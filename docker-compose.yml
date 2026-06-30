@@ -1,8 +1,7 @@
 services:
+
   mariadb:
     image: mariadb:11
-    container_name: senioron-db
-
     restart: unless-stopped
 
     ports:
@@ -24,14 +23,17 @@ services:
     volumes:
       - mariadb-data:/var/lib/mysql
 
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h localhost -uroot -p$$MARIADB_ROOT_PASSWORD || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+
   app:
     build:
       context: .
       dockerfile: Dockerfile
-
-    container_name: senioron-app
-
-    restart: unless-stopped
 
     ports:
       - "8080:8080"
@@ -40,7 +42,10 @@ services:
       - .env
 
     depends_on:
-      - mariadb
+      mariadb:
+        condition: service_healthy
+
+    restart: unless-stopped
 
 volumes:
   mariadb-data:
