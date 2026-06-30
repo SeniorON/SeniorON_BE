@@ -3,17 +3,17 @@ FROM eclipse-temurin:17-jdk AS builder
 
 WORKDIR /app
 
-COPY gradlew .
-COPY gradle gradle
-COPY build.gradle .
-COPY settings.gradle .
+COPY SeniorON/gradlew .
+COPY SeniorON/gradle gradle
+COPY SeniorON/build.gradle .
+COPY SeniorON/settings.gradle .
 
 RUN chmod +x gradlew
 
 # dependency cache
 RUN ./gradlew dependencies --no-daemon || true
 
-COPY src src
+COPY SeniorON/src src
 
 RUN ./gradlew clean bootJar --no-daemon
 
