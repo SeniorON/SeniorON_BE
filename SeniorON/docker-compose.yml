@@ -1,0 +1,46 @@
+services:
+  mariadb:
+    image: mariadb:11
+    container_name: senioron-db
+
+    restart: unless-stopped
+
+    ports:
+      - "3306:3306"
+
+    env_file:
+      - .env
+
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${DB_NAME}
+      MARIADB_USER: ${DB_USERNAME}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+
+    volumes:
+      - mariadb-data:/var/lib/mysql
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: senioron-app
+
+    restart: unless-stopped
+
+    ports:
+      - "8080:8080"
+
+    env_file:
+      - .env
+
+    depends_on:
+      - mariadb
+
+volumes:
+  mariadb-data:
