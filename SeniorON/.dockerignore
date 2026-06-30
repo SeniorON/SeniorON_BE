@@ -1,0 +1,16 @@
+.git
+.github
+
+.gradle
+build
+out
+
+.idea
+*.iml
+
+README.md
+
+.env
+
+application-secret.yml
+application-prod.yml
