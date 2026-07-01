@@ -1,5 +1,18 @@
 services:
 
+  nginx:
+    image: nginx:latest
+    restart: unless-stopped
+
+    ports:
+      - "80:80"
+
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+
+    depends_on:
+      - app
+
   mariadb:
     image: mariadb:11
     restart: unless-stopped
@@ -35,8 +48,8 @@ services:
       context: .
       dockerfile: Dockerfile
 
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
 
     env_file:
       - .env
