@@ -1,2 +1,38 @@
+name: Docker Deploy
+
 on:
+  push:
+    branches:
+      - develop
+
 jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: SSH Key 설정
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+      - name: EC2 자동 배포
+        run: |
+          ssh -o StrictHostKeyChecking=no \
+              -i ~/.ssh/id_ed25519 \
+              ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} << 'EOF'
+
+          cd ~/SeniorON_BE
+
+          git pull origin develop
+
+          docker compose down
+
+          docker compose up --build -d
+
+          docker image prune -f
+
+          EOF
