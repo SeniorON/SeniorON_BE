@@ -27,4 +27,3 @@ replay_pid*
 # Environments & Secrets
 .env
 application-secret.yml
-application-prod.yml
