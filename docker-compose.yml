@@ -13,7 +13,8 @@ services:
       - /etc/letsencrypt:/etc/letsencrypt
 
     depends_on:
-      - app
+      app:
+        condition: service_healthy
 
   mariadb:
     image: mariadb:11
@@ -62,6 +63,13 @@ services:
     depends_on:
       mariadb:
         condition: service_healthy
+
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/8080' 2>/dev/null && exit 0 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
 
     restart: unless-stopped
 
