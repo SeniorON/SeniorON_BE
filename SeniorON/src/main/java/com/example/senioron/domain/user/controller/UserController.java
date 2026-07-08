@@ -34,6 +34,7 @@ public class UserController {
         return userService.signUp(request);
     }
 
+    @Operation(summary = "로그인", description = "아이디와 비밀번호로 로그인하고 JWT accessToken을 발급합니다.")
     @PostMapping("/login")
     public UserLoginResponse login(@Valid @RequestBody UserLoginRequest request) {
         return userService.login(request);
