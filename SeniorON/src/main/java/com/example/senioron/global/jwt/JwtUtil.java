@@ -1,6 +1,7 @@
 package com.example.senioron.global.jwt;
 
 import com.example.senioron.domain.user.entity.User;
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
@@ -36,5 +37,26 @@ public class JwtUtil {
                 .expiration(expiration)
                 .signWith(secretKey)
                 .compact();
+    }
+
+    public boolean validateToken(String token) {
+        try {
+            parseClaims(token);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public Long getUsersId(String token) {
+        return Long.valueOf(parseClaims(token).getSubject());
+    }
+
+    private Claims parseClaims(String token) {
+        return Jwts.parser()
+                .verifyWith(secretKey)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
     }
 }
