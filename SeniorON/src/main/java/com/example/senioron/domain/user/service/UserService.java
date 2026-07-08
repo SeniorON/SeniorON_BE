@@ -1,9 +1,11 @@
 package com.example.senioron.domain.user.service;
 
 import com.example.senioron.domain.user.dto.request.UserLoginRequest;
+import com.example.senioron.domain.user.dto.request.UserRoleUpdateRequest;
 import com.example.senioron.domain.user.dto.request.UserSignUpRequest;
 import com.example.senioron.domain.user.dto.response.LoginIdCheckResponse;
 import com.example.senioron.domain.user.dto.response.UserLoginResponse;
+import com.example.senioron.domain.user.dto.response.UserRoleUpdateResponse;
 import com.example.senioron.domain.user.dto.response.UserSignUpResponse;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.entity.UserStatus;
@@ -82,6 +84,17 @@ public class UserService {
                 .name(user.getName())
                 .loginId(user.getLoginId())
                 .accessToken(accessToken)
+                .build();
+    }
+
+    // 계정의 역할 수정 서비스
+    public UserRoleUpdateResponse updateRole(User user, UserRoleUpdateRequest request) {
+        user.updateRole(request.getRole());
+
+        return UserRoleUpdateResponse.builder()
+                .usersId(user.getUsersId())
+                .name(user.getName())
+                .role(user.getRole())
                 .build();
     }
 

@@ -1,16 +1,20 @@
 package com.example.senioron.domain.user.controller;
 
 import com.example.senioron.domain.user.dto.request.UserLoginRequest;
+import com.example.senioron.domain.user.dto.request.UserRoleUpdateRequest;
 import com.example.senioron.domain.user.dto.request.UserSignUpRequest;
 import com.example.senioron.domain.user.dto.response.LoginIdCheckResponse;
 import com.example.senioron.domain.user.dto.response.UserLoginResponse;
+import com.example.senioron.domain.user.dto.response.UserRoleUpdateResponse;
 import com.example.senioron.domain.user.dto.response.UserSignUpResponse;
+import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "회원", description = "회원가입, 로그인, 계정 관련 API")
@@ -38,5 +42,15 @@ public class UserController {
     @PostMapping("/login")
     public UserLoginResponse login(@Valid @RequestBody UserLoginRequest request) {
         return userService.login(request);
+    }
+
+
+    @Operation(summary = "역할 선택/변경", description = "현재 로그인한 사용자의 역할을 선택하거나 변경합니다.")
+    @PatchMapping("/me/role")
+    public UserRoleUpdateResponse updateRole(
+            @AuthenticationPrincipal User user,
+            @Valid @RequestBody UserRoleUpdateRequest request
+    ) {
+        return userService.updateRole(user, request);
     }
 }
