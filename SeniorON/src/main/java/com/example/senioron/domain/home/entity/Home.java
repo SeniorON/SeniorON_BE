@@ -1,11 +1,10 @@
 package com.example.senioron.domain.home.entity;
 
+import com.example.senioron.common.entity.BaseEntity;
 import com.example.senioron.domain.device.entity.Device;
 import com.example.senioron.domain.user.entity.User;
 import jakarta.persistence.*;
-import java.time.*;
 import lombok.*;
-import com.example.senioron.common.entity.BaseEntity;
 
 @Entity
 @Getter
@@ -14,8 +13,9 @@ import com.example.senioron.common.entity.BaseEntity;
 @Builder
 public class Home extends BaseEntity {
 
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long home_id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long homeId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "users_id")
@@ -25,7 +25,7 @@ public class Home extends BaseEntity {
     @JoinColumn(name = "device_id")
     private Device device;
 
-    private Integer buttonIndex;
+    private Integer buttonOrder;
 
     private String buttonName;
 
@@ -38,5 +38,4 @@ public class Home extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
     private FontSize fontSize;
-
 }
