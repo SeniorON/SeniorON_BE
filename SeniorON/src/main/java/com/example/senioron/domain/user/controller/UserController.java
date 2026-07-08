@@ -9,6 +9,7 @@ import com.example.senioron.domain.user.dto.response.UserRoleUpdateResponse;
 import com.example.senioron.domain.user.dto.response.UserSignUpResponse;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.service.UserService;
+import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -25,32 +26,30 @@ public class UserController {
 
     private final UserService userService;
 
-    @Operation(summary = "아이디 중복 확인", description = "사용 가능한 아이디인지 중복 검사를 합니다.")
     @GetMapping("/check-login-id")
-    public LoginIdCheckResponse checkLoginId(@RequestParam String loginId) {
-        return userService.checkLoginId(loginId);
+    public Response<LoginIdCheckResponse> checkLoginId(@RequestParam String loginId) {
+        return Response.ok(userService.checkLoginId(loginId));
     }
-
 
     @Operation(summary = "회원가입", description = "이메일 인증 후 아이디, 비밀번호, 약관 동의 정보를 바탕으로 회원가입을 진행합니다.")
     @PostMapping("/signup")
-    public UserSignUpResponse signUp(@Valid @RequestBody UserSignUpRequest request) {
-        return userService.signUp(request);
+    public Response<UserSignUpResponse> signUp(@Valid @RequestBody UserSignUpRequest request) {
+        return Response.ok(userService.signUp(request));
     }
 
     @Operation(summary = "로그인", description = "아이디와 비밀번호로 로그인하고 JWT accessToken을 발급합니다.")
     @PostMapping("/login")
-    public UserLoginResponse login(@Valid @RequestBody UserLoginRequest request) {
-        return userService.login(request);
+    public Response<UserLoginResponse> login(@Valid @RequestBody UserLoginRequest request) {
+        return Response.ok(userService.login(request));
     }
 
 
     @Operation(summary = "역할 선택/변경", description = "현재 로그인한 사용자의 역할을 선택하거나 변경합니다.")
     @PatchMapping("/me/role")
-    public UserRoleUpdateResponse updateRole(
+    public Response<UserRoleUpdateResponse> updateRole(
             @AuthenticationPrincipal User user,
             @Valid @RequestBody UserRoleUpdateRequest request
     ) {
-        return userService.updateRole(user, request);
+        return Response.ok(userService.updateRole(user, request));
     }
 }
