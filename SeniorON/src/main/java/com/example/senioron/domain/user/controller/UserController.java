@@ -1,7 +1,9 @@
 package com.example.senioron.domain.user.controller;
 
+import com.example.senioron.domain.user.dto.request.UserLoginRequest;
 import com.example.senioron.domain.user.dto.request.UserSignUpRequest;
 import com.example.senioron.domain.user.dto.response.LoginIdCheckResponse;
+import com.example.senioron.domain.user.dto.response.UserLoginResponse;
 import com.example.senioron.domain.user.dto.response.UserSignUpResponse;
 import com.example.senioron.domain.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -30,5 +32,10 @@ public class UserController {
     @PostMapping("/signup")
     public UserSignUpResponse signUp(@Valid @RequestBody UserSignUpRequest request) {
         return userService.signUp(request);
+    }
+
+    @PostMapping("/login")
+    public UserLoginResponse login(@Valid @RequestBody UserLoginRequest request) {
+        return userService.login(request);
     }
 }
