@@ -50,4 +50,8 @@ public class User extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Builder.Default
     private UserStatus status = UserStatus.ACTIVE;
+
+    public void updateRole(Role role) {
+        this.role = role;
+    }
 }
