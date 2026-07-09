@@ -42,17 +42,13 @@ public class HomeService {
 
         return new HomeResponse(
                 user.getName(),
-                new HomeResponse.ConnectionResponse(
-                        "Galaxy S24-어머니 폰",
-                        true,
-                        70
-                ),
+                null,
                 new HomeResponse.SeniorProfileResponse(
                         user.getName(),
-                        "어머니",
+                        null,
                         birth,
                         Period.between(birth, LocalDate.now()).getYears(),
-                        "경기도 하남시 창우동",
+                        null,
                         user.getPhoneNumber()
                 ),
                 homes.isEmpty() ? null : homes.get(0).getFontSize(),
