@@ -23,7 +23,7 @@ public class FamilyController {
     private final FamilyService familyService;
 
     @Operation(summary = "가족 공유코드 생성", description = "새로운 가족을 생성하고 가족 공유코드를 발급합니다. 가족코드 생성은 자식(CHILD)만 가능합니다.")
-    @PostMapping
+    @PostMapping("code-create")
     public Response<FamilyCodeCreateResponse> createFamily(@AuthenticationPrincipal User user) {
         return Response.ok(familyService.createFamily(user));
     }
