@@ -6,14 +6,17 @@ import lombok.*;
 import com.example.senioron.common.entity.BaseEntity;
 
 @Entity
+@Table(name = "family")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
 @Builder
 public class Family extends BaseEntity {
 
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long family_id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name="family_id")
+    private Long familyId;
 
     @Column(unique = true)
     private String familyCode;}

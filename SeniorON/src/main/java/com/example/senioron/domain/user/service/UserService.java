@@ -1,13 +1,17 @@
 package com.example.senioron.domain.user.service;
 
 import com.example.senioron.domain.user.dto.request.UserLoginRequest;
+import com.example.senioron.domain.user.dto.request.UserRoleUpdateRequest;
 import com.example.senioron.domain.user.dto.request.UserSignUpRequest;
 import com.example.senioron.domain.user.dto.response.LoginIdCheckResponse;
 import com.example.senioron.domain.user.dto.response.UserLoginResponse;
+import com.example.senioron.domain.user.dto.response.UserRoleUpdateResponse;
 import com.example.senioron.domain.user.dto.response.UserSignUpResponse;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.entity.UserStatus;
 import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.global.apiPayload.code.ErrorCode;
+import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.jwt.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -36,15 +40,15 @@ public class UserService {
     // 최종 회원가입 서비스
     public UserSignUpResponse signUp(UserSignUpRequest request) {
         if (userRepository.existsByLoginId(request.getLoginId())) {
-            throw new IllegalArgumentException("이미 사용 중인 아이디입니다.");
+            throw new BusinessException(ErrorCode.DUPLICATE_LOGIN_ID);
         }
 
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new IllegalArgumentException("이미 가입된 이메일입니다.");
+            throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
         }
 
         if (!request.getPassword().equals(request.getPasswordCheck())) {
-            throw new IllegalArgumentException("비밀번호가 일치하지 않습니다.");
+            throw new BusinessException(ErrorCode.PASSWORD_MISMATCH);
         }
 
         User user = User.builder()
@@ -69,10 +73,10 @@ public class UserService {
     // 로그인 서비스
     public UserLoginResponse login(UserLoginRequest request) {
         User user = userRepository.findByLoginId(request.getLoginId())
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 아이디입니다."));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new IllegalArgumentException("비밀번호가 일치하지 않습니다.");
+            throw new BusinessException(ErrorCode.INVALID_PASSWORD);
         }
 
         String accessToken = jwtUtil.createAccessToken(user);
@@ -82,6 +86,17 @@ public class UserService {
                 .name(user.getName())
                 .loginId(user.getLoginId())
                 .accessToken(accessToken)
+                .build();
+    }
+
+    // 계정의 역할 수정 서비스
+    public UserRoleUpdateResponse updateRole(User user, UserRoleUpdateRequest request) {
+        user.updateRole(request.getRole());
+
+        return UserRoleUpdateResponse.builder()
+                .usersId(user.getUsersId())
+                .name(user.getName())
+                .role(user.getRole())
                 .build();
     }
 
