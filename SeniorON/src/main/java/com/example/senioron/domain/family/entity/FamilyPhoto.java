@@ -15,8 +15,10 @@ import com.example.senioron.common.entity.BaseEntity;
 @Builder
 public class FamilyPhoto extends BaseEntity {
 
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long family_photo_id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name="family_photo_id")
+    private Long familyPhotoId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "family_id")
