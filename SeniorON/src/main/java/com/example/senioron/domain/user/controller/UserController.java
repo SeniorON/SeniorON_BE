@@ -26,6 +26,7 @@ public class UserController {
 
     private final UserService userService;
 
+    @Operation(summary = "아이디 중복 확인", description = "회원가입 시 입력한 아이디가 이미 사용 중인지 확인합니다.")
     @GetMapping("/check-login-id")
     public Response<LoginIdCheckResponse> checkLoginId(@RequestParam String loginId) {
         return Response.ok(userService.checkLoginId(loginId));
