@@ -20,6 +20,8 @@ public class Medication extends BaseEntity {
     @JoinColumn(name = "users_id")
     private User user;
 
+    private String ingredientName;
+
     private String medicineName;
 
     private LocalTime medicineTime;
