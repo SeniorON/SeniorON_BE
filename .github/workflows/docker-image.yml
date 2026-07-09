@@ -3,7 +3,7 @@ name: Docker Image
 on:
   push:
     branches:
-      - infra/dockerhub-cicd
+      - infra/dockerHub
 
 jobs:
   docker:
