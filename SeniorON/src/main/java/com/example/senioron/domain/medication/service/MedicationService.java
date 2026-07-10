@@ -10,6 +10,7 @@ import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +23,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -46,11 +48,10 @@ public class MedicationService {
 
     @Transactional
     public MedicationCreateResponse createMedication(
-            Long usersId,
+            Long userId,
             MedicationCreateRequest request
     ) {
-        User user = userRepository.findById(usersId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        User user = getUserOrThrow(userId);
 
         String medicineDays = String.join(",", request.getMedicineDays());
 
@@ -82,8 +83,7 @@ public class MedicationService {
     }
 
     public List<MedicationReadResponse> getMedications(Long userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        User user = getUserOrThrow(userId);
 
         return medicationRepository.findAllByUserOrderByMedicineTimeAsc(user)
                 .stream()
@@ -95,6 +95,11 @@ public class MedicationService {
                         formatMedicineDays(medication.getMedicineDays())
                 ))
                 .collect(Collectors.toList());
+    }
+
+    private User getUserOrThrow(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
     }
 
     private String formatMedicineTime(LocalTime medicineTime) {
@@ -129,7 +134,15 @@ public class MedicationService {
         Set<String> normalizedDays = Arrays.stream(medicineDays.split(","))
                 .map(String::trim)
                 .map(String::toUpperCase)
-                .map(this::normalizeDay)
+                .map(day -> {
+                    String normalizedDay = normalizeDay(day);
+
+                    if (normalizedDay == null) {
+                        log.warn("Unrecognized medicine day token: {}", day);
+                    }
+
+                    return normalizedDay;
+                })
                 .filter(day -> day != null)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
