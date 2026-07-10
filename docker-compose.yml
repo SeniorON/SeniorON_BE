@@ -20,8 +20,8 @@ services:
     image: mariadb:11
     restart: unless-stopped
 
-    ports:
-      - "3306:3306"
+    expose:
+      - "3306"
 
     env_file:
       - .env
@@ -71,5 +71,40 @@ services:
 
     restart: unless-stopped
 
+  prometheus:
+    image: prom/prometheus:latest
+
+    restart: unless-stopped
+
+    expose:
+      - "9090"
+
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+
+    depends_on:
+      app:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:latest
+
+    expose:
+      - "3000"
+
+    environment:
+      GF_SERVER_ROOT_URL: https://senioron.site/grafana
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+
+    volumes:
+      - grafana-data:/var/lib/grafana
+
+    depends_on:
+      prometheus:
+        condition: service_started
+
 volumes:
   mariadb-data:
+  grafana-data:
