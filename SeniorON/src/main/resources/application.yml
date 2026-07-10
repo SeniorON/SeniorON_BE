@@ -7,3 +7,17 @@ spring:
 jwt:
   secret: this-is-a-temporary-secret-key-for-senioron-jwt-please-change-later
   access-token-expiration: 3600000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus
+
+  endpoint:
+    health:
+      show-details: always
+
+  metrics:
+    tags:
+      application: senioron
