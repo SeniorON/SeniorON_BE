@@ -22,12 +22,16 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      - name: Build Docker Image
-        run: |
-          docker build \
-            -t ${{ secrets.DOCKER_USERNAME }}/senioron:latest \
-            .
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Push Docker Image
-        run: |
-          docker push ${{ secrets.DOCKER_USERNAME }}/senioron:latest
+      - name: Build and Push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/senioron:latest
+            ${{ secrets.DOCKER_USERNAME }}/senioron:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
