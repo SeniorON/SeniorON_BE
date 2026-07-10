@@ -7,6 +7,7 @@ import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
@@ -21,9 +22,15 @@ import java.util.UUID;
 public class FamilyService {
 
     private final FamilyRepository familyRepository;
+    private final UserRepository userRepository;
 
     // 가족 생성 및 공유코드 발급 서비스
-    public FamilyCodeCreateResponse createFamily(User user) {
+    public FamilyCodeCreateResponse createFamily(User principal) {
+        User user = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.USER_NOT_FOUND)
+                );
+
         if (user.getRole() != Role.CHILD) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
@@ -67,9 +74,19 @@ public class FamilyService {
     }
 
     // 공유코드로 가족 참여 메소드
-    public FamilyJoinResponse joinFamily(User user, FamilyJoinRequest request) {
+    public FamilyJoinResponse joinFamily(
+            User principal,
+            FamilyJoinRequest request
+    ) {
+        User user = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.USER_NOT_FOUND)
+                );
+
         Family family = familyRepository.findByFamilyCode(request.getFamilyCode())
-                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_FAMILY_CODE));
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.INVALID_FAMILY_CODE)
+                );
 
         user.updateFamily(family);
 
