@@ -47,9 +47,7 @@ services:
 
 
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: jsh424/senioron:latest
 
     expose:
       - "8080"

@@ -28,10 +28,12 @@ jobs:
           cd ~/SeniorON_BE
 
           git pull origin develop
-
+  
           docker compose down
-
-          docker compose up --build -d
+  
+          docker compose pull
+  
+          docker compose up -d
 
           docker image prune -f
 
