@@ -2,7 +2,6 @@ package com.example.senioron.domain.event.entity;
 
 import com.example.senioron.domain.user.entity.User;
 import jakarta.persistence.*;
-import java.time.*;
 import lombok.*;
 import com.example.senioron.common.entity.BaseEntity;
 
@@ -14,7 +13,7 @@ import com.example.senioron.common.entity.BaseEntity;
 public class Event extends BaseEntity {
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long event_id;
+    private Long eventId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "users_id")
@@ -27,8 +26,14 @@ public class Event extends BaseEntity {
     @Enumerated(EnumType.STRING)
     private EventType eventType;
 
+    @Enumerated(EnumType.STRING)
+    private OutingPhase phase;
+
     @Column(precision = 10, scale = 7)
     private java.math.BigDecimal latitude;
 
     @Column(precision = 10, scale = 7)
-    private java.math.BigDecimal longitude;}
+    private java.math.BigDecimal longitude;
+
+    private Integer deviceBattery;
+}
