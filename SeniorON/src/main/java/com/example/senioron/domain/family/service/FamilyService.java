@@ -6,6 +6,7 @@ import com.example.senioron.domain.family.dto.response.FamilyJoinResponse;
 import com.example.senioron.domain.family.dto.response.FamilyMemberResponse;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.repository.FamilyRepository;
+import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
@@ -48,6 +49,7 @@ public class FamilyService {
         Family savedFamily = familyRepository.save(family);
 
         user.updateFamily(savedFamily);
+        user.updateManagerType(ManagerType.PRIMARY);
 
         return FamilyCodeCreateResponse.builder()
                 .familyId(savedFamily.getFamilyId())
@@ -93,6 +95,7 @@ public class FamilyService {
                 );
 
         user.updateFamily(family);
+        user.updateManagerType(ManagerType.SUB);
 
         return FamilyJoinResponse.builder()
                 .familyId(family.getFamilyId())
