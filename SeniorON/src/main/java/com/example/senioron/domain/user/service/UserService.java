@@ -90,8 +90,24 @@ public class UserService {
     }
 
     // 계정의 역할 수정 서비스
-    public UserRoleUpdateResponse updateRole(User user, UserRoleUpdateRequest request) {
+    public UserRoleUpdateResponse updateRole(
+            User principal,
+            UserRoleUpdateRequest request
+    ) {
+        User user = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.USER_NOT_FOUND)
+                );
+
+        System.out.println("=== 역할 변경 전 ===");
+        System.out.println("userId = " + user.getUsersId());
+        System.out.println("role = " + user.getRole());
+
         user.updateRole(request.getRole());
+
+        System.out.println("=== 역할 변경 후 ===");
+        System.out.println("userId = " + user.getUsersId());
+        System.out.println("role = " + user.getRole());
 
         return UserRoleUpdateResponse.builder()
                 .usersId(user.getUsersId())
