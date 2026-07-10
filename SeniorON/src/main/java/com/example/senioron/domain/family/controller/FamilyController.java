@@ -3,6 +3,7 @@ package com.example.senioron.domain.family.controller;
 import com.example.senioron.domain.family.dto.request.FamilyJoinRequest;
 import com.example.senioron.domain.family.dto.response.FamilyCodeCreateResponse;
 import com.example.senioron.domain.family.dto.response.FamilyJoinResponse;
+import com.example.senioron.domain.family.dto.response.FamilyMemberResponse;
 import com.example.senioron.domain.family.service.FamilyService;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.global.apiPayload.response.Response;
@@ -12,6 +13,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 
 @Tag(name = "가족", description = "가족코드 등 외의 가족 관련 API")
@@ -32,5 +35,13 @@ public class FamilyController {
     @PostMapping("/join")
     public Response<FamilyJoinResponse> joinFamily(@AuthenticationPrincipal User user, @Valid @RequestBody FamilyJoinRequest request) {
         return Response.ok(familyService.joinFamily(user, request));
+    }
+
+    @Operation(summary = "가족 구성원 조회", description = "현재 로그인한 사용자가 속한 가족의 구성원 목록을 조회합니다.")
+    @GetMapping("/members")
+    public Response<List<FamilyMemberResponse>> getFamilyMembers(
+            @AuthenticationPrincipal User user
+    ){
+        return Response.ok(familyService.getFamilyMembers(user));
     }
 }

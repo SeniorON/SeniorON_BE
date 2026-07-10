@@ -1,8 +1,10 @@
 package com.example.senioron.domain.user.repository;
 
+import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.user.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, Long> {
@@ -12,5 +14,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByEmail(String email);
 
     Optional<User> findByLoginId(String loginId);
+
+    List<User> findAllByFamily(Family family);
 
 }
