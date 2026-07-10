@@ -71,5 +71,20 @@ services:
 
     restart: unless-stopped
 
+  prometheus:
+    image: prom/prometheus:latest
+
+    restart: unless-stopped
+
+    ports:
+      - "9090:9090"
+
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+
+    depends_on:
+      app:
+        condition: service_healthy
+
 volumes:
   mariadb-data:

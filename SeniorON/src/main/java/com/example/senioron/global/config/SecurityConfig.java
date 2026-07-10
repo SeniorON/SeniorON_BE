@@ -39,7 +39,8 @@ public class SecurityConfig {
                                 "/swagger-ui.html",
                                 "/api/users/signup",
                                 "/api/users/login",
-                                "/api/users/check-login-id"
+                                "/api/users/check-login-id",
+                                "/actuator/**"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )
