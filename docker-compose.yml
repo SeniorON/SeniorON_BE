@@ -86,5 +86,21 @@ services:
       app:
         condition: service_healthy
 
+  grafana:
+    image: grafana/grafana:latest
+
+    restart: unless-stopped
+
+    ports:
+      - "3000:3000"
+
+    volumes:
+      - grafana-data:/var/lib/grafana
+
+    depends_on:
+      prometheus:
+        condition: service_started
+
 volumes:
   mariadb-data:
+  grafana-data:
