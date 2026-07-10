@@ -21,5 +21,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     List<User> findAllByFamily(Family family);
 
     @Query("SELECT u FROM User u WHERE u.family = :family AND u.usersId != :excludeUserId AND u.role = :role")
-    List<User> findByFamilyAndUsersIdNotAndRole(Family family, Long excludeUserId, Role role);
+    List<User> findByFamilyAndUsersIdNotAndRole(
+            @Param("family")Family family,
+            @Param("excludeUserId")Long excludeUserId,
+            @Param("role")Role role);
 }

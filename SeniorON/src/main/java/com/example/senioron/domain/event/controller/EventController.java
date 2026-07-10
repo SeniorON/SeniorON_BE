@@ -7,6 +7,7 @@ import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -22,7 +23,7 @@ public class EventController {
     @PostMapping("/sos")
     public Response<SosEventResponse> createSosEvent(
             @AuthenticationPrincipal User user,
-            @RequestBody SosEventRequest req
+            @Valid @RequestBody SosEventRequest req
     ){
         return Response.ok(eventService.createSosEvent(user, req));
 

@@ -3,7 +3,7 @@ package com.example.senioron.domain.notification.controller;
 import com.example.senioron.domain.notification.dto.request.NotificationSettingRequest;
 import com.example.senioron.domain.notification.dto.response.NotificationHomeResponse;
 import com.example.senioron.domain.notification.dto.response.NotificationSettingResponse;
-import com.example.senioron.domain.notification.entity.NotificationType;
+import com.example.senioron.domain.notification.entity.NotificationSettingType;
 import com.example.senioron.domain.notification.service.NotificationService;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
@@ -12,6 +12,7 @@ import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -40,8 +41,8 @@ public class NotificationController {
     @Operation(summary = "알림 설정 토글 기능")
     @PatchMapping("/setting/{type}")
     public Response<NotificationSettingResponse> updateSetting(
-            @PathVariable NotificationType type,
-            @RequestBody NotificationSettingRequest req,
+            @PathVariable NotificationSettingType type,
+            @Valid @RequestBody NotificationSettingRequest req,
             @AuthenticationPrincipal User user
     ){
         if (user.getRole() != Role.CHILD) {

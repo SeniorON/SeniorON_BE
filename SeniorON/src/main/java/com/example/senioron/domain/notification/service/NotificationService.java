@@ -7,6 +7,7 @@ import com.example.senioron.domain.notification.dto.response.NotificationHomeRes
 import com.example.senioron.domain.notification.dto.response.NotificationSettingResponse;
 import com.example.senioron.domain.notification.entity.Notification;
 import com.example.senioron.domain.notification.entity.NotificationSetting;
+import com.example.senioron.domain.notification.entity.NotificationSettingType;
 import com.example.senioron.domain.notification.entity.NotificationType;
 import com.example.senioron.domain.notification.repository.NotificationRepository;
 import com.example.senioron.domain.notification.repository.NotificationSettingRepository;
@@ -33,15 +34,20 @@ public class NotificationService {
 
     @Transactional
     public void createFormEvent(Event event) {
-        User sender = event.getUser();
+        User sender = event.getTriggeredUser();
+        if(sender.getFamily() == null) return;
 
         List<User> receivers = userRepository.findByFamilyAndUsersIdNotAndRole(sender.getFamily(), sender.getUsersId(), Role.CHILD);
+        if (receivers.isEmpty()) return;
 
         NotificationType type = resolveType(event.getEventType());
         String title = resolveTitle(event.getEventType());
         String body = resolveBody(event.getEventType(), event.getPhase());
         List<Notification> notifications = new ArrayList<>();
         for (User receiver : receivers) {
+            if (!isEnabled(receiver, type)) {
+                continue;
+            }
             Notification notification = Notification.builder()
                     .event(event)
                     .sendUser(sender)
@@ -55,6 +61,19 @@ public class NotificationService {
         }
 
         notificationRepository.saveAll(notifications);
+    }
+
+    //
+    private boolean isEnabled(User receiver, NotificationType type) {
+        return notificationSettingRepository.findById(receiver.getUsersId())
+                .map(setting -> switch (type) {
+                    case SOS -> setting.getSosEnabled();
+                    case INACTIVITY -> setting.getInactivityEnabled();
+                    case RISK_LINK -> setting.getRiskLinkEnabled();
+                    case OUTING_RETURN -> setting.getOutingReturnEnabled();
+                    default -> throw new BusinessException(ErrorCode.FORBIDDEN);
+                })
+                .orElse(true);
     }
 
     private NotificationType resolveType(EventType eventType) {
@@ -125,9 +144,12 @@ public class NotificationService {
     @Transactional
     public NotificationSettingResponse updateSetting(
             Long userId,
-            NotificationType type,
+            NotificationSettingType type,
             Boolean enabled
     ){
+        if(enabled == null){
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
         NotificationSetting setting = notificationSettingRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND));
 
@@ -136,7 +158,6 @@ public class NotificationService {
             case INACTIVITY -> setting.updateInactivityEnabled(enabled);
             case RISK_LINK -> setting.updateRiskLinkEnabled(enabled);
             case OUTING_RETURN -> setting.updateOutingReturnEnabled(enabled);
-            default -> throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
 
         return NotificationSettingResponse.from(type, enabled);

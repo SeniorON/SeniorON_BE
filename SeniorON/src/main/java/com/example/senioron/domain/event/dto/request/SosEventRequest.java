@@ -1,5 +1,6 @@
 package com.example.senioron.domain.event.dto.request;
 
+import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -8,14 +9,14 @@ import java.time.LocalDateTime;
 
 @Getter
 public class SosEventRequest {
-    private LocalDateTime occurredAt;
+    @NotNull
     private BigDecimal latitude;
+    @NotNull
     private BigDecimal longitude;
     private Integer deviceBattery;
 
     @Builder
     public SosEventRequest(LocalDateTime occurredAt, BigDecimal latitude, BigDecimal longitude, Integer deviceBattery) {
-        this.occurredAt = occurredAt;
         this.latitude = latitude;
         this.longitude = longitude;
         this.deviceBattery = deviceBattery;
