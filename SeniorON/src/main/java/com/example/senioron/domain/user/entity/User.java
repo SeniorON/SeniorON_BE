@@ -58,4 +58,9 @@ public class User extends BaseEntity {
     public void updateFamily(Family family) {
         this.family = family;
     }
+
+    // 주 담당자 변경 메서드
+    public void updateManagerType(ManagerType managerType){
+        this.managerType = managerType;
+    }
 }
