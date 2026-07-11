@@ -51,6 +51,7 @@ public class FamilyService {
         Family savedFamily = familyRepository.save(family);
 
         user.updateFamily(savedFamily);
+        user.updateManagerType(ManagerType.PRIMARY);
 
         return FamilyCodeCreateResponse.builder()
                 .familyId(savedFamily.getFamilyId())
@@ -96,6 +97,7 @@ public class FamilyService {
                 );
 
         user.updateFamily(family);
+        user.updateManagerType(ManagerType.SUB);
 
         return FamilyJoinResponse.builder()
                 .familyId(family.getFamilyId())

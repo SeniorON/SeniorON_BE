@@ -29,6 +29,9 @@ public class SecurityConfig {
 
         http
                 .csrf(csrf -> csrf.disable())
+                .headers(headers -> headers
+                        .frameOptions(frameOptions -> frameOptions.sameOrigin())
+                )
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
@@ -40,6 +43,7 @@ public class SecurityConfig {
                                 "/api/users/signup",
                                 "/api/users/login",
                                 "/api/users/check-login-id",
+                                "/h2-console/**",
                                 "/actuator/**"
                         ).permitAll()
                         .anyRequest().authenticated()
