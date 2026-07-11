@@ -7,6 +7,7 @@ import com.example.senioron.domain.user.dto.response.LoginIdCheckResponse;
 import com.example.senioron.domain.user.dto.response.UserLoginResponse;
 import com.example.senioron.domain.user.dto.response.UserRoleUpdateResponse;
 import com.example.senioron.domain.user.dto.response.UserSignUpResponse;
+import com.example.senioron.domain.notification.service.NotificationService;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.entity.UserStatus;
 import com.example.senioron.domain.user.repository.UserRepository;
@@ -26,6 +27,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final NotificationService notificationService;
 
     // 아이디 중복 확인 서비스
     public LoginIdCheckResponse checkLoginId(String loginId) {
@@ -61,6 +63,7 @@ public class UserService {
                 .build();
 
         User savedUser = userRepository.save(user);
+        notificationService.createDefaultSetting(savedUser);
 
         return UserSignUpResponse.builder()
                 .usersId(savedUser.getUsersId())

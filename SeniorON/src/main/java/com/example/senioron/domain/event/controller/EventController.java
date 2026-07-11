@@ -1,0 +1,31 @@
+package com.example.senioron.domain.event.controller;
+
+import com.example.senioron.domain.event.dto.request.SosEventRequest;
+import com.example.senioron.domain.event.dto.response.SosEventResponse;
+import com.example.senioron.domain.event.service.EventService;
+import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.global.apiPayload.response.Response;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
+
+@Tag(name = "이벤트",description = "이벤트 관련 메소드")
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/event")
+public class EventController {
+    private final EventService eventService;
+
+    @Operation(summary = "SOS 긴급 이벤트 생성", description = "사용자의 SOS 긴급 호출 이벤트를 생성합니다")
+    @PostMapping("/sos")
+    public Response<SosEventResponse> createSosEvent(
+            @AuthenticationPrincipal User user,
+            @Valid @RequestBody SosEventRequest req
+    ){
+        return Response.ok(eventService.createSosEvent(user, req));
+
+    }
+}

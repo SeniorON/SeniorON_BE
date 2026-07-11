@@ -26,4 +26,12 @@ replay_pid*
 
 # Environments & Secrets
 .env
+
+# Firebase Admin SDK Private Key
+*firebase-adminsdk*.json
+
+# IntelliJ IDEA settings
+.idea/
+
+# Existing application secrets
 application-secret.yml
