@@ -4,9 +4,11 @@ import com.example.senioron.domain.hospital.entity.HospitalReminderType;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 
 @Getter
+@Builder
 @AllArgsConstructor
 public class HospitalCreateResponse {
 

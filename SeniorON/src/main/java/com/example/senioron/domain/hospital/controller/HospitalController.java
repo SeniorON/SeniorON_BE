@@ -1,12 +1,13 @@
 package com.example.senioron.domain.hospital.controller;
-import io.swagger.v3.oas.annotations.tags.Tag;
-import io.swagger.v3.oas.annotations.Operation;
+
 import com.example.senioron.domain.hospital.dto.request.HospitalCreateRequest;
 import com.example.senioron.domain.hospital.dto.response.HospitalCreateResponse;
 import com.example.senioron.domain.hospital.service.HospitalService;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.global.apiPayload.code.ResultCode;
 import com.example.senioron.global.apiPayload.response.Response;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class HospitalController {
 
     private final HospitalService hospitalService;
+
     @Operation(
             summary = "병원 일정 등록",
             description = "로그인한 사용자가 부모님의 병원 진료 일정을 등록합니다."
@@ -35,7 +37,7 @@ public class HospitalController {
             @Valid @RequestBody HospitalCreateRequest request
     ) {
         HospitalCreateResponse result =
-                hospitalService.createHospital(user.getUsersId(), request);
+                hospitalService.createHospital(user, request);
 
         return Response.ok(ResultCode.CREATED, result);
     }
