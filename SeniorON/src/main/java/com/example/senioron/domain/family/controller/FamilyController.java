@@ -1,9 +1,11 @@
 package com.example.senioron.domain.family.controller;
 
 import com.example.senioron.domain.family.dto.request.FamilyJoinRequest;
+import com.example.senioron.domain.family.dto.request.FamilyPrimaryManagerUpdateRequest;
 import com.example.senioron.domain.family.dto.response.FamilyCodeCreateResponse;
 import com.example.senioron.domain.family.dto.response.FamilyJoinResponse;
 import com.example.senioron.domain.family.dto.response.FamilyMemberResponse;
+import com.example.senioron.domain.family.dto.response.FamilyPrimaryManagerUpdateResponse;
 import com.example.senioron.domain.family.service.FamilyService;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.global.apiPayload.response.Response;
@@ -43,5 +45,14 @@ public class FamilyController {
             @AuthenticationPrincipal User user
     ){
         return Response.ok(familyService.getFamilyMembers(user));
+    }
+
+    @Operation(summary = "주 담당자 변경", description = "현재 주 담당자를 같은 가족의 다른 구성원으로 변경합니다.")
+    @PatchMapping("/primary-manager")
+    public Response<FamilyPrimaryManagerUpdateResponse> updatePrimaryManager(
+            @AuthenticationPrincipal User user,
+            @Valid @RequestBody FamilyPrimaryManagerUpdateRequest request
+    ){
+        return Response.ok(familyService.updatePrimaryManager(user, request));
     }
 }

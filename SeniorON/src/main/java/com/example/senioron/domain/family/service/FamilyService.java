@@ -1,9 +1,11 @@
 package com.example.senioron.domain.family.service;
 
 import com.example.senioron.domain.family.dto.request.FamilyJoinRequest;
+import com.example.senioron.domain.family.dto.request.FamilyPrimaryManagerUpdateRequest;
 import com.example.senioron.domain.family.dto.response.FamilyCodeCreateResponse;
 import com.example.senioron.domain.family.dto.response.FamilyJoinResponse;
 import com.example.senioron.domain.family.dto.response.FamilyMemberResponse;
+import com.example.senioron.domain.family.dto.response.FamilyPrimaryManagerUpdateResponse;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.user.entity.ManagerType;
@@ -126,4 +128,41 @@ public class FamilyService {
                 .toList();
     }
 
+    // 주 담당자 변경 메서드
+    @Transactional
+    public FamilyPrimaryManagerUpdateResponse updatePrimaryManager(
+            User principal,
+            FamilyPrimaryManagerUpdateRequest request
+    ){
+        // 현재 로그인한 사용자가 실제 DB에 없는 경우
+        User currentUser = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        Family family = currentUser.getFamily();
+
+        if(family == null){
+            throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
+        }
+
+        if(currentUser.getManagerType() != ManagerType.PRIMARY){
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+
+        // 요청으로 받은 대상 사용자 ID가 실제 DB에 없는 경우
+        User targetUser = userRepository.findById(request.getTargetUserId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        if(targetUser.getFamily() == null || !Objects.equals(family.getFamilyId(), targetUser.getFamily().getFamilyId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+
+        currentUser.updateManagerType(ManagerType.SUB);
+        targetUser.updateManagerType(ManagerType.PRIMARY);
+
+        return FamilyPrimaryManagerUpdateResponse.builder()
+                .usersId((targetUser.getUsersId()))
+                .name(targetUser.getName())
+                .managerType(targetUser.getManagerType())
+                .build();
+    }
 }
