@@ -134,7 +134,7 @@ public class FamilyService {
             User principal,
             FamilyPrimaryManagerUpdateRequest request
     ){
-        // 요청으로 받은 대상 사용자 ID가 실제 DB에 없는 경우
+        // 현재 로그인한 사용자가 실제 DB에 없는 경우
         User currentUser = userRepository.findById(principal.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
