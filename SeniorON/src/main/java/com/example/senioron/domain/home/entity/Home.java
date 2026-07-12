@@ -38,4 +38,14 @@ public class Home extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
     private FontSize fontSize;
+
+    public void updateButton(Integer buttonOrder, String buttonName, String icon) {
+        this.buttonOrder = buttonOrder;
+        this.buttonName = buttonName;
+        this.icon = icon;
+    }
+
+    public void updateFontSize(FontSize fontSize) {
+        this.fontSize = fontSize;
+    }
 }

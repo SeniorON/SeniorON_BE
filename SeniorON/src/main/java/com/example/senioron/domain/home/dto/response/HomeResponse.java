@@ -1,4 +1,4 @@
-package com.example.senioron.domain.home.dto;
+package com.example.senioron.domain.home.dto.response;
 
 import com.example.senioron.domain.home.entity.FontSize;
 import com.fasterxml.jackson.annotation.JsonProperty;
