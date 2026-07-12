@@ -48,4 +48,24 @@ public class Home extends BaseEntity {
     public void updateFontSize(FontSize fontSize) {
         this.fontSize = fontSize;
     }
+
+    public static Home createButton(
+            User user,
+            Integer buttonOrder,
+            String buttonName,
+            String icon,
+            ActionType actionType,
+            String actionValue,
+            FontSize fontSize
+    ) {
+        return Home.builder()
+                .user(user)
+                .buttonOrder(buttonOrder)
+                .buttonName(buttonName)
+                .icon(icon)
+                .actionType(actionType)
+                .actionValue(actionValue)
+                .fontSize(fontSize)
+                .build();
+    }
 }

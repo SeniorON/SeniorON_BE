@@ -1,6 +1,7 @@
 package com.example.senioron.domain.home.controller;
 
 import com.example.senioron.domain.home.dto.request.HomeButtonUpdateRequest;
+import com.example.senioron.domain.home.dto.response.ButtonOptionResponse;
 import com.example.senioron.domain.home.dto.response.HomeResponse;
 import com.example.senioron.domain.home.service.HomeService;
 import com.example.senioron.global.apiPayload.response.Response;
@@ -11,6 +12,8 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @Tag(name = "홈", description = "홈 화면 관련 API")
 @RestController
@@ -42,5 +45,14 @@ public class HomeController {
     ) {
         homeService.updateButtons(request);
         return Response.ok();
+    }
+
+    @Operation(
+            summary = "추가 가능한 홈 버튼 목록 조회",
+            description = "사용자가 홈 화면에 추가할 수 있는 버튼 옵션 목록 조회"
+    )
+    @GetMapping("/button-options")
+    public Response<List<ButtonOptionResponse>> getButtonOptions() {
+        return Response.ok(homeService.getButtonOptions());
     }
 }

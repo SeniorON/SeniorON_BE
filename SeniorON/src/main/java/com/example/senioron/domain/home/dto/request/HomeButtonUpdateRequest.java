@@ -1,5 +1,6 @@
 package com.example.senioron.domain.home.dto.request;
 
+import com.example.senioron.domain.home.entity.ActionType;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.List;
@@ -24,6 +25,12 @@ public class HomeButtonUpdateRequest {
         private String buttonName;
 
         private String icon;
+
+        @JsonProperty("action_type")
+        private ActionType actionType;
+
+        @JsonProperty("action_value")
+        private String actionValue;
 
         public Long getButtonId() {
             return buttonId;

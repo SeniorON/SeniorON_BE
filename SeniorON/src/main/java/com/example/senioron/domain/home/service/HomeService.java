@@ -1,8 +1,10 @@
 package com.example.senioron.domain.home.service;
 
 import com.example.senioron.domain.home.dto.request.HomeButtonUpdateRequest;
+import com.example.senioron.domain.home.dto.response.ButtonOptionResponse;
 import com.example.senioron.domain.home.dto.response.HomeResponse;
 import com.example.senioron.domain.home.entity.Home;
+import com.example.senioron.domain.home.repository.ButtonOptionRepository;
 import com.example.senioron.domain.home.repository.HomeRepository;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
@@ -23,9 +25,14 @@ import java.util.stream.Collectors;
 public class HomeService {
 
     private final HomeRepository homeRepository;
+    private final ButtonOptionRepository buttonOptionRepository;
 
-    public HomeService(HomeRepository homeRepository) {
+    public HomeService(
+            HomeRepository homeRepository,
+            ButtonOptionRepository buttonOptionRepository
+    ) {
         this.homeRepository = homeRepository;
+        this.buttonOptionRepository = buttonOptionRepository;
     }
 
     public HomeResponse getHome() {
@@ -91,6 +98,20 @@ public class HomeService {
                     buttonRequest.getIcon()
             );
         }
+    }
+
+    public List<ButtonOptionResponse> getButtonOptions() {
+
+        return buttonOptionRepository.findAll()
+                .stream()
+                .map(option -> new ButtonOptionResponse(
+                        option.getOptionId(),
+                        option.getButtonName(),
+                        option.getIcon(),
+                        option.getActionType(),
+                        option.getActionValue()
+                ))
+                .toList();
     }
 
     private User getCurrentUser() {

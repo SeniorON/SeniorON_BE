@@ -9,4 +9,6 @@ import java.util.List;
 public interface HomeRepository extends JpaRepository<Home, Long> {
 
     List<Home> findAllByUserOrderByButtonOrderAsc(User user);
+
+    void deleteAllByHomeIdIn(List<Long> homeIds);
 }
