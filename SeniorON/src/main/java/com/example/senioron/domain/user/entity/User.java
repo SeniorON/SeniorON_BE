@@ -62,4 +62,9 @@ public class User extends BaseEntity {
     public void updateManagerType(ManagerType managerType) {
         this.managerType = managerType;
     }
+
+    public void removeFromFamily() {
+        this.family = null;
+        this.managerType = null;
+    }
 }

@@ -165,4 +165,38 @@ public class FamilyService {
                 .managerType(targetUser.getManagerType())
                 .build();
     }
+
+    public void removeFamilyMember(User principal, Long targetUserId) {
+        // 로그인한 사용자 조회
+        User currentUser = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        // 요청자가 가족에 소속되어 있는지 확인
+        Family family = currentUser.getFamily();
+
+        if (family == null) {
+            throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
+        }
+
+        // 주 담당자만 가족 구성원을 제외할 수 있음
+        if (currentUser.getManagerType() != ManagerType.PRIMARY) {
+            throw new BusinessException(ErrorCode.FAMILY_MEMBER_REMOVE_FORBIDDEN);
+        }
+
+        // 제외할 사용자 조회
+        User targetUser = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        // 대상자가 요청자와 같은 가족인지 확인
+        if (targetUser.getFamily() == null || !Objects.equals(family.getFamilyId(), targetUser.getFamily().getFamilyId())) {
+            throw new BusinessException(ErrorCode.FAMILY_MEMBER_NOT_FOUND);
+        }
+
+        if (Objects.equals(currentUser.getUsersId(), targetUser.getUsersId())) {
+            throw new BusinessException(ErrorCode.CANNOT_REMOVE_SELF);
+        }
+
+        targetUser.removeFromFamily();
+
+    }
 }
