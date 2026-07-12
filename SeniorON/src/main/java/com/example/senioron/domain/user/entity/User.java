@@ -20,23 +20,26 @@ public class User extends BaseEntity {
     @Column(name = "users_id")
     private Long usersId;
 
+    @Enumerated(EnumType.STRING)
+    private LoginProvider provider;
+
+    private String providerId;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "family_id")
     private Family family;
 
-    @Column(nullable = false, unique = true)
+    @Column(unique = true)
     private String loginId;
 
-    @Column(nullable = false, unique = true)
+    @Column(unique = true)
     private String email;
 
-    @Column(nullable = false)
     private String password;
 
     @Column(nullable = false)
     private String name;
 
-    @Column(nullable = false)
     private LocalDate birth;
 
     private String phoneNumber;

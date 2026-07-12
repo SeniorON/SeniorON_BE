@@ -21,3 +21,7 @@ management:
   metrics:
     tags:
       application: senioron
+
+kakao:
+  client-id: ${KAKAO_CLIENT_ID}
+  redirect-uri: ${KAKAO_REDIRECT_URI}

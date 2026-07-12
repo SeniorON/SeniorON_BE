@@ -1,6 +1,7 @@
 package com.example.senioron.domain.user.repository;
 
 import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.user.entity.LoginProvider;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -19,6 +20,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByLoginId(String loginId);
 
     List<User> findAllByFamily(Family family);
+
+    Optional<User> findByProviderAndProviderId(LoginProvider provider, String providerId);
 
     @Query("SELECT u FROM User u WHERE u.family = :family AND u.usersId != :excludeUserId AND u.role = :role")
     List<User> findByFamilyAndUsersIdNotAndRole(
