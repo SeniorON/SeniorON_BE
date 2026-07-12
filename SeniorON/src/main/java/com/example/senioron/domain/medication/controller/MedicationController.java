@@ -7,6 +7,8 @@ import com.example.senioron.domain.medication.service.MedicationService;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.global.apiPayload.code.ResultCode;
 import com.example.senioron.global.apiPayload.response.Response;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -22,11 +24,15 @@ import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
+@Tag(name = "약", description = "복약 관리 API")
 @RequestMapping("/api/medications")
 public class MedicationController {
 
     private final MedicationService medicationService;
-
+    @Operation(
+            summary = "약 등록",
+            description = "로그인한 사용자가 부모님의 복약 정보를 등록합니다."
+    )
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public Response<MedicationCreateResponse> createMedication(
@@ -39,6 +45,10 @@ public class MedicationController {
         return Response.ok(ResultCode.CREATED, result);
     }
 
+    @Operation(
+            summary = "약 목록 조회",
+            description = "로그인한 사용자가 부모님의 복약 정보를 조회합니다."
+    )
     @GetMapping
     public Response<List<MedicationReadResponse>> getMedications(
             @AuthenticationPrincipal User user
