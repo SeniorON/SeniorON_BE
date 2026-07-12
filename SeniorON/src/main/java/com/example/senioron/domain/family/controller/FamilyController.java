@@ -55,4 +55,14 @@ public class FamilyController {
     ){
         return Response.ok(familyService.updatePrimaryManager(user, request));
     }
+
+    @Operation(summary = "가족 구성원 삭제", description = "주 담당자가 같은 가족의 구성원을 가족에서 제외합니다.")
+    @DeleteMapping("/members/{targetUserId}")
+    public Response<Void> removeFamilyMember(
+            @AuthenticationPrincipal User user,
+            @PathVariable Long targetUserId
+    ) {
+        familyService.removeFamilyMember(user, targetUserId);
+        return Response.ok();
+    }
 }
