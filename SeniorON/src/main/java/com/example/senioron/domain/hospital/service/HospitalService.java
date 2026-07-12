@@ -41,4 +41,13 @@ public class HospitalService {
                 .reminderType(savedHospital.getReminderType())
                 .build();
     }
+
+    @Transactional
+    public void deleteHospital(User user, Long hospitalId) {
+        Hospital hospital = hospitalRepository.findById(hospitalId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 병원 일정입니다."));
+
+        hospitalRepository.delete(hospital);
+    }
+
 }
