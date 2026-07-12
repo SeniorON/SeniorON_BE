@@ -156,6 +156,11 @@ public class FamilyService {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
 
+        // 자신은 주 담당자 변경 대상 불가
+        if (Objects.equals(currentUser.getUsersId(), targetUser.getUsersId())) {
+            throw new BusinessException(ErrorCode.CANNOT_CHANGE_PRIMARY_TO_SELF);
+        }
+
         currentUser.updateManagerType(ManagerType.SUB);
         targetUser.updateManagerType(ManagerType.PRIMARY);
 
@@ -166,6 +171,7 @@ public class FamilyService {
                 .build();
     }
 
+    // 가족 구성원 제거 메서드
     public void removeFamilyMember(User principal, Long targetUserId) {
         // 로그인한 사용자 조회
         User currentUser = userRepository.findById(principal.getUsersId())
