@@ -1,5 +1,7 @@
 package com.example.senioron.domain.hospital.service;
 
+import com.example.senioron.global.apiPayload.code.ErrorCode;
+import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.domain.hospital.dto.request.HospitalCreateRequest;
 import com.example.senioron.domain.hospital.dto.response.HospitalCreateResponse;
 import com.example.senioron.domain.hospital.entity.Hospital;
@@ -45,7 +47,13 @@ public class HospitalService {
     @Transactional
     public void deleteHospital(User user, Long hospitalId) {
         Hospital hospital = hospitalRepository.findById(hospitalId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 병원 일정입니다."));
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.HOSPITAL_SCHEDULE_NOT_FOUND)
+                );
+
+        if (!hospital.getUser().getUsersId().equals(user.getUsersId())) {
+            throw new BusinessException(ErrorCode.HOSPITAL_SCHEDULE_NOT_FOUND);
+        }
 
         hospitalRepository.delete(hospital);
     }
