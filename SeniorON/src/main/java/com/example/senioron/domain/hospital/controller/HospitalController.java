@@ -1,5 +1,7 @@
 package com.example.senioron.domain.hospital.controller;
 
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import com.example.senioron.domain.hospital.dto.request.HospitalCreateRequest;
 import com.example.senioron.domain.hospital.dto.response.HospitalCreateResponse;
 import com.example.senioron.domain.hospital.service.HospitalService;
@@ -40,5 +42,18 @@ public class HospitalController {
                 hospitalService.createHospital(user, request);
 
         return Response.ok(ResultCode.CREATED, result);
+    }
+    @Operation(
+            summary = "병원 일정 삭제",
+            description = "등록된 특정 병원 진료 일정을 삭제합니다."
+    )
+    @DeleteMapping("/{hospitalId}")
+    @ResponseStatus(HttpStatus.OK)
+    public Response<Void> deleteHospital(
+            @AuthenticationPrincipal User user,
+            @PathVariable("hospitalId") Long hospitalId
+    ) {
+        hospitalService.deleteHospital(user, hospitalId);
+        return Response.ok(ResultCode.OK, null);
     }
 }
