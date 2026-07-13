@@ -15,7 +15,7 @@ import java.math.BigDecimal;
 public class GeocodingClient {
     private final RestClient kakaoRestClient;
 
-    @Value("${kakao.local.api-key}")
+    @Value("${kakao.local.api-key:}")
     private String kakaoApiKey;
 
     public String reverseGeocode(BigDecimal lat, BigDecimal lng){
