@@ -5,6 +5,7 @@ import com.example.senioron.domain.event.dto.response.SosEventResponse;
 import com.example.senioron.domain.event.entity.Event;
 import com.example.senioron.domain.event.entity.EventType;
 import com.example.senioron.domain.event.repository.EventRepository;
+import com.example.senioron.domain.event.util.GeocodingClient;
 import com.example.senioron.domain.notification.service.NotificationService;
 import com.example.senioron.domain.user.entity.User;
 import jakarta.transaction.Transactional;
@@ -17,9 +18,12 @@ public class EventService {
 
     private final EventRepository eventRepository;
     private final NotificationService notificationService;
+    private final GeocodingClient geocodingClient;
 
     @Transactional
     public SosEventResponse createSosEvent(User user, SosEventRequest req){
+        String address = geocodingClient.reverseGeocode(req.getLatitude(), req.getLongitude());
+
         Event event = Event.builder()
                 .user(user)
                 .triggeredUser(user)
@@ -27,10 +31,12 @@ public class EventService {
                 .eventType(EventType.SOS)
                 .latitude(req.getLatitude())
                 .longitude(req.getLongitude())
+                .address(address)
                 .build();
 
         Event savedEvent = eventRepository.save(event);
         notificationService.createFormEvent(event);
+
         return SosEventResponse.of(savedEvent);
     }
 }
