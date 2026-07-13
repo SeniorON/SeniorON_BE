@@ -33,10 +33,18 @@ public class GeocodingClient {
             if(response == null || response.documents().isEmpty()){
                 return "위치 정보를 확인할 수 없어요";
             }
-            return response.documents().get(0).address().addressName();
+
+            KakaoAddressResponse.Document document = response.documents().get(0);
+            if(document.address() != null){
+                return document.address().addressName();
+            }
+            if(document.roadAddress() != null){
+                return document.roadAddress().roadAddress();
+            }
+            return "위치정보를 확인할 수 없어요";
 
         } catch (Exception e){
-            log.warn("카카오 역지오코딩 실패 : lat={}, lng={}", lat, lng);
+            log.warn("카카오 역지오코딩 실패");
             return "위치정보를 확인할 수 없어요";
         }
     }
