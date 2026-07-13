@@ -13,6 +13,7 @@ public class SosEventResponse {
     private Long id;
     private BigDecimal latitude;
     private BigDecimal longitude;
+    private String address;
     private Integer deviceBattery;
 
     public static SosEventResponse of (Event event){
@@ -21,6 +22,7 @@ public class SosEventResponse {
                 .latitude(event.getLatitude())
                 .longitude(event.getLongitude())
                 .deviceBattery(event.getDeviceBattery())
+                .address(event.getAddress())
                 .build();
     }
 }
