@@ -35,16 +35,21 @@ public class GeocodingClient {
             }
 
             KakaoAddressResponse.Document document = response.documents().get(0);
-            if(document.address() != null){
-                return document.address().addressName();
+
+            KakaoAddressResponse.Address address = document.address();
+            if (address != null && address.addressName() != null && !address.addressName().isBlank()) {
+                return address.addressName();
             }
-            if(document.roadAddress() != null){
-                return document.roadAddress().roadAddress();
+
+            KakaoAddressResponse.RoadAddress roadAddress = document.roadAddress();
+            if (roadAddress != null && roadAddress.roadAddressName() != null && !roadAddress.roadAddressName().isBlank()) {
+                return roadAddress.roadAddressName();
             }
+
             return "위치정보를 확인할 수 없어요";
 
         } catch (Exception e){
-            log.warn("카카오 역지오코딩 실패");
+            log.warn("카카오 역지오코딩 실패: {}", e.getMessage());
             return "위치정보를 확인할 수 없어요";
         }
     }

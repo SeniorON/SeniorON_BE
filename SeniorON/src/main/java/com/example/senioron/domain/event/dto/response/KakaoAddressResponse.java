@@ -10,6 +10,6 @@ public record KakaoAddressResponse(List<Document> documents){
             @JsonProperty("address_name") String addressName
     ){}
     public record RoadAddress(
-            @JsonProperty("address_name") String roadAddress
+            @JsonProperty("address_name") String roadAddressName
     ){}
 }
