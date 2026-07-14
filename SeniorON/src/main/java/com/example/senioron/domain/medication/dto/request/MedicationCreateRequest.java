@@ -22,7 +22,6 @@ public class MedicationCreateRequest {
     private String ingredientName;
 
     @NotEmpty(message = "복용 시간은 최소 하나 이상 지정해야 합니다.")
-    // 💡 네 서비스 로직(for문)에서 List<LocalTime>을 쓰기 때문에 이렇게 리스트 예시로 넣어줘야 해!
     @Schema(description = "복용 시간 목록", example = "[\"08:30\", \"19:00\"]")
     private List<LocalTime> medicineTimes;
 
