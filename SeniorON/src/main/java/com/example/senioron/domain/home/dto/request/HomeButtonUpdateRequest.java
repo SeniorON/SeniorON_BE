@@ -1,12 +1,15 @@
 package com.example.senioron.domain.home.dto.request;
 
-import com.example.senioron.domain.home.entity.ActionType;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 
 import java.util.List;
 
 public class HomeButtonUpdateRequest {
 
+    @NotNull(message = "버튼 목록은 필수입니다.")
+    @Valid
     private List<ButtonRequest> buttons;
 
     public List<ButtonRequest> getButtons() {
@@ -16,21 +19,17 @@ public class HomeButtonUpdateRequest {
     public static class ButtonRequest {
 
         @JsonProperty("button_id")
+        @NotNull(message = "버튼 ID는 필수입니다.")
         private Long buttonId;
 
         @JsonProperty("button_order")
+        @NotNull(message = "버튼 순서는 필수입니다.")
         private Integer buttonOrder;
 
         @JsonProperty("button_name")
         private String buttonName;
 
         private String icon;
-
-        @JsonProperty("action_type")
-        private ActionType actionType;
-
-        @JsonProperty("action_value")
-        private String actionValue;
 
         public Long getButtonId() {
             return buttonId;

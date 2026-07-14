@@ -81,7 +81,9 @@ public class HomeService {
         List<Home> homes =
                 homeRepository.findAllByUserOrderByButtonOrderAsc(user);
 
-        if (request.getButtons().size() != homes.size()) {
+        if (request.getButtons() == null
+                || request.getButtons().size() != homes.size()) {
+
             throw new BusinessException(
                     ErrorCode.INVALID_HOME_BUTTON_REQUEST
             );
@@ -93,6 +95,17 @@ public class HomeService {
                         Function.identity()
                 ));
 
+        boolean hasNullButtonId = request.getButtons().stream()
+                .anyMatch(buttonRequest ->
+                        buttonRequest.getButtonId() == null
+                );
+
+        if (hasNullButtonId) {
+            throw new BusinessException(
+                    ErrorCode.HOME_BUTTON_NOT_FOUND
+            );
+        }
+
         long buttonIdCount = request.getButtons().stream()
                 .map(HomeButtonUpdateRequest.ButtonRequest::getButtonId)
                 .distinct()
@@ -101,6 +114,17 @@ public class HomeService {
         if (buttonIdCount != request.getButtons().size()) {
             throw new BusinessException(
                     ErrorCode.DUPLICATE_HOME_BUTTON_ID
+            );
+        }
+
+        boolean hasNullButtonOrder = request.getButtons().stream()
+                .anyMatch(buttonRequest ->
+                        buttonRequest.getButtonOrder() == null
+                );
+
+        if (hasNullButtonOrder) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_HOME_BUTTON_ORDER
             );
         }
 
@@ -122,9 +146,7 @@ public class HomeService {
 
         for (int i = 0; i < sortedOrders.size(); i++) {
 
-            if (sortedOrders.get(i) == null
-                    || !sortedOrders.get(i).equals(i + 1)) {
-
+            if (!sortedOrders.get(i).equals(i + 1)) {
                 throw new BusinessException(
                         ErrorCode.INVALID_HOME_BUTTON_ORDER
                 );

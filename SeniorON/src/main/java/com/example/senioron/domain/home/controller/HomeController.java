@@ -9,6 +9,7 @@ import com.example.senioron.domain.home.service.HomeService;
 import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -46,7 +47,7 @@ public class HomeController {
     )
     @PatchMapping("/buttons")
     public Response<Void> updateButtons(
-            @RequestBody HomeButtonUpdateRequest request
+            @Valid @RequestBody HomeButtonUpdateRequest request
     ) {
         homeService.updateButtons(request);
         return Response.ok();
@@ -58,7 +59,7 @@ public class HomeController {
     )
     @PostMapping("/buttons")
     public Response<HomeButtonCreateResponse> createButton(
-            @RequestBody HomeButtonCreateRequest request
+            @Valid @RequestBody HomeButtonCreateRequest request
     ) {
         return Response.ok(homeService.createButton(request));
     }
