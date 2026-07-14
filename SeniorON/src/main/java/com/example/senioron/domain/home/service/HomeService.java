@@ -1,8 +1,12 @@
 package com.example.senioron.domain.home.service;
 
+import com.example.senioron.domain.home.dto.request.HomeButtonCreateRequest;
 import com.example.senioron.domain.home.dto.request.HomeButtonUpdateRequest;
 import com.example.senioron.domain.home.dto.response.ButtonOptionResponse;
+import com.example.senioron.domain.home.dto.response.HomeButtonCreateResponse;
 import com.example.senioron.domain.home.dto.response.HomeResponse;
+import com.example.senioron.domain.home.entity.ButtonOption;
+import com.example.senioron.domain.home.entity.FontSize;
 import com.example.senioron.domain.home.entity.Home;
 import com.example.senioron.domain.home.repository.ButtonOptionRepository;
 import com.example.senioron.domain.home.repository.HomeRepository;
@@ -89,7 +93,9 @@ public class HomeService {
             Home home = homeMap.get(buttonRequest.getButtonId());
 
             if (home == null) {
-                throw new BusinessException(ErrorCode.HOME_BUTTON_NOT_FOUND);
+                throw new BusinessException(
+                        ErrorCode.HOME_BUTTON_NOT_FOUND
+                );
             }
 
             home.updateButton(
@@ -112,6 +118,60 @@ public class HomeService {
                         option.getActionValue()
                 ))
                 .toList();
+    }
+
+    @Transactional
+    public HomeButtonCreateResponse createButton(
+            HomeButtonCreateRequest request
+    ) {
+
+        User user = getCurrentUser();
+
+        ButtonOption buttonOption = buttonOptionRepository
+                .findById(request.getOptionId())
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.BUTTON_OPTION_NOT_FOUND
+                ));
+
+        boolean alreadyExists =
+                homeRepository.existsByUserAndActionTypeAndActionValue(
+                        user,
+                        buttonOption.getActionType(),
+                        buttonOption.getActionValue()
+                );
+
+        if (alreadyExists) {
+            throw new BusinessException(
+                    ErrorCode.HOME_BUTTON_ALREADY_EXISTS
+            );
+        }
+
+        List<Home> homes =
+                homeRepository.findAllByUserOrderByButtonOrderAsc(user);
+
+        int newButtonOrder = homes.stream()
+                .mapToInt(Home::getButtonOrder)
+                .max()
+                .orElse(0)
+                + 1;
+
+        FontSize fontSize = homes.isEmpty()
+                ? FontSize.MEDIUM
+                : homes.get(0).getFontSize();
+
+        Home newButton = Home.createButton(
+                user,
+                newButtonOrder,
+                buttonOption.getButtonName(),
+                buttonOption.getIcon(),
+                buttonOption.getActionType(),
+                buttonOption.getActionValue(),
+                fontSize
+        );
+
+        Home savedButton = homeRepository.save(newButton);
+
+        return HomeButtonCreateResponse.from(savedButton);
     }
 
     private User getCurrentUser() {

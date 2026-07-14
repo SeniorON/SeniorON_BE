@@ -25,6 +25,8 @@ public enum ErrorCode implements BaseCode {
 
     // Home Error
     HOME_BUTTON_NOT_FOUND(HttpStatus.NOT_FOUND, "HOME404", "홈 버튼을 찾을 수 없습니다."),
+    BUTTON_OPTION_NOT_FOUND(HttpStatus.NOT_FOUND, "HOME4001", "존재하지 않는 버튼 옵션입니다."),
+    HOME_BUTTON_ALREADY_EXISTS(HttpStatus.CONFLICT, "HOME4002", "이미 추가된 홈 버튼입니다."),
 
     // Family Error
     FAMILY_NOT_FOUND(HttpStatus.NOT_FOUND, "FAMILY404", "가족 정보를 찾을 수 없습니다."),

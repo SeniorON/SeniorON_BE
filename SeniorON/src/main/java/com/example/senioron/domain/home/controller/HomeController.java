@@ -1,7 +1,9 @@
 package com.example.senioron.domain.home.controller;
 
+import com.example.senioron.domain.home.dto.request.HomeButtonCreateRequest;
 import com.example.senioron.domain.home.dto.request.HomeButtonUpdateRequest;
 import com.example.senioron.domain.home.dto.response.ButtonOptionResponse;
+import com.example.senioron.domain.home.dto.response.HomeButtonCreateResponse;
 import com.example.senioron.domain.home.dto.response.HomeResponse;
 import com.example.senioron.domain.home.service.HomeService;
 import com.example.senioron.global.apiPayload.response.Response;
@@ -9,6 +11,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -45,6 +48,17 @@ public class HomeController {
     ) {
         homeService.updateButtons(request);
         return Response.ok();
+    }
+
+    @Operation(
+            summary = "홈 버튼 추가",
+            description = "선택한 버튼 옵션을 로그인한 사용자의 홈 화면에 추가"
+    )
+    @PostMapping("/buttons")
+    public Response<HomeButtonCreateResponse> createButton(
+            @RequestBody HomeButtonCreateRequest request
+    ) {
+        return Response.ok(homeService.createButton(request));
     }
 
     @Operation(
