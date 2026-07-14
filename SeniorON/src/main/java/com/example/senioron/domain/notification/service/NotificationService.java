@@ -66,7 +66,7 @@ public class NotificationService {
         if (notifications.isEmpty()) {return;}
         notificationRepository.saveAll(notifications); // 레포 저장
 
-// 커밋 성공 이후에만 FCM 발송이 실행되도록 등록
+        // 커밋 성공 이후에만 FCM 발송이 실행되도록 등록
         TransactionSynchronizationManager.registerSynchronization(
                 new TransactionSynchronization() {
                     @Override

@@ -11,6 +11,7 @@ import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,10 +35,18 @@ public class InactivitySettingService {
     }
     //조회 시 세팅 없을 경우 생성
     private InactivitySetting createDefaultInternal(User targetUser) {
-        InactivitySetting setting = InactivitySetting.builder()
-                .user(targetUser)
-                .build();
-        return inactivitySettingRepository.save(setting);
+        try {
+            InactivitySetting setting = InactivitySetting.builder()
+                    .user(targetUser)
+                    .isEnabled(true)
+                    .thresholdHours(4)
+                    .build();
+            return inactivitySettingRepository.save(setting);
+        } catch (DataIntegrityViolationException e) {
+            // 동시에 다른 요청이 먼저 만들어버린 경우 그냥 다시 조회 후 반환
+            return inactivitySettingRepository.findById(targetUser.getUsersId())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.INACTIVITY_SETTING_NOT_FOUND));
+        }
     }
 
     @Transactional
