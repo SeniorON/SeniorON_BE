@@ -23,6 +23,9 @@ public enum ErrorCode implements BaseCode {
     PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, "USER400_1", "비밀번호가 일치하지 않습니다."),
     INVALID_PASSWORD(HttpStatus.BAD_REQUEST, "USER400_2", "비밀번호가 올바르지 않습니다."),
 
+    // Senior Error
+    CUSTOM_RELATION_REQUIRED(HttpStatus.BAD_REQUEST, "SENIOR4001", "직접 작성 관계를 입력해 주세요."),
+    
     // Family Error
     FAMILY_NOT_FOUND(HttpStatus.NOT_FOUND, "FAMILY404", "가족 정보를 찾을 수 없습니다."),
     INVALID_FAMILY_CODE(HttpStatus.BAD_REQUEST, "FAMILY400", "유효하지 않은 가족 코드입니다."),
