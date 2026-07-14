@@ -28,6 +28,7 @@ public class FamilyPhoto extends BaseEntity {
     @JoinColumn(name = "users_id")
     private User user;
 
-    private String photoUrl;
+    @Column(name = "image_key", nullable = false)
+    private String imageKey;
 
     private String description;}

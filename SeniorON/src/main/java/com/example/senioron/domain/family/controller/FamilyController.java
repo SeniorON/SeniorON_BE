@@ -65,4 +65,5 @@ public class FamilyController {
         familyService.removeFamilyMember(user, targetUserId);
         return Response.ok();
     }
+
 }
