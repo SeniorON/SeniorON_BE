@@ -1,9 +1,11 @@
 package com.example.senioron.domain.user.controller;
 
 import com.example.senioron.domain.user.dto.request.LoginIdFindRequest;
+import com.example.senioron.domain.user.dto.request.PasswordResetRequest;
 import com.example.senioron.domain.user.dto.request.PasswordResetCodeSendRequest;
 import com.example.senioron.domain.user.dto.request.PasswordResetCodeVerifyRequest;
 import com.example.senioron.domain.user.dto.response.LoginIdFindResponse;
+import com.example.senioron.domain.user.dto.response.PasswordResetResponse;
 import com.example.senioron.domain.user.dto.response.PasswordResetCodeSendResponse;
 import com.example.senioron.domain.user.dto.response.PasswordResetCodeVerifyResponse;
 import com.example.senioron.domain.user.service.AccountRecoveryService;
@@ -12,6 +14,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -56,5 +59,16 @@ public class AccountRecoveryController {
             @Valid @RequestBody PasswordResetCodeVerifyRequest request
     ) {
         return Response.ok(accountRecoveryService.verifyPasswordResetVerificationCode(request));
+    }
+
+    @Operation(
+            summary = "비밀번호 재설정",
+            description = "인증번호 확인이 완료된 인증번호 ID로 사용자의 비밀번호를 새 비밀번호로 변경합니다."
+    )
+    @PatchMapping("/password")
+    public Response<PasswordResetResponse> resetPassword(
+            @Valid @RequestBody PasswordResetRequest request
+    ) {
+        return Response.ok(accountRecoveryService.resetPassword(request));
     }
 }

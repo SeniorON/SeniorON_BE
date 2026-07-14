@@ -1,9 +1,11 @@
 package com.example.senioron.domain.user.service;
 
 import com.example.senioron.domain.user.dto.request.LoginIdFindRequest;
+import com.example.senioron.domain.user.dto.request.PasswordResetRequest;
 import com.example.senioron.domain.user.dto.request.PasswordResetCodeSendRequest;
 import com.example.senioron.domain.user.dto.request.PasswordResetCodeVerifyRequest;
 import com.example.senioron.domain.user.dto.response.LoginIdFindResponse;
+import com.example.senioron.domain.user.dto.response.PasswordResetResponse;
 import com.example.senioron.domain.user.dto.response.PasswordResetCodeSendResponse;
 import com.example.senioron.domain.user.dto.response.PasswordResetCodeVerifyResponse;
 import com.example.senioron.domain.user.entity.AccountRecoveryPurpose;
@@ -97,6 +99,33 @@ public class AccountRecoveryService {
 
         return PasswordResetCodeVerifyResponse.builder()
                 .verified(true)
+                .build();
+    }
+
+    @Transactional
+    public PasswordResetResponse resetPassword(PasswordResetRequest request) {
+        if (!request.getNewPassword().equals(request.getNewPasswordCheck())) {
+            throw new BusinessException(ErrorCode.PASSWORD_MISMATCH);
+        }
+
+        AccountRecoveryVerificationCode savedCode = verificationCodeRepository
+                .findByAccountRecoveryVerificationCodeIdAndPurposeAndUsedAtIsNull(
+                        request.getVerificationId(),
+                        AccountRecoveryPurpose.PASSWORD_RESET
+                )
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_PASSWORD_RESET_VERIFICATION_CODE));
+
+        LocalDateTime now = LocalDateTime.now();
+        if (savedCode.isExpired(now) || !savedCode.isVerified()) {
+            throw new BusinessException(ErrorCode.INVALID_PASSWORD_RESET_VERIFICATION_CODE);
+        }
+
+        User user = savedCode.getUser();
+        user.updatePassword(passwordEncoder.encode(request.getNewPassword()));
+        savedCode.use(now);
+
+        return PasswordResetResponse.builder()
+                .reset(true)
                 .build();
     }
 

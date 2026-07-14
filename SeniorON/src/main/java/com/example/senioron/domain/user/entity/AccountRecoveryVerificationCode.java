@@ -51,11 +51,19 @@ public class AccountRecoveryVerificationCode extends BaseEntity {
         this.usedAt = expiredAt;
     }
 
+    public void use(LocalDateTime usedAt) {
+        this.usedAt = usedAt;
+    }
+
     public void verify(LocalDateTime verifiedAt) {
         this.verifiedAt = verifiedAt;
     }
 
     public boolean isExpired(LocalDateTime now) {
         return expiresAt.isBefore(now);
+    }
+
+    public boolean isVerified() {
+        return verifiedAt != null;
     }
 }
