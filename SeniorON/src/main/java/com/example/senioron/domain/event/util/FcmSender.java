@@ -41,8 +41,7 @@ public class FcmSender {
             if (errorCode == MessagingErrorCode.UNREGISTERED
                     || errorCode == MessagingErrorCode.INVALID_ARGUMENT) {
                 log.warn("유효하지 않은 FCM 토큰, 삭제 처리");
-                userRepository.findByFcmToken(fcmToken)
-                        .ifPresent(user -> user.updateFcmToken(null));
+                userRepository.clearFcmToken(fcmToken);
             } else {
                 log.warn("FCM 발송 일시 실패, 재시도 필요: token = " + maskToken(fcmToken));
             }
