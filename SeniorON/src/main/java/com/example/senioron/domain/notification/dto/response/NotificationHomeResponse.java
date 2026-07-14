@@ -20,6 +20,7 @@ public class NotificationHomeResponse {
     private Long senderId;
     private String senderName;
     private Integer deviceBattery;
+    private String address;
 
     private String emptyMessage;
 
@@ -40,6 +41,7 @@ public class NotificationHomeResponse {
                 .senderId(latest.getSendUser().getUsersId())
                 .senderName(latest.getSendUser().getName())
                 .deviceBattery(latest.getEvent() != null ? latest.getEvent().getDeviceBattery() : null)
+                .address(latest.getEvent() != null ? latest.getEvent().getAddress() : null)
                 .build();
     }
 
