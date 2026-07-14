@@ -20,6 +20,8 @@ import com.example.senioron.global.apiPayload.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -63,12 +65,20 @@ public class NotificationService {
         if (notifications.isEmpty()) {return;}
         notificationRepository.saveAll(notifications); // 레포 저장
 
-        for (Notification notification : notifications){
-            User receiver = notification.getReceiverUser();
-            if(receiver.getFcmToken() != null){
-                fcmSender.send(receiver.getFcmToken(), notification.getTitle(), notification.getBody());
-            }
-        }
+// 커밋 성공 이후에만 FCM 발송이 실행되도록 등록
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        for (Notification notification : notifications) {
+                            User receiver = notification.getReceiverUser();
+                            if (receiver.getFcmToken() != null) {
+                                fcmSender.send(receiver.getFcmToken(), notification.getTitle(), notification.getBody());
+                            }
+                        }
+                    }
+                }
+        );
     }
 
     @Transactional(readOnly = true)

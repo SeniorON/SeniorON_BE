@@ -120,6 +120,8 @@ public class UserService {
                 .build();
     }
 
-
+    public void clearFcmToken(String fcmToken){
+        userRepository.findByFcmToken(fcmToken).ifPresent(user -> user.updateFcmToken(null));
+    }
 
 }

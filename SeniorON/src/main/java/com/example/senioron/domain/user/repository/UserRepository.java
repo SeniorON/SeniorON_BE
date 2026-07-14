@@ -25,4 +25,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
             @Param("family")Family family,
             @Param("excludeUserId")Long excludeUserId,
             @Param("role")Role role);
+
+    Optional<User> findByFcmToken(String fcmToken);
 }
