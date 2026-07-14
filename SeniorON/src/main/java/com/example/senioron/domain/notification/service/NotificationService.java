@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -154,8 +155,11 @@ public class NotificationService {
         );
     }
 
-    private NotificationHomeResponse buildGroup(Long userId, NotificationType type, boolean enabled){
-        Notification latest = notificationRepository.findLatestUnread(userId, type).orElse(null);
+    private NotificationHomeResponse buildGroup(Long userId, NotificationType type, boolean enabled) {
+        LocalDateTime threshold = LocalDateTime.now().minusDays(2);
+        Notification latest = notificationRepository
+                .findLatestUnread(userId, type, threshold)
+                .orElse(null);
         return NotificationHomeResponse.of(type, enabled, latest);
     }
 
