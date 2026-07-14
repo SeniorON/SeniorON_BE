@@ -43,19 +43,24 @@ public class FamilyPhotoService {
                 directory
         );
 
-        FamilyPhoto familyPhoto = FamilyPhoto.builder()
-                .family(family)
-                .user(user)
-                .imageKey(imageKey)
-                .build();
+        try {
+            FamilyPhoto familyPhoto = FamilyPhoto.builder()
+                    .family(family)
+                    .user(user)
+                    .imageKey(imageKey)
+                    .build();
 
-        FamilyPhoto savedPhoto = familyPhotoRepository.save(familyPhoto);
+            FamilyPhoto savedPhoto = familyPhotoRepository.saveAndFlush(familyPhoto);
 
-        return FamilyPhotoCreateResponse.builder()
-                .familyPhotoId(savedPhoto.getFamilyPhotoId())
-                .imageKey(savedPhoto.getImageKey())
-                .uploaderName(user.getName())
-                .createdAt(savedPhoto.getCreatedAt())
-                .build();
+            return FamilyPhotoCreateResponse.builder()
+                    .familyPhotoId(savedPhoto.getFamilyPhotoId())
+                    .imageKey(savedPhoto.getImageKey())
+                    .uploaderName(user.getName())
+                    .createdAt(savedPhoto.getCreatedAt())
+                    .build();
+        } catch(RuntimeException e) {
+            s3Service.delete(imageKey);
+            throw e;
+        }
     }
 }
