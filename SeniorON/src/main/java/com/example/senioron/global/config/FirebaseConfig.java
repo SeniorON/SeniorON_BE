@@ -8,6 +8,7 @@ import com.google.firebase.FirebaseOptions;
 import jakarta.annotation.PostConstruct;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
@@ -19,13 +20,15 @@ public class FirebaseConfig {
 
     @Getter
     private boolean initialized = false;
+    @Value("${firebase.service-account-path}")
+    private String serviceAccountPath;
 
     @PostConstruct
     public void init(){
 
         try {
             InputStream serviceAccount =
-                    new ClassPathResource("").getInputStream();
+                    new ClassPathResource(serviceAccountPath).getInputStream();
             FirebaseOptions options =
                     FirebaseOptions.builder().setCredentials(GoogleCredentials.fromStream(serviceAccount)).build();
 
