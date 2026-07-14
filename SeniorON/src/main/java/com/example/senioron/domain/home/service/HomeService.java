@@ -81,11 +81,55 @@ public class HomeService {
         List<Home> homes =
                 homeRepository.findAllByUserOrderByButtonOrderAsc(user);
 
+        if (request.getButtons().size() != homes.size()) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_HOME_BUTTON_REQUEST
+            );
+        }
+
         Map<Long, Home> homeMap = homes.stream()
                 .collect(Collectors.toMap(
                         Home::getHomeId,
                         Function.identity()
                 ));
+
+        long buttonIdCount = request.getButtons().stream()
+                .map(HomeButtonUpdateRequest.ButtonRequest::getButtonId)
+                .distinct()
+                .count();
+
+        if (buttonIdCount != request.getButtons().size()) {
+            throw new BusinessException(
+                    ErrorCode.DUPLICATE_HOME_BUTTON_ID
+            );
+        }
+
+        long buttonOrderCount = request.getButtons().stream()
+                .map(HomeButtonUpdateRequest.ButtonRequest::getButtonOrder)
+                .distinct()
+                .count();
+
+        if (buttonOrderCount != request.getButtons().size()) {
+            throw new BusinessException(
+                    ErrorCode.DUPLICATE_HOME_BUTTON_ORDER
+            );
+        }
+
+        List<Integer> sortedOrders = request.getButtons().stream()
+                .map(HomeButtonUpdateRequest.ButtonRequest::getButtonOrder)
+                .sorted()
+                .toList();
+
+        for (int i = 0; i < sortedOrders.size(); i++) {
+
+            if (sortedOrders.get(i) == null
+                    || !sortedOrders.get(i).equals(i + 1)) {
+
+                throw new BusinessException(
+                        ErrorCode.INVALID_HOME_BUTTON_ORDER
+                );
+            }
+        }
 
         for (HomeButtonUpdateRequest.ButtonRequest buttonRequest
                 : request.getButtons()) {
@@ -201,5 +245,4 @@ public class HomeService {
 
         return (User) authentication.getPrincipal();
     }
-
 }
