@@ -50,6 +50,8 @@ public class HospitalService {
                 .hospitalName(request.getHospitalName())
                 .scheduleDate(date)
                 .scheduleTime(time)
+                .department(request.getDepartment())
+                .reminderType(request.getReminderType())
                 .build();
 
         Hospital savedHospital = hospitalRepository.save(hospital);
