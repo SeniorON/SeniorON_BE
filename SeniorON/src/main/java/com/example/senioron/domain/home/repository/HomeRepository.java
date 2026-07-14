@@ -6,6 +6,7 @@ import com.example.senioron.domain.user.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface HomeRepository extends JpaRepository<Home, Long> {
 
@@ -18,4 +19,6 @@ public interface HomeRepository extends JpaRepository<Home, Long> {
     );
 
     void deleteAllByHomeIdIn(List<Long> homeIds);
+
+    Optional<Home> findByHomeIdAndUser(Long homeId, User user);
 }

@@ -68,4 +68,8 @@ public class Home extends BaseEntity {
                 .fontSize(fontSize)
                 .build();
     }
+
+    public void updateButtonOrder(Integer buttonOrder) {
+        this.buttonOrder = buttonOrder;
+    }
 }

@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 
 import java.util.List;
 
@@ -68,5 +70,17 @@ public class HomeController {
     @GetMapping("/button-options")
     public Response<List<ButtonOptionResponse>> getButtonOptions() {
         return Response.ok(homeService.getButtonOptions());
+    }
+
+    @Operation(
+            summary = "홈 버튼 삭제",
+            description = "로그인한 사용자의 홈 버튼을 삭제하고 남은 버튼 순서를 재정렬"
+    )
+    @DeleteMapping("/buttons/{buttonId}")
+    public Response<Void> deleteButton(
+            @PathVariable Long buttonId
+    ) {
+        homeService.deleteButton(buttonId);
+        return Response.ok();
     }
 }

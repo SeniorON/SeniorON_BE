@@ -174,6 +174,26 @@ public class HomeService {
         return HomeButtonCreateResponse.from(savedButton);
     }
 
+    @Transactional
+    public void deleteButton(Long buttonId) {
+
+        User user = getCurrentUser();
+
+        Home home = homeRepository.findByHomeIdAndUser(buttonId, user)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.HOME_BUTTON_NOT_FOUND
+                ));
+
+        homeRepository.delete(home);
+
+        List<Home> remainingButtons =
+                homeRepository.findAllByUserOrderByButtonOrderAsc(user);
+
+        for (int i = 0; i < remainingButtons.size(); i++) {
+            remainingButtons.get(i).updateButtonOrder(i + 1);
+        }
+    }
+
     private User getCurrentUser() {
 
         Authentication authentication =
@@ -181,4 +201,5 @@ public class HomeService {
 
         return (User) authentication.getPrincipal();
     }
+
 }
