@@ -27,6 +27,9 @@ public class KakaoLoginService {
     private final SocialAccountRepository socialAccountRepository;
     private final JwtUtil jwtUtil;
 
+    /**
+     * 카카오 Access Token으로 사용자 정보를 조회합니다.
+     */
     public KakaoUserInfo getUserInfo(String kakaoAccessToken) {
         return RestClient.create()
                 .get()
@@ -39,6 +42,12 @@ public class KakaoLoginService {
                 .body(KakaoUserInfo.class);
     }
 
+
+    /**
+     * 카카오 로그인 처리
+     * - 기존 회원이면 JWT를 발급합니다.
+     * - 신규 회원이면 추가 회원가입을 위한 정보를 반환합니다.
+     */
     @Transactional
     public KakaoLoginResponse kakaoLogin(KakaoLoginRequest request) {
 
@@ -55,9 +64,9 @@ public class KakaoLoginService {
                         providerId
                 );
 
-        // 기존 카카오 회원
+        // 기존 카카오 회원인 경우 JWT 발급 후 로그인
         if (existingSocialAccount.isPresent()) {
-            User user = existingSocialAccount.get().getUser();;
+            User user = existingSocialAccount.get().getUser();
 
             String accessToken = jwtUtil.createAccessToken(user);
 
@@ -70,7 +79,7 @@ public class KakaoLoginService {
                     .build();
         }
 
-        // 신규 카카오 회원
+        // 신규 카카오 회원인 경우 추가 회원가입 진행
         return KakaoLoginResponse.builder()
                 .accessToken(null)
                 .usersId(null)
@@ -91,25 +100,5 @@ public class KakaoLoginService {
                     "카카오 사용자 정보를 가져오지 못했습니다."
             );
         }
-    }
-
-
-
-    private LocalDate convertToBirth(
-            String birthyear,
-            String birthday
-    ) {
-        int year = Integer.parseInt(birthyear);
-        int month = Integer.parseInt(birthday.substring(0, 2));
-        int day = Integer.parseInt(birthday.substring(2, 4));
-
-        return LocalDate.of(year, month, day);
-    }
-
-    private String normalizePhoneNumber(String phoneNumber) {
-        return phoneNumber
-                .replace("+82 ", "0")
-                .replace("-", "")
-                .replace(" ", "");
     }
 }
