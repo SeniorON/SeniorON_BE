@@ -1,4 +1,4 @@
-package com.example.senioron.domain.user.dto.kakao.response;
+package com.example.senioron.domain.socialaccount.dto.kakao.response;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;

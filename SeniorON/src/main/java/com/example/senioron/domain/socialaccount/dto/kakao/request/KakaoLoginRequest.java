@@ -1,4 +1,4 @@
-package com.example.senioron.domain.user.dto.kakao.request;
+package com.example.senioron.domain.socialaccount.dto.kakao.request;
 
 import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;

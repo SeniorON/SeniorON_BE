@@ -20,11 +20,6 @@ public class User extends BaseEntity {
     @Column(name = "users_id")
     private Long usersId;
 
-    @Enumerated(EnumType.STRING)
-    private LoginProvider provider;
-
-    private String providerId;
-
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "family_id")
     private Family family;

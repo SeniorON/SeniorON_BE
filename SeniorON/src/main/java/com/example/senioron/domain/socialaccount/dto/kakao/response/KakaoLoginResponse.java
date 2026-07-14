@@ -1,4 +1,4 @@
-package com.example.senioron.domain.user.dto.kakao.response;
+package com.example.senioron.domain.socialaccount.dto.kakao.response;
 
 import com.example.senioron.domain.user.entity.Role;
 import lombok.Builder;
