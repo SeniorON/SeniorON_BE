@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.*;
 public class UserController {
 
     private final UserService userService;
-    private final KakaoLoginService kakaoLoginService;
+
 
     @Operation(summary = "아이디 중복 확인", description = "회원가입 시 입력한 아이디가 이미 사용 중인지 확인합니다.")
     @GetMapping("/check-login-id")
@@ -54,16 +54,5 @@ public class UserController {
         return Response.ok(userService.updateRole(user, request));
     }
 
-    @Operation(
-            summary = "카카오 로그인",
-            description = "안드로이드에서 발급받은 카카오 액세스 토큰으로 로그인 또는 회원가입을 진행합니다."
-    )
-    @PostMapping("/login/kakao")
-    public Response<KakaoLoginResponse> kakaoLogin(
-            @Valid @RequestBody KakaoLoginRequest request
-    ) {
-        return Response.ok(
-                kakaoLoginService.kakaoLogin(request)
-        );
-    }
+
 }

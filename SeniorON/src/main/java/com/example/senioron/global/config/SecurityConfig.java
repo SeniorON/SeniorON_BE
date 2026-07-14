@@ -43,7 +43,7 @@ public class SecurityConfig {
                                 "/api/users/signup",
                                 "/api/users/login",
                                 "/api/users/check-login-id",
-                                "/api/users/login/kakao",
+                                "/api/social-accounts/login/kakao",
                                 "/h2-console/**",
                                 "/actuator/**"
                         ).permitAll()
