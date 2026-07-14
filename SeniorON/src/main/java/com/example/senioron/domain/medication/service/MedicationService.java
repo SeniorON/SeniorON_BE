@@ -176,9 +176,11 @@ public class MedicationService {
     }
 
     @Transactional
-    public void deleteMedicationGroup(String medicationGroupId) {
-        medicationRepository.deleteByMedicationGroupId(medicationGroupId);
+    public void deleteMedicationGroup(Long userId, String medicationGroupId) {
 
-        log.info("성공적으로 약 그룹을 삭제했습니다. GroupId: {}", medicationGroupId);
+        User user = getUserOrThrow(userId);
+        medicationRepository.deleteByUserAndMedicationGroupId(user, medicationGroupId);
+
+        log.info("성공적으로 약 그룹을 삭제했습니다. UserId: {}, GroupId: {}", userId, medicationGroupId);
     }
 }

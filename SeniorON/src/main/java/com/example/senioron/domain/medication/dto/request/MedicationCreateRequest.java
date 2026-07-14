@@ -27,6 +27,7 @@ public class MedicationCreateRequest {
             example = "[\"08:30\", \"19:00\"]"
     )
     private List<
+            @jakarta.validation.constraints.NotNull(message = "복용 시간 값은 필수입니다.")
             @Pattern(
                     regexp = "^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$",
                     message = "복용 시간은 올바른 24시간 형식(HH:mm)이어야 합니다. (예: 08:30)"

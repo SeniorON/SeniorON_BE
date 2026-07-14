@@ -1,6 +1,7 @@
 package com.example.senioron.domain.hospital.service;
 
 
+import java.time.format.DateTimeParseException;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -33,16 +34,22 @@ public class HospitalService {
             HospitalCreateRequest request
     ) {
 
-        LocalDate date = LocalDate.parse(request.getScheduleDate());
-        LocalTime time = LocalTime.parse(request.getScheduleTime());
+        LocalDate date;
+        LocalTime time;
+
+        try {
+            date = LocalDate.parse(request.getScheduleDate());
+            time = LocalTime.parse(request.getScheduleTime());
+        } catch (DateTimeParseException e) {
+            throw new IllegalArgumentException("잘못된 날짜 및 시간 형식입니다. (YYYY-MM-DD / HH:mm)");
+        }
+
 
         Hospital hospital = Hospital.builder()
                 .user(user)
                 .hospitalName(request.getHospitalName())
-                .department(request.getDepartment())
                 .scheduleDate(date)
                 .scheduleTime(time)
-                .reminderType(request.getReminderType())
                 .build();
 
         Hospital savedHospital = hospitalRepository.save(hospital);

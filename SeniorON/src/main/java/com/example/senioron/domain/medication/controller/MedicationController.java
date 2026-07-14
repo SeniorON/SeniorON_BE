@@ -61,9 +61,10 @@ public class MedicationController {
     )
     @DeleteMapping("/groups/{medicationGroupId}")
     public Response<String> deleteMedicationGroup(
+            @AuthenticationPrincipal User user, // 💡 요렇게 User 객체로 바로 받기!
             @PathVariable("medicationGroupId") String medicationGroupId
     ) {
-        medicationService.deleteMedicationGroup(medicationGroupId);
+        medicationService.deleteMedicationGroup(user.getUsersId(), medicationGroupId);
         return Response.ok("약 일정이 성공적으로 삭제되었습니다.");
     }
 }

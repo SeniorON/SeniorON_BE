@@ -10,5 +10,5 @@ public interface MedicationRepository extends JpaRepository<Medication, Long> {
 
     List<Medication> findAllByUserOrderByMedicineTimeAsc(User user);
 
-    void deleteByMedicationGroupId(String medicationGroupId);
+    void deleteByUserAndMedicationGroupId(User user, String medicationGroupId);
 }
