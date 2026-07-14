@@ -9,4 +9,6 @@ import java.util.List;
 public interface MedicationRepository extends JpaRepository<Medication, Long> {
 
     List<Medication> findAllByUserOrderByMedicineTimeAsc(User user);
+
+    void deleteByUserAndMedicationGroupId(User user, String medicationGroupId);
 }

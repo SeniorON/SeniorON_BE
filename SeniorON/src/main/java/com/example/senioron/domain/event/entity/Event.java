@@ -36,4 +36,6 @@ public class Event extends BaseEntity {
     private java.math.BigDecimal longitude;
 
     private Integer deviceBattery;
+
+    private String address;
 }

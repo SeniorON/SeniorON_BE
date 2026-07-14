@@ -3,6 +3,8 @@ spring:
     active: local
   application:
     name: senioron
+  config:
+    import: optional:classpath:application-secret.yml
 
 jwt:
   secret: this-is-a-temporary-secret-key-for-senioron-jwt-please-change-later
@@ -21,3 +23,15 @@ management:
   metrics:
     tags:
       application: senioron
+
+kakao:
+  client-id: ${KAKAO_CLIENT_ID}
+  redirect-uri: ${KAKAO_REDIRECT_URI}
+
+cloud:
+  aws:
+    region: ${AWS_REGION}
+    s3:
+      bucket: ${S3_BUCKET}
+firebase:
+  service-account-path: senioron-8c2e1-firebase-adminsdk-fbsvc-ba018605fb.json

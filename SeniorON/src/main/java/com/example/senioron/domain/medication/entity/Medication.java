@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import java.time.*;
 import lombok.*;
 import com.example.senioron.common.entity.BaseEntity;
+import jakarta.persistence.Column;
 
 @Entity
 @Getter
@@ -27,5 +28,8 @@ public class Medication extends BaseEntity {
     private LocalTime medicineTime;
 
     private String medicineDays;
+
+    @Column(name = "medication_group_id", nullable = false)
+    private String medicationGroupId;
 
 }
