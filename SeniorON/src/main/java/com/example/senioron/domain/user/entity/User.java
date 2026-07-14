@@ -49,6 +49,8 @@ public class User extends BaseEntity {
     @Builder.Default
     private UserStatus status = UserStatus.ACTIVE;
 
+    private String fcmToken;
+
     public void updateRole(Role role) {
         this.role = role;
     }
@@ -64,5 +66,9 @@ public class User extends BaseEntity {
     public void removeFromFamily() {
         this.family = null;
         this.managerType = null;
+    }
+
+    public void updateFcmToken(String fcmToken) {
+        this.fcmToken = fcmToken;
     }
 }
