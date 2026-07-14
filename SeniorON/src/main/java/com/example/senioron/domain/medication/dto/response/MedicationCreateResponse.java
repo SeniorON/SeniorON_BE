@@ -11,6 +11,8 @@ public class MedicationCreateResponse {
 
     private List<Long> medicationIds;
 
+    private String medicationGroupId;
+
     private String medicineName;
 
     private String ingredientName;
