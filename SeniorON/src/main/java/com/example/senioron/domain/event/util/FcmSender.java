@@ -17,6 +17,11 @@ public class FcmSender {
     private final UserRepository userRepository;
 
     public void send(String fcmToken, String title, String body) {
+        if (fcmToken == null || fcmToken.isBlank()) {
+            log.warn("FCM 토큰이 비어있어 발송을 건너뜁니다.");
+            return;
+        }
+
         if(!firebaseConfig.isInitialized()){
             log.warn("Firebase가 초기화되지 않아 FCM 발송을 건너뜁니다.");
             return;

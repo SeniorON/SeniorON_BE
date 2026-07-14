@@ -79,7 +79,7 @@ public class UserService {
             throw new BusinessException(ErrorCode.INVALID_PASSWORD);
         }
 
-        if(request.getFcmToken() != null){
+        if(request.getFcmToken() != null && !request.getFcmToken().isBlank()){
             user.updateFcmToken(request.getFcmToken());
         }
 
