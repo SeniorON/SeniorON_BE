@@ -5,10 +5,12 @@ import com.example.senioron.domain.event.dto.response.SosEventResponse;
 import com.example.senioron.domain.event.entity.Event;
 import com.example.senioron.domain.event.entity.EventType;
 import com.example.senioron.domain.event.repository.EventRepository;
+import com.example.senioron.domain.event.util.GeocodingClient;
 import com.example.senioron.domain.notification.service.NotificationService;
 import com.example.senioron.domain.user.entity.User;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -17,9 +19,17 @@ public class EventService {
 
     private final EventRepository eventRepository;
     private final NotificationService notificationService;
+    private final GeocodingClient geocodingClient;
+    private final ApplicationContext applicationContext;
+
+    public SosEventResponse createSosEvent(User user, SosEventRequest req){
+        String address = geocodingClient.reverseGeocode(req.getLatitude(), req.getLongitude());
+        EventService self= applicationContext.getBean(EventService.class);
+        return self.saveSosEvent(address, user, req);
+    }
 
     @Transactional
-    public SosEventResponse createSosEvent(User user, SosEventRequest req){
+    public SosEventResponse saveSosEvent(String address,User user, SosEventRequest req){
         Event event = Event.builder()
                 .user(user)
                 .triggeredUser(user)
@@ -27,10 +37,12 @@ public class EventService {
                 .eventType(EventType.SOS)
                 .latitude(req.getLatitude())
                 .longitude(req.getLongitude())
+                .address(address)
                 .build();
 
         Event savedEvent = eventRepository.save(event);
         notificationService.createFormEvent(event);
+
         return SosEventResponse.of(savedEvent);
     }
 }

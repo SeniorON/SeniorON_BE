@@ -122,6 +122,7 @@ public class NotificationService {
         notificationSettingRepository.save(setting);
     }
 
+    //알람 탭 홈화면 조회
     @Transactional
     public List<NotificationHomeResponse> getHomeSettings(Long userId) {
         NotificationSetting setting = notificationSettingRepository.findById(userId)
