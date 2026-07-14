@@ -97,7 +97,11 @@ public class FamilyService {
                 );
 
         user.updateFamily(family);
-        user.updateManagerType(ManagerType.SUB);
+        if (user.getRole() == Role.CHILD) {
+            user.updateManagerType(ManagerType.SUB);
+        } else if (user.getRole() == Role.PARENT) {
+            user.updateManagerType(ManagerType.NONE);
+        }
 
         return FamilyJoinResponse.builder()
                 .familyId(family.getFamilyId())

@@ -1,17 +1,16 @@
 package com.example.senioron.domain.user.controller;
 
+import com.example.senioron.domain.socialaccount.dto.kakao.request.KakaoLoginRequest;
+import com.example.senioron.domain.socialaccount.dto.kakao.response.KakaoLoginResponse;
 import com.example.senioron.domain.user.dto.request.UserLoginRequest;
 import com.example.senioron.domain.user.dto.request.UserRoleUpdateRequest;
 import com.example.senioron.domain.user.dto.request.UserSignUpRequest;
-import com.example.senioron.domain.user.dto.response.LoginIdCheckResponse;
-import com.example.senioron.domain.user.dto.response.UserLoginResponse;
-import com.example.senioron.domain.user.dto.response.UserRoleUpdateResponse;
-import com.example.senioron.domain.user.dto.response.UserSignUpResponse;
+import com.example.senioron.domain.user.dto.response.*;
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.socialaccount.service.KakaoLoginService;
 import com.example.senioron.domain.user.service.UserService;
 import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +24,7 @@ import org.springframework.web.bind.annotation.*;
 public class UserController {
 
     private final UserService userService;
+
 
     @Operation(summary = "아이디 중복 확인", description = "회원가입 시 입력한 아이디가 이미 사용 중인지 확인합니다.")
     @GetMapping("/check-login-id")
@@ -53,4 +53,6 @@ public class UserController {
     ) {
         return Response.ok(userService.updateRole(user, request));
     }
+
+
 }
