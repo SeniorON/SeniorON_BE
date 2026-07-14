@@ -4,6 +4,7 @@ package com.example.senioron.domain.hospital.service;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.time.LocalTime;
 import com.example.senioron.domain.hospital.dto.response.HospitalListResponse;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
@@ -31,12 +32,16 @@ public class HospitalService {
             User user,
             HospitalCreateRequest request
     ) {
+
+        LocalDate date = LocalDate.parse(request.getScheduleDate());
+        LocalTime time = LocalTime.parse(request.getScheduleTime());
+
         Hospital hospital = Hospital.builder()
                 .user(user)
                 .hospitalName(request.getHospitalName())
                 .department(request.getDepartment())
-                .scheduleDate(request.getScheduleDate())
-                .scheduleTime(request.getScheduleTime())
+                .scheduleDate(date)
+                .scheduleTime(time)
                 .reminderType(request.getReminderType())
                 .build();
 

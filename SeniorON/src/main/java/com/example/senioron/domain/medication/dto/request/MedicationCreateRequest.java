@@ -3,10 +3,10 @@ package com.example.senioron.domain.medication.dto.request;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Pattern;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalTime;
 import java.util.List;
 
 @Getter
@@ -22,10 +22,28 @@ public class MedicationCreateRequest {
     private String ingredientName;
 
     @NotEmpty(message = "복용 시간은 최소 하나 이상 지정해야 합니다.")
-    @Schema(description = "복용 시간 목록", example = "[\"08:30\", \"19:00\"]")
-    private List<LocalTime> medicineTimes;
+    @Schema(
+            description = "복용 시간 목록 (24시간 형식: HH:mm)",
+            example = "[\"08:30\", \"19:00\"]"
+    )
+    private List<
+            @Pattern(
+                    regexp = "^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$",
+                    message = "복용 시간은 올바른 24시간 형식(HH:mm)이어야 합니다. (예: 08:30)"
+            )
+                    String
+            > medicineTimes;
 
     @NotEmpty(message = "복용 요일은 최소 하나 이상 지정해야 합니다.")
-    @Schema(description = "복용 요일 목록 (월, 화, 수, 목, 금, 토, 일 또는 MON, TUE 등)", example = "[\"월\", \"수\", \"금\"]")
-    private List<String> medicineDays;
+    @Schema(
+            description = "복용 요일 목록 (월, 화, 수, 목, 금, 토, 일)",
+            example = "[\"월\", \"수\", \"금\"]"
+    )
+    private List<
+            @Pattern(
+                    regexp = "^[월화수목금토일]$",
+                    message = "요일은 '월', '화', '수', '목', '금', '토', '일' 중 하나여야 합니다."
+            )
+                    String
+            > medicineDays;
 }

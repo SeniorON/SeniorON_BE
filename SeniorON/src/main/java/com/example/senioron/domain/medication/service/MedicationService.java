@@ -55,16 +55,21 @@ public class MedicationService {
 
         String medicineDays = String.join(",", request.getMedicineDays());
 
+        String medicationGroupId = java.util.UUID.randomUUID().toString();
+
         List<Long> medicationIds = new ArrayList<>();
         List<String> medicineTimes = new ArrayList<>();
 
-        for (LocalTime medicineTime : request.getMedicineTimes()) {
+        for (String timeStr : request.getMedicineTimes()) {
+            LocalTime medicineTime = LocalTime.parse(timeStr);
+
             Medication medication = Medication.builder()
                     .user(user)
                     .medicineName(request.getMedicineName())
                     .ingredientName(request.getIngredientName())
                     .medicineTime(medicineTime)
                     .medicineDays(medicineDays)
+                    .medicationGroupId(medicationGroupId)
                     .build();
 
             Medication savedMedication = medicationRepository.save(medication);
@@ -75,6 +80,7 @@ public class MedicationService {
 
         return new MedicationCreateResponse(
                 medicationIds,
+                medicationGroupId,
                 request.getMedicineName(),
                 request.getIngredientName(),
                 medicineTimes,
@@ -167,5 +173,12 @@ public class MedicationService {
             case "SAT", "SATURDAY", "토" -> "SAT";
             default -> null;
         };
+    }
+
+    @Transactional
+    public void deleteMedicationGroup(String medicationGroupId) {
+        medicationRepository.deleteByMedicationGroupId(medicationGroupId);
+
+        log.info("성공적으로 약 그룹을 삭제했습니다. GroupId: {}", medicationGroupId);
     }
 }

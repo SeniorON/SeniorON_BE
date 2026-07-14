@@ -66,7 +66,7 @@ public class HospitalController {
     }
 
     @Operation(
-            summary = "부모님 병원 일정 월별 목록 조회 (#65)",
+            summary = "부모님 병원 일정 월별 목록 조회",
             description = "특정 연도(year)와 월(month)에 해당하는 병원 일정을 날짜순으로 조회합니다."
     )
     @GetMapping
