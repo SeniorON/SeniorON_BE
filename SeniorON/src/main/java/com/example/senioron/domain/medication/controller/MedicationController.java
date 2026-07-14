@@ -13,12 +13,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -29,6 +24,7 @@ import java.util.List;
 public class MedicationController {
 
     private final MedicationService medicationService;
+
     @Operation(
             summary = "약 등록",
             description = "로그인한 사용자가 부모님의 복약 정보를 등록합니다."
@@ -45,8 +41,6 @@ public class MedicationController {
         return Response.ok(ResultCode.CREATED, result);
     }
 
-
-
     @Operation(
             summary = "약 목록 조회",
             description = "로그인한 사용자가 부모님의 복약 정보를 조회합니다."
@@ -61,5 +55,16 @@ public class MedicationController {
         return Response.ok(result);
     }
 
-
+    @Operation(
+            summary = "약 삭제",
+            description = "그룹 ID를 기준으로 복약 정보를 일괄 삭제합니다."
+    )
+    @DeleteMapping("/groups/{medicationGroupId}")
+    public Response<String> deleteMedicationGroup(
+            @AuthenticationPrincipal User user, // 💡 요렇게 User 객체로 바로 받기!
+            @PathVariable("medicationGroupId") String medicationGroupId
+    ) {
+        medicationService.deleteMedicationGroup(user.getUsersId(), medicationGroupId);
+        return Response.ok("약 일정이 성공적으로 삭제되었습니다.");
+    }
 }

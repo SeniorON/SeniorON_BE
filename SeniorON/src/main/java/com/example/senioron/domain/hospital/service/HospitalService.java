@@ -1,9 +1,11 @@
 package com.example.senioron.domain.hospital.service;
 
 
+import java.time.format.DateTimeParseException;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.time.LocalTime;
 import com.example.senioron.domain.hospital.dto.response.HospitalListResponse;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
@@ -31,12 +33,24 @@ public class HospitalService {
             User user,
             HospitalCreateRequest request
     ) {
+
+        LocalDate date;
+        LocalTime time;
+
+        try {
+            date = LocalDate.parse(request.getScheduleDate());
+            time = LocalTime.parse(request.getScheduleTime());
+        } catch (DateTimeParseException e) {
+            throw new IllegalArgumentException("잘못된 날짜 및 시간 형식입니다. (YYYY-MM-DD / HH:mm)");
+        }
+
+
         Hospital hospital = Hospital.builder()
                 .user(user)
                 .hospitalName(request.getHospitalName())
+                .scheduleDate(date)
+                .scheduleTime(time)
                 .department(request.getDepartment())
-                .scheduleDate(request.getScheduleDate())
-                .scheduleTime(request.getScheduleTime())
                 .reminderType(request.getReminderType())
                 .build();
 

@@ -3,10 +3,7 @@ package com.example.senioron.domain.user.service;
 import com.example.senioron.domain.user.dto.request.UserLoginRequest;
 import com.example.senioron.domain.user.dto.request.UserRoleUpdateRequest;
 import com.example.senioron.domain.user.dto.request.UserSignUpRequest;
-import com.example.senioron.domain.user.dto.response.LoginIdCheckResponse;
-import com.example.senioron.domain.user.dto.response.UserLoginResponse;
-import com.example.senioron.domain.user.dto.response.UserRoleUpdateResponse;
-import com.example.senioron.domain.user.dto.response.UserSignUpResponse;
+import com.example.senioron.domain.user.dto.response.*;
 import com.example.senioron.domain.notification.service.NotificationService;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.entity.UserStatus;
@@ -82,6 +79,10 @@ public class UserService {
             throw new BusinessException(ErrorCode.INVALID_PASSWORD);
         }
 
+        if(request.getFcmToken() != null && !request.getFcmToken().isBlank()){
+            user.updateFcmToken(request.getFcmToken());
+        }
+
         String accessToken = jwtUtil.createAccessToken(user);
 
         return UserLoginResponse.builder()
@@ -118,5 +119,4 @@ public class UserService {
                 .role(user.getRole())
                 .build();
     }
-
 }
