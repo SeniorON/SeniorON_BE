@@ -32,15 +32,20 @@ public class InactivitySettingService {
 
         inactivitySettingRepository.save(setting);
     }
+    //조회 시 세팅 없을 경우 생성
+    private InactivitySetting createDefaultInternal(User targetUser) {
+        InactivitySetting setting = InactivitySetting.builder()
+                .user(targetUser)
+                .build();
+        return inactivitySettingRepository.save(setting);
+    }
 
-    // 가족 구성원(대상자)의 무활동 감지 설정 조회
-    @Transactional(readOnly = true)
-    public InactivitySettingResponse getSetting(User principal, Long targetUserId) {
-        User targetUser = resolveTargetUser(principal, targetUserId);
+    @Transactional
+    public InactivitySettingResponse getSetting(User principal, Long targetId) {
+        User targetUser = resolveTargetUser(principal,targetId);
 
         InactivitySetting setting = inactivitySettingRepository.findById(targetUser.getUsersId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.INACTIVITY_SETTING_NOT_FOUND));
-
+                .orElseGet(() -> createDefaultInternal(targetUser));   // 없으면 즉석에서 생성
         return InactivitySettingResponse.from(setting);
     }
 
@@ -49,7 +54,7 @@ public class InactivitySettingService {
         User targetUser = resolveTargetUser(principal, targetUserId);
 
         InactivitySetting setting = inactivitySettingRepository.findById(targetUser.getUsersId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.INACTIVITY_SETTING_NOT_FOUND));
+                .orElseGet(() -> createDefaultInternal(targetUser));
 
         setting.updateThresholdHours(request.getThresholdHours());
         return InactivitySettingResponse.from(setting);
@@ -59,7 +64,6 @@ public class InactivitySettingService {
     private User resolveTargetUser(User principal, Long targetUserId) {
         User currentUser = userRepository.findById(principal.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-
         if (currentUser.getRole() != Role.CHILD) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
@@ -68,9 +72,11 @@ public class InactivitySettingService {
         if (family == null) {
             throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
         }
-
         User targetUser = userRepository.findById(targetUserId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        if (targetUser.getRole() != Role.PARENT) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
 
         if (targetUser.getFamily() == null || !Objects.equals(family.getFamilyId(), targetUser.getFamily().getFamilyId())) {
             throw new BusinessException(ErrorCode.FORBIDDEN);

@@ -34,7 +34,7 @@ public class InactivitySettingController {
         return Response.ok(inactivitySettingService.getSetting(user, targetUserId));
     }
 
-    @Operation(summary = "무활동 감지 설정 수정", description = "자녀가 같은 가족의 대상자(부모님)의 무활동 감지 임계 시간과 on/off 여부를 수정합니다")
+    @Operation(summary = "무활동 감지 설정 수정", description = "자녀가 같은 가족의 대상자(부모님)의 무활동 감지 임계 시간을 수정합니다")
     @PatchMapping("/{targetUserId}")
     public Response<InactivitySettingResponse> updateSetting(
             @AuthenticationPrincipal User user,

@@ -33,8 +33,4 @@ public class InactivitySetting extends BaseEntity {
     public void updateThresholdHours(Integer thresholdHours) {
         this.thresholdHours = thresholdHours;
     }
-
-    public void updateIsEnabled(Boolean isEnabled) {
-        this.isEnabled = isEnabled;
-    }
 }
