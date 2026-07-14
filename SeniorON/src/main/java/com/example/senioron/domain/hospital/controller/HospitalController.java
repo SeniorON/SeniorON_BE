@@ -2,12 +2,17 @@ package com.example.senioron.domain.hospital.controller;
 
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import com.example.senioron.domain.hospital.dto.request.HospitalCreateRequest;
 import com.example.senioron.domain.hospital.dto.response.HospitalCreateResponse;
+import com.example.senioron.domain.hospital.dto.response.HospitalListResponse;
 import com.example.senioron.domain.hospital.service.HospitalService;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.global.apiPayload.code.ResultCode;
 import com.example.senioron.global.apiPayload.response.Response;
+import com.example.senioron.global.apiPayload.code.ErrorCode;
+import com.example.senioron.global.apiPayload.exception.BusinessException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -19,6 +24,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
@@ -43,6 +50,7 @@ public class HospitalController {
 
         return Response.ok(ResultCode.CREATED, result);
     }
+
     @Operation(
             summary = "병원 일정 삭제",
             description = "등록된 특정 병원 진료 일정을 삭제합니다."
@@ -55,5 +63,24 @@ public class HospitalController {
     ) {
         hospitalService.deleteHospital(user, hospitalId);
         return Response.ok(ResultCode.OK, null);
+    }
+
+    @Operation(
+            summary = "부모님 병원 일정 월별 목록 조회 (#65)",
+            description = "특정 연도(year)와 월(month)에 해당하는 병원 일정을 날짜순으로 조회합니다."
+    )
+    @GetMapping
+    @ResponseStatus(HttpStatus.OK)
+    public Response<List<HospitalListResponse>> getHospitalByMonth(
+                                                                    @AuthenticationPrincipal User user,
+                                                                    @RequestParam(value = "year") int year,
+                                                                    @RequestParam(value = "month") int month
+    ) {
+        if (month < 1 || month > 12) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+
+        List<HospitalListResponse> responses = hospitalService.getHospitalByMonth(user, year, month);
+        return Response.ok(ResultCode.OK, responses);
     }
 }
