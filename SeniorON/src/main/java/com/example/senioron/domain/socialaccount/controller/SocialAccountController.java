@@ -34,6 +34,10 @@ public class SocialAccountController {
     }
 
 
+    @Operation(
+            summary = "카카오 callback",
+            description = "call 테스트를 위해 넣음"
+    )
     @GetMapping("/login/kakao/callback")
     public ResponseEntity<String> kakaoCallback(
             @RequestParam String code
