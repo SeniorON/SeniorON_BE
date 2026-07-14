@@ -37,10 +37,15 @@ public class FcmSender {
             if (errorCode == MessagingErrorCode.UNREGISTERED
                     || errorCode == MessagingErrorCode.INVALID_ARGUMENT) {
                 log.warn("유효하지 않은 FCM 토큰, 삭제 처리");
-                userService.clearFcmToken(fcmToken);
+                userRepository.findByFcmToken(fcmToken)
+                        .ifPresent(user -> user.updateFcmToken(null));
             } else {
-                log.warn("FCM 발송 일시 실패, 재시도 필요");
+                log.warn("FCM 발송 일시 실패, 재시도 필요: token = " + maskToken(fcmToken));
             }
         }
+    }
+    private String maskToken(String token) {
+        if (token == null || token.length() < 8) return "****";
+        return token.substring(0, 8) + "...(masked)";
     }
 }
