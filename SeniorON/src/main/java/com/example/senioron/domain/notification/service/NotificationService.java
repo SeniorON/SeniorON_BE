@@ -3,6 +3,7 @@ package com.example.senioron.domain.notification.service;
 import com.example.senioron.domain.event.entity.Event;
 import com.example.senioron.domain.event.entity.EventType;
 import com.example.senioron.domain.event.entity.OutingPhase;
+import com.example.senioron.domain.event.util.FcmSender;
 import com.example.senioron.domain.notification.dto.response.NotificationHomeResponse;
 import com.example.senioron.domain.notification.dto.response.NotificationSettingResponse;
 import com.example.senioron.domain.notification.entity.Notification;
@@ -16,11 +17,10 @@ import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.sql.ConnectionBuilder;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -31,6 +31,7 @@ public class NotificationService {
     private final NotificationRepository notificationRepository;
     private final NotificationSettingRepository notificationSettingRepository;
     private final UserRepository userRepository;
+    private final FcmSender fcmSender;
 
     @Transactional
     public void createFormEvent(Event event) {
@@ -57,14 +58,21 @@ public class NotificationService {
                     .body(body)
                     .isRead(false)
                     .build();
-            notifications.add(notification);
+            notifications.add(notification); // 임시 저장
         }
+        if (notifications.isEmpty()) {return;}
+        notificationRepository.saveAll(notifications); // 레포 저장
 
-        notificationRepository.saveAll(notifications);
+        for (Notification notification : notifications){
+            User receiver = notification.getReceiverUser();
+            if(receiver.getFcmToken() != null){
+                fcmSender.send(receiver.getFcmToken(), notification.getTitle(), notification.getBody());
+            }
+        }
     }
 
-    //
-    private boolean isEnabled(User receiver, NotificationType type) {
+    @Transactional(readOnly = true)
+    public  boolean isEnabled(User receiver, NotificationType type) {
         return notificationSettingRepository.findById(receiver.getUsersId())
                 .map(setting -> switch (type) {
                     case SOS -> setting.getSosEnabled();
