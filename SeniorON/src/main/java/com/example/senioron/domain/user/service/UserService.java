@@ -79,6 +79,10 @@ public class UserService {
             throw new BusinessException(ErrorCode.INVALID_PASSWORD);
         }
 
+        if(request.getFcmToken() != null && !request.getFcmToken().isBlank()){
+            user.updateFcmToken(request.getFcmToken());
+        }
+
         String accessToken = jwtUtil.createAccessToken(user);
 
         return UserLoginResponse.builder()
@@ -115,7 +119,4 @@ public class UserService {
                 .role(user.getRole())
                 .build();
     }
-
-
-
 }
