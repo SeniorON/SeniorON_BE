@@ -2,8 +2,10 @@ package com.example.senioron.domain.user.controller;
 
 import com.example.senioron.domain.user.dto.request.LoginIdFindRequest;
 import com.example.senioron.domain.user.dto.request.PasswordResetCodeSendRequest;
+import com.example.senioron.domain.user.dto.request.PasswordResetCodeVerifyRequest;
 import com.example.senioron.domain.user.dto.response.LoginIdFindResponse;
 import com.example.senioron.domain.user.dto.response.PasswordResetCodeSendResponse;
+import com.example.senioron.domain.user.dto.response.PasswordResetCodeVerifyResponse;
 import com.example.senioron.domain.user.service.AccountRecoveryService;
 import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
@@ -43,5 +45,16 @@ public class AccountRecoveryController {
             @Valid @RequestBody PasswordResetCodeSendRequest request
     ) {
         return Response.ok(accountRecoveryService.sendPasswordResetVerificationCode(request));
+    }
+
+    @Operation(
+            summary = "비밀번호 재설정 인증번호 확인",
+            description = "비밀번호 재설정 인증번호 발송 API에서 응답받은 인증번호 ID와 사용자가 입력한 인증번호가 일치하는지 확인합니다."
+    )
+    @PostMapping("/password/verification-code/verify")
+    public Response<PasswordResetCodeVerifyResponse> verifyPasswordResetVerificationCode(
+            @Valid @RequestBody PasswordResetCodeVerifyRequest request
+    ) {
+        return Response.ok(accountRecoveryService.verifyPasswordResetVerificationCode(request));
     }
 }

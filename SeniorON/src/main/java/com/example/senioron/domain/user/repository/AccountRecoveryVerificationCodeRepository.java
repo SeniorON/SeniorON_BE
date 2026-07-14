@@ -9,6 +9,11 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface AccountRecoveryVerificationCodeRepository
         extends JpaRepository<AccountRecoveryVerificationCode, Long> {
 
+    Optional<AccountRecoveryVerificationCode> findByAccountRecoveryVerificationCodeIdAndPurposeAndUsedAtIsNull(
+            Long accountRecoveryVerificationCodeId,
+            AccountRecoveryPurpose purpose
+    );
+
     Optional<AccountRecoveryVerificationCode> findTopByUserAndPurposeAndUsedAtIsNullOrderByCreatedAtDesc(
             User user,
             AccountRecoveryPurpose purpose

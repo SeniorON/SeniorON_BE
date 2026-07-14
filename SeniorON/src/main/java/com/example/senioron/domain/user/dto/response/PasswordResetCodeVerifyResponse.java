@@ -5,9 +5,7 @@ import lombok.Getter;
 
 @Getter
 @Builder
-public class PasswordResetCodeSendResponse {
+public class PasswordResetCodeVerifyResponse {
 
-    private Boolean sent;
-
-    private Long verificationId;
+    private Boolean verified;
 }

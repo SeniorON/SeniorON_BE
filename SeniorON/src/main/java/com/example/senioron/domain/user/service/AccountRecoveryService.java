@@ -2,8 +2,10 @@ package com.example.senioron.domain.user.service;
 
 import com.example.senioron.domain.user.dto.request.LoginIdFindRequest;
 import com.example.senioron.domain.user.dto.request.PasswordResetCodeSendRequest;
+import com.example.senioron.domain.user.dto.request.PasswordResetCodeVerifyRequest;
 import com.example.senioron.domain.user.dto.response.LoginIdFindResponse;
 import com.example.senioron.domain.user.dto.response.PasswordResetCodeSendResponse;
+import com.example.senioron.domain.user.dto.response.PasswordResetCodeVerifyResponse;
 import com.example.senioron.domain.user.entity.AccountRecoveryPurpose;
 import com.example.senioron.domain.user.entity.AccountRecoveryVerificationCode;
 import com.example.senioron.domain.user.entity.User;
@@ -70,6 +72,31 @@ public class AccountRecoveryService {
 
         return PasswordResetCodeSendResponse.builder()
                 .sent(true)
+                .verificationId(savedCode.getAccountRecoveryVerificationCodeId())
+                .build();
+    }
+
+    @Transactional
+    public PasswordResetCodeVerifyResponse verifyPasswordResetVerificationCode(
+            PasswordResetCodeVerifyRequest request
+    ) {
+        AccountRecoveryVerificationCode savedCode = verificationCodeRepository
+                .findByAccountRecoveryVerificationCodeIdAndPurposeAndUsedAtIsNull(
+                        request.getVerificationId(),
+                        AccountRecoveryPurpose.PASSWORD_RESET
+                )
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_PASSWORD_RESET_VERIFICATION_CODE));
+
+        LocalDateTime now = LocalDateTime.now();
+        if (savedCode.isExpired(now)
+                || !passwordEncoder.matches(request.getVerificationCode(), savedCode.getCodeHash())) {
+            throw new BusinessException(ErrorCode.INVALID_PASSWORD_RESET_VERIFICATION_CODE);
+        }
+
+        savedCode.verify(now);
+
+        return PasswordResetCodeVerifyResponse.builder()
+                .verified(true)
                 .build();
     }
 
