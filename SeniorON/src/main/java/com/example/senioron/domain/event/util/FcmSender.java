@@ -15,7 +15,6 @@ public class FcmSender {
 
     private final FirebaseConfig firebaseConfig;
     private final UserRepository userRepository;
-    private final UserService userService;
 
     public void send(String fcmToken, String title, String body) {
         if(!firebaseConfig.isInitialized()){
