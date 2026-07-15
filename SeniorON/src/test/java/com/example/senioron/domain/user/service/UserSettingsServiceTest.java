@@ -13,6 +13,7 @@ import com.example.senioron.domain.user.dto.request.UserLoginRequest;
 import com.example.senioron.domain.user.dto.request.PasswordChangeRequest;
 import com.example.senioron.domain.user.dto.response.UserLoginResponse;
 import com.example.senioron.domain.user.dto.response.PasswordChangeResponse;
+import com.example.senioron.domain.user.dto.response.ProfileImageResponse;
 import com.example.senioron.domain.user.dto.response.ProfileImageUpdateResponse;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
@@ -196,6 +197,32 @@ class UserSettingsServiceTest {
                 .isEqualTo(ErrorCode.PROFILE_IMAGE_SIZE_EXCEEDED);
 
         verify(s3Service, never()).upload(org.mockito.Mockito.any(), org.mockito.Mockito.anyString());
+    }
+
+    @Test
+    void getProfileImageReturnsProfileImageUrl() {
+        User user = createUser(passwordEncoder.encode(CURRENT_PASSWORD));
+        String imageKey = "profile-images/1/profile.webp";
+        String imageUrl = "https://bucket.s3.ap-northeast-2.amazonaws.com/" + imageKey;
+        user.updateProfileImageKey(imageKey);
+
+        given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+        given(s3Service.getFileUrl(imageKey)).willReturn(imageUrl);
+
+        ProfileImageResponse response = userSettingsService.getProfileImage(user);
+
+        assertThat(response.getProfileImageUrl()).isEqualTo(imageUrl);
+    }
+
+    @Test
+    void getProfileImageReturnsNullWhenProfileImageMissing() {
+        User user = createUser(passwordEncoder.encode(CURRENT_PASSWORD));
+
+        given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+
+        ProfileImageResponse response = userSettingsService.getProfileImage(user);
+
+        assertThat(response.getProfileImageUrl()).isNull();
     }
 
     private User createUser(String encodedPassword) {

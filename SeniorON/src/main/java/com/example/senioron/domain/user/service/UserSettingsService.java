@@ -5,6 +5,7 @@ import com.example.senioron.domain.user.dto.request.PasswordChangeRequest;
 import com.example.senioron.domain.user.dto.response.CurrentNameResponse;
 import com.example.senioron.domain.user.dto.response.NameUpdateResponse;
 import com.example.senioron.domain.user.dto.response.PasswordChangeResponse;
+import com.example.senioron.domain.user.dto.response.ProfileImageResponse;
 import com.example.senioron.domain.user.dto.response.ProfileImageUpdateResponse;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
@@ -124,6 +125,18 @@ public class UserSettingsService {
 
         return ProfileImageUpdateResponse.builder()
                 .profileImageUrl(s3Service.getFileUrl(newProfileImageKey))
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public ProfileImageResponse getProfileImage(User principal) {
+        validateAuthenticated(principal);
+
+        User user = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        return ProfileImageResponse.builder()
+                .profileImageUrl(s3Service.getFileUrl(user.getProfileImageKey()))
                 .build();
     }
 

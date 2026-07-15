@@ -5,6 +5,7 @@ import com.example.senioron.domain.user.dto.request.PasswordChangeRequest;
 import com.example.senioron.domain.user.dto.response.CurrentNameResponse;
 import com.example.senioron.domain.user.dto.response.NameUpdateResponse;
 import com.example.senioron.domain.user.dto.response.PasswordChangeResponse;
+import com.example.senioron.domain.user.dto.response.ProfileImageResponse;
 import com.example.senioron.domain.user.dto.response.ProfileImageUpdateResponse;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.service.UserSettingsService;
@@ -81,5 +82,16 @@ public class UserSettingsController {
             @RequestPart(value = "image", required = false) MultipartFile image
     ) {
         return Response.ok(userSettingsService.updateProfileImage(user, image));
+    }
+
+    @Operation(
+            summary = "프로필 이미지 조회",
+            description = "로그인한 사용자의 프로필 이미지 URL을 조회합니다."
+    )
+    @GetMapping("/profile-image")
+    public Response<ProfileImageResponse> getProfileImage(
+            @AuthenticationPrincipal User user
+    ) {
+        return Response.ok(userSettingsService.getProfileImage(user));
     }
 }
