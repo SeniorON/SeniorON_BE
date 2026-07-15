@@ -1,12 +1,14 @@
 package com.example.senioron.domain.event.util;
 
 import com.example.senioron.domain.user.repository.UserRepository;
-import com.example.senioron.domain.user.service.UserService;
 import com.example.senioron.global.config.FirebaseConfig;
 import com.google.firebase.messaging.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 @Component
 @RequiredArgsConstructor
@@ -15,6 +17,7 @@ public class FcmSender {
 
     private final FirebaseConfig firebaseConfig;
     private final UserRepository userRepository;
+    private final ApplicationContext applicationContext;
 
     public void send(String fcmToken, String title, String body) {
         if (fcmToken == null || fcmToken.isBlank()) {
@@ -40,8 +43,8 @@ public class FcmSender {
 
             if (errorCode == MessagingErrorCode.UNREGISTERED
                     || errorCode == MessagingErrorCode.INVALID_ARGUMENT) {
-                log.warn("유효하지 않은 FCM 토큰, 삭제 처리");
-                userRepository.clearFcmToken(fcmToken);
+                FcmSender self = applicationContext.getBean(FcmSender.class);
+                self.clearInvalidToken(fcmToken);
             } else {
                 log.warn("FCM 발송 일시 실패, 재시도 필요: token = " + maskToken(fcmToken));
             }
@@ -50,5 +53,11 @@ public class FcmSender {
     private String maskToken(String token) {
         if (token == null || token.length() < 8) return "****";
         return token.substring(0, 8) + "...(masked)";
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void  clearInvalidToken(String token) {
+        log.warn("유효하지 않은 FCM 토큰, 삭제 처리");
+        userRepository.clearFcmToken(token);
     }
 }
