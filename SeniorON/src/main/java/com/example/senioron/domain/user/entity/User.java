@@ -51,6 +51,9 @@ public class User extends BaseEntity {
 
     private String fcmToken;
 
+    @Column(name = "profile_image_key")
+    private String profileImageKey;
+
     public void updateRole(Role role) {
         this.role = role;
     }
@@ -70,5 +73,17 @@ public class User extends BaseEntity {
 
     public void updateFcmToken(String fcmToken) {
         this.fcmToken = fcmToken;
+    }
+
+    public void updateName(String name) {
+        this.name = name;
+    }
+
+    public void updatePassword(String password) {
+        this.password = password;
+    }
+
+    public void updateProfileImageKey(String profileImageKey) {
+        this.profileImageKey = profileImageKey;
     }
 }

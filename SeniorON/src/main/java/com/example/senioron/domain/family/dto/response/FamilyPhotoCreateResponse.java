@@ -16,4 +16,6 @@ public class FamilyPhotoCreateResponse {
     private String uploaderName;
 
     private LocalDateTime createdAt;
+
+    private String description;
 }

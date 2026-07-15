@@ -18,16 +18,20 @@ import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class NotificationService {
 
     private final NotificationRepository notificationRepository;
@@ -65,7 +69,7 @@ public class NotificationService {
         if (notifications.isEmpty()) {return;}
         notificationRepository.saveAll(notifications); // 레포 저장
 
-// 커밋 성공 이후에만 FCM 발송이 실행되도록 등록
+        // 커밋 성공 이후에만 FCM 발송이 실행되도록 등록
         TransactionSynchronizationManager.registerSynchronization(
                 new TransactionSynchronization() {
                     @Override
@@ -73,7 +77,11 @@ public class NotificationService {
                         for (Notification notification : notifications) {
                             User receiver = notification.getReceiverUser();
                             if (receiver.getFcmToken() != null) {
-                                fcmSender.send(receiver.getFcmToken(), notification.getTitle(), notification.getBody());
+                                try {
+                                    fcmSender.send(receiver.getFcmToken(), notification.getTitle(), notification.getBody());
+                                } catch (Exception e) {
+                                    log.warn("FCM 발송 처리 중 예외 발생, receiverId={}", receiver.getUsersId(), e);
+                                }
                             }
                         }
                     }
@@ -140,11 +148,25 @@ public class NotificationService {
         notificationSettingRepository.save(setting);
     }
 
+    // 백필 대응 메소드 (기존 세팅 없을 경우 즉시 생성)
+    private NotificationSetting createDefaultSettingInternal(User user){
+        try{
+            NotificationSetting setting = NotificationSetting.builder()
+                    .user(user)
+                    .build();
+            return notificationSettingRepository.save(setting);
+        } catch(DataIntegrityViolationException e){
+            return notificationSettingRepository.findById(user.getUsersId())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND));
+        }
+    }
     //알람 탭 홈화면 조회
-    @Transactional
+    @Transactional(readOnly = true)
     public List<NotificationHomeResponse> getHomeSettings(Long userId) {
-        NotificationSetting setting = notificationSettingRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND));
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        NotificationSetting setting = notificationSettingRepository.findById(user.getUsersId())
+                .orElseGet(() -> createDefaultSettingInternal(user));
         return List.of(
                 buildGroup(userId, NotificationType.SOS, setting.getSosEnabled()),
                 buildGroup(userId, NotificationType.INACTIVITY, setting.getInactivityEnabled()),
@@ -154,10 +176,14 @@ public class NotificationService {
         );
     }
 
-    private NotificationHomeResponse buildGroup(Long userId, NotificationType type, boolean enabled){
-        Notification latest = notificationRepository.findLatestUnread(userId, type).orElse(null);
+    private NotificationHomeResponse buildGroup(Long userId, NotificationType type, boolean enabled) {
+        LocalDateTime threshold = LocalDateTime.now().minusDays(2);
+        Notification latest = notificationRepository
+                .findLatestUnread(userId, type, threshold)
+                .orElse(null);
         return NotificationHomeResponse.of(type, enabled, latest);
     }
+
 
     // 알람 토글 설정
     @Transactional
@@ -169,8 +195,11 @@ public class NotificationService {
         if(enabled == null){
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
-        NotificationSetting setting = notificationSettingRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND));
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        NotificationSetting setting = notificationSettingRepository.findById(user.getUsersId())
+                .orElseGet(() -> createDefaultSettingInternal(user));
 
         switch (type) {
             case SOS -> setting.updateSosEnabled(enabled);

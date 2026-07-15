@@ -22,6 +22,32 @@ public enum ErrorCode implements BaseCode {
     DUPLICATE_LOGIN_ID(HttpStatus.CONFLICT, "USER409_1", "이미 사용 중인 아이디입니다."),
     PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, "USER400_1", "비밀번호가 일치하지 않습니다."),
     INVALID_PASSWORD(HttpStatus.BAD_REQUEST, "USER400_2", "비밀번호가 올바르지 않습니다."),
+    INVALID_PASSWORD_RESET_VERIFICATION_CODE(HttpStatus.BAD_REQUEST, "USER400_3", "인증번호가 올바르지 않거나 만료되었습니다."),
+    NAME_NOT_CHANGED(HttpStatus.BAD_REQUEST, "USER400_4", "현재 사용 중인 이름과 동일해요"),
+    CURRENT_PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, "USER400_5", "현재 비밀번호가 일치하지 않아요"),
+    NEW_PASSWORD_CONFIRMATION_MISMATCH(HttpStatus.BAD_REQUEST, "USER400_6", "새 비밀번호가 일치하지 않아요"),
+    SAME_AS_CURRENT_PASSWORD(HttpStatus.BAD_REQUEST, "USER400_7", "현재 사용 중인 비밀번호와 동일해요"),
+    PROFILE_IMAGE_REQUIRED(HttpStatus.BAD_REQUEST, "USER400_8", "프로필 이미지를 선택해 주세요"),
+    UNSUPPORTED_PROFILE_IMAGE_TYPE(HttpStatus.BAD_REQUEST, "USER400_9", "지원하지 않는 이미지 형식이에요"),
+    PROFILE_IMAGE_SIZE_EXCEEDED(HttpStatus.BAD_REQUEST, "USER400_10", "프로필 이미지 크기가 너무 커요"),
+    PROFILE_IMAGE_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "USER500_1", "프로필 이미지 업로드에 실패했어요"),
+    LOGIN_ID_NOT_FOUND(HttpStatus.NOT_FOUND, "USER404_1", "일치하는 아이디를 찾지 못했어요"),
+    ACCOUNT_RECOVERY_USER_NOT_FOUND(HttpStatus.NOT_FOUND, "USER404_2", "일치하는 계정을 찾지 못했어요"),
+
+    // Email Error
+    EMAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "EMAIL500", "이메일 발송에 실패했습니다."),
+
+    // Home Error
+    HOME_BUTTON_NOT_FOUND(HttpStatus.NOT_FOUND, "HOME404", "홈 버튼을 찾을 수 없습니다."),
+    BUTTON_OPTION_NOT_FOUND(HttpStatus.NOT_FOUND, "HOME4001", "존재하지 않는 버튼 옵션입니다."),
+    HOME_BUTTON_ALREADY_EXISTS(HttpStatus.CONFLICT, "HOME4002", "이미 추가된 홈 버튼입니다."),
+    INVALID_HOME_BUTTON_REQUEST(HttpStatus.BAD_REQUEST, "HOME_4002", "현재 홈 버튼 전체를 요청해야 합니다."),
+    DUPLICATE_HOME_BUTTON_ID(HttpStatus.BAD_REQUEST, "HOME_4003", "중복된 홈 버튼 ID가 있습니다."),
+    DUPLICATE_HOME_BUTTON_ORDER(HttpStatus.BAD_REQUEST, "HOME_4004", "중복된 홈 버튼 순서가 있습니다."),
+    INVALID_HOME_BUTTON_ORDER(HttpStatus.BAD_REQUEST, "HOME_4005", "홈 버튼 순서는 1부터 연속되어야 합니다."),
+
+    // Senior Error
+    CUSTOM_RELATION_REQUIRED(HttpStatus.BAD_REQUEST, "SENIOR4001", "직접 작성 관계를 입력해 주세요."),
 
     // Family Error
     FAMILY_NOT_FOUND(HttpStatus.NOT_FOUND, "FAMILY404", "가족 정보를 찾을 수 없습니다."),

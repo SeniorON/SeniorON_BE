@@ -5,6 +5,8 @@ import jakarta.persistence.*;
 import lombok.*;
 import com.example.senioron.common.entity.BaseEntity;
 
+import java.time.LocalDateTime;
+
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -38,4 +40,6 @@ public class Event extends BaseEntity {
     private Integer deviceBattery;
 
     private String address;
+
+    private LocalDateTime lastSeenAt;
 }

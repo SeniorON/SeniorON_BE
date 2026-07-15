@@ -3,7 +3,9 @@ package com.example.senioron.domain.user.repository;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -18,6 +20,14 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByEmail(String email);
 
     Optional<User> findByLoginId(String loginId);
+
+    Optional<User> findByNameAndEmail(String name, String email);
+
+    Optional<User> findByNameAndLoginId(String name, String loginId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT u FROM User u WHERE u.usersId = :usersId")
+    Optional<User> findByIdForUpdate(@Param("usersId") Long usersId);
 
     List<User> findAllByFamily(Family family);
 
