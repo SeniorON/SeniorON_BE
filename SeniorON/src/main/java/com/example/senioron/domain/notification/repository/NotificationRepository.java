@@ -6,20 +6,22 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
     @Query("""
-        SELECT n FROM Notification n
-        WHERE n.receiverUser.usersId = :userId
-        AND n.notificationType = :type
-        AND n.isRead = false
-        ORDER BY n.createdAt DESC
-        LIMIT 1
-        """)
-    // 알림 메인화면 표시 알람 (읽지 않은 최신 1건의 알림만)
+    SELECT n FROM Notification n
+    WHERE n.receiverUser.usersId = :userId
+    AND n.notificationType = :type
+    AND n.isRead = false
+    AND n.createdAt >= :threshold
+    ORDER BY n.createdAt DESC
+    LIMIT 1
+    """)
     Optional<Notification> findLatestUnread(
             @Param("userId") Long userId,
-            @Param("type") NotificationType type
+            @Param("type") NotificationType type,
+            @Param("threshold") LocalDateTime threshold
     );
 }
