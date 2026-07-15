@@ -24,6 +24,9 @@ public enum ErrorCode implements BaseCode {
     INVALID_PASSWORD(HttpStatus.BAD_REQUEST, "USER400_2", "비밀번호가 올바르지 않습니다."),
     INVALID_PASSWORD_RESET_VERIFICATION_CODE(HttpStatus.BAD_REQUEST, "USER400_3", "인증번호가 올바르지 않거나 만료되었습니다."),
     NAME_NOT_CHANGED(HttpStatus.BAD_REQUEST, "USER400_4", "현재 사용 중인 이름과 동일해요"),
+    CURRENT_PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, "USER400_5", "현재 비밀번호가 일치하지 않아요"),
+    NEW_PASSWORD_CONFIRMATION_MISMATCH(HttpStatus.BAD_REQUEST, "USER400_6", "새 비밀번호가 일치하지 않아요"),
+    SAME_AS_CURRENT_PASSWORD(HttpStatus.BAD_REQUEST, "USER400_7", "현재 사용 중인 비밀번호와 동일해요"),
     LOGIN_ID_NOT_FOUND(HttpStatus.NOT_FOUND, "USER404_1", "일치하는 아이디를 찾지 못했어요"),
     ACCOUNT_RECOVERY_USER_NOT_FOUND(HttpStatus.NOT_FOUND, "USER404_2", "일치하는 계정을 찾지 못했어요"),
 

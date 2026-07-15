@@ -1,13 +1,16 @@
 package com.example.senioron.domain.user.service;
 
 import com.example.senioron.domain.user.dto.request.NameUpdateRequest;
+import com.example.senioron.domain.user.dto.request.PasswordChangeRequest;
 import com.example.senioron.domain.user.dto.response.CurrentNameResponse;
 import com.example.senioron.domain.user.dto.response.NameUpdateResponse;
+import com.example.senioron.domain.user.dto.response.PasswordChangeResponse;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserSettingsService {
 
     private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
 
     @Transactional(readOnly = true)
     public CurrentNameResponse getCurrentName(User principal) {
@@ -43,6 +47,31 @@ public class UserSettingsService {
 
         return NameUpdateResponse.builder()
                 .name(user.getName())
+                .build();
+    }
+
+    public PasswordChangeResponse changePassword(User principal, PasswordChangeRequest request) {
+        validateAuthenticated(principal);
+
+        User user = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+            throw new BusinessException(ErrorCode.CURRENT_PASSWORD_MISMATCH);
+        }
+
+        if (!request.getNewPassword().equals(request.getNewPasswordCheck())) {
+            throw new BusinessException(ErrorCode.NEW_PASSWORD_CONFIRMATION_MISMATCH);
+        }
+
+        if (passwordEncoder.matches(request.getNewPassword(), user.getPassword())) {
+            throw new BusinessException(ErrorCode.SAME_AS_CURRENT_PASSWORD);
+        }
+
+        user.updatePassword(passwordEncoder.encode(request.getNewPassword()));
+
+        return PasswordChangeResponse.builder()
+                .changed(true)
                 .build();
     }
 

@@ -63,7 +63,7 @@ public class AccountRecoveryController {
 
     @Operation(
             summary = "비밀번호 재설정",
-            description = "인증번호 확인이 완료된 인증번호 ID로 사용자의 비밀번호를 새 비밀번호로 변경합니다."
+            description = "비밀번호를 잊은 사용자가 이메일 인증을 완료한 뒤 새 비밀번호를 설정합니다."
     )
     @PatchMapping("/password")
     public Response<PasswordResetResponse> resetPassword(

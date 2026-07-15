@@ -1,8 +1,10 @@
 package com.example.senioron.domain.user.controller;
 
 import com.example.senioron.domain.user.dto.request.NameUpdateRequest;
+import com.example.senioron.domain.user.dto.request.PasswordChangeRequest;
 import com.example.senioron.domain.user.dto.response.CurrentNameResponse;
 import com.example.senioron.domain.user.dto.response.NameUpdateResponse;
+import com.example.senioron.domain.user.dto.response.PasswordChangeResponse;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.service.UserSettingsService;
 import com.example.senioron.global.apiPayload.response.Response;
@@ -40,5 +42,17 @@ public class UserSettingsController {
             @Valid @RequestBody NameUpdateRequest request
     ) {
         return Response.ok(userSettingsService.updateName(user, request));
+    }
+
+    @Operation(
+            summary = "비밀번호 변경",
+            description = "로그인한 사용자가 현재 비밀번호를 확인한 뒤 새 비밀번호로 변경합니다."
+    )
+    @PatchMapping("/password")
+    public Response<PasswordChangeResponse> changePassword(
+            @AuthenticationPrincipal User user,
+            @Valid @RequestBody PasswordChangeRequest request
+    ) {
+        return Response.ok(userSettingsService.changePassword(user, request));
     }
 }
