@@ -1,6 +1,7 @@
 package com.example.senioron.domain.medication.service;
 
 import com.example.senioron.domain.medication.dto.request.MedicationCreateRequest;
+import com.example.senioron.domain.medication.dto.request.MedicationUpdateRequest;
 import com.example.senioron.domain.medication.dto.response.MedicationCreateResponse;
 import com.example.senioron.domain.medication.dto.response.MedicationReadResponse;
 import com.example.senioron.domain.medication.entity.Medication;
@@ -177,10 +178,46 @@ public class MedicationService {
 
     @Transactional
     public void deleteMedicationGroup(Long userId, String medicationGroupId) {
-
         User user = getUserOrThrow(userId);
+
         medicationRepository.deleteByUserAndMedicationGroupId(user, medicationGroupId);
 
         log.info("성공적으로 약 그룹을 삭제했습니다. UserId: {}, GroupId: {}", userId, medicationGroupId);
     }
+
+    @Transactional
+    public void updateMedication(Long userId, MedicationUpdateRequest request) {
+        User user = getUserOrThrow(userId);
+
+        boolean exists = medicationRepository.existsByUserAndMedicationGroupId(user, request.getMedicationGroupId());
+        if (!exists) {
+            throw new BusinessException(ErrorCode.MEDICATION_NOT_FOUND);
+        }
+
+        medicationRepository.deleteByUserAndMedicationGroupId(user, request.getMedicationGroupId());
+
+        String medicineDays = String.join(",", request.getMedicineDays());
+
+        for (String timeStr : request.getMedicineTimes()) {
+            LocalTime medicineTime;
+            try {
+                medicineTime = LocalTime.parse(timeStr);
+            } catch (java.time.format.DateTimeParseException e) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST);
+            }
+
+            Medication medication = Medication.builder()
+                    .user(user)
+                    .medicineName(request.getMedicineName())
+                    .ingredientName(request.getIngredientName())
+                    .medicineTime(medicineTime)
+                    .medicineDays(medicineDays)
+                    .medicationGroupId(request.getMedicationGroupId())
+                    .build();
+
+            medicationRepository.save(medication);
+        }
+        log.info("성공적으로 약 그룹을 수정했습니다. UserId: {}, GroupId: {}", userId, request.getMedicationGroupId());
+    }
+
 }
