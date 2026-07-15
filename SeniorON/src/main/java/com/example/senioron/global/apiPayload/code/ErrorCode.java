@@ -22,6 +22,12 @@ public enum ErrorCode implements BaseCode {
     DUPLICATE_LOGIN_ID(HttpStatus.CONFLICT, "USER409_1", "이미 사용 중인 아이디입니다."),
     PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, "USER400_1", "비밀번호가 일치하지 않습니다."),
     INVALID_PASSWORD(HttpStatus.BAD_REQUEST, "USER400_2", "비밀번호가 올바르지 않습니다."),
+    INVALID_PASSWORD_RESET_VERIFICATION_CODE(HttpStatus.BAD_REQUEST, "USER400_3", "인증번호가 올바르지 않거나 만료되었습니다."),
+    LOGIN_ID_NOT_FOUND(HttpStatus.NOT_FOUND, "USER404_1", "일치하는 아이디를 찾지 못했어요"),
+    ACCOUNT_RECOVERY_USER_NOT_FOUND(HttpStatus.NOT_FOUND, "USER404_2", "일치하는 계정을 찾지 못했어요"),
+
+    // Email Error
+    EMAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "EMAIL500", "이메일 발송에 실패했습니다."),
 
     // Home Error
     HOME_BUTTON_NOT_FOUND(HttpStatus.NOT_FOUND, "HOME404", "홈 버튼을 찾을 수 없습니다."),

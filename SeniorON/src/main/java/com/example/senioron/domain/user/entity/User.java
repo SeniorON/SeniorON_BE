@@ -71,4 +71,8 @@ public class User extends BaseEntity {
     public void updateFcmToken(String fcmToken) {
         this.fcmToken = fcmToken;
     }
+
+    public void updatePassword(String password) {
+        this.password = password;
+    }
 }
