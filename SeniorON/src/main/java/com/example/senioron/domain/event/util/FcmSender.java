@@ -41,12 +41,12 @@ public class FcmSender {
         } catch (FirebaseMessagingException e) {
             MessagingErrorCode errorCode = e.getMessagingErrorCode();
 
-            if (errorCode == MessagingErrorCode.UNREGISTERED
-                    || errorCode == MessagingErrorCode.INVALID_ARGUMENT) {
+            if (errorCode == MessagingErrorCode.UNREGISTERED){
+                log.warn("유효하지 않은 FCM 토큰, 삭제 처리");
                 FcmSender self = applicationContext.getBean(FcmSender.class);
                 self.clearInvalidToken(fcmToken);
             } else {
-                log.warn("FCM 발송 일시 실패, 재시도 필요: token = " + maskToken(fcmToken));
+                log.warn("FCM 발송 실패, token={}, errorCode={}", maskToken(fcmToken), errorCode);
             }
         }
     }
@@ -57,7 +57,6 @@ public class FcmSender {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void  clearInvalidToken(String token) {
-        log.warn("유효하지 않은 FCM 토큰, 삭제 처리");
         userRepository.clearFcmToken(token);
     }
 }
