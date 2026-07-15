@@ -14,11 +14,4 @@ public class SosEventRequest {
     @NotNull
     private BigDecimal longitude;
     private Integer deviceBattery;
-
-    @Builder
-    public SosEventRequest(LocalDateTime occurredAt, BigDecimal latitude, BigDecimal longitude, Integer deviceBattery) {
-        this.latitude = latitude;
-        this.longitude = longitude;
-        this.deviceBattery = deviceBattery;
-    }
 }

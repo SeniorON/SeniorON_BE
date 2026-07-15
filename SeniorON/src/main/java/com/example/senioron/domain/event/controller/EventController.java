@@ -1,6 +1,8 @@
 package com.example.senioron.domain.event.controller;
 
+import com.example.senioron.domain.event.dto.request.InactivityRequest;
 import com.example.senioron.domain.event.dto.request.SosEventRequest;
+import com.example.senioron.domain.event.dto.response.InactivityResponse;
 import com.example.senioron.domain.event.dto.response.SosEventResponse;
 import com.example.senioron.domain.event.service.EventService;
 import com.example.senioron.domain.user.entity.User;
@@ -27,5 +29,13 @@ public class EventController {
     ){
         return Response.ok(eventService.createSosEvent(user, req));
 
+    }
+    @Operation(summary = "미활동 이벤트 생성", description = "사용자의 미활동 이벤트를 생성합니다")
+    @PostMapping("/inactivity")
+    public Response<InactivityResponse> createInactivityEvent(
+            @AuthenticationPrincipal User user,
+            @Valid @RequestBody InactivityRequest req
+    ) {
+        return Response.ok(eventService.createInactivityEvent(user, req));
     }
 }
