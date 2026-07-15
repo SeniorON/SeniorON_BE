@@ -18,6 +18,7 @@ import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +31,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class NotificationService {
 
     private final NotificationRepository notificationRepository;
@@ -75,7 +77,11 @@ public class NotificationService {
                         for (Notification notification : notifications) {
                             User receiver = notification.getReceiverUser();
                             if (receiver.getFcmToken() != null) {
-                                fcmSender.send(receiver.getFcmToken(), notification.getTitle(), notification.getBody());
+                                try {
+                                    fcmSender.send(receiver.getFcmToken(), notification.getTitle(), notification.getBody());
+                                } catch (Exception e) {
+                                    log.warn("FCM 발송 처리 중 예외 발생, receiverId={}", receiver.getUsersId(), e);
+                                }
                             }
                         }
                     }

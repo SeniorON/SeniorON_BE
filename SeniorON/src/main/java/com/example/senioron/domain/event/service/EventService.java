@@ -1,6 +1,8 @@
 package com.example.senioron.domain.event.service;
 
+import com.example.senioron.domain.event.dto.request.InactivityRequest;
 import com.example.senioron.domain.event.dto.request.SosEventRequest;
+import com.example.senioron.domain.event.dto.response.InactivityResponse;
 import com.example.senioron.domain.event.dto.response.SosEventResponse;
 import com.example.senioron.domain.event.entity.Event;
 import com.example.senioron.domain.event.entity.EventType;
@@ -45,4 +47,30 @@ public class EventService {
 
         return SosEventResponse.of(savedEvent);
     }
+
+    public InactivityResponse createInactivityEvent(User user, InactivityRequest req){
+        String address = geocodingClient.reverseGeocode(req.getLatitude(), req.getLongitude());
+        EventService self= applicationContext.getBean(EventService.class);
+        return self.saveInactivityEvent(address, user, req);
+    }
+
+    @Transactional
+    public InactivityResponse saveInactivityEvent(String address,User user, InactivityRequest req){
+        Event event = Event.builder()
+                .user(user)
+                .triggeredUser(user)
+                .deviceBattery(req.getDeviceBattery())
+                .eventType(EventType.INACTIVITY)
+                .latitude(req.getLatitude())
+                .longitude(req.getLongitude())
+                .address(address)
+                .lastSeenAt(req.getLastSeenAt())
+                .build();
+
+        Event savedEvent = eventRepository.save(event);
+        notificationService.createFormEvent(event);
+
+        return InactivityResponse.of(savedEvent);
+    }
+
 }
