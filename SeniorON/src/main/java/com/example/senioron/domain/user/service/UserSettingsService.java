@@ -98,7 +98,7 @@ public class UserSettingsService {
         validateAuthenticated(principal);
         validateProfileImage(image);
 
-        User user = userRepository.findById(principal.getUsersId())
+        User user = userRepository.findByIdForUpdate(principal.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         String previousProfileImageKey = user.getProfileImageKey();

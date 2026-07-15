@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -24,6 +25,7 @@ import com.example.senioron.global.storage.S3Service;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.mock.web.MockMultipartFile;
@@ -146,7 +148,7 @@ class UserSettingsServiceTest {
         String newImageKey = "profile-images/1/new.webp";
         String newImageUrl = "https://bucket.s3.ap-northeast-2.amazonaws.com/" + newImageKey;
 
-        given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+        given(userRepository.findByIdForUpdate(USER_ID)).willReturn(Optional.of(user));
         given(s3Service.upload(image, "profile-images/" + USER_ID)).willReturn(newImageKey);
         given(s3Service.getFileUrl(newImageKey)).willReturn(newImageUrl);
 
@@ -154,6 +156,9 @@ class UserSettingsServiceTest {
 
         assertThat(user.getProfileImageKey()).isEqualTo(newImageKey);
         assertThat(response.getProfileImageUrl()).isEqualTo(newImageUrl);
+        InOrder inOrder = inOrder(userRepository, s3Service);
+        inOrder.verify(userRepository).findByIdForUpdate(USER_ID);
+        inOrder.verify(s3Service).upload(image, "profile-images/" + USER_ID);
         verify(userRepository).flush();
         verify(s3Service).delete("profile-images/1/old.webp");
     }
