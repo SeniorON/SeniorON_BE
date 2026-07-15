@@ -20,6 +20,7 @@ public class InactivityResponse {
                 .address(event.getAddress())
                 .latitude(event.getLatitude())
                 .longitude(event.getLongitude())
+                .LastSeenAt(event.getLastSeenAt())
                 .build();
     }
 }
