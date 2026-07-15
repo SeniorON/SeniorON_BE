@@ -1,14 +1,17 @@
 package com.example.senioron.domain.event.dto.request;
 
 import com.example.senioron.domain.event.entity.OutingPhase;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.*;
 import lombok.Builder;
 import lombok.Getter;
 
+
 import java.math.BigDecimal;
 
 @Getter
-public class OutingReturnRequest{
+public class OutingReturnRequest {
 
     @NotNull
     private OutingPhase phase;
@@ -27,7 +30,13 @@ public class OutingReturnRequest{
     private Integer deviceBattery;
 
     @Builder
-    public OutingReturnRequest(OutingPhase phase, BigDecimal latitude, BigDecimal longitude, Integer deviceBattery) {
+    @JsonCreator
+    public OutingReturnRequest(
+            @JsonProperty("phase") OutingPhase phase,
+            @JsonProperty("latitude") BigDecimal latitude,
+            @JsonProperty("longitude") BigDecimal longitude,
+            @JsonProperty("deviceBattery") Integer deviceBattery
+    ) {
         this.phase = phase;
         this.latitude = latitude;
         this.longitude = longitude;
