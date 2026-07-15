@@ -5,12 +5,16 @@ import com.example.senioron.domain.home.dto.request.HomeButtonUpdateRequest;
 import com.example.senioron.domain.home.dto.response.ButtonOptionResponse;
 import com.example.senioron.domain.home.dto.response.HomeButtonCreateResponse;
 import com.example.senioron.domain.home.dto.response.HomeResponse;
+import com.example.senioron.domain.home.dto.response.SeniorHomeResponse;
 import com.example.senioron.domain.home.entity.ButtonOption;
 import com.example.senioron.domain.home.entity.FontSize;
 import com.example.senioron.domain.home.entity.Home;
 import com.example.senioron.domain.home.repository.ButtonOptionRepository;
 import com.example.senioron.domain.home.repository.HomeRepository;
+import com.example.senioron.domain.user.entity.ManagerType;
+import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import jakarta.transaction.Transactional;
@@ -30,13 +34,16 @@ public class HomeService {
 
     private final HomeRepository homeRepository;
     private final ButtonOptionRepository buttonOptionRepository;
+    private final UserRepository userRepository;
 
     public HomeService(
             HomeRepository homeRepository,
-            ButtonOptionRepository buttonOptionRepository
+            ButtonOptionRepository buttonOptionRepository,
+            UserRepository userRepository
     ) {
         this.homeRepository = homeRepository;
         this.buttonOptionRepository = buttonOptionRepository;
+        this.userRepository = userRepository;
     }
 
     public HomeResponse getHome() {
@@ -57,6 +64,10 @@ public class HomeService {
                 ))
                 .toList();
 
+        Integer age = birth == null
+                ? null
+                : Period.between(birth, LocalDate.now()).getYears();
+
         return new HomeResponse(
                 user.getName(),
                 null,
@@ -64,11 +75,13 @@ public class HomeService {
                         user.getName(),
                         null,
                         birth,
-                        Period.between(birth, LocalDate.now()).getYears(),
+                        age,
                         null,
                         user.getPhoneNumber()
                 ),
-                homes.isEmpty() ? null : homes.get(0).getFontSize(),
+                homes.isEmpty()
+                        ? null
+                        : homes.get(0).getFontSize(),
                 buttons
         );
     }
@@ -245,7 +258,8 @@ public class HomeService {
 
         User user = getCurrentUser();
 
-        Home home = homeRepository.findByHomeIdAndUser(buttonId, user)
+        Home home = homeRepository
+                .findByHomeIdAndUser(buttonId, user)
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.HOME_BUTTON_NOT_FOUND
                 ));
@@ -260,10 +274,71 @@ public class HomeService {
         }
     }
 
+    public SeniorHomeResponse getSeniorHome() {
+
+        User parent = getCurrentUser();
+
+        /*
+         * 현재 로그인한 부모님과 같은 Family에 속한
+         * CHILD 역할의 사용자들을 조회한다.
+         *
+         * UserRepository는 수정하지 않고
+         * 기존 메서드를 그대로 사용한다.
+         */
+        List<User> children =
+                userRepository.findByFamilyAndUsersIdNotAndRole(
+                        parent.getFamily(),
+                        parent.getUsersId(),
+                        Role.CHILD
+                );
+
+        /*
+         * 자녀들 중 주 담당자(PRIMARY)를 찾는다.
+         */
+        User primaryChild = children.stream()
+                .filter(child ->
+                        child.getManagerType() == ManagerType.PRIMARY
+                )
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.HOME_BUTTON_NOT_FOUND
+                ));
+
+        /*
+         * 주 담당자가 설정한 홈 버튼들을 조회한다.
+         */
+        List<Home> homes =
+                homeRepository.findAllByUserOrderByButtonOrderAsc(
+                        primaryChild
+                );
+
+        List<SeniorHomeResponse.ButtonResponse> buttons = homes.stream()
+                .map(home -> new SeniorHomeResponse.ButtonResponse(
+                        home.getHomeId(),
+                        home.getButtonOrder(),
+                        home.getButtonName(),
+                        home.getIcon(),
+                        home.getActionType(),
+                        home.getActionValue()
+                ))
+                .toList();
+
+        FontSize fontSize = homes.isEmpty()
+                ? FontSize.MEDIUM
+                : homes.get(0).getFontSize();
+
+        return new SeniorHomeResponse(
+                fontSize,
+                buttons
+        );
+    }
+
     private User getCurrentUser() {
 
         Authentication authentication =
-                SecurityContextHolder.getContext().getAuthentication();
+                SecurityContextHolder
+                        .getContext()
+                        .getAuthentication();
 
         return (User) authentication.getPrincipal();
     }

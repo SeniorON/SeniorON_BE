@@ -5,6 +5,7 @@ import com.example.senioron.domain.home.dto.request.HomeButtonUpdateRequest;
 import com.example.senioron.domain.home.dto.response.ButtonOptionResponse;
 import com.example.senioron.domain.home.dto.response.HomeButtonCreateResponse;
 import com.example.senioron.domain.home.dto.response.HomeResponse;
+import com.example.senioron.domain.home.dto.response.SeniorHomeResponse;
 import com.example.senioron.domain.home.service.HomeService;
 import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
@@ -83,5 +84,14 @@ public class HomeController {
     ) {
         homeService.deleteButton(buttonId);
         return Response.ok();
+    }
+
+    @Operation(
+            summary = "부모님 홈 조회",
+            description = "부모님 앱에서 글자 크기와 홈 버튼 설정 조회"
+    )
+    @GetMapping("/senior")
+    public Response<SeniorHomeResponse> getSeniorHome() {
+        return Response.ok(homeService.getSeniorHome());
     }
 }
