@@ -32,6 +32,9 @@ public class S3Service {
     @Value("${cloud.aws.s3.bucket}")
     private String bucket;
 
+    @Value("${cloud.aws.region}")
+    private String region;
+
     public String upload(
             MultipartFile file,
             String directory
@@ -77,6 +80,19 @@ public class S3Service {
                 .build();
 
         s3Client.deleteObject(request);
+    }
+
+    public String getFileUrl(String imageKey) {
+        if (imageKey == null || imageKey.isBlank()) {
+            return null;
+        }
+
+        return "https://"
+                + bucket
+                + ".s3."
+                + region
+                + ".amazonaws.com/"
+                + imageKey;
     }
 
     private void validateImage(MultipartFile file) {

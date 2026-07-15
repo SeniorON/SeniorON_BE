@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 import com.example.senioron.domain.inactivity.service.InactivitySettingService;
 import com.example.senioron.domain.notification.service.NotificationService;
@@ -11,16 +13,19 @@ import com.example.senioron.domain.user.dto.request.UserLoginRequest;
 import com.example.senioron.domain.user.dto.request.PasswordChangeRequest;
 import com.example.senioron.domain.user.dto.response.UserLoginResponse;
 import com.example.senioron.domain.user.dto.response.PasswordChangeResponse;
+import com.example.senioron.domain.user.dto.response.ProfileImageUpdateResponse;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.jwt.JwtUtil;
+import com.example.senioron.global.storage.S3Service;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class UserSettingsServiceTest {
@@ -31,12 +36,13 @@ class UserSettingsServiceTest {
 
     private final UserRepository userRepository = org.mockito.Mockito.mock(UserRepository.class);
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    private final S3Service s3Service = org.mockito.Mockito.mock(S3Service.class);
 
     private UserSettingsService userSettingsService;
 
     @BeforeEach
     void setUp() {
-        userSettingsService = new UserSettingsService(userRepository, passwordEncoder);
+        userSettingsService = new UserSettingsService(userRepository, passwordEncoder, s3Service);
     }
 
     @Test
@@ -131,6 +137,67 @@ class UserSettingsServiceTest {
                 .isEqualTo(ErrorCode.SAME_AS_CURRENT_PASSWORD);
     }
 
+    @Test
+    void updateProfileImageUploadsNewImageAndDeletesPreviousImage() {
+        User user = createUser(passwordEncoder.encode(CURRENT_PASSWORD));
+        user.updateProfileImageKey("profile-images/1/old.webp");
+        MockMultipartFile image = createImage("profile.webp", "image/webp", 1024);
+        String newImageKey = "profile-images/1/new.webp";
+        String newImageUrl = "https://bucket.s3.ap-northeast-2.amazonaws.com/" + newImageKey;
+
+        given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+        given(s3Service.upload(image, "profile-images/" + USER_ID)).willReturn(newImageKey);
+        given(s3Service.getFileUrl(newImageKey)).willReturn(newImageUrl);
+
+        ProfileImageUpdateResponse response = userSettingsService.updateProfileImage(user, image);
+
+        assertThat(user.getProfileImageKey()).isEqualTo(newImageKey);
+        assertThat(response.getProfileImageUrl()).isEqualTo(newImageUrl);
+        verify(userRepository).flush();
+        verify(s3Service).delete("profile-images/1/old.webp");
+    }
+
+    @Test
+    void updateProfileImageThrowsExceptionWhenImageMissing() {
+        User user = createUser(passwordEncoder.encode(CURRENT_PASSWORD));
+
+        assertThatThrownBy(() -> userSettingsService.updateProfileImage(user, null))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.PROFILE_IMAGE_REQUIRED);
+
+        verify(s3Service, never()).upload(org.mockito.Mockito.any(), org.mockito.Mockito.anyString());
+    }
+
+    @Test
+    void updateProfileImageThrowsExceptionWhenUnsupportedContentType() {
+        User user = createUser(passwordEncoder.encode(CURRENT_PASSWORD));
+        MockMultipartFile image = createImage("profile.gif", "image/gif", 1024);
+
+        assertThatThrownBy(() -> userSettingsService.updateProfileImage(user, image))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.UNSUPPORTED_PROFILE_IMAGE_TYPE);
+
+        verify(s3Service, never()).upload(org.mockito.Mockito.any(), org.mockito.Mockito.anyString());
+    }
+
+    @Test
+    void updateProfileImageThrowsExceptionWhenFileSizeExceeded() {
+        User user = createUser(passwordEncoder.encode(CURRENT_PASSWORD));
+        MockMultipartFile image = createImage("profile.jpg", "image/jpeg", 10 * 1024 * 1024 + 1);
+
+        assertThatThrownBy(() -> userSettingsService.updateProfileImage(user, image))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.PROFILE_IMAGE_SIZE_EXCEEDED);
+
+        verify(s3Service, never()).upload(org.mockito.Mockito.any(), org.mockito.Mockito.anyString());
+    }
+
     private User createUser(String encodedPassword) {
         return User.builder()
                 .usersId(USER_ID)
@@ -158,5 +225,14 @@ class UserSettingsServiceTest {
         ReflectionTestUtils.setField(request, "loginId", "testuser");
         ReflectionTestUtils.setField(request, "password", password);
         return request;
+    }
+
+    private MockMultipartFile createImage(String originalFilename, String contentType, int size) {
+        return new MockMultipartFile(
+                "image",
+                originalFilename,
+                contentType,
+                new byte[size]
+        );
     }
 }
