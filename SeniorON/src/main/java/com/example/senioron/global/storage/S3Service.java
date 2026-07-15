@@ -8,10 +8,14 @@ import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 
@@ -21,6 +25,7 @@ public class S3Service {
 
     private static final long MAX_FILE_SIZE = 10 * 1024 * 1024;
 
+
     private static final Map<String, String> IMAGE_EXTENSIONS = Map.of(
             "image/jpeg", ".jpg",
             "image/png", ".png",
@@ -28,6 +33,7 @@ public class S3Service {
     );
 
     private final S3Client s3Client;
+    private final S3Presigner s3Presigner;
 
     @Value("${cloud.aws.s3.bucket}")
     private String bucket;
@@ -87,12 +93,21 @@ public class S3Service {
             return null;
         }
 
-        return "https://"
-                + bucket
-                + ".s3."
-                + region
-                + ".amazonaws.com/"
-                + imageKey;
+        GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                .bucket(bucket)
+                .key(imageKey)
+                .build();
+
+        GetObjectPresignRequest presignRequest =
+                GetObjectPresignRequest.builder()
+                        .signatureDuration(Duration.ofHours(1))
+                        .getObjectRequest(getObjectRequest)
+                        .build();
+
+        return s3Presigner
+                .presignGetObject(presignRequest)
+                .url()
+                .toString();
     }
 
     private void validateImage(MultipartFile file) {
