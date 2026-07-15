@@ -2,15 +2,20 @@ package com.example.senioron.domain.home.service;
 
 import com.example.senioron.domain.home.dto.request.HomeButtonCreateRequest;
 import com.example.senioron.domain.home.dto.request.HomeButtonUpdateRequest;
+import com.example.senioron.domain.home.dto.request.HomeFontSizeUpdateRequest;
 import com.example.senioron.domain.home.dto.response.ButtonOptionResponse;
 import com.example.senioron.domain.home.dto.response.HomeButtonCreateResponse;
 import com.example.senioron.domain.home.dto.response.HomeResponse;
+import com.example.senioron.domain.home.dto.response.SeniorHomeResponse;
 import com.example.senioron.domain.home.entity.ButtonOption;
 import com.example.senioron.domain.home.entity.FontSize;
 import com.example.senioron.domain.home.entity.Home;
 import com.example.senioron.domain.home.repository.ButtonOptionRepository;
 import com.example.senioron.domain.home.repository.HomeRepository;
+import com.example.senioron.domain.user.entity.ManagerType;
+import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import jakarta.transaction.Transactional;
@@ -30,23 +35,34 @@ public class HomeService {
 
     private final HomeRepository homeRepository;
     private final ButtonOptionRepository buttonOptionRepository;
+    private final UserRepository userRepository;
 
     public HomeService(
             HomeRepository homeRepository,
-            ButtonOptionRepository buttonOptionRepository
+            ButtonOptionRepository buttonOptionRepository,
+            UserRepository userRepository
     ) {
         this.homeRepository = homeRepository;
         this.buttonOptionRepository = buttonOptionRepository;
+        this.userRepository = userRepository;
     }
 
     public HomeResponse getHome() {
 
-        User user = getCurrentUser();
+        User currentUser = getCurrentUser();
+
+        if (currentUser.getRole() != Role.CHILD) {
+            throw new BusinessException(
+                    ErrorCode.CHILD_HOME_ACCESS_DENIED
+            );
+        }
+
+        User homeOwner = resolvePrimaryChild(currentUser);
 
         List<Home> homes =
-                homeRepository.findAllByUserOrderByButtonOrderAsc(user);
+                homeRepository.findAllByUserOrderByButtonOrderAsc(homeOwner);
 
-        LocalDate birth = user.getBirth();
+        LocalDate birth = currentUser.getBirth();
 
         List<HomeResponse.HomeButtonResponse> buttons = homes.stream()
                 .map(home -> new HomeResponse.HomeButtonResponse(
@@ -57,26 +73,38 @@ public class HomeService {
                 ))
                 .toList();
 
+        Integer age = birth == null
+                ? null
+                : Period.between(
+                birth,
+                LocalDate.now()
+        ).getYears();
+
         return new HomeResponse(
-                user.getName(),
+                currentUser.getName(),
                 null,
                 new HomeResponse.SeniorProfileResponse(
-                        user.getName(),
+                        currentUser.getName(),
                         null,
                         birth,
-                        Period.between(birth, LocalDate.now()).getYears(),
+                        age,
                         null,
-                        user.getPhoneNumber()
+                        currentUser.getPhoneNumber()
                 ),
-                homes.isEmpty() ? null : homes.get(0).getFontSize(),
+                homes.isEmpty()
+                        ? FontSize.MEDIUM
+                        : homes.get(0).getFontSize(),
                 buttons
         );
     }
 
     @Transactional
-    public void updateButtons(HomeButtonUpdateRequest request) {
+    public void updateButtons(
+            HomeButtonUpdateRequest request
+    ) {
 
         User user = getCurrentUser();
+        validatePrimaryManager(user);
 
         List<Home> homes =
                 homeRepository.findAllByUserOrderByButtonOrderAsc(user);
@@ -156,7 +184,9 @@ public class HomeService {
         for (HomeButtonUpdateRequest.ButtonRequest buttonRequest
                 : request.getButtons()) {
 
-            Home home = homeMap.get(buttonRequest.getButtonId());
+            Home home = homeMap.get(
+                    buttonRequest.getButtonId()
+            );
 
             if (home == null) {
                 throw new BusinessException(
@@ -173,6 +203,9 @@ public class HomeService {
     }
 
     public List<ButtonOptionResponse> getButtonOptions() {
+
+        User user = getCurrentUser();
+        validatePrimaryManager(user);
 
         return buttonOptionRepository.findAll()
                 .stream()
@@ -192,6 +225,7 @@ public class HomeService {
     ) {
 
         User user = getCurrentUser();
+        validatePrimaryManager(user);
 
         ButtonOption buttonOption = buttonOptionRepository
                 .findById(request.getOptionId())
@@ -235,17 +269,22 @@ public class HomeService {
                 fontSize
         );
 
-        Home savedButton = homeRepository.save(newButton);
+        Home savedButton =
+                homeRepository.save(newButton);
 
-        return HomeButtonCreateResponse.from(savedButton);
+        return HomeButtonCreateResponse.from(
+                savedButton
+        );
     }
 
     @Transactional
     public void deleteButton(Long buttonId) {
 
         User user = getCurrentUser();
+        validatePrimaryManager(user);
 
-        Home home = homeRepository.findByHomeIdAndUser(buttonId, user)
+        Home home = homeRepository
+                .findByHomeIdAndUser(buttonId, user)
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.HOME_BUTTON_NOT_FOUND
                 ));
@@ -256,14 +295,139 @@ public class HomeService {
                 homeRepository.findAllByUserOrderByButtonOrderAsc(user);
 
         for (int i = 0; i < remainingButtons.size(); i++) {
-            remainingButtons.get(i).updateButtonOrder(i + 1);
+            remainingButtons
+                    .get(i)
+                    .updateButtonOrder(i + 1);
+        }
+    }
+
+    public SeniorHomeResponse getSeniorHome() {
+
+        User parent = getCurrentUser();
+
+        if (parent.getRole() != Role.PARENT) {
+            throw new BusinessException(
+                    ErrorCode.SENIOR_HOME_ACCESS_DENIED
+            );
+        }
+
+        User primaryChild =
+                findPrimaryChild(parent);
+
+        List<Home> homes =
+                homeRepository.findAllByUserOrderByButtonOrderAsc(
+                        primaryChild
+                );
+
+        List<SeniorHomeResponse.ButtonResponse> buttons =
+                homes.stream()
+                        .map(home ->
+                                new SeniorHomeResponse.ButtonResponse(
+                                        home.getHomeId(),
+                                        home.getButtonOrder(),
+                                        home.getButtonName(),
+                                        home.getIcon(),
+                                        home.getActionType(),
+                                        home.getActionValue()
+                                )
+                        )
+                        .toList();
+
+        FontSize fontSize = homes.isEmpty()
+                ? FontSize.MEDIUM
+                : homes.get(0).getFontSize();
+
+        return new SeniorHomeResponse(
+                fontSize,
+                buttons
+        );
+    }
+
+    @Transactional
+    public void updateFontSize(
+            HomeFontSizeUpdateRequest request
+    ) {
+
+        User user = getCurrentUser();
+        validatePrimaryManager(user);
+
+        List<Home> homes =
+                homeRepository.findAllByUserOrderByButtonOrderAsc(user);
+
+        if (homes.isEmpty()) {
+            throw new BusinessException(
+                    ErrorCode.HOME_BUTTON_NOT_FOUND
+            );
+        }
+
+        for (Home home : homes) {
+            home.updateFontSize(
+                    request.getFontSize()
+            );
+        }
+    }
+
+    private User resolvePrimaryChild(
+            User currentUser
+    ) {
+
+        if (currentUser.getManagerType()
+                == ManagerType.PRIMARY) {
+
+            return currentUser;
+        }
+
+        return findPrimaryChild(currentUser);
+    }
+
+    private User findPrimaryChild(
+            User currentUser
+    ) {
+
+        if (currentUser.getFamily() == null) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_NOT_CONNECTED
+            );
+        }
+
+        List<User> children =
+                userRepository.findByFamilyAndUsersIdNotAndRole(
+                        currentUser.getFamily(),
+                        currentUser.getUsersId(),
+                        Role.CHILD
+                );
+
+        return children.stream()
+                .filter(child ->
+                        child.getManagerType()
+                                == ManagerType.PRIMARY
+                )
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.PRIMARY_MANAGER_NOT_FOUND
+                ));
+    }
+
+    private void validatePrimaryManager(
+            User user
+    ) {
+
+        if (user.getRole() != Role.CHILD
+                || user.getManagerType()
+                != ManagerType.PRIMARY) {
+
+            throw new BusinessException(
+                    ErrorCode.HOME_SETTING_ACCESS_DENIED
+            );
         }
     }
 
     private User getCurrentUser() {
 
         Authentication authentication =
-                SecurityContextHolder.getContext().getAuthentication();
+                SecurityContextHolder
+                        .getContext()
+                        .getAuthentication();
 
         return (User) authentication.getPrincipal();
     }

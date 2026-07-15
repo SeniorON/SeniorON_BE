@@ -2,9 +2,11 @@ package com.example.senioron.domain.home.controller;
 
 import com.example.senioron.domain.home.dto.request.HomeButtonCreateRequest;
 import com.example.senioron.domain.home.dto.request.HomeButtonUpdateRequest;
+import com.example.senioron.domain.home.dto.request.HomeFontSizeUpdateRequest;
 import com.example.senioron.domain.home.dto.response.ButtonOptionResponse;
 import com.example.senioron.domain.home.dto.response.HomeButtonCreateResponse;
 import com.example.senioron.domain.home.dto.response.HomeResponse;
+import com.example.senioron.domain.home.dto.response.SeniorHomeResponse;
 import com.example.senioron.domain.home.service.HomeService;
 import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
@@ -82,6 +84,26 @@ public class HomeController {
             @PathVariable Long buttonId
     ) {
         homeService.deleteButton(buttonId);
+        return Response.ok();
+    }
+
+    @Operation(
+            summary = "부모님 홈 조회",
+            description = "부모님 앱에서 글자 크기와 홈 버튼 설정 조회"
+    )
+    @GetMapping("/senior")
+    public Response<SeniorHomeResponse> getSeniorHome() {
+        return Response.ok(homeService.getSeniorHome());
+    }
+    @Operation(
+            summary = "홈 글자 크기 수정",
+            description = "주 담당자가 부모님 홈 화면의 글자 크기를 수정"
+    )
+    @PatchMapping("/font-size")
+    public Response<Void> updateFontSize(
+            @Valid @RequestBody HomeFontSizeUpdateRequest request
+    ) {
+        homeService.updateFontSize(request);
         return Response.ok();
     }
 }
