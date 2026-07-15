@@ -1,6 +1,7 @@
 package com.example.senioron.domain.medication.controller;
 
 import com.example.senioron.domain.medication.dto.request.MedicationCreateRequest;
+import com.example.senioron.domain.medication.dto.request.MedicationUpdateRequest;
 import com.example.senioron.domain.medication.dto.response.MedicationCreateResponse;
 import com.example.senioron.domain.medication.dto.response.MedicationReadResponse;
 import com.example.senioron.domain.medication.service.MedicationService;
@@ -56,15 +57,30 @@ public class MedicationController {
     }
 
     @Operation(
+                summary = "약 수정",
+                description = "그룹 ID를 기준으로 기존 복약 정보를 일괄 삭제한 후, 새로운 복약 정보로 재등록합니다."
+    )
+    @PutMapping
+    public Response<String> updateMedication(
+            @AuthenticationPrincipal User user,
+            @Valid @RequestBody MedicationUpdateRequest request
+    ) {
+        medicationService.updateMedication(user.getUsersId(), request);
+        return Response.ok("약 일정이 성공적으로 수정되었습니다.");
+    }
+
+    @Operation(
             summary = "약 삭제",
             description = "그룹 ID를 기준으로 복약 정보를 일괄 삭제합니다."
     )
     @DeleteMapping("/groups/{medicationGroupId}")
     public Response<String> deleteMedicationGroup(
-            @AuthenticationPrincipal User user, // 💡 요렇게 User 객체로 바로 받기!
+            @AuthenticationPrincipal User user,
             @PathVariable("medicationGroupId") String medicationGroupId
     ) {
         medicationService.deleteMedicationGroup(user.getUsersId(), medicationGroupId);
         return Response.ok("약 일정이 성공적으로 삭제되었습니다.");
     }
+
+
 }
