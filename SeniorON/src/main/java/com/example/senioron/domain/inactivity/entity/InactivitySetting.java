@@ -22,7 +22,15 @@ public class InactivitySetting extends BaseEntity {
     @JoinColumn(name = "user_id")
     private User user;
 
-    private Integer thresholdHours;
+    @Builder.Default
+    @Column(nullable = false)
+    private Integer thresholdHours = 24;
 
-    private Boolean isEnabled;
+    @Builder.Default
+    @Column(nullable = false)
+    private Boolean isEnabled = true;
+
+    public void updateThresholdHours(Integer thresholdHours) {
+        this.thresholdHours = thresholdHours;
+    }
 }
