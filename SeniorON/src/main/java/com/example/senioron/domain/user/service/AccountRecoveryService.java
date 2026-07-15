@@ -53,18 +53,20 @@ public class AccountRecoveryService {
     ) {
         User user = userRepository.findByNameAndLoginId(request.getName(), request.getLoginId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_RECOVERY_USER_NOT_FOUND));
+        User lockedUser = userRepository.findByIdForUpdate(user.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_RECOVERY_USER_NOT_FOUND));
 
         LocalDateTime now = LocalDateTime.now();
         verificationCodeRepository
                 .expireAllByUserAndPurposeAndUsedAtIsNull(
-                        user,
+                        lockedUser,
                         AccountRecoveryPurpose.PASSWORD_RESET,
                         now
                 );
 
         String verificationCode = generateVerificationCode();
         AccountRecoveryVerificationCode savedCode = AccountRecoveryVerificationCode.builder()
-                .user(user)
+                .user(lockedUser)
                 .purpose(AccountRecoveryPurpose.PASSWORD_RESET)
                 .codeHash(passwordEncoder.encode(verificationCode))
                 .expiresAt(now.plusMinutes(VERIFICATION_CODE_EXPIRATION_MINUTES))
@@ -72,7 +74,7 @@ public class AccountRecoveryService {
 
         verificationCodeRepository.save(savedCode);
         eventPublisher.publishEvent(new PasswordResetVerificationCodeSendEvent(
-                user.getEmail(),
+                lockedUser.getEmail(),
                 verificationCode
         ));
 
