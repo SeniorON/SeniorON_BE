@@ -18,6 +18,7 @@ import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -141,11 +142,25 @@ public class NotificationService {
         notificationSettingRepository.save(setting);
     }
 
+    // 백필 대응 메소드 (기존 세팅 없을 경우 즉시 생성)
+    private NotificationSetting createDefaultSettingInternal(User user){
+        try{
+            NotificationSetting setting = NotificationSetting.builder()
+                    .user(user)
+                    .build();
+            return notificationSettingRepository.save(setting);
+        } catch(DataIntegrityViolationException e){
+            return notificationSettingRepository.findById(user.getUsersId())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND));
+        }
+    }
     //알람 탭 홈화면 조회
-    @Transactional
+    @Transactional(readOnly = true)
     public List<NotificationHomeResponse> getHomeSettings(Long userId) {
-        NotificationSetting setting = notificationSettingRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND));
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        NotificationSetting setting = notificationSettingRepository.findById(user.getUsersId())
+                .orElseGet(() -> createDefaultSettingInternal(user));
         return List.of(
                 buildGroup(userId, NotificationType.SOS, setting.getSosEnabled()),
                 buildGroup(userId, NotificationType.INACTIVITY, setting.getInactivityEnabled()),
@@ -163,6 +178,7 @@ public class NotificationService {
         return NotificationHomeResponse.of(type, enabled, latest);
     }
 
+
     // 알람 토글 설정
     @Transactional
     public NotificationSettingResponse updateSetting(
@@ -173,8 +189,11 @@ public class NotificationService {
         if(enabled == null){
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
-        NotificationSetting setting = notificationSettingRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND));
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        NotificationSetting setting = notificationSettingRepository.findById(user.getUsersId())
+                .orElseGet(() -> createDefaultSettingInternal(user));
 
         switch (type) {
             case SOS -> setting.updateSosEnabled(enabled);
