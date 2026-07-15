@@ -48,6 +48,7 @@ public class FamilyPhotoService {
                     .family(family)
                     .user(user)
                     .imageKey(imageKey)
+                    .description(request.getDescription())
                     .build();
 
             FamilyPhoto savedPhoto = familyPhotoRepository.saveAndFlush(familyPhoto);
@@ -56,6 +57,7 @@ public class FamilyPhotoService {
                     .familyPhotoId(savedPhoto.getFamilyPhotoId())
                     .imageKey(savedPhoto.getImageKey())
                     .uploaderName(user.getName())
+                    .description(savedPhoto.getDescription())
                     .createdAt(savedPhoto.getCreatedAt())
                     .build();
         } catch(RuntimeException e) {
