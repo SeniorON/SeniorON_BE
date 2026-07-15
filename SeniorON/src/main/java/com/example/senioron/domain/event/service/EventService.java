@@ -64,6 +64,7 @@ public class EventService {
                 .latitude(req.getLatitude())
                 .longitude(req.getLongitude())
                 .address(address)
+                .lastSeenAt(req.getLastSeenAt())
                 .build();
 
         Event savedEvent = eventRepository.save(event);

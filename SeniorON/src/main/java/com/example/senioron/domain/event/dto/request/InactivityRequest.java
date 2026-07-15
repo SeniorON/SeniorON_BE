@@ -19,4 +19,7 @@ public class InactivityRequest {
     @DecimalMin(value = "-180", inclusive = true)
     @DecimalMax(value = "180", inclusive = true)
     private BigDecimal longitude;
+
+    private Integer deviceBattery;
+    private LocalDateTime lastSeenAt;
 }
