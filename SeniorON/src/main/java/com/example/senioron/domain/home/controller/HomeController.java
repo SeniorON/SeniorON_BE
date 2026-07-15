@@ -2,6 +2,7 @@ package com.example.senioron.domain.home.controller;
 
 import com.example.senioron.domain.home.dto.request.HomeButtonCreateRequest;
 import com.example.senioron.domain.home.dto.request.HomeButtonUpdateRequest;
+import com.example.senioron.domain.home.dto.request.HomeFontSizeUpdateRequest;
 import com.example.senioron.domain.home.dto.response.ButtonOptionResponse;
 import com.example.senioron.domain.home.dto.response.HomeButtonCreateResponse;
 import com.example.senioron.domain.home.dto.response.HomeResponse;
@@ -93,5 +94,16 @@ public class HomeController {
     @GetMapping("/senior")
     public Response<SeniorHomeResponse> getSeniorHome() {
         return Response.ok(homeService.getSeniorHome());
+    }
+    @Operation(
+            summary = "홈 글자 크기 수정",
+            description = "주 담당자가 부모님 홈 화면의 글자 크기를 수정"
+    )
+    @PatchMapping("/font-size")
+    public Response<Void> updateFontSize(
+            @Valid @RequestBody HomeFontSizeUpdateRequest request
+    ) {
+        homeService.updateFontSize(request);
+        return Response.ok();
     }
 }

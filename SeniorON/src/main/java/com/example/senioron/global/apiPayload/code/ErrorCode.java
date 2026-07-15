@@ -30,13 +30,14 @@ public enum ErrorCode implements BaseCode {
     EMAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "EMAIL500", "이메일 발송에 실패했습니다."),
 
     // Home Error
-    HOME_BUTTON_NOT_FOUND(HttpStatus.NOT_FOUND, "HOME404", "홈 버튼을 찾을 수 없습니다."),
+    HOME_BUTTON_NOT_FOUND(HttpStatus.NOT_FOUND, "HOME404", "버튼을 찾을 수 없습니다."),
     BUTTON_OPTION_NOT_FOUND(HttpStatus.NOT_FOUND, "HOME4001", "존재하지 않는 버튼 옵션입니다."),
     HOME_BUTTON_ALREADY_EXISTS(HttpStatus.CONFLICT, "HOME4002", "이미 추가된 홈 버튼입니다."),
     INVALID_HOME_BUTTON_REQUEST(HttpStatus.BAD_REQUEST, "HOME_4002", "현재 홈 버튼 전체를 요청해야 합니다."),
     DUPLICATE_HOME_BUTTON_ID(HttpStatus.BAD_REQUEST, "HOME_4003", "중복된 홈 버튼 ID가 있습니다."),
     DUPLICATE_HOME_BUTTON_ORDER(HttpStatus.BAD_REQUEST, "HOME_4004", "중복된 홈 버튼 순서가 있습니다."),
     INVALID_HOME_BUTTON_ORDER(HttpStatus.BAD_REQUEST, "HOME_4005", "홈 버튼 순서는 1부터 연속되어야 합니다."),
+    HOME_SETTING_ACCESS_DENIED(HttpStatus.FORBIDDEN, "HOME403", "주 담당 자녀만 홈 설정을 수정할 수 있습니다."),
 
     // Senior Error
     CUSTOM_RELATION_REQUIRED(HttpStatus.BAD_REQUEST, "SENIOR4001", "직접 작성 관계를 입력해 주세요."),
