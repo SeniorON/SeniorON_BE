@@ -1,8 +1,10 @@
 package com.example.senioron.domain.event.service;
 
 import com.example.senioron.domain.event.dto.request.InactivityRequest;
+import com.example.senioron.domain.event.dto.request.OutingReturnRequest;
 import com.example.senioron.domain.event.dto.request.SosEventRequest;
 import com.example.senioron.domain.event.dto.response.InactivityResponse;
+import com.example.senioron.domain.event.dto.response.OutingReturnResponse;
 import com.example.senioron.domain.event.dto.response.SosEventResponse;
 import com.example.senioron.domain.event.entity.Event;
 import com.example.senioron.domain.event.entity.EventType;
@@ -71,6 +73,31 @@ public class EventService {
         notificationService.createFormEvent(event);
 
         return InactivityResponse.of(savedEvent);
+    }
+
+    public OutingReturnResponse createOutingReturnEvent(User user, OutingReturnRequest req) {
+        String address = geocodingClient.reverseGeocode(req.getLatitude(), req.getLongitude());
+        EventService self = applicationContext.getBean(EventService.class);
+        return self.saveOutingReturnEvent(address, user, req);
+    }
+
+    @Transactional
+    public OutingReturnResponse saveOutingReturnEvent(String address, User user, OutingReturnRequest req) {
+        Event event = Event.builder()
+                .user(user)
+                .triggeredUser(user)
+                .eventType(EventType.OUTING_RETURN)
+                .phase(req.getPhase())
+                .latitude(req.getLatitude())
+                .longitude(req.getLongitude())
+                .deviceBattery(req.getDeviceBattery())
+                .address(address)
+                .build();
+
+        Event savedEvent = eventRepository.save(event);
+        notificationService.createFormEvent(savedEvent);
+
+        return OutingReturnResponse.of(savedEvent);
     }
 
 }
