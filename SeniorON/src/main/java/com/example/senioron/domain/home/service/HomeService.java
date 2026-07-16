@@ -24,7 +24,7 @@ import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -317,6 +317,7 @@ public class HomeService {
         }
     }
 
+    @Transactional(readOnly = true)
     public SeniorHomeResponse getSeniorHome() {
 
         User parent = getCurrentUser();
