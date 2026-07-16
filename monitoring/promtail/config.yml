@@ -14,12 +14,22 @@ scrape_configs:
     docker_sd_configs:
       - host: unix:///var/run/docker.sock
 
+
     relabel_configs:
 
-      # 컨테이너 이름 라벨 추가
       - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
         target_label: container
 
-      # 로그 stream
       - source_labels: ['__meta_docker_container_log_stream']
         target_label: stream
+
+      - source_labels: ['__meta_docker_container_image']
+        target_label: image
+
+      - source_labels: ['__meta_docker_container_log_path']
+        target_label: __path__
+
+
+    pipeline_stages:
+      - docker: {}
