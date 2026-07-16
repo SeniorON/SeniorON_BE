@@ -15,6 +15,9 @@ public class SeniorHomeResponse {
     @JsonProperty("font_size")
     private FontSize fontSize;
 
+    @JsonProperty("today_schedules")
+    private List<TodayScheduleResponse> todaySchedules;
+
     private List<ButtonResponse> buttons;
 
     @Getter
