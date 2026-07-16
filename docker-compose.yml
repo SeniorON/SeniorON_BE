@@ -47,8 +47,8 @@ services:
 
 
   app:
-    build: .
-    #image: jsh424/senioron:latest
+    #build: .
+    image: jsh424/senioron:latest
 
     expose:
       - "8080"
