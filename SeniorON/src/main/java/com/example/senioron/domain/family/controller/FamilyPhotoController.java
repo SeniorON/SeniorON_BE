@@ -2,6 +2,7 @@ package com.example.senioron.domain.family.controller;
 
 import com.example.senioron.domain.family.dto.request.FamilyPhotoCreateRequest;
 import com.example.senioron.domain.family.dto.response.FamilyPhotoCreateResponse;
+import com.example.senioron.domain.family.dto.response.FamilyPhotoListResponse;
 import com.example.senioron.domain.family.service.FamilyPhotoService;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.global.apiPayload.response.Response;
@@ -11,10 +12,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.ModelAttribute;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "가족 사진", description = "가족 사진 관련 API")
 @RestController
@@ -31,5 +29,17 @@ public class FamilyPhotoController {
             @Valid @ModelAttribute FamilyPhotoCreateRequest request
     ) {
         return Response.ok(familyPhotoService.createPhoto(user, request));
+    }
+
+    @Operation(summary = "가족 사진 목록 조회", description = "현재 사용자가 속한 가족의 사진을 최신순으로 조회합니다.")
+    @GetMapping
+    public Response<FamilyPhotoListResponse> getPhotos(
+            @AuthenticationPrincipal User user,
+            @RequestParam(name = "cursor", required = false) Long cursor,
+            @RequestParam(name = "size", defaultValue = "10") int size
+    ) {
+        return Response.ok(
+                familyPhotoService.getPhotos(user, cursor, size)
+        );
     }
 }
