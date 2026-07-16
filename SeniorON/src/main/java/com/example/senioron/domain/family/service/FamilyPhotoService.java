@@ -2,6 +2,8 @@ package com.example.senioron.domain.family.service;
 
 import com.example.senioron.domain.family.dto.request.FamilyPhotoCreateRequest;
 import com.example.senioron.domain.family.dto.response.FamilyPhotoCreateResponse;
+import com.example.senioron.domain.family.dto.response.FamilyPhotoItemResponse;
+import com.example.senioron.domain.family.dto.response.FamilyPhotoListResponse;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
@@ -11,8 +13,12 @@ import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.storage.S3Service;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -64,5 +70,68 @@ public class FamilyPhotoService {
             s3Service.delete(imageKey);
             throw e;
         }
+    }
+
+    @Transactional(readOnly = true)
+    public FamilyPhotoListResponse getPhotos(
+            User principal,
+            Long cursor,
+            int size
+    ) {
+        if (size < 1 || size > 50) {
+            throw new IllegalArgumentException("사진 조회 개수는 1~50이어야 합니다.");
+        }
+
+        User user = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        Family family = user.getFamily();
+
+        if (family == null) {
+            throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
+        }
+
+        Pageable pageable = PageRequest.of(0, size + 1);
+
+        List<FamilyPhoto> fetchedPhotos;
+
+        if (cursor == null) {
+            fetchedPhotos = familyPhotoRepository.findByFamilyOrderByFamilyPhotoIdDesc(
+                    family,
+                    pageable
+            );
+        } else {
+            fetchedPhotos = familyPhotoRepository.findByFamilyAndFamilyPhotoIdLessThanOrderByFamilyPhotoIdDesc(
+                    family,
+                    cursor,
+                    pageable
+            );
+        }
+
+        boolean hasNext = fetchedPhotos.size() > size;
+
+        List<FamilyPhoto> pagePhotos = hasNext
+                ? fetchedPhotos.subList(0, size)
+                : fetchedPhotos;
+
+        Long nextCursor = hasNext
+                ? pagePhotos.get(pagePhotos.size() - 1).getFamilyPhotoId()
+                : null;
+
+        List<FamilyPhotoItemResponse> photoResponses = pagePhotos.stream()
+                .map(photo -> FamilyPhotoItemResponse.builder()
+                        .familyPhotoId(photo.getFamilyPhotoId())
+                        .imageUrl(s3Service.getFileUrl(photo.getImageKey()))
+                        .uploaderName(photo.getUser().getName())
+                        .description(photo.getDescription())
+                        .createdAt(photo.getCreatedAt())
+                        .build())
+                .toList();
+
+        return FamilyPhotoListResponse.builder()
+                .photos(photoResponses)
+                .nextCursor(nextCursor)
+                .hasNext(hasNext)
+                .build();
     }
 }
