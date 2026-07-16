@@ -26,3 +26,10 @@ scrape_configs:
 
       - source_labels: ['__meta_docker_container_image']
         target_label: image
+
+      - source_labels: ['__meta_docker_container_log_path']
+        target_label: __path__
+
+
+    pipeline_stages:
+      - docker: {}
