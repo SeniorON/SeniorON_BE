@@ -15,8 +15,11 @@ import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -25,6 +28,7 @@ import java.util.List;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/notification")
+@Validated
 public class NotificationController {
 
     private final NotificationService notificationService;
@@ -59,7 +63,7 @@ public class NotificationController {
             @AuthenticationPrincipal User user,
             @RequestParam NotificationType type,
             @RequestParam(required = false) Long cursor,
-            @RequestParam(defaultValue = "20") int size
+            @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size
 
             ){
         return Response.ok(notificationService.getNotificationList(user.getUsersId(), type, cursor, size));

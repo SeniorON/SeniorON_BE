@@ -215,6 +215,7 @@ public class NotificationService {
 
     @Transactional(readOnly = true)
     public NotificationListResponse getNotificationList(Long userId, NotificationType type,Long cursor, int size) {
+        if (size < 1 || size > 50) {throw new BusinessException(ErrorCode.BAD_REQUEST);}
         LocalDateTime thirtyDaysLimit = LocalDateTime.now().minusDays(30);
         List<Notification> notifications = notificationRepository
                 .findByTypeWithCursor(userId, type, thirtyDaysLimit, cursor, PageRequest.of(0, size + 1));

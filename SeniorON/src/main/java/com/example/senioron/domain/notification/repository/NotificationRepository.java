@@ -33,7 +33,7 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     AND n.notificationType = :type
     AND n.createdAt >= :thirtyDaysAgo
     AND (:cursor IS NULL OR n.notificationId < :cursor)
-    ORDER BY n.createdAt DESC
+    ORDER BY n.notificationId DESC
     """)
     List<Notification> findByTypeWithCursor(
             @Param("userId") Long userId,
