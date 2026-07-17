@@ -2,8 +2,10 @@ package com.example.senioron.domain.notification.controller;
 
 import com.example.senioron.domain.notification.dto.request.NotificationSettingRequest;
 import com.example.senioron.domain.notification.dto.response.NotificationHomeResponse;
+import com.example.senioron.domain.notification.dto.response.NotificationListResponse;
 import com.example.senioron.domain.notification.dto.response.NotificationSettingResponse;
 import com.example.senioron.domain.notification.entity.NotificationSettingType;
+import com.example.senioron.domain.notification.entity.NotificationType;
 import com.example.senioron.domain.notification.service.NotificationService;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
@@ -49,5 +51,17 @@ public class NotificationController {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
         return Response.ok(notificationService.updateSetting(user.getUsersId(), type, req.getEnabled()));
+    }
+
+    @Operation(summary = "알림 기록 조회", description = "SOS/무활동/위험사이트/외출·귀가 알림들의 내역을 조회합니다.")
+    @GetMapping
+    public Response<NotificationListResponse> getNotifications(
+            @AuthenticationPrincipal User user,
+            @RequestParam NotificationType type,
+            @RequestParam(required = false) Long cursor,
+            @RequestParam(defaultValue = "20") int size
+
+            ){
+        return Response.ok(notificationService.getNotificationList(user.getUsersId(), type, cursor, size));
     }
 }
