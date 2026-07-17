@@ -61,6 +61,8 @@ public enum ErrorCode implements BaseCode {
     FAMILY_MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "FAMILY404_1", "해당 가족 구성원을 찾을 수 없습니다."),
     CANNOT_REMOVE_SELF(HttpStatus.BAD_REQUEST, "FAMILY400_1", "주 담당자는 자기 자신을 가족에서 제외할 수 없습니다."),
     CANNOT_CHANGE_PRIMARY_TO_SELF(HttpStatus.BAD_REQUEST, "FAMILY400_2", "본인은 주 담당자 변경 대상으로 선택할 수 없습니다."),
+    FAMILY_PHOTO_NOT_FOUND(HttpStatus.NOT_FOUND, "FAMILY_PHOTO404", "가족 사진을 찾을 수 없습니다."),
+    FAMILY_PHOTO_DELETE_FORBIDDEN(HttpStatus.FORBIDDEN, "FAMILY_PHOTO403", "해당 가족 사진을 삭제할 권한이 없습니다."),
 
     // Medication Error
     MEDICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "MED404", "복약 정보를 찾을 수 없습니다."),
