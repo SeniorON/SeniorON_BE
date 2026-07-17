@@ -14,6 +14,7 @@ import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
+import com.example.senioron.global.storage.S3Service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +31,7 @@ public class FamilyService {
 
     private final FamilyRepository familyRepository;
     private final UserRepository userRepository;
+    private final S3Service s3Service;
 
     // 가족 생성 및 공유코드 발급 서비스
     public FamilyCodeCreateResponse createFamily(User principal) {
@@ -127,6 +129,7 @@ public class FamilyService {
                         .usersId(member.getUsersId())
                         .name(member.getName())
                         .managerType(member.getManagerType())
+                        .profileImageUrl(s3Service.getFileUrl(member.getProfileImageKey()))
                         .me(Objects.equals(member.getUsersId(),user.getUsersId()))
                         .build())
                 .toList();

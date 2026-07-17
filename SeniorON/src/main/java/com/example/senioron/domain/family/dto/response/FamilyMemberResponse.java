@@ -16,4 +16,6 @@ public class FamilyMemberResponse {
 
     private boolean me;
 
+    private String profileImageUrl;
+
 }
