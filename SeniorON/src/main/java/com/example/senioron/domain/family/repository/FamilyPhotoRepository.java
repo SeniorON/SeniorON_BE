@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> {
 
@@ -23,5 +24,12 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
             Family family,
             Long cursor,
             Pageable pageable
+    );
+
+    // 현재 사용자의 가족에 속한 사진만 조회하여 타 가족 사진 접근 방지
+    @EntityGraph(attributePaths = {"user", "user.family"})
+    Optional<FamilyPhoto> findByFamilyPhotoIdAndFamily(
+            Long familyPhotoId,
+            Family family
     );
 }

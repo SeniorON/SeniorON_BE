@@ -5,6 +5,7 @@ import com.example.senioron.domain.family.dto.response.FamilyPhotoCreateResponse
 import com.example.senioron.domain.family.dto.response.FamilyPhotoListResponse;
 import com.example.senioron.domain.family.service.FamilyPhotoService;
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.global.apiPayload.code.ResultCode;
 import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -41,5 +42,16 @@ public class FamilyPhotoController {
         return Response.ok(
                 familyPhotoService.getPhotos(user, cursor, size)
         );
+    }
+
+    @Operation(summary = "가족 사진 삭제", description = "본인이 등록한 사진을 삭제합니다." + "업로더가 가족에서 나간 경우 주 담당자가 삭제할 수 있습니다.")
+    @DeleteMapping("/{familyPhotoId}")
+    public Response<Void> deletePhoto(
+            @AuthenticationPrincipal User user,
+            @PathVariable("familyPhotoId") Long familyPhotoId
+    ) {
+        familyPhotoService.deletePhoto(user, familyPhotoId);
+
+        return Response.ok(ResultCode.OK, null);
     }
 }
