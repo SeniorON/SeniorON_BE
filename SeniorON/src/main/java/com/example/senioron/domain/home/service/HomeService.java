@@ -24,10 +24,10 @@ import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -63,6 +63,7 @@ public class HomeService {
         this.medicationRepository = medicationRepository;
     }
 
+    @Transactional(readOnly = true)
     public HomeResponse getHome() {
 
         User currentUser = getCurrentUser();
@@ -75,10 +76,14 @@ public class HomeService {
 
         User homeOwner = resolvePrimaryChild(currentUser);
 
+        // 같은 가족에 속한 시니어 사용자 조회
+        User senior = findSenior(currentUser);
+
         List<Home> homes =
                 homeRepository.findAllByUserOrderByButtonOrderAsc(homeOwner);
 
-        LocalDate birth = currentUser.getBirth();
+        // 로그인한 자녀가 아니라 시니어의 생년월일 사용
+        LocalDate birth = senior.getBirth();
 
         List<HomeResponse.HomeButtonResponse> buttons = homes.stream()
                 .map(home -> new HomeResponse.HomeButtonResponse(
@@ -100,12 +105,12 @@ public class HomeService {
                 currentUser.getName(),
                 null,
                 new HomeResponse.SeniorProfileResponse(
-                        currentUser.getName(),
+                        senior.getName(),
                         null,
                         birth,
                         age,
                         null,
-                        currentUser.getPhoneNumber()
+                        senior.getPhoneNumber()
                 ),
                 homes.isEmpty()
                         ? FontSize.MEDIUM
@@ -566,6 +571,36 @@ public class HomeService {
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.PRIMARY_MANAGER_NOT_FOUND
+                ));
+    }
+
+    /**
+     * 현재 로그인한 자녀와 같은 가족에 속한 시니어 사용자 조회
+     *
+     * UserRepository의 기존 메서드를 사용하므로
+     * User 도메인은 수정하지 않는다.
+     */
+    private User findSenior(
+            User currentUser
+    ) {
+
+        if (currentUser.getFamily() == null) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_NOT_CONNECTED
+            );
+        }
+
+        List<User> seniors =
+                userRepository.findByFamilyAndUsersIdNotAndRole(
+                        currentUser.getFamily(),
+                        currentUser.getUsersId(),
+                        Role.PARENT
+                );
+
+        return seniors.stream()
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.FAMILY_NOT_CONNECTED
                 ));
     }
 
