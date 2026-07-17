@@ -1,5 +1,7 @@
 package com.example.senioron.domain.home.service;
 
+import com.example.senioron.domain.device.entity.DeviceStatus;
+import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.home.dto.request.HomeButtonCreateRequest;
 import com.example.senioron.domain.home.dto.request.HomeButtonUpdateRequest;
 import com.example.senioron.domain.home.dto.request.HomeFontSizeUpdateRequest;
@@ -48,19 +50,22 @@ public class HomeService {
     private final UserRepository userRepository;
     private final HospitalRepository hospitalRepository;
     private final MedicationRepository medicationRepository;
+    private final DeviceRepository deviceRepository;
 
     public HomeService(
             HomeRepository homeRepository,
             ButtonOptionRepository buttonOptionRepository,
             UserRepository userRepository,
             HospitalRepository hospitalRepository,
-            MedicationRepository medicationRepository
+            MedicationRepository medicationRepository,
+            DeviceRepository deviceRepository
     ) {
         this.homeRepository = homeRepository;
         this.buttonOptionRepository = buttonOptionRepository;
         this.userRepository = userRepository;
         this.hospitalRepository = hospitalRepository;
         this.medicationRepository = medicationRepository;
+        this.deviceRepository = deviceRepository;
     }
 
     @Transactional(readOnly = true)
@@ -75,14 +80,14 @@ public class HomeService {
         }
 
         User homeOwner = resolvePrimaryChild(currentUser);
-
-        // 같은 가족에 속한 시니어 사용자 조회
         User senior = findSenior(currentUser);
+
+        HomeResponse.ConnectionResponse connection =
+                createConnectionResponse(senior);
 
         List<Home> homes =
                 homeRepository.findAllByUserOrderByButtonOrderAsc(homeOwner);
 
-        // 로그인한 자녀가 아니라 시니어의 생년월일 사용
         LocalDate birth = senior.getBirth();
 
         List<HomeResponse.HomeButtonResponse> buttons = homes.stream()
@@ -103,7 +108,7 @@ public class HomeService {
 
         return new HomeResponse(
                 currentUser.getName(),
-                null,
+                connection,
                 new HomeResponse.SeniorProfileResponse(
                         senior.getName(),
                         null,
@@ -574,12 +579,6 @@ public class HomeService {
                 ));
     }
 
-    /**
-     * 현재 로그인한 자녀와 같은 가족에 속한 시니어 사용자 조회
-     *
-     * UserRepository의 기존 메서드를 사용하므로
-     * User 도메인은 수정하지 않는다.
-     */
     private User findSenior(
             User currentUser
     ) {
@@ -601,6 +600,25 @@ public class HomeService {
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(
                         ErrorCode.FAMILY_NOT_CONNECTED
+                ));
+    }
+
+    private HomeResponse.ConnectionResponse createConnectionResponse(
+            User senior
+    ) {
+
+        return deviceRepository
+                .findFirstByUser(senior)
+                .map(device -> new HomeResponse.ConnectionResponse(
+                        device.getDeviceName(),
+                        device.getConnectionStatus()
+                                == DeviceStatus.ONLINE,
+                        device.getBatteryLevel()
+                ))
+                .orElseGet(() -> new HomeResponse.ConnectionResponse(
+                        null,
+                        false,
+                        null
                 ));
     }
 
