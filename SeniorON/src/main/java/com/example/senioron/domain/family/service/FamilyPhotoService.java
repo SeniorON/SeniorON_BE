@@ -14,14 +14,18 @@ import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.storage.S3Service;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
 import java.util.Objects;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class FamilyPhotoService {
@@ -173,8 +177,28 @@ public class FamilyPhotoService {
             throw new BusinessException(ErrorCode.FAMILY_PHOTO_DELETE_FORBIDDEN);
         }
 
-        s3Service.delete(photo.getImageKey());
-        familyPhotoRepository.delete(photo);
+        String imageKey = photo.getImageKey();
 
+        familyPhotoRepository.delete(photo);
+        registerS3DeleteAfterCommit(imageKey);
+    }
+
+    private void registerS3DeleteAfterCommit(String imageKey){
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization(){
+                    @Override
+                    public void afterCommit(){
+                        try{
+                            s3Service.delete(imageKey);
+                        }catch(RuntimeException e){
+                            log.warn(
+                                    "가족 사진 S3 삭제 실패, imageKey={}",
+                                    imageKey,
+                                    e
+                            );
+                        }
+                    }
+                }
+        );
     }
 }
