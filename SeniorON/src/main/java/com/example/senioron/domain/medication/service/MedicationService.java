@@ -220,9 +220,14 @@ public class MedicationService {
     public void deleteMedicationGroup(Long userId, String medicationGroupId) {
         User user = getUserOrThrow(userId);
 
-        medicationRepository.deleteByUserAndMedicationGroupId(user, medicationGroupId);
+        List<Medication> medications = medicationRepository.findByUserAndMedicationGroupId(user, medicationGroupId);
 
-        log.info("성공적으로 약 그룹을 삭제했습니다. UserId: {}, GroupId: {}", userId, medicationGroupId);
+        if (!medications.isEmpty()) {
+            medicationLogRepository.deleteByMedicationIn(medications);
+            medicationRepository.deleteByUserAndMedicationGroupId(user, medicationGroupId);
+        }
+
+        log.info("성공적으로 약 그룹과 복약 로그를 삭제했습니다. UserId: {}, GroupId: {}", userId, medicationGroupId);
     }
 
     @Transactional
@@ -234,6 +239,10 @@ public class MedicationService {
             throw new BusinessException(ErrorCode.MEDICATION_NOT_FOUND);
         }
 
+        List<Medication> medications = medicationRepository.findByUserAndMedicationGroupId(user, request.getMedicationGroupId());
+        if (!medications.isEmpty()) {
+            medicationLogRepository.deleteByMedicationIn(medications);
+        }
         medicationRepository.deleteByUserAndMedicationGroupId(user, request.getMedicationGroupId());
 
         String medicineDays = String.join(",", request.getMedicineDays());
