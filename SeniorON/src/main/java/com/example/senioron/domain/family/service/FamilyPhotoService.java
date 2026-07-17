@@ -7,6 +7,7 @@ import com.example.senioron.domain.family.dto.response.FamilyPhotoListResponse;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
+import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -133,5 +135,46 @@ public class FamilyPhotoService {
                 .nextCursor(nextCursor)
                 .hasNext(hasNext)
                 .build();
+    }
+
+    @Transactional
+    public void deletePhoto(User principal, Long familyPhotoId) {
+        User currentUser = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        Family family = currentUser.getFamily();
+
+        if (family == null) {
+            throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
+        }
+
+        FamilyPhoto photo = familyPhotoRepository
+                .findByFamilyPhotoIdAndFamily(familyPhotoId, family)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_PHOTO_NOT_FOUND));
+
+        boolean isUploader = Objects.equals(
+                photo.getUser().getUsersId(),
+                currentUser.getUsersId()
+        );
+
+        boolean uploaderStillInFamily =
+                photo.getUser().getFamily() != null && Objects.equals(
+                        photo.getUser().getFamily().getFamilyId(),
+                        family.getFamilyId()
+                );
+
+        boolean isPrimaryManager =
+                currentUser.getManagerType() == ManagerType.PRIMARY;
+
+        boolean canDelete =
+                isUploader || (!uploaderStillInFamily && isPrimaryManager);
+
+        if (!canDelete) {
+            throw new BusinessException(ErrorCode.FAMILY_PHOTO_DELETE_FORBIDDEN);
+        }
+
+        s3Service.delete(photo.getImageKey());
+        familyPhotoRepository.delete(photo);
+
     }
 }
