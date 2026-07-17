@@ -5,6 +5,8 @@ import com.example.senioron.domain.medication.dto.request.MedicationUpdateReques
 import com.example.senioron.domain.medication.dto.response.MedicationCreateResponse;
 import com.example.senioron.domain.medication.dto.response.MedicationReadResponse;
 import com.example.senioron.domain.medication.entity.Medication;
+import com.example.senioron.domain.medication.entity.MedicationLog;
+import com.example.senioron.domain.medication.repository.MedicationLogRepository;
 import com.example.senioron.domain.medication.repository.MedicationRepository;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
@@ -46,6 +48,7 @@ public class MedicationService {
 
     private final MedicationRepository medicationRepository;
     private final UserRepository userRepository;
+    private final MedicationLogRepository medicationLogRepository;
 
     @Transactional
     public MedicationCreateResponse createMedication(
@@ -60,6 +63,31 @@ public class MedicationService {
 
         List<Long> medicationIds = new ArrayList<>();
         List<String> medicineTimes = new ArrayList<>();
+
+        String todayKorean = switch (java.time.LocalDate.now().getDayOfWeek()) {
+            case MONDAY -> "월";
+            case TUESDAY -> "화";
+            case WEDNESDAY -> "수";
+            case THURSDAY -> "목";
+            case FRIDAY -> "금";
+            case SATURDAY -> "토";
+            case SUNDAY -> "일";
+        };
+
+        String todayEnglish = switch (java.time.LocalDate.now().getDayOfWeek()) {
+            case MONDAY -> "MON";
+            case TUESDAY -> "TUE";
+            case WEDNESDAY -> "WED";
+            case THURSDAY -> "THU";
+            case FRIDAY -> "FRI";
+            case SATURDAY -> "SAT";
+            case SUNDAY -> "SUN";
+        };
+
+        boolean isTodayIncluded = request.getMedicineDays().stream()
+                .map(String::trim)
+                .map(String::toUpperCase)
+                .anyMatch(day -> day.equals(todayKorean) || day.equals(todayEnglish) || day.contains(todayKorean));
 
         for (String timeStr : request.getMedicineTimes()) {
             LocalTime medicineTime = LocalTime.parse(timeStr);
@@ -77,6 +105,18 @@ public class MedicationService {
 
             medicationIds.add(savedMedication.getMedication_id());
             medicineTimes.add(savedMedication.getMedicineTime().toString());
+
+            if (isTodayIncluded) {
+                MedicationLog todayLog = MedicationLog.builder()
+                        .user(user)
+                        .medication(savedMedication)
+                        .plannedDate(java.time.LocalDate.now())
+                        .plannedTime(medicineTime)
+                        .isTaken(false)
+                        .build();
+
+                medicationLogRepository.save(todayLog);
+            }
         }
 
         return new MedicationCreateResponse(
@@ -219,5 +259,4 @@ public class MedicationService {
         }
         log.info("성공적으로 약 그룹을 수정했습니다. UserId: {}, GroupId: {}", userId, request.getMedicationGroupId());
     }
-
 }

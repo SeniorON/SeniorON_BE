@@ -1,0 +1,1102 @@
+> Task :compileJava UP-TO-DATE
+> Task :processResources UP-TO-DATE
+> Task :classes UP-TO-DATE
+> Task :resolveMainClassName UP-TO-DATE
+
+> Task :bootRun
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-07-17T14:00:24.760+09:00  INFO 86970 --- [senioron] [           main] c.example.senioron.SeniorOnApplication   : Starting SeniorOnApplication using Java 17.0.17 with PID 86970 (/Users/koeunwoo/IdeaProjects/SeniorON_BE/SeniorON/build/classes/java/main started by koeunwoo in /Users/koeunwoo/IdeaProjects/SeniorON_BE/SeniorON)
+2026-07-17T14:00:24.763+09:00  INFO 86970 --- [senioron] [           main] c.example.senioron.SeniorOnApplication   : The following 1 profile is active: "local"
+2026-07-17T14:00:25.215+09:00  INFO 86970 --- [senioron] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-07-17T14:00:25.249+09:00  INFO 86970 --- [senioron] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 30 ms. Found 15 JPA repository interfaces.
+2026-07-17T14:00:25.559+09:00  INFO 86970 --- [senioron] [           main] o.s.boot.tomcat.TomcatWebServer          : Tomcat initialized with port 8080 (http)
+2026-07-17T14:00:25.565+09:00  INFO 86970 --- [senioron] [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-07-17T14:00:25.565+09:00  INFO 86970 --- [senioron] [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/11.0.22]
+2026-07-17T14:00:25.593+09:00  INFO 86970 --- [senioron] [           main] b.w.c.s.WebApplicationContextInitializer : Root WebApplicationContext: initialization completed in 808 ms
+2026-07-17T14:00:25.701+09:00  INFO 86970 --- [senioron] [           main] org.hibernate.orm.jpa                    : HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-07-17T14:00:25.733+09:00  INFO 86970 --- [senioron] [           main] org.hibernate.orm.core                   : HHH000001: Hibernate ORM core version 7.4.1.Final
+2026-07-17T14:00:25.950+09:00  INFO 86970 --- [senioron] [           main] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-07-17T14:00:25.966+09:00  INFO 86970 --- [senioron] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-07-17T14:00:26.038+09:00  INFO 86970 --- [senioron] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection conn0: url=jdbc:h2:mem:senioron user=SA
+2026-07-17T14:00:26.039+09:00  INFO 86970 --- [senioron] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-07-17T14:00:26.071+09:00  INFO 86970 --- [senioron] [           main] org.hibernate.orm.connections.pooling    : HHH10001005: Database info:
+	Database JDBC URL [jdbc:h2:mem:senioron]
+	Database driver: H2 JDBC Driver
+	Database dialect: H2Dialect
+	Database version: 2.4.240
+	Default catalog/schema: SENIORON/PUBLIC
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: 100
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-07-17T14:00:26.683+09:00  INFO 86970 --- [senioron] [           main] org.hibernate.orm.core                   : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-07-17T14:00:26.693+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists account_recovery_verification_code cascade 
+Hibernate: 
+    drop table if exists account_recovery_verification_code cascade 
+2026-07-17T14:00:26.694+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists button_option cascade 
+Hibernate: 
+    drop table if exists button_option cascade 
+2026-07-17T14:00:26.694+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists device cascade 
+Hibernate: 
+    drop table if exists device cascade 
+2026-07-17T14:00:26.694+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists event cascade 
+Hibernate: 
+    drop table if exists event cascade 
+2026-07-17T14:00:26.694+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists family cascade 
+Hibernate: 
+    drop table if exists family cascade 
+2026-07-17T14:00:26.694+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists family_photo cascade 
+Hibernate: 
+    drop table if exists family_photo cascade 
+2026-07-17T14:00:26.694+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists health cascade 
+Hibernate: 
+    drop table if exists health cascade 
+2026-07-17T14:00:26.694+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists home cascade 
+Hibernate: 
+    drop table if exists home cascade 
+2026-07-17T14:00:26.694+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists hospital cascade 
+Hibernate: 
+    drop table if exists hospital cascade 
+2026-07-17T14:00:26.694+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists inactivity_setting cascade 
+Hibernate: 
+    drop table if exists inactivity_setting cascade 
+2026-07-17T14:00:26.694+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists medication cascade 
+Hibernate: 
+    drop table if exists medication cascade 
+2026-07-17T14:00:26.695+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists medication_log cascade 
+Hibernate: 
+    drop table if exists medication_log cascade 
+2026-07-17T14:00:26.695+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists notification cascade 
+Hibernate: 
+    drop table if exists notification cascade 
+2026-07-17T14:00:26.695+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists notification_setting cascade 
+Hibernate: 
+    drop table if exists notification_setting cascade 
+2026-07-17T14:00:26.695+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists receipt cascade 
+Hibernate: 
+    drop table if exists receipt cascade 
+2026-07-17T14:00:26.695+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists seniors cascade 
+Hibernate: 
+    drop table if exists seniors cascade 
+2026-07-17T14:00:26.695+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists social_accounts cascade 
+Hibernate: 
+    drop table if exists social_accounts cascade 
+2026-07-17T14:00:26.695+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists users cascade 
+Hibernate: 
+    drop table if exists users cascade 
+2026-07-17T14:00:26.697+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    create table account_recovery_verification_code (
+        account_recovery_verification_code_id bigint generated by default as identity,
+        created_at timestamp(6),
+        expires_at timestamp(6) not null,
+        updated_at timestamp(6),
+        used_at timestamp(6),
+        users_id bigint not null,
+        verified_at timestamp(6),
+        code_hash varchar(255) not null,
+        purpose enum ('PASSWORD_RESET') not null,
+        primary key (account_recovery_verification_code_id)
+    )
+Hibernate: 
+    create table account_recovery_verification_code (
+        account_recovery_verification_code_id bigint generated by default as identity,
+        created_at timestamp(6),
+        expires_at timestamp(6) not null,
+        updated_at timestamp(6),
+        used_at timestamp(6),
+        users_id bigint not null,
+        verified_at timestamp(6),
+        code_hash varchar(255) not null,
+        purpose enum ('PASSWORD_RESET') not null,
+        primary key (account_recovery_verification_code_id)
+    )
+2026-07-17T14:00:26.700+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    create table button_option (
+        created_at timestamp(6),
+        option_id bigint generated by default as identity,
+        updated_at timestamp(6),
+        action_value varchar(255),
+        button_name varchar(255),
+        icon varchar(255),
+        action_type enum ('APP','CALL','WEB'),
+        primary key (option_id)
+    )
+Hibernate: 
+    create table button_option (
+        created_at timestamp(6),
+        option_id bigint generated by default as identity,
+        updated_at timestamp(6),
+        action_value varchar(255),
+        button_name varchar(255),
+        icon varchar(255),
+        action_type enum ('APP','CALL','WEB'),
+        primary key (option_id)
+    )
+2026-07-17T14:00:26.701+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    create table device (
+        created_at timestamp(6),
+        device_id bigint generated by default as identity,
+        updated_at timestamp(6),
+        users_id bigint,
+        device_identifier varchar(255),
+        device_token varchar(255),
+        primary key (device_id)
+    )
+Hibernate: 
+    create table device (
+        created_at timestamp(6),
+        device_id bigint generated by default as identity,
+        updated_at timestamp(6),
+        users_id bigint,
+        device_identifier varchar(255),
+        device_token varchar(255),
+        primary key (device_id)
+    )
+2026-07-17T14:00:26.702+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    create table event (
+        device_battery integer,
+        latitude numeric(10,7),
+        longitude numeric(10,7),
+        created_at timestamp(6),
+        event_id bigint generated by default as identity,
+        last_seen_at timestamp(6),
+        triggered_users_id bigint,
+        updated_at timestamp(6),
+        users_id bigint,
+        address varchar(255),
+        event_type enum ('INACTIVITY','OUTING_RETURN','RISK_LINK','SOS'),
+        phase enum ('OUTING','RETURN'),
+        primary key (event_id)
+    )
+Hibernate: 
+    create table event (
+        device_battery integer,
+        latitude numeric(10,7),
+        longitude numeric(10,7),
+        created_at timestamp(6),
+        event_id bigint generated by default as identity,
+        last_seen_at timestamp(6),
+        triggered_users_id bigint,
+        updated_at timestamp(6),
+        users_id bigint,
+        address varchar(255),
+        event_type enum ('INACTIVITY','OUTING_RETURN','RISK_LINK','SOS'),
+        phase enum ('OUTING','RETURN'),
+        primary key (event_id)
+    )
+2026-07-17T14:00:26.702+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    create table family (
+        created_at timestamp(6),
+        family_id bigint generated by default as identity,
+        updated_at timestamp(6),
+        family_code varchar(255) unique,
+        primary key (family_id)
+    )
+Hibernate: 
+    create table family (
+        created_at timestamp(6),
+        family_id bigint generated by default as identity,
+        updated_at timestamp(6),
+        family_code varchar(255) unique,
+        primary key (family_id)
+    )
+2026-07-17T14:00:26.703+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    create table family_photo (
+        created_at timestamp(6),
+        family_id bigint,
+        family_photo_id bigint generated by default as identity,
+        updated_at timestamp(6),
+        users_id bigint,
+        description varchar(30),
+        image_key varchar(255) not null,
+        primary key (family_photo_id)
+    )
+Hibernate: 
+    create table family_photo (
+        created_at timestamp(6),
+        family_id bigint,
+        family_photo_id bigint generated by default as identity,
+        updated_at timestamp(6),
+        users_id bigint,
+        description varchar(30),
+        image_key varchar(255) not null,
+        primary key (family_photo_id)
+    )
+2026-07-17T14:00:26.704+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    create table health (
+        record_date date,
+        step_count integer,
+        created_at timestamp(6),
+        device_id bigint,
+        health_id bigint generated by default as identity,
+        updated_at timestamp(6),
+        users_id bigint,
+        primary key (health_id)
+    )
+Hibernate: 
+    create table health (
+        record_date date,
+        step_count integer,
+        created_at timestamp(6),
+        device_id bigint,
+        health_id bigint generated by default as identity,
+        updated_at timestamp(6),
+        users_id bigint,
+        primary key (health_id)
+    )
+2026-07-17T14:00:26.704+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    create table home (
+        button_order integer,
+        created_at timestamp(6),
+        device_id bigint,
+        home_id bigint generated by default as identity,
+        updated_at timestamp(6),
+        users_id bigint,
+        action_value varchar(255),
+        button_name varchar(255),
+        icon varchar(255),
+        action_type enum ('APP','CALL','WEB'),
+        font_size enum ('LARGE','MEDIUM','SMALL'),
+        primary key (home_id)
+    )
+Hibernate: 
+    create table home (
+        button_order integer,
+        created_at timestamp(6),
+        device_id bigint,
+        home_id bigint generated by default as identity,
+        updated_at timestamp(6),
+        users_id bigint,
+        action_value varchar(255),
+        button_name varchar(255),
+        icon varchar(255),
+        action_type enum ('APP','CALL','WEB'),
+        font_size enum ('LARGE','MEDIUM','SMALL'),
+        primary key (home_id)
+    )
+2026-07-17T14:00:26.705+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    create table hospital (
+        schedule_date date not null,
+        schedule_time time(0) not null,
+        created_at timestamp(6),
+        device_id bigint,
+        hospital_id bigint generated by default as identity,
+        updated_at timestamp(6),
+        users_id bigint,
+        department varchar(255) not null,
+        hospital_name varchar(255) not null,
+        reminder_type enum ('DAY_BEFORE','NONE','SAME_DAY') not null,
+        primary key (hospital_id)
+    )
+Hibernate: 
+    create table hospital (
+        schedule_date date not null,
+        schedule_time time(0) not null,
+        created_at timestamp(6),
+        device_id bigint,
+        hospital_id bigint generated by default as identity,
+        updated_at timestamp(6),
+        users_id bigint,
+        department varchar(255) not null,
+        hospital_name varchar(255) not null,
+        reminder_type enum ('DAY_BEFORE','NONE','SAME_DAY') not null,
+        primary key (hospital_id)
+    )
+2026-07-17T14:00:26.705+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    create table inactivity_setting (
+        is_enabled boolean not null,
+        threshold_hours integer not null,
+        created_at timestamp(6),
+        updated_at timestamp(6),
+        user_id bigint not null,
+        primary key (user_id)
+    )
+Hibernate: 
+    create table inactivity_setting (
+        is_enabled boolean not null,
+        threshold_hours integer not null,
+        created_at timestamp(6),
+        updated_at timestamp(6),
+        user_id bigint not null,
+        primary key (user_id)
+    )
+2026-07-17T14:00:26.705+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    create table medication (
+        medicine_time time(0),
+        created_at timestamp(6),
+        medication_id bigint generated by default as identity,
+        updated_at timestamp(6),
+        users_id bigint,
+        ingredient_name varchar(255),
+        medication_group_id varchar(255) not null,
+        medicine_days varchar(255),
+        medicine_name varchar(255),
+        primary key (medication_id)
+    )
+Hibernate: 
+    create table medication (
+        medicine_time time(0),
+        created_at timestamp(6),
+        medication_id bigint generated by default as identity,
+        updated_at timestamp(6),
+        users_id bigint,
+        ingredient_name varchar(255),
+        medication_group_id varchar(255) not null,
+        medicine_days varchar(255),
+        medicine_name varchar(255),
+        primary key (medication_id)
+    )
+2026-07-17T14:00:26.706+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    create table medication_log (
+        is_taken boolean not null,
+        planned_date date not null,
+        planned_time time(0) not null,
+        created_at timestamp(6),
+        medication_id bigint not null,
+        medication_log_id bigint generated by default as identity,
+        taken_at timestamp(6),
+        updated_at timestamp(6),
+        users_id bigint not null,
+        primary key (medication_log_id)
+    )
+Hibernate: 
+    create table medication_log (
+        is_taken boolean not null,
+        planned_date date not null,
+        planned_time time(0) not null,
+        created_at timestamp(6),
+        medication_id bigint not null,
+        medication_log_id bigint generated by default as identity,
+        taken_at timestamp(6),
+        updated_at timestamp(6),
+        users_id bigint not null,
+        primary key (medication_log_id)
+    )
+2026-07-17T14:00:26.707+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    create table notification (
+        is_read boolean,
+        created_at timestamp(6),
+        event_id bigint,
+        notification_id bigint generated by default as identity,
+        read_at timestamp(6),
+        receiver_users_id bigint,
+        send_users_id bigint,
+        updated_at timestamp(6),
+        body varchar(255),
+        link_url varchar(255),
+        title varchar(255),
+        notification_type enum ('HEALTH','INACTIVITY','OUTING_RETURN','RISK_LINK','SOS','SYSTEM'),
+        primary key (notification_id)
+    )
+Hibernate: 
+    create table notification (
+        is_read boolean,
+        created_at timestamp(6),
+        event_id bigint,
+        notification_id bigint generated by default as identity,
+        read_at timestamp(6),
+        receiver_users_id bigint,
+        send_users_id bigint,
+        updated_at timestamp(6),
+        body varchar(255),
+        link_url varchar(255),
+        title varchar(255),
+        notification_type enum ('HEALTH','INACTIVITY','OUTING_RETURN','RISK_LINK','SOS','SYSTEM'),
+        primary key (notification_id)
+    )
+2026-07-17T14:00:26.708+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    create table notification_setting (
+        inactivity_enabled boolean not null,
+        outing_return_enabled boolean not null,
+        risk_link_enabled boolean not null,
+        sos_enabled boolean not null,
+        created_at timestamp(6),
+        updated_at timestamp(6),
+        user_id bigint not null,
+        primary key (user_id)
+    )
+Hibernate: 
+    create table notification_setting (
+        inactivity_enabled boolean not null,
+        outing_return_enabled boolean not null,
+        risk_link_enabled boolean not null,
+        sos_enabled boolean not null,
+        created_at timestamp(6),
+        updated_at timestamp(6),
+        user_id bigint not null,
+        primary key (user_id)
+    )
+2026-07-17T14:00:26.708+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    create table receipt (
+        created_at timestamp(6),
+        device_id bigint,
+        hospital_date timestamp(6),
+        receipt_id bigint generated by default as identity,
+        updated_at timestamp(6),
+        users_id bigint,
+        analysis_result_json json,
+        hospital_fee varchar(255),
+        hospital_name varchar(255),
+        receipt_url varchar(255),
+        primary key (receipt_id)
+    )
+Hibernate: 
+    create table receipt (
+        created_at timestamp(6),
+        device_id bigint,
+        hospital_date timestamp(6),
+        receipt_id bigint generated by default as identity,
+        updated_at timestamp(6),
+        users_id bigint,
+        analysis_result_json json,
+        hospital_fee varchar(255),
+        hospital_name varchar(255),
+        receipt_url varchar(255),
+        primary key (receipt_id)
+    )
+2026-07-17T14:00:26.709+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    create table seniors (
+        birth date not null,
+        registered_by_user_id bigint not null,
+        senior_id bigint generated by default as identity,
+        address varchar(255),
+        custom_relation varchar(255),
+        detail_address varchar(255),
+        name varchar(255) not null,
+        phone_number varchar(255) not null,
+        relation enum ('FATHER','GRANDPARENT','MOTHER','OTHER') not null,
+        primary key (senior_id)
+    )
+Hibernate: 
+    create table seniors (
+        birth date not null,
+        registered_by_user_id bigint not null,
+        senior_id bigint generated by default as identity,
+        address varchar(255),
+        custom_relation varchar(255),
+        detail_address varchar(255),
+        name varchar(255) not null,
+        phone_number varchar(255) not null,
+        relation enum ('FATHER','GRANDPARENT','MOTHER','OTHER') not null,
+        primary key (senior_id)
+    )
+2026-07-17T14:00:26.709+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    create table social_accounts (
+        created_at timestamp(6),
+        social_account_id bigint generated by default as identity,
+        updated_at timestamp(6),
+        users_id bigint not null,
+        provider_id varchar(255) not null,
+        provider enum ('GOOGLE','KAKAO') not null,
+        primary key (social_account_id),
+        constraint uk_social_provider_provider_id unique (provider, provider_id),
+        constraint uk_social_user_provider unique (users_id, provider)
+    )
+Hibernate: 
+    create table social_accounts (
+        created_at timestamp(6),
+        social_account_id bigint generated by default as identity,
+        updated_at timestamp(6),
+        users_id bigint not null,
+        provider_id varchar(255) not null,
+        provider enum ('GOOGLE','KAKAO') not null,
+        primary key (social_account_id),
+        constraint uk_social_provider_provider_id unique (provider, provider_id),
+        constraint uk_social_user_provider unique (users_id, provider)
+    )
+2026-07-17T14:00:26.710+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    create table users (
+        birth date,
+        created_at timestamp(6),
+        family_id bigint,
+        updated_at timestamp(6),
+        users_id bigint generated by default as identity,
+        email varchar(255) unique,
+        fcm_token varchar(255),
+        login_id varchar(255) unique,
+        name varchar(255) not null,
+        password varchar(255),
+        phone_number varchar(255),
+        profile_image_key varchar(255),
+        manager_type enum ('NONE','PRIMARY','SUB'),
+        role enum ('CHILD','PARENT'),
+        status enum ('ACTIVE','WITHDRAWN'),
+        primary key (users_id)
+    )
+Hibernate: 
+    create table users (
+        birth date,
+        created_at timestamp(6),
+        family_id bigint,
+        updated_at timestamp(6),
+        users_id bigint generated by default as identity,
+        email varchar(255) unique,
+        fcm_token varchar(255),
+        login_id varchar(255) unique,
+        name varchar(255) not null,
+        password varchar(255),
+        phone_number varchar(255),
+        profile_image_key varchar(255),
+        manager_type enum ('NONE','PRIMARY','SUB'),
+        role enum ('CHILD','PARENT'),
+        status enum ('ACTIVE','WITHDRAWN'),
+        primary key (users_id)
+    )
+2026-07-17T14:00:26.711+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    alter table if exists account_recovery_verification_code 
+       add constraint FKivtb4xa6f9glhck22dedfdhiu 
+       foreign key (users_id) 
+       references users
+Hibernate: 
+    alter table if exists account_recovery_verification_code 
+       add constraint FKivtb4xa6f9glhck22dedfdhiu 
+       foreign key (users_id) 
+       references users
+2026-07-17T14:00:26.716+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    alter table if exists device 
+       add constraint FK28sq9r573677lwss4t2kfkwn0 
+       foreign key (users_id) 
+       references users
+Hibernate: 
+    alter table if exists device 
+       add constraint FK28sq9r573677lwss4t2kfkwn0 
+       foreign key (users_id) 
+       references users
+2026-07-17T14:00:26.716+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    alter table if exists event 
+       add constraint FK7va0vng2f8hg805o2jeb0itqn 
+       foreign key (triggered_users_id) 
+       references users
+Hibernate: 
+    alter table if exists event 
+       add constraint FK7va0vng2f8hg805o2jeb0itqn 
+       foreign key (triggered_users_id) 
+       references users
+2026-07-17T14:00:26.717+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    alter table if exists event 
+       add constraint FKnxmjrl4cjc890j4l6r91mw060 
+       foreign key (users_id) 
+       references users
+Hibernate: 
+    alter table if exists event 
+       add constraint FKnxmjrl4cjc890j4l6r91mw060 
+       foreign key (users_id) 
+       references users
+2026-07-17T14:00:26.718+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    alter table if exists family_photo 
+       add constraint FKe2mn5480xm2c6vt5iiyc3xbcr 
+       foreign key (family_id) 
+       references family
+Hibernate: 
+    alter table if exists family_photo 
+       add constraint FKe2mn5480xm2c6vt5iiyc3xbcr 
+       foreign key (family_id) 
+       references family
+2026-07-17T14:00:26.718+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    alter table if exists family_photo 
+       add constraint FK7m1osyas9bljoet4fmfll1eo6 
+       foreign key (users_id) 
+       references users
+Hibernate: 
+    alter table if exists family_photo 
+       add constraint FK7m1osyas9bljoet4fmfll1eo6 
+       foreign key (users_id) 
+       references users
+2026-07-17T14:00:26.719+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    alter table if exists health 
+       add constraint FKr5nwriw4qs5wjeh5jpju1o84v 
+       foreign key (device_id) 
+       references device
+Hibernate: 
+    alter table if exists health 
+       add constraint FKr5nwriw4qs5wjeh5jpju1o84v 
+       foreign key (device_id) 
+       references device
+2026-07-17T14:00:26.719+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    alter table if exists health 
+       add constraint FKf1g0ydnv99hbkq0jwf1x68kjp 
+       foreign key (users_id) 
+       references users
+Hibernate: 
+    alter table if exists health 
+       add constraint FKf1g0ydnv99hbkq0jwf1x68kjp 
+       foreign key (users_id) 
+       references users
+2026-07-17T14:00:26.720+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    alter table if exists home 
+       add constraint FK3vfq811wxx3v8cv9oyt5cm181 
+       foreign key (device_id) 
+       references device
+Hibernate: 
+    alter table if exists home 
+       add constraint FK3vfq811wxx3v8cv9oyt5cm181 
+       foreign key (device_id) 
+       references device
+2026-07-17T14:00:26.720+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    alter table if exists home 
+       add constraint FKbgm8af6ae4p1sxjvu4qmyna5h 
+       foreign key (users_id) 
+       references users
+Hibernate: 
+    alter table if exists home 
+       add constraint FKbgm8af6ae4p1sxjvu4qmyna5h 
+       foreign key (users_id) 
+       references users
+2026-07-17T14:00:26.721+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    alter table if exists hospital 
+       add constraint FK1f8qusfemxcppdqphfwrm0nj5 
+       foreign key (device_id) 
+       references device
+Hibernate: 
+    alter table if exists hospital 
+       add constraint FK1f8qusfemxcppdqphfwrm0nj5 
+       foreign key (device_id) 
+       references device
+2026-07-17T14:00:26.721+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    alter table if exists hospital 
+       add constraint FK5j4byllkbe6i2nurv1ltsikaw 
+       foreign key (users_id) 
+       references users
+Hibernate: 
+    alter table if exists hospital 
+       add constraint FK5j4byllkbe6i2nurv1ltsikaw 
+       foreign key (users_id) 
+       references users
+2026-07-17T14:00:26.722+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    alter table if exists inactivity_setting 
+       add constraint FK8s0yydcmx1xrb8g0vkoswp3ta 
+       foreign key (user_id) 
+       references users
+Hibernate: 
+    alter table if exists inactivity_setting 
+       add constraint FK8s0yydcmx1xrb8g0vkoswp3ta 
+       foreign key (user_id) 
+       references users
+2026-07-17T14:00:26.722+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    alter table if exists medication 
+       add constraint FK4wlb3h20ush55dnr7w0f82413 
+       foreign key (users_id) 
+       references users
+Hibernate: 
+    alter table if exists medication 
+       add constraint FK4wlb3h20ush55dnr7w0f82413 
+       foreign key (users_id) 
+       references users
+2026-07-17T14:00:26.723+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    alter table if exists medication_log 
+       add constraint FK4dtx79wd8gmxb3anqq55p20c5 
+       foreign key (medication_id) 
+       references medication
+Hibernate: 
+    alter table if exists medication_log 
+       add constraint FK4dtx79wd8gmxb3anqq55p20c5 
+       foreign key (medication_id) 
+       references medication
+2026-07-17T14:00:26.723+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    alter table if exists medication_log 
+       add constraint FKqq0fg7glnut7q8d95eh9utxgg 
+       foreign key (users_id) 
+       references users
+Hibernate: 
+    alter table if exists medication_log 
+       add constraint FKqq0fg7glnut7q8d95eh9utxgg 
+       foreign key (users_id) 
+       references users
+2026-07-17T14:00:26.724+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    alter table if exists notification 
+       add constraint FKsht3fif7btn0phoy13gvsae3m 
+       foreign key (event_id) 
+       references event
+Hibernate: 
+    alter table if exists notification 
+       add constraint FKsht3fif7btn0phoy13gvsae3m 
+       foreign key (event_id) 
+       references event
+2026-07-17T14:00:26.725+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    alter table if exists notification 
+       add constraint FKqo32sojlpn1xa34pl0n3lshvc 
+       foreign key (receiver_users_id) 
+       references users
+Hibernate: 
+    alter table if exists notification 
+       add constraint FKqo32sojlpn1xa34pl0n3lshvc 
+       foreign key (receiver_users_id) 
+       references users
+2026-07-17T14:00:26.725+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    alter table if exists notification 
+       add constraint FKi325125btrs6nfs5pddcnfcdh 
+       foreign key (send_users_id) 
+       references users
+Hibernate: 
+    alter table if exists notification 
+       add constraint FKi325125btrs6nfs5pddcnfcdh 
+       foreign key (send_users_id) 
+       references users
+2026-07-17T14:00:26.726+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    alter table if exists notification_setting 
+       add constraint FKmk226jk5f6j26wg7moshwhdx8 
+       foreign key (user_id) 
+       references users
+Hibernate: 
+    alter table if exists notification_setting 
+       add constraint FKmk226jk5f6j26wg7moshwhdx8 
+       foreign key (user_id) 
+       references users
+2026-07-17T14:00:26.726+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    alter table if exists receipt 
+       add constraint FKr48ywu92pu4ahmu44wbbhnrl5 
+       foreign key (device_id) 
+       references device
+Hibernate: 
+    alter table if exists receipt 
+       add constraint FKr48ywu92pu4ahmu44wbbhnrl5 
+       foreign key (device_id) 
+       references device
+2026-07-17T14:00:26.726+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    alter table if exists receipt 
+       add constraint FKrvjqf9tfhl4jy8rcrn3cgop3c 
+       foreign key (users_id) 
+       references users
+Hibernate: 
+    alter table if exists receipt 
+       add constraint FKrvjqf9tfhl4jy8rcrn3cgop3c 
+       foreign key (users_id) 
+       references users
+2026-07-17T14:00:26.727+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    alter table if exists seniors 
+       add constraint FK2ac8ov7nli9w77d1yps0yqxp2 
+       foreign key (registered_by_user_id) 
+       references users
+Hibernate: 
+    alter table if exists seniors 
+       add constraint FK2ac8ov7nli9w77d1yps0yqxp2 
+       foreign key (registered_by_user_id) 
+       references users
+2026-07-17T14:00:26.727+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    alter table if exists social_accounts 
+       add constraint FKrolofcw6dsjs4385orutjhypu 
+       foreign key (users_id) 
+       references users
+Hibernate: 
+    alter table if exists social_accounts 
+       add constraint FKrolofcw6dsjs4385orutjhypu 
+       foreign key (users_id) 
+       references users
+2026-07-17T14:00:26.728+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    alter table if exists users 
+       add constraint FKlpd9xh6p9u8ttjvki6n4w9ts4 
+       foreign key (family_id) 
+       references family
+Hibernate: 
+    alter table if exists users 
+       add constraint FKlpd9xh6p9u8ttjvki6n4w9ts4 
+       foreign key (family_id) 
+       references family
+2026-07-17T14:00:26.730+09:00  INFO 86970 --- [senioron] [           main] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-07-17T14:00:26.758+09:00  INFO 86970 --- [senioron] [           main] o.s.d.j.r.query.QueryEnhancerFactories   : Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-07-17T14:00:27.094+09:00  WARN 86970 --- [senioron] [           main] c.e.s.global.config.FirebaseConfig       : Firebase 초기화 실패, FCM 기능이 비활성화됩니다.
+
+java.io.FileNotFoundException: class path resource [senioron-8c2e1-firebase-adminsdk-fbsvc-ba018605fb.json] cannot be opened because it does not exist
+	at org.springframework.core.io.ClassPathResource.getInputStream(ClassPathResource.java:212) ~[spring-core-7.0.8.jar:7.0.8]
+	at com.example.senioron.global.config.FirebaseConfig.init(FirebaseConfig.java:31) ~[main/:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) ~[na:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77) ~[na:na]
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569) ~[na:na]
+	at org.springframework.beans.factory.annotation.InitDestroyAnnotationBeanPostProcessor$LifecycleMethod.invoke(InitDestroyAnnotationBeanPostProcessor.java:453) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.annotation.InitDestroyAnnotationBeanPostProcessor$LifecycleMetadata.invokeInitMethods(InitDestroyAnnotationBeanPostProcessor.java:397) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.annotation.InitDestroyAnnotationBeanPostProcessor.postProcessBeforeInitialization(InitDestroyAnnotationBeanPostProcessor.java:217) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.applyBeanPostProcessorsBeforeInitialization(AbstractAutowireCapableBeanFactory.java:426) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.initializeBean(AbstractAutowireCapableBeanFactory.java:1807) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:603) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:525) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:333) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:371) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:331) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:201) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveBean(DefaultListableBeanFactory.java:1232) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1711) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1658) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.ConstructorResolver.resolveAutowiredArgument(ConstructorResolver.java:912) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:791) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.ConstructorResolver.autowireConstructor(ConstructorResolver.java:240) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.autowireConstructor(AbstractAutowireCapableBeanFactory.java:1380) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1219) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:565) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:525) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:333) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:371) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:331) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:201) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveBean(DefaultListableBeanFactory.java:1232) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1711) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1658) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.ConstructorResolver.resolveAutowiredArgument(ConstructorResolver.java:912) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:791) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.ConstructorResolver.autowireConstructor(ConstructorResolver.java:240) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.autowireConstructor(AbstractAutowireCapableBeanFactory.java:1380) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1219) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:565) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:525) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:333) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:371) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:331) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:201) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveBean(DefaultListableBeanFactory.java:1232) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1711) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1658) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.ConstructorResolver.resolveAutowiredArgument(ConstructorResolver.java:912) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:791) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.ConstructorResolver.autowireConstructor(ConstructorResolver.java:240) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.autowireConstructor(AbstractAutowireCapableBeanFactory.java:1380) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1219) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:565) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:525) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:333) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:371) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:331) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:201) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveBean(DefaultListableBeanFactory.java:1232) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1711) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1658) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.ConstructorResolver.resolveAutowiredArgument(ConstructorResolver.java:912) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:791) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.ConstructorResolver.autowireConstructor(ConstructorResolver.java:240) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.autowireConstructor(AbstractAutowireCapableBeanFactory.java:1380) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1219) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:565) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:525) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:333) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:371) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:331) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:196) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.instantiateSingleton(DefaultListableBeanFactory.java:1225) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingleton(DefaultListableBeanFactory.java:1191) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:1121) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:994) ~[spring-context-7.0.8.jar:7.0.8]
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:621) ~[spring-context-7.0.8.jar:7.0.8]
+	at org.springframework.boot.web.server.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:143) ~[spring-boot-web-server-4.1.0.jar:4.1.0]
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:756) ~[spring-boot-4.1.0.jar:4.1.0]
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:445) ~[spring-boot-4.1.0.jar:4.1.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:321) ~[spring-boot-4.1.0.jar:4.1.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1365) ~[spring-boot-4.1.0.jar:4.1.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1354) ~[spring-boot-4.1.0.jar:4.1.0]
+	at com.example.senioron.SeniorOnApplication.main(SeniorOnApplication.java:12) ~[main/:na]
+
+2026-07-17T14:00:27.223+09:00  WARN 86970 --- [senioron] [           main] ConfigServletWebServerApplicationContext : Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'familyPhotoController' defined in file [/Users/koeunwoo/IdeaProjects/SeniorON_BE/SeniorON/build/classes/java/main/com/example/senioron/domain/family/controller/FamilyPhotoController.class]: Unsatisfied dependency expressed through constructor parameter 0: Error creating bean with name 'familyPhotoService' defined in file [/Users/koeunwoo/IdeaProjects/SeniorON_BE/SeniorON/build/classes/java/main/com/example/senioron/domain/family/service/FamilyPhotoService.class]: Unsatisfied dependency expressed through constructor parameter 2: Error creating bean with name 's3Service' defined in file [/Users/koeunwoo/IdeaProjects/SeniorON_BE/SeniorON/build/classes/java/main/com/example/senioron/global/storage/S3Service.class]: Unsatisfied dependency expressed through constructor parameter 0: Error creating bean with name 's3Client' defined in class path resource [com/example/senioron/global/config/S3Config.class]: Unexpected exception during bean creation
+2026-07-17T14:00:27.223+09:00  INFO 86970 --- [senioron] [           main] j.LocalContainerEntityManagerFactoryBean : Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-07-17T14:00:27.223+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists account_recovery_verification_code cascade 
+Hibernate: 
+    drop table if exists account_recovery_verification_code cascade 
+2026-07-17T14:00:27.224+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists button_option cascade 
+Hibernate: 
+    drop table if exists button_option cascade 
+2026-07-17T14:00:27.224+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists device cascade 
+Hibernate: 
+    drop table if exists device cascade 
+2026-07-17T14:00:27.225+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists event cascade 
+Hibernate: 
+    drop table if exists event cascade 
+2026-07-17T14:00:27.225+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists family cascade 
+Hibernate: 
+    drop table if exists family cascade 
+2026-07-17T14:00:27.225+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists family_photo cascade 
+Hibernate: 
+    drop table if exists family_photo cascade 
+2026-07-17T14:00:27.226+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists health cascade 
+Hibernate: 
+    drop table if exists health cascade 
+2026-07-17T14:00:27.226+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists home cascade 
+Hibernate: 
+    drop table if exists home cascade 
+2026-07-17T14:00:27.226+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists hospital cascade 
+Hibernate: 
+    drop table if exists hospital cascade 
+2026-07-17T14:00:27.226+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists inactivity_setting cascade 
+Hibernate: 
+    drop table if exists inactivity_setting cascade 
+2026-07-17T14:00:27.227+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists medication cascade 
+Hibernate: 
+    drop table if exists medication cascade 
+2026-07-17T14:00:27.227+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists medication_log cascade 
+Hibernate: 
+    drop table if exists medication_log cascade 
+2026-07-17T14:00:27.227+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists notification cascade 
+Hibernate: 
+    drop table if exists notification cascade 
+2026-07-17T14:00:27.227+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists notification_setting cascade 
+Hibernate: 
+    drop table if exists notification_setting cascade 
+2026-07-17T14:00:27.227+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists receipt cascade 
+Hibernate: 
+    drop table if exists receipt cascade 
+2026-07-17T14:00:27.228+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists seniors cascade 
+Hibernate: 
+    drop table if exists seniors cascade 
+2026-07-17T14:00:27.228+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists social_accounts cascade 
+Hibernate: 
+    drop table if exists social_accounts cascade 
+2026-07-17T14:00:27.228+09:00 DEBUG 86970 --- [senioron] [           main] org.hibernate.SQL                        : 
+    drop table if exists users cascade 
+Hibernate: 
+    drop table if exists users cascade 
+2026-07-17T14:00:27.229+09:00  INFO 86970 --- [senioron] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown initiated...
+2026-07-17T14:00:27.230+09:00  INFO 86970 --- [senioron] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown completed.
+2026-07-17T14:00:27.231+09:00  INFO 86970 --- [senioron] [           main] o.apache.catalina.core.StandardService   : Stopping service [Tomcat]
+2026-07-17T14:00:27.238+09:00  INFO 86970 --- [senioron] [           main] .s.b.a.l.ConditionEvaluationReportLogger : 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-07-17T14:00:27.244+09:00 ERROR 86970 --- [senioron] [           main] o.s.boot.SpringApplication               : Application run failed
+
+org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'familyPhotoController' defined in file [/Users/koeunwoo/IdeaProjects/SeniorON_BE/SeniorON/build/classes/java/main/com/example/senioron/domain/family/controller/FamilyPhotoController.class]: Unsatisfied dependency expressed through constructor parameter 0: Error creating bean with name 'familyPhotoService' defined in file [/Users/koeunwoo/IdeaProjects/SeniorON_BE/SeniorON/build/classes/java/main/com/example/senioron/domain/family/service/FamilyPhotoService.class]: Unsatisfied dependency expressed through constructor parameter 2: Error creating bean with name 's3Service' defined in file [/Users/koeunwoo/IdeaProjects/SeniorON_BE/SeniorON/build/classes/java/main/com/example/senioron/global/storage/S3Service.class]: Unsatisfied dependency expressed through constructor parameter 0: Error creating bean with name 's3Client' defined in class path resource [com/example/senioron/global/config/S3Config.class]: Unexpected exception during bean creation
+	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:804) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.ConstructorResolver.autowireConstructor(ConstructorResolver.java:240) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.autowireConstructor(AbstractAutowireCapableBeanFactory.java:1380) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1219) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:565) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:525) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:333) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:371) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:331) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:196) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.instantiateSingleton(DefaultListableBeanFactory.java:1225) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingleton(DefaultListableBeanFactory.java:1191) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:1121) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:994) ~[spring-context-7.0.8.jar:7.0.8]
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:621) ~[spring-context-7.0.8.jar:7.0.8]
+	at org.springframework.boot.web.server.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:143) ~[spring-boot-web-server-4.1.0.jar:4.1.0]
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:756) ~[spring-boot-4.1.0.jar:4.1.0]
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:445) ~[spring-boot-4.1.0.jar:4.1.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:321) ~[spring-boot-4.1.0.jar:4.1.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1365) ~[spring-boot-4.1.0.jar:4.1.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1354) ~[spring-boot-4.1.0.jar:4.1.0]
+	at com.example.senioron.SeniorOnApplication.main(SeniorOnApplication.java:12) ~[main/:na]
+Caused by: org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'familyPhotoService' defined in file [/Users/koeunwoo/IdeaProjects/SeniorON_BE/SeniorON/build/classes/java/main/com/example/senioron/domain/family/service/FamilyPhotoService.class]: Unsatisfied dependency expressed through constructor parameter 2: Error creating bean with name 's3Service' defined in file [/Users/koeunwoo/IdeaProjects/SeniorON_BE/SeniorON/build/classes/java/main/com/example/senioron/global/storage/S3Service.class]: Unsatisfied dependency expressed through constructor parameter 0: Error creating bean with name 's3Client' defined in class path resource [com/example/senioron/global/config/S3Config.class]: Unexpected exception during bean creation
+	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:804) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.ConstructorResolver.autowireConstructor(ConstructorResolver.java:240) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.autowireConstructor(AbstractAutowireCapableBeanFactory.java:1380) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1219) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:565) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:525) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:333) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:371) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:331) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:201) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveBean(DefaultListableBeanFactory.java:1232) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1711) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1658) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.ConstructorResolver.resolveAutowiredArgument(ConstructorResolver.java:912) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:791) ~[spring-beans-7.0.8.jar:7.0.8]
+	... 21 common frames omitted
+Caused by: org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 's3Service' defined in file [/Users/koeunwoo/IdeaProjects/SeniorON_BE/SeniorON/build/classes/java/main/com/example/senioron/global/storage/S3Service.class]: Unsatisfied dependency expressed through constructor parameter 0: Error creating bean with name 's3Client' defined in class path resource [com/example/senioron/global/config/S3Config.class]: Unexpected exception during bean creation
+	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:804) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.ConstructorResolver.autowireConstructor(ConstructorResolver.java:240) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.autowireConstructor(AbstractAutowireCapableBeanFactory.java:1380) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1219) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:565) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:525) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:333) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:371) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:331) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:201) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveBean(DefaultListableBeanFactory.java:1232) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1711) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1658) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.ConstructorResolver.resolveAutowiredArgument(ConstructorResolver.java:912) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:791) ~[spring-beans-7.0.8.jar:7.0.8]
+	... 35 common frames omitted
+Caused by: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 's3Client' defined in class path resource [com/example/senioron/global/config/S3Config.class]: Unexpected exception during bean creation
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:538) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:333) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:371) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:331) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:201) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveBean(DefaultListableBeanFactory.java:1232) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1711) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1658) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.ConstructorResolver.resolveAutowiredArgument(ConstructorResolver.java:912) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:791) ~[spring-beans-7.0.8.jar:7.0.8]
+	... 49 common frames omitted
+Caused by: org.springframework.util.PlaceholderResolutionException: Could not resolve placeholder 'AWS_REGION' in value "${AWS_REGION}" <-- "${cloud.aws.region}"
+	at org.springframework.util.PlaceholderResolutionException.withValue(PlaceholderResolutionException.java:81) ~[spring-core-7.0.8.jar:7.0.8]
+	at org.springframework.util.PlaceholderParser$ParsedValue.resolve(PlaceholderParser.java:296) ~[spring-core-7.0.8.jar:7.0.8]
+	at org.springframework.util.PlaceholderParser.replacePlaceholders(PlaceholderParser.java:129) ~[spring-core-7.0.8.jar:7.0.8]
+	at org.springframework.util.PropertyPlaceholderHelper.replacePlaceholders(PropertyPlaceholderHelper.java:96) ~[spring-core-7.0.8.jar:7.0.8]
+	at org.springframework.core.env.AbstractPropertyResolver.doResolvePlaceholders(AbstractPropertyResolver.java:286) ~[spring-core-7.0.8.jar:7.0.8]
+	at org.springframework.core.env.AbstractPropertyResolver.resolveRequiredPlaceholders(AbstractPropertyResolver.java:257) ~[spring-core-7.0.8.jar:7.0.8]
+	at org.springframework.context.support.PropertySourcesPlaceholderConfigurer.lambda$processProperties$0(PropertySourcesPlaceholderConfigurer.java:184) ~[spring-context-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.resolveEmbeddedValue(AbstractBeanFactory.java:959) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1679) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1658) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.ConstructorResolver.resolveAutowiredArgument(ConstructorResolver.java:912) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:791) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiateUsingFactoryMethod(ConstructorResolver.java:546) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.instantiateUsingFactoryMethod(AbstractAutowireCapableBeanFactory.java:1360) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1192) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:565) ~[spring-beans-7.0.8.jar:7.0.8]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:525) ~[spring-beans-7.0.8.jar:7.0.8]
+	... 58 common frames omitted
+
+
+> Task :bootRun FAILED
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':bootRun' (registered by plugin 'org.springframework.boot').
+> Process 'command '/Users/koeunwoo/Library/Java/JavaVirtualMachines/ms-17.0.17/Contents/Home/bin/java'' finished with non-zero exit value 1
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 4s
+4 actionable tasks: 1 executed, 3 up-to-date
