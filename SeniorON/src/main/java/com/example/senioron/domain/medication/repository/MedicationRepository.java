@@ -14,6 +14,8 @@ public interface MedicationRepository extends JpaRepository<Medication, Long> {
     List<Medication> findAllByUserOrderByMedicineTimeAsc(User user);
 
 
+    List<Medication> findByUserAndMedicationGroupId(User user, String medicationGroupId);
+
     @Modifying
     @Query("DELETE FROM Medication m WHERE m.user = :user AND m.medicationGroupId = :groupId")
     void deleteByUserAndMedicationGroupId(@Param("user") User user, @Param("groupId") String medicationGroupId);
