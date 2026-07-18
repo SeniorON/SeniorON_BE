@@ -55,4 +55,12 @@ public class Hospital extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private HospitalReminderType reminderType;
+
+    public void updateHospital(String hospitalName, String department, LocalDate scheduleDate, LocalTime scheduleTime, HospitalReminderType reminderType) {
+        this.hospitalName = hospitalName;
+        this.department = department;
+        this.scheduleDate = scheduleDate;
+        this.scheduleTime = scheduleTime;
+        this.reminderType = reminderType;
+    }
 }
