@@ -20,6 +20,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import com.example.senioron.domain.home.dto.request.SeniorProfileUpdateRequest;
+import com.example.senioron.domain.home.dto.response.SeniorProfileUpdateResponse;
 
 import java.util.List;
 
@@ -105,5 +107,18 @@ public class HomeController {
     ) {
         homeService.updateFontSize(request);
         return Response.ok();
+    }
+
+    @Operation(
+            summary = "시니어 프로필 수정",
+            description = "주담당자 또는 보조담당자가 공통 시니어 프로필 정보를 수정"
+    )
+    @PatchMapping("/senior-profile")
+    public Response<SeniorProfileUpdateResponse> updateSeniorProfile(
+            @Valid @RequestBody SeniorProfileUpdateRequest request
+    ) {
+        return Response.ok(
+                homeService.updateSeniorProfile(request)
+        );
     }
 }

@@ -21,8 +21,13 @@ public class HomeResponse {
 
     private List<HomeButtonResponse> buttons;
 
-    public HomeResponse(String userName, ConnectionResponse connection, SeniorProfileResponse seniorProfile,
-                        FontSize fontSize, List<HomeButtonResponse> buttons) {
+    public HomeResponse(
+            String userName,
+            ConnectionResponse connection,
+            SeniorProfileResponse seniorProfile,
+            FontSize fontSize,
+            List<HomeButtonResponse> buttons
+    ) {
         this.userName = userName;
         this.connection = connection;
         this.seniorProfile = seniorProfile;
@@ -58,10 +63,22 @@ public class HomeResponse {
         private Boolean connected;
         private Integer battery;
 
-        public ConnectionResponse(String deviceName, Boolean connected, Integer battery) {
+        public ConnectionResponse(
+                String deviceName,
+                Boolean connected,
+                Integer battery
+        ) {
             this.deviceName = deviceName;
             this.connected = connected;
             this.battery = battery;
+        }
+
+        public static ConnectionResponse disconnected() {
+            return new ConnectionResponse(
+                    null,
+                    false,
+                    null
+            );
         }
 
         public String getDeviceName() {
@@ -86,14 +103,31 @@ public class HomeResponse {
         private String address;
         private String phone;
 
-        public SeniorProfileResponse(String name, String relation, LocalDate birth, Integer age,
-                                     String address, String phone) {
+        public SeniorProfileResponse(
+                String name,
+                String relation,
+                LocalDate birth,
+                Integer age,
+                String address,
+                String phone
+        ) {
             this.name = name;
             this.relation = relation;
             this.birth = birth;
             this.age = age;
             this.address = address;
             this.phone = phone;
+        }
+
+        public static SeniorProfileResponse empty() {
+            return new SeniorProfileResponse(
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+            );
         }
 
         public String getName() {
@@ -134,7 +168,12 @@ public class HomeResponse {
 
         private String icon;
 
-        public HomeButtonResponse(Long buttonId, Integer buttonOrder, String buttonName, String icon) {
+        public HomeButtonResponse(
+                Long buttonId,
+                Integer buttonOrder,
+                String buttonName,
+                String icon
+        ) {
             this.buttonId = buttonId;
             this.buttonOrder = buttonOrder;
             this.buttonName = buttonName;

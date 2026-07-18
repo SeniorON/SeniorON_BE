@@ -50,6 +50,7 @@ public enum ErrorCode implements BaseCode {
     CHILD_HOME_ACCESS_DENIED(HttpStatus.FORBIDDEN, "HOME405", "자녀 역할의 사용자만 자녀 홈을 조회할 수 있습니다."),
     FAMILY_NOT_CONNECTED(HttpStatus.BAD_REQUEST, "HOME406", "연결된 가족이 없습니다."),
     PRIMARY_MANAGER_NOT_FOUND(HttpStatus.NOT_FOUND, "HOME407", "가족의 주 담당자를 찾을 수 없습니다."),
+    SENIOR_NOT_FOUND(HttpStatus.NOT_FOUND, "SENIOR404", "등록된 시니어 정보를 찾을 수 없습니다."),
 
     // Senior Error
     CUSTOM_RELATION_REQUIRED(HttpStatus.BAD_REQUEST, "SENIOR4001", "직접 작성 관계를 입력해 주세요."),
