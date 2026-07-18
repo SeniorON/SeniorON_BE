@@ -1,13 +1,17 @@
 package com.example.senioron.domain.home.service;
 
+import com.example.senioron.domain.device.entity.DeviceStatus;
+import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.home.dto.request.HomeButtonCreateRequest;
 import com.example.senioron.domain.home.dto.request.HomeButtonUpdateRequest;
 import com.example.senioron.domain.home.dto.request.HomeFontSizeUpdateRequest;
+import com.example.senioron.domain.home.dto.request.SeniorProfileUpdateRequest;
 import com.example.senioron.domain.home.dto.response.ButtonOptionResponse;
 import com.example.senioron.domain.home.dto.response.HomeButtonCreateResponse;
 import com.example.senioron.domain.home.dto.response.HomeResponse;
 import com.example.senioron.domain.home.dto.response.ScheduleType;
 import com.example.senioron.domain.home.dto.response.SeniorHomeResponse;
+import com.example.senioron.domain.home.dto.response.SeniorProfileUpdateResponse;
 import com.example.senioron.domain.home.dto.response.TodayScheduleResponse;
 import com.example.senioron.domain.home.entity.ButtonOption;
 import com.example.senioron.domain.home.entity.FontSize;
@@ -18,16 +22,19 @@ import com.example.senioron.domain.hospital.entity.Hospital;
 import com.example.senioron.domain.hospital.repository.HospitalRepository;
 import com.example.senioron.domain.medication.entity.Medication;
 import com.example.senioron.domain.medication.repository.MedicationRepository;
+import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.senior.entity.SeniorRelation;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -37,6 +44,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -48,21 +56,31 @@ public class HomeService {
     private final UserRepository userRepository;
     private final HospitalRepository hospitalRepository;
     private final MedicationRepository medicationRepository;
+    private final DeviceRepository deviceRepository;
+    private final SeniorRepository seniorRepository;
 
     public HomeService(
             HomeRepository homeRepository,
             ButtonOptionRepository buttonOptionRepository,
             UserRepository userRepository,
             HospitalRepository hospitalRepository,
-            MedicationRepository medicationRepository
+            MedicationRepository medicationRepository,
+            DeviceRepository deviceRepository,
+            SeniorRepository seniorRepository
     ) {
         this.homeRepository = homeRepository;
         this.buttonOptionRepository = buttonOptionRepository;
         this.userRepository = userRepository;
         this.hospitalRepository = hospitalRepository;
         this.medicationRepository = medicationRepository;
+        this.deviceRepository = deviceRepository;
+        this.seniorRepository = seniorRepository;
     }
 
+    /**
+     * 자녀 홈 화면 조회
+     */
+    @Transactional(readOnly = true)
     public HomeResponse getHome() {
 
         User currentUser = getCurrentUser();
@@ -75,42 +93,181 @@ public class HomeService {
 
         User homeOwner = resolvePrimaryChild(currentUser);
 
+        Optional<User> seniorUser =
+                findSeniorUser(currentUser);
+
+        Optional<Senior> seniorProfile =
+                findRegisteredSenior(currentUser);
+
+        HomeResponse.ConnectionResponse connection =
+                createConnectionResponse(seniorUser);
+
         List<Home> homes =
-                homeRepository.findAllByUserOrderByButtonOrderAsc(homeOwner);
+                homeRepository
+                        .findAllByUserOrderByButtonOrderAsc(
+                                homeOwner
+                        );
 
-        LocalDate birth = currentUser.getBirth();
+        List<HomeResponse.HomeButtonResponse> buttons =
+                homes.stream()
+                        .map(home ->
+                                new HomeResponse.HomeButtonResponse(
+                                        home.getHomeId(),
+                                        home.getButtonOrder(),
+                                        home.getButtonName(),
+                                        home.getIcon()
+                                )
+                        )
+                        .toList();
 
-        List<HomeResponse.HomeButtonResponse> buttons = homes.stream()
-                .map(home -> new HomeResponse.HomeButtonResponse(
-                        home.getHomeId(),
-                        home.getButtonOrder(),
-                        home.getButtonName(),
-                        home.getIcon()
-                ))
-                .toList();
+        HomeResponse.SeniorProfileResponse seniorProfileResponse =
+                seniorProfile
+                        .map(this::createSeniorProfileResponse)
+                        .orElseGet(
+                                HomeResponse.SeniorProfileResponse::empty
+                        );
 
-        Integer age = birth == null
-                ? null
-                : Period.between(
-                birth,
-                LocalDate.now()
-        ).getYears();
+        FontSize fontSize =
+                homes.isEmpty()
+                        ? FontSize.MEDIUM
+                        : homes.get(0).getFontSize();
 
         return new HomeResponse(
                 currentUser.getName(),
-                null,
-                new HomeResponse.SeniorProfileResponse(
-                        currentUser.getName(),
-                        null,
-                        birth,
-                        age,
-                        null,
-                        currentUser.getPhoneNumber()
-                ),
-                homes.isEmpty()
-                        ? FontSize.MEDIUM
-                        : homes.get(0).getFontSize(),
+                connection,
+                seniorProfileResponse,
+                fontSize,
                 buttons
+        );
+    }
+
+    /**
+     * 시니어 프로필 최초 등록 및 수정
+     */
+    @Transactional
+    public SeniorProfileUpdateResponse updateSeniorProfile(
+            SeniorProfileUpdateRequest request
+    ) {
+
+        User currentUser = getCurrentUser();
+
+        if (currentUser.getRole() != Role.CHILD) {
+            throw new BusinessException(
+                    ErrorCode.CHILD_HOME_ACCESS_DENIED
+            );
+        }
+
+        if (currentUser.getFamily() == null) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_NOT_CONNECTED
+            );
+        }
+
+        /*
+         * OTHER 관계인 경우 직접 입력한 관계가 반드시 존재해야 합니다.
+         */
+        String resolvedCustomRelation =
+                resolveCustomRelation(
+                        request.relation(),
+                        request.customRelation()
+                );
+
+        String normalizedPhoneNumber =
+                normalizePhoneNumber(
+                        request.phoneNumber()
+                );
+
+        Optional<Senior> currentUserSeniorOptional =
+                findRegisteredSenior(currentUser);
+
+        Senior currentUserSenior;
+
+        /*
+         * 현재 담당자에게 등록된 시니어 정보가 없으면
+         * 최초 등록으로 처리합니다.
+         */
+        if (currentUserSeniorOptional.isEmpty()) {
+
+            currentUserSenior = Senior.builder()
+                    .name(request.name())
+                    .relation(request.relation())
+                    .customRelation(resolvedCustomRelation)
+                    .birth(request.birth())
+                    .phoneNumber(normalizedPhoneNumber)
+                    .address(request.address())
+                    .detailAddress(request.detailAddress())
+                    .registeredBy(currentUser)
+                    .build();
+
+            currentUserSenior =
+                    seniorRepository.save(
+                            currentUserSenior
+                    );
+
+        } else {
+
+            /*
+             * 기존 정보가 있으면 공통 프로필 정보만 수정합니다.
+             *
+             * relation과 customRelation은 담당자별로 다를 수 있으므로
+             * 기존 값을 유지합니다.
+             */
+            currentUserSenior =
+                    currentUserSeniorOptional.get();
+
+            currentUserSenior.updateProfile(
+                    request.name(),
+                    request.birth(),
+                    normalizedPhoneNumber,
+                    request.address(),
+                    request.detailAddress()
+            );
+        }
+
+        /*
+         * 같은 가족의 다른 자녀 담당자가 이미 등록한 Senior 정보가 있다면
+         * 이름, 생년월일, 전화번호, 주소 등 공통 정보만 동기화합니다.
+         *
+         * 다른 담당자의 Senior 정보가 없는 경우에는 관계를 알 수 없으므로
+         * 서버에서 임의로 새 행을 생성하지 않습니다.
+         */
+        List<User> familyMembers =
+                userRepository.findAllByFamily(
+                        currentUser.getFamily()
+                );
+
+        List<User> otherChildManagers =
+                familyMembers.stream()
+                        .filter(user ->
+                                user.getRole() == Role.CHILD
+                        )
+                        .filter(user ->
+                                !user.getUsersId()
+                                        .equals(
+                                                currentUser.getUsersId()
+                                        )
+                        )
+                        .toList();
+
+        for (User childManager : otherChildManagers) {
+
+            seniorRepository
+                    .findFirstByRegisteredBy(
+                            childManager
+                    )
+                    .ifPresent(senior ->
+                            senior.updateProfile(
+                                    request.name(),
+                                    request.birth(),
+                                    normalizedPhoneNumber,
+                                    request.address(),
+                                    request.detailAddress()
+                            )
+                    );
+        }
+
+        return SeniorProfileUpdateResponse.from(
+                currentUserSenior
         );
     }
 
@@ -123,7 +280,10 @@ public class HomeService {
         validatePrimaryManager(user);
 
         List<Home> homes =
-                homeRepository.findAllByUserOrderByButtonOrderAsc(user);
+                homeRepository
+                        .findAllByUserOrderByButtonOrderAsc(
+                                user
+                        );
 
         if (request.getButtons() == null
                 || request.getButtons().size() != homes.size()) {
@@ -133,16 +293,21 @@ public class HomeService {
             );
         }
 
-        Map<Long, Home> homeMap = homes.stream()
-                .collect(Collectors.toMap(
-                        Home::getHomeId,
-                        Function.identity()
-                ));
+        Map<Long, Home> homeMap =
+                homes.stream()
+                        .collect(
+                                Collectors.toMap(
+                                        Home::getHomeId,
+                                        Function.identity()
+                                )
+                        );
 
-        boolean hasNullButtonId = request.getButtons().stream()
-                .anyMatch(buttonRequest ->
-                        buttonRequest.getButtonId() == null
-                );
+        boolean hasNullButtonId =
+                request.getButtons()
+                        .stream()
+                        .anyMatch(buttonRequest ->
+                                buttonRequest.getButtonId() == null
+                        );
 
         if (hasNullButtonId) {
             throw new BusinessException(
@@ -150,21 +315,30 @@ public class HomeService {
             );
         }
 
-        long buttonIdCount = request.getButtons().stream()
-                .map(HomeButtonUpdateRequest.ButtonRequest::getButtonId)
-                .distinct()
-                .count();
+        long buttonIdCount =
+                request.getButtons()
+                        .stream()
+                        .map(
+                                HomeButtonUpdateRequest.ButtonRequest
+                                        ::getButtonId
+                        )
+                        .distinct()
+                        .count();
 
-        if (buttonIdCount != request.getButtons().size()) {
+        if (buttonIdCount
+                != request.getButtons().size()) {
+
             throw new BusinessException(
                     ErrorCode.DUPLICATE_HOME_BUTTON_ID
             );
         }
 
-        boolean hasNullButtonOrder = request.getButtons().stream()
-                .anyMatch(buttonRequest ->
-                        buttonRequest.getButtonOrder() == null
-                );
+        boolean hasNullButtonOrder =
+                request.getButtons()
+                        .stream()
+                        .anyMatch(buttonRequest ->
+                                buttonRequest.getButtonOrder() == null
+                        );
 
         if (hasNullButtonOrder) {
             throw new BusinessException(
@@ -172,21 +346,33 @@ public class HomeService {
             );
         }
 
-        long buttonOrderCount = request.getButtons().stream()
-                .map(HomeButtonUpdateRequest.ButtonRequest::getButtonOrder)
-                .distinct()
-                .count();
+        long buttonOrderCount =
+                request.getButtons()
+                        .stream()
+                        .map(
+                                HomeButtonUpdateRequest.ButtonRequest
+                                        ::getButtonOrder
+                        )
+                        .distinct()
+                        .count();
 
-        if (buttonOrderCount != request.getButtons().size()) {
+        if (buttonOrderCount
+                != request.getButtons().size()) {
+
             throw new BusinessException(
                     ErrorCode.DUPLICATE_HOME_BUTTON_ORDER
             );
         }
 
-        List<Integer> sortedOrders = request.getButtons().stream()
-                .map(HomeButtonUpdateRequest.ButtonRequest::getButtonOrder)
-                .sorted()
-                .toList();
+        List<Integer> sortedOrders =
+                request.getButtons()
+                        .stream()
+                        .map(
+                                HomeButtonUpdateRequest.ButtonRequest
+                                        ::getButtonOrder
+                        )
+                        .sorted()
+                        .toList();
 
         for (int i = 0; i < sortedOrders.size(); i++) {
 
@@ -200,9 +386,10 @@ public class HomeService {
         for (HomeButtonUpdateRequest.ButtonRequest buttonRequest
                 : request.getButtons()) {
 
-            Home home = homeMap.get(
-                    buttonRequest.getButtonId()
-            );
+            Home home =
+                    homeMap.get(
+                            buttonRequest.getButtonId()
+                    );
 
             if (home == null) {
                 throw new BusinessException(
@@ -218,20 +405,24 @@ public class HomeService {
         }
     }
 
+    @Transactional(readOnly = true)
     public List<ButtonOptionResponse> getButtonOptions() {
 
         User user = getCurrentUser();
         validatePrimaryManager(user);
 
-        return buttonOptionRepository.findAll()
+        return buttonOptionRepository
+                .findAll()
                 .stream()
-                .map(option -> new ButtonOptionResponse(
-                        option.getOptionId(),
-                        option.getButtonName(),
-                        option.getIcon(),
-                        option.getActionType(),
-                        option.getActionValue()
-                ))
+                .map(option ->
+                        new ButtonOptionResponse(
+                                option.getOptionId(),
+                                option.getButtonName(),
+                                option.getIcon(),
+                                option.getActionType(),
+                                option.getActionValue()
+                        )
+                )
                 .toList();
     }
 
@@ -243,18 +434,22 @@ public class HomeService {
         User user = getCurrentUser();
         validatePrimaryManager(user);
 
-        ButtonOption buttonOption = buttonOptionRepository
-                .findById(request.getOptionId())
-                .orElseThrow(() -> new BusinessException(
-                        ErrorCode.BUTTON_OPTION_NOT_FOUND
-                ));
+        ButtonOption buttonOption =
+                buttonOptionRepository
+                        .findById(request.getOptionId())
+                        .orElseThrow(() ->
+                                new BusinessException(
+                                        ErrorCode.BUTTON_OPTION_NOT_FOUND
+                                )
+                        );
 
         boolean alreadyExists =
-                homeRepository.existsByUserAndActionTypeAndActionValue(
-                        user,
-                        buttonOption.getActionType(),
-                        buttonOption.getActionValue()
-                );
+                homeRepository
+                        .existsByUserAndActionTypeAndActionValue(
+                                user,
+                                buttonOption.getActionType(),
+                                buttonOption.getActionValue()
+                        );
 
         if (alreadyExists) {
             throw new BusinessException(
@@ -263,30 +458,38 @@ public class HomeService {
         }
 
         List<Home> homes =
-                homeRepository.findAllByUserOrderByButtonOrderAsc(user);
+                homeRepository
+                        .findAllByUserOrderByButtonOrderAsc(
+                                user
+                        );
 
-        int newButtonOrder = homes.stream()
-                .mapToInt(Home::getButtonOrder)
-                .max()
-                .orElse(0)
-                + 1;
+        int newButtonOrder =
+                homes.stream()
+                        .mapToInt(Home::getButtonOrder)
+                        .max()
+                        .orElse(0)
+                        + 1;
 
-        FontSize fontSize = homes.isEmpty()
-                ? FontSize.MEDIUM
-                : homes.get(0).getFontSize();
+        FontSize fontSize =
+                homes.isEmpty()
+                        ? FontSize.MEDIUM
+                        : homes.get(0).getFontSize();
 
-        Home newButton = Home.createButton(
-                user,
-                newButtonOrder,
-                buttonOption.getButtonName(),
-                buttonOption.getIcon(),
-                buttonOption.getActionType(),
-                buttonOption.getActionValue(),
-                fontSize
-        );
+        Home newButton =
+                Home.createButton(
+                        user,
+                        newButtonOrder,
+                        buttonOption.getButtonName(),
+                        buttonOption.getIcon(),
+                        buttonOption.getActionType(),
+                        buttonOption.getActionValue(),
+                        fontSize
+                );
 
         Home savedButton =
-                homeRepository.save(newButton);
+                homeRepository.save(
+                        newButton
+                );
 
         return HomeButtonCreateResponse.from(
                 savedButton
@@ -294,23 +497,37 @@ public class HomeService {
     }
 
     @Transactional
-    public void deleteButton(Long buttonId) {
+    public void deleteButton(
+            Long buttonId
+    ) {
 
         User user = getCurrentUser();
         validatePrimaryManager(user);
 
-        Home home = homeRepository
-                .findByHomeIdAndUser(buttonId, user)
-                .orElseThrow(() -> new BusinessException(
-                        ErrorCode.HOME_BUTTON_NOT_FOUND
-                ));
+        Home home =
+                homeRepository
+                        .findByHomeIdAndUser(
+                                buttonId,
+                                user
+                        )
+                        .orElseThrow(() ->
+                                new BusinessException(
+                                        ErrorCode.HOME_BUTTON_NOT_FOUND
+                                )
+                        );
 
         homeRepository.delete(home);
 
         List<Home> remainingButtons =
-                homeRepository.findAllByUserOrderByButtonOrderAsc(user);
+                homeRepository
+                        .findAllByUserOrderByButtonOrderAsc(
+                                user
+                        );
 
-        for (int i = 0; i < remainingButtons.size(); i++) {
+        for (int i = 0;
+             i < remainingButtons.size();
+             i++) {
+
             remainingButtons
                     .get(i)
                     .updateButtonOrder(i + 1);
@@ -332,9 +549,10 @@ public class HomeService {
                 findPrimaryChild(parent);
 
         List<Home> homes =
-                homeRepository.findAllByUserOrderByButtonOrderAsc(
-                        primaryChild
-                );
+                homeRepository
+                        .findAllByUserOrderByButtonOrderAsc(
+                                primaryChild
+                        );
 
         List<SeniorHomeResponse.ButtonResponse> buttons =
                 homes.stream()
@@ -350,9 +568,10 @@ public class HomeService {
                         )
                         .toList();
 
-        FontSize fontSize = homes.isEmpty()
-                ? FontSize.MEDIUM
-                : homes.get(0).getFontSize();
+        FontSize fontSize =
+                homes.isEmpty()
+                        ? FontSize.MEDIUM
+                        : homes.get(0).getFontSize();
 
         List<TodayScheduleResponse> todaySchedules =
                 getTodaySchedules(parent);
@@ -382,6 +601,7 @@ public class HomeService {
                         );
 
         for (Hospital hospital : hospitals) {
+
             schedules.add(
                     TodayScheduleResponse.builder()
                             .scheduleId(
@@ -405,7 +625,9 @@ public class HomeService {
 
         List<Medication> medications =
                 medicationRepository
-                        .findAllByUserOrderByMedicineTimeAsc(parent);
+                        .findAllByUserOrderByMedicineTimeAsc(
+                                parent
+                        );
 
         for (Medication medication : medications) {
 
@@ -459,6 +681,7 @@ public class HomeService {
 
         if (medicineDays == null
                 || medicineDays.isBlank()) {
+
             return false;
         }
 
@@ -469,7 +692,9 @@ public class HomeService {
                 convertToKoreanDay(dayOfWeek);
 
         String shortEnglishDay =
-                dayOfWeek.name().substring(0, 3);
+                dayOfWeek
+                        .name()
+                        .substring(0, 3);
 
         String fullEnglishDay =
                 dayOfWeek.name();
@@ -484,8 +709,12 @@ public class HomeService {
                 .map(String::toUpperCase)
                 .anyMatch(day ->
                         day.equals(koreanDay)
-                                || day.equals(shortEnglishDay)
-                                || day.equals(fullEnglishDay)
+                                || day.equals(
+                                shortEnglishDay
+                        )
+                                || day.equals(
+                                fullEnglishDay
+                        )
                 );
     }
 
@@ -513,7 +742,10 @@ public class HomeService {
         validatePrimaryManager(user);
 
         List<Home> homes =
-                homeRepository.findAllByUserOrderByButtonOrderAsc(user);
+                homeRepository
+                        .findAllByUserOrderByButtonOrderAsc(
+                                user
+                        );
 
         if (homes.isEmpty()) {
             throw new BusinessException(
@@ -552,11 +784,12 @@ public class HomeService {
         }
 
         List<User> children =
-                userRepository.findByFamilyAndUsersIdNotAndRole(
-                        currentUser.getFamily(),
-                        currentUser.getUsersId(),
-                        Role.CHILD
-                );
+                userRepository
+                        .findByFamilyAndUsersIdNotAndRole(
+                                currentUser.getFamily(),
+                                currentUser.getUsersId(),
+                                Role.CHILD
+                        );
 
         return children.stream()
                 .filter(child ->
@@ -564,9 +797,175 @@ public class HomeService {
                                 == ManagerType.PRIMARY
                 )
                 .findFirst()
-                .orElseThrow(() -> new BusinessException(
-                        ErrorCode.PRIMARY_MANAGER_NOT_FOUND
-                ));
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.PRIMARY_MANAGER_NOT_FOUND
+                        )
+                );
+    }
+
+    private Optional<User> findSeniorUser(
+            User currentUser
+    ) {
+
+        if (currentUser.getFamily() == null) {
+            return Optional.empty();
+        }
+
+        List<User> seniors =
+                userRepository
+                        .findByFamilyAndUsersIdNotAndRole(
+                                currentUser.getFamily(),
+                                currentUser.getUsersId(),
+                                Role.PARENT
+                        );
+
+        return seniors.stream()
+                .findFirst();
+    }
+
+    private Optional<Senior> findRegisteredSenior(
+            User child
+    ) {
+
+        return seniorRepository
+                .findFirstByRegisteredBy(
+                        child
+                );
+    }
+
+    private HomeResponse.ConnectionResponse createConnectionResponse(
+            Optional<User> seniorUser
+    ) {
+
+        if (seniorUser.isEmpty()) {
+            return HomeResponse
+                    .ConnectionResponse
+                    .disconnected();
+        }
+
+        return deviceRepository
+                .findFirstByUser(
+                        seniorUser.get()
+                )
+                .map(device ->
+                        new HomeResponse.ConnectionResponse(
+                                device.getDeviceName(),
+                                device.getConnectionStatus()
+                                        == DeviceStatus.ONLINE,
+                                device.getBatteryLevel()
+                        )
+                )
+                .orElseGet(
+                        HomeResponse
+                                .ConnectionResponse
+                                ::disconnected
+                );
+    }
+
+    private HomeResponse.SeniorProfileResponse
+    createSeniorProfileResponse(
+            Senior senior
+    ) {
+
+        LocalDate birth =
+                senior.getBirth();
+
+        Integer age =
+                birth == null
+                        ? null
+                        : Period.between(
+                        birth,
+                        LocalDate.now()
+                ).getYears();
+
+        return new HomeResponse.SeniorProfileResponse(
+                senior.getName(),
+                resolveRelation(senior),
+                birth,
+                age,
+                createFullAddress(senior),
+                senior.getPhoneNumber()
+        );
+    }
+
+    private String resolveRelation(
+            Senior senior
+    ) {
+
+        if (senior.getRelation() == null) {
+            return null;
+        }
+
+        if (senior.getRelation()
+                == SeniorRelation.OTHER) {
+
+            return senior.getCustomRelation();
+        }
+
+        return senior.getRelation().name();
+    }
+
+    /**
+     * OTHER 관계라면 직접 입력한 관계값을 검증합니다.
+     *
+     * 별도의 ErrorCode를 추가하지 않고 HomeService 내부에서 검증해
+     * Senior 도메인의 변경을 피합니다.
+     */
+    private String resolveCustomRelation(
+            SeniorRelation relation,
+            String customRelation
+    ) {
+
+        if (relation != SeniorRelation.OTHER) {
+            return null;
+        }
+
+        if (customRelation == null
+                || customRelation.isBlank()) {
+
+            throw new BusinessException(
+                    ErrorCode.CUSTOM_RELATION_REQUIRED
+            );
+        }
+
+        return customRelation.trim();
+    }
+
+    private String createFullAddress(
+            Senior senior
+    ) {
+
+        String address =
+                senior.getAddress();
+
+        String detailAddress =
+                senior.getDetailAddress();
+
+        if (address == null
+                || address.isBlank()) {
+
+            return detailAddress;
+        }
+
+        if (detailAddress == null
+                || detailAddress.isBlank()) {
+
+            return address;
+        }
+
+        return address
+                + " "
+                + detailAddress;
+    }
+
+    private String normalizePhoneNumber(
+            String phoneNumber
+    ) {
+
+        return phoneNumber
+                .replace("-", "")
+                .replace(" ", "");
     }
 
     private void validatePrimaryManager(
@@ -590,6 +989,7 @@ public class HomeService {
                         .getContext()
                         .getAuthentication();
 
-        return (User) authentication.getPrincipal();
+        return (User) authentication
+                .getPrincipal();
     }
 }

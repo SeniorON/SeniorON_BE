@@ -47,4 +47,19 @@ public class Senior {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "registered_by_user_id", nullable = false)
     private User registeredBy;
+
+    public void updateProfile(
+            String name,
+            LocalDate birth,
+            String phoneNumber,
+            String address,
+            String detailAddress
+    ) {
+        this.name = name;
+        this.birth = birth;
+        this.phoneNumber = phoneNumber;
+        this.address = address;
+        this.detailAddress = detailAddress;
+    }
+
 }
