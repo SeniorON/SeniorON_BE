@@ -122,11 +122,7 @@ public class HomeService {
 
         HomeResponse.SeniorProfileResponse seniorProfileResponse =
                 seniorProfile
-                        .map(senior ->
-                                createSeniorProfileResponse(
-                                        senior
-                                )
-                        )
+                        .map(this::createSeniorProfileResponse)
                         .orElseGet(
                                 HomeResponse.SeniorProfileResponse::empty
                         );
@@ -167,6 +163,15 @@ public class HomeService {
             );
         }
 
+        /*
+         * OTHER 관계인 경우 직접 입력한 관계가 반드시 존재해야 합니다.
+         */
+        String resolvedCustomRelation =
+                resolveCustomRelation(
+                        request.relation(),
+                        request.customRelation()
+                );
+
         String normalizedPhoneNumber =
                 normalizePhoneNumber(
                         request.phoneNumber()
@@ -177,17 +182,16 @@ public class HomeService {
 
         Senior currentUserSenior;
 
+        /*
+         * 현재 담당자에게 등록된 시니어 정보가 없으면
+         * 최초 등록으로 처리합니다.
+         */
         if (currentUserSeniorOptional.isEmpty()) {
 
             currentUserSenior = Senior.builder()
                     .name(request.name())
                     .relation(request.relation())
-                    .customRelation(
-                            resolveCustomRelation(
-                                    request.relation(),
-                                    request.customRelation()
-                            )
-                    )
+                    .customRelation(resolvedCustomRelation)
                     .birth(request.birth())
                     .phoneNumber(normalizedPhoneNumber)
                     .address(request.address())
@@ -202,6 +206,12 @@ public class HomeService {
 
         } else {
 
+            /*
+             * 기존 정보가 있으면 공통 프로필 정보만 수정합니다.
+             *
+             * relation과 customRelation은 담당자별로 다를 수 있으므로
+             * 기존 값을 유지합니다.
+             */
             currentUserSenior =
                     currentUserSeniorOptional.get();
 
@@ -214,6 +224,13 @@ public class HomeService {
             );
         }
 
+        /*
+         * 같은 가족의 다른 자녀 담당자가 이미 등록한 Senior 정보가 있다면
+         * 이름, 생년월일, 전화번호, 주소 등 공통 정보만 동기화합니다.
+         *
+         * 다른 담당자의 Senior 정보가 없는 경우에는 관계를 알 수 없으므로
+         * 서버에서 임의로 새 행을 생성하지 않습니다.
+         */
         List<User> familyMembers =
                 userRepository.findAllByFamily(
                         currentUser.getFamily()
@@ -235,7 +252,9 @@ public class HomeService {
         for (User childManager : otherChildManagers) {
 
             seniorRepository
-                    .findFirstByRegisteredBy(childManager)
+                    .findFirstByRegisteredBy(
+                            childManager
+                    )
                     .ifPresent(senior ->
                             senior.updateProfile(
                                     request.name(),
@@ -446,9 +465,7 @@ public class HomeService {
 
         int newButtonOrder =
                 homes.stream()
-                        .mapToInt(
-                                Home::getButtonOrder
-                        )
+                        .mapToInt(Home::getButtonOrder)
                         .max()
                         .orElse(0)
                         + 1;
@@ -499,9 +516,7 @@ public class HomeService {
                                 )
                         );
 
-        homeRepository.delete(
-                home
-        );
+        homeRepository.delete(home);
 
         List<Home> remainingButtons =
                 homeRepository
@@ -559,9 +574,7 @@ public class HomeService {
                         : homes.get(0).getFontSize();
 
         List<TodayScheduleResponse> todaySchedules =
-                getTodaySchedules(
-                        parent
-                );
+                getTodaySchedules(parent);
 
         return new SeniorHomeResponse(
                 fontSize,
@@ -574,8 +587,7 @@ public class HomeService {
             User parent
     ) {
 
-        LocalDate today =
-                LocalDate.now();
+        LocalDate today = LocalDate.now();
 
         List<TodayScheduleResponse> schedules =
                 new ArrayList<>();
@@ -677,9 +689,7 @@ public class HomeService {
                 today.getDayOfWeek();
 
         String koreanDay =
-                convertToKoreanDay(
-                        dayOfWeek
-                );
+                convertToKoreanDay(dayOfWeek);
 
         String shortEnglishDay =
                 dayOfWeek
@@ -760,9 +770,7 @@ public class HomeService {
             return currentUser;
         }
 
-        return findPrimaryChild(
-                currentUser
-        );
+        return findPrimaryChild(currentUser);
     }
 
     private User findPrimaryChild(
@@ -898,6 +906,12 @@ public class HomeService {
         return senior.getRelation().name();
     }
 
+    /**
+     * OTHER 관계라면 직접 입력한 관계값을 검증합니다.
+     *
+     * 별도의 ErrorCode를 추가하지 않고 HomeService 내부에서 검증해
+     * Senior 도메인의 변경을 피합니다.
+     */
     private String resolveCustomRelation(
             SeniorRelation relation,
             String customRelation
@@ -907,8 +921,12 @@ public class HomeService {
             return null;
         }
 
-        if (customRelation == null) {
-            return null;
+        if (customRelation == null
+                || customRelation.isBlank()) {
+
+            throw new IllegalArgumentException(
+                    "기타 관계를 직접 입력해 주세요."
+            );
         }
 
         return customRelation.trim();
