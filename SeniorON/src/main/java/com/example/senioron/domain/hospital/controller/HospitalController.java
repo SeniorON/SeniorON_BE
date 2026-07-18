@@ -1,5 +1,6 @@
 package com.example.senioron.domain.hospital.controller;
 
+import com.example.senioron.domain.hospital.dto.request.HospitalUpdateRequest;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PutMapping;
 
 import java.util.List;
 
@@ -83,4 +85,19 @@ public class HospitalController {
         List<HospitalListResponse> responses = hospitalService.getHospitalByMonth(user, year, month);
         return Response.ok(ResultCode.OK, responses);
     }
+    @Operation(
+            summary = "병원 일정 수정",
+            description = "등록된 특정 병원 진료 일정을 수정합니다."
+    )
+    @PutMapping("/{hospitalId}")
+    @ResponseStatus(HttpStatus.OK)
+    public Response<Void> updateHospital(
+            @AuthenticationPrincipal User user,
+            @PathVariable("hospitalId") Long hospitalId,
+            @Valid @RequestBody HospitalUpdateRequest request
+    ) {
+        hospitalService.updateHospital(user, hospitalId, request);
+        return Response.ok(ResultCode.OK, null);
+    }
+
 }
