@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -17,10 +18,12 @@ public class HospitalUpdateRequest {
 
     @NotBlank(message = "병원 이름은 필수입니다.")
     @Schema(description = "변경할 병원 이름", example = "서울대학교병원" )
+    @Size(max = 255, message = "병원 이름은 255자를 초과할 수 없습니다.")
     private String hospitalName;
 
     @NotBlank(message = "진료 과목은 필수입니다.")
     @Schema(description = "변경할 진료 과목", example = "내과")
+    @Size(max = 255, message = "진료 과목은 255자를 초과할 수 없습니다.")
     private String department;
 
     @NotBlank(message = "진료 날짜는 필수입니다.")
