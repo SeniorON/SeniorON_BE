@@ -924,8 +924,8 @@ public class HomeService {
         if (customRelation == null
                 || customRelation.isBlank()) {
 
-            throw new IllegalArgumentException(
-                    "기타 관계를 직접 입력해 주세요."
+            throw new BusinessException(
+                    ErrorCode.CUSTOM_RELATION_REQUIRED
             );
         }
 
