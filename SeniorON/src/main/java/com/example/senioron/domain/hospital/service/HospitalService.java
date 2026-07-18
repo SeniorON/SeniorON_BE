@@ -6,6 +6,8 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.time.LocalTime;
+
+import com.example.senioron.domain.hospital.dto.request.HospitalUpdateRequest;
 import com.example.senioron.domain.hospital.dto.response.HospitalListResponse;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
@@ -41,7 +43,7 @@ public class HospitalService {
             date = LocalDate.parse(request.getScheduleDate());
             time = LocalTime.parse(request.getScheduleTime());
         } catch (DateTimeParseException e) {
-            throw new IllegalArgumentException("잘못된 날짜 및 시간 형식입니다. (YYYY-MM-DD / HH:mm)");
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
 
 
@@ -101,6 +103,33 @@ public class HospitalService {
         }
 
         hospitalRepository.delete(hospital);
+    }
+    //병원 일정 수정 부분
+    @Transactional
+    public void updateHospital(User user, Long   hospitalId, HospitalUpdateRequest request){
+        Hospital hospital = hospitalRepository.findById(hospitalId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.HOSPITAL_SCHEDULE_NOT_FOUND));
+
+        if (!hospital.getUser().getUsersId().equals(user.getUsersId())) {
+            throw new BusinessException(ErrorCode.HOSPITAL_SCHEDULE_NOT_FOUND);
+        }
+
+        LocalDate date;
+        LocalTime time;
+
+        try {
+            date = LocalDate.parse(request.getScheduleDate());
+            time = LocalTime.parse(request.getScheduleTime());
+        } catch (DateTimeParseException e) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+        hospital.updateHospital(
+                request.getHospitalName(),
+                request.getDepartment(),
+                date,
+                time,
+                request.getReminderType()
+        );
     }
 
 }
