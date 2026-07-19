@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.PutMapping;
+import com.example.senioron.domain.hospital.dto.response.HospitalDetailResponse;
 
 import java.util.List;
 
@@ -98,6 +99,16 @@ public class HospitalController {
     ) {
         hospitalService.updateHospital(user, hospitalId, request);
         return Response.ok(ResultCode.OK, null);
+    }
+
+    @GetMapping("/daily")
+    @Operation(summary = "특정 날짜의 진료 상세 조회 API", description = "달력에서 특정 날짜를 클릭했을 때 그날의 진료 일정 상세 목록을 조회합니다.")
+    public Response<List<HospitalDetailResponse>> getHospitalByDate(
+            @AuthenticationPrincipal User user,
+            @RequestParam("date") String date
+    ) {
+        List<HospitalDetailResponse> responses = hospitalService.getHospitalByDate(user, date);
+        return Response.ok(ResultCode.OK, responses);
     }
 
 }

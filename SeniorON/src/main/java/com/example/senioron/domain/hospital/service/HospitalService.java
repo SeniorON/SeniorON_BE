@@ -1,6 +1,5 @@
 package com.example.senioron.domain.hospital.service;
 
-
 import java.time.format.DateTimeParseException;
 import java.time.LocalDate;
 import java.util.List;
@@ -15,12 +14,11 @@ import com.example.senioron.domain.hospital.dto.request.HospitalCreateRequest;
 import com.example.senioron.domain.hospital.dto.response.HospitalCreateResponse;
 import com.example.senioron.domain.hospital.entity.Hospital;
 import com.example.senioron.domain.hospital.repository.HospitalRepository;
+import com.example.senioron.domain.hospital.dto.response.HospitalDetailResponse;
 import com.example.senioron.domain.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.LocalDate;
 
 @Service
 @RequiredArgsConstructor
@@ -46,7 +44,6 @@ public class HospitalService {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
 
-
         Hospital hospital = Hospital.builder()
                 .user(user)
                 .hospitalName(request.getHospitalName())
@@ -67,7 +64,8 @@ public class HospitalService {
                 .reminderType(savedHospital.getReminderType())
                 .build();
     }
-    //일정 목록 조회 부분
+
+    // 일정 목록 조회 부분
     public List<HospitalListResponse> getHospitalByMonth(User user, int year, int month) {
 
         LocalDate startDate = LocalDate.of(year, month, 1);
@@ -85,12 +83,9 @@ public class HospitalService {
                         .reminderType(hospital.getReminderType() != null ? hospital.getReminderType().name() : null)
                         .build())
                 .collect(Collectors.toList());
-
-
-
     }
 
-    //병원 일정 삭제 부분
+    // 병원 일정 삭제 부분
     @Transactional
     public void deleteHospital(User user, Long hospitalId) {
         Hospital hospital = hospitalRepository.findById(hospitalId)
@@ -104,9 +99,10 @@ public class HospitalService {
 
         hospitalRepository.delete(hospital);
     }
-    //병원 일정 수정 부분
+
+    // 병원 일정 수정 부분
     @Transactional
-    public void updateHospital(User user, Long   hospitalId, HospitalUpdateRequest request){
+    public void updateHospital(User user, Long hospitalId, HospitalUpdateRequest request){
         Hospital hospital = hospitalRepository.findById(hospitalId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.HOSPITAL_SCHEDULE_NOT_FOUND));
 
@@ -123,6 +119,7 @@ public class HospitalService {
         } catch (DateTimeParseException e) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
+
         hospital.updateHospital(
                 request.getHospitalName(),
                 request.getDepartment(),
@@ -132,4 +129,26 @@ public class HospitalService {
         );
     }
 
+    // 특정 날짜의 진료 상세 조회
+    public List<HospitalDetailResponse> getHospitalByDate(User user, String dateStr) {
+        LocalDate date;
+        try {
+            date = LocalDate.parse(dateStr);
+        } catch (DateTimeParseException e) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+
+        List<Hospital> hospitals = hospitalRepository.findByUserAndScheduleDateOrderByScheduleTimeAsc(user, date);
+
+        return hospitals.stream()
+                .map(hospital -> HospitalDetailResponse.builder()
+                        .hospitalId(hospital.getHospital_id())
+                        .hospitalName(hospital.getHospitalName())
+                        .department(hospital.getDepartment())
+                        .scheduleDate(hospital.getScheduleDate())
+                        .scheduleTime(hospital.getScheduleTime())
+                        .reminderType(hospital.getReminderType() != null ? hospital.getReminderType().name() : null)
+                        .build())
+                .collect(Collectors.toList());
+    }
 }

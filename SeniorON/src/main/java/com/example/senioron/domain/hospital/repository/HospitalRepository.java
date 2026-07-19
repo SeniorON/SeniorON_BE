@@ -11,4 +11,6 @@ public interface HospitalRepository extends JpaRepository<Hospital, Long> {
     List<Hospital> findByUserAndScheduleDateBetweenOrderByScheduleDateAscScheduleTimeAsc(
             User user, LocalDate start, LocalDate end
     );
+
+    List<Hospital> findByUserAndScheduleDateOrderByScheduleTimeAsc(User user, LocalDate scheduleDate);
 }
