@@ -5,6 +5,7 @@ import com.example.senioron.domain.event.entity.EventType;
 import com.example.senioron.domain.event.entity.OutingPhase;
 import com.example.senioron.domain.event.util.FcmSender;
 import com.example.senioron.domain.notification.dto.response.NotificationHomeResponse;
+import com.example.senioron.domain.notification.dto.response.NotificationListResponse;
 import com.example.senioron.domain.notification.dto.response.NotificationSettingResponse;
 import com.example.senioron.domain.notification.entity.Notification;
 import com.example.senioron.domain.notification.entity.NotificationSetting;
@@ -20,6 +21,7 @@ import com.example.senioron.global.apiPayload.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -209,6 +211,36 @@ public class NotificationService {
         }
 
         return NotificationSettingResponse.from(type, enabled);
+    }
+
+    @Transactional(readOnly = true)
+    public NotificationListResponse getNotificationList(Long userId, NotificationType type,Long cursor, int size) {
+        if (size < 1 || size > 50) {throw new BusinessException(ErrorCode.BAD_REQUEST);}
+        LocalDateTime thirtyDaysLimit = LocalDateTime.now().minusDays(30);
+        List<Notification> notifications = notificationRepository
+                .findByTypeWithCursor(userId, type, thirtyDaysLimit, cursor, PageRequest.of(0, size + 1));
+        boolean hasNext = notifications.size() > size;
+        List<Notification> pageItems = hasNext ? notifications.subList(0, size) : notifications;
+        Long nextCursor = hasNext ? pageItems.get(pageItems.size() - 1).getNotificationId() : null;
+        long totalCount = notificationRepository.countByTypeWithin30Days(userId, type, thirtyDaysLimit);
+
+        List<NotificationListResponse.NotificationItem> items = pageItems.stream()
+                .map(n -> NotificationListResponse.NotificationItem.builder()
+                        .notificationId(n.getNotificationId())
+                        .eventId(n.getEvent().getEventId())
+                        .title(n.getTitle())
+                        .summary(n.getBody())
+                        .occurredAt(n.getCreatedAt())
+                        .isRead(n.getIsRead())
+                        .build())
+                .toList();
+
+        return NotificationListResponse.builder()
+                .totalCount(totalCount)
+                .items(items)
+                .nextCursor(nextCursor)
+                .build();
+
     }
 }
 

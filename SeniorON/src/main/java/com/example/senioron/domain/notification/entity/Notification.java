@@ -15,7 +15,7 @@ import com.example.senioron.common.entity.BaseEntity;
 public class Notification extends BaseEntity {
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long notification_id;
+    private Long notificationId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "event_id")

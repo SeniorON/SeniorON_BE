@@ -3,6 +3,7 @@ package com.example.senioron.domain.event.service;
 import com.example.senioron.domain.event.dto.request.InactivityRequest;
 import com.example.senioron.domain.event.dto.request.OutingReturnRequest;
 import com.example.senioron.domain.event.dto.request.SosEventRequest;
+import com.example.senioron.domain.event.dto.response.EventDetailResponse;
 import com.example.senioron.domain.event.dto.response.InactivityResponse;
 import com.example.senioron.domain.event.dto.response.OutingReturnResponse;
 import com.example.senioron.domain.event.dto.response.SosEventResponse;
@@ -12,10 +13,15 @@ import com.example.senioron.domain.event.repository.EventRepository;
 import com.example.senioron.domain.event.util.GeocodingClient;
 import com.example.senioron.domain.notification.service.NotificationService;
 import com.example.senioron.domain.user.entity.User;
-import jakarta.transaction.Transactional;
+import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.global.apiPayload.code.ErrorCode;
+import com.example.senioron.global.apiPayload.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +31,7 @@ public class EventService {
     private final NotificationService notificationService;
     private final GeocodingClient geocodingClient;
     private final ApplicationContext applicationContext;
+    private final UserRepository userRepository;
 
     public SosEventResponse createSosEvent(User user, SosEventRequest req){
         String address = geocodingClient.reverseGeocode(req.getLatitude(), req.getLongitude());
@@ -100,4 +107,24 @@ public class EventService {
         return OutingReturnResponse.of(savedEvent);
     }
 
+    @Transactional(readOnly = true)
+    public EventDetailResponse getEventDetail(User user, Long eventId){
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
+        validateAccess(user, event);
+        return EventDetailResponse.of(event);
+    }
+
+    // 요청자가 이 이벤트를 조회할 권한이 있는지 검증
+    private void validateAccess(User principal, Event event) {
+        User currentUser = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        User eventOwner = event.getTriggeredUser();
+
+        if (eventOwner.getFamily() == null || currentUser.getFamily() == null
+                || !Objects.equals(currentUser.getFamily().getFamilyId(), eventOwner.getFamily().getFamilyId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+}
 }

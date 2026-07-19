@@ -3,9 +3,11 @@ package com.example.senioron.domain.event.controller;
 import com.example.senioron.domain.event.dto.request.InactivityRequest;
 import com.example.senioron.domain.event.dto.request.OutingReturnRequest;
 import com.example.senioron.domain.event.dto.request.SosEventRequest;
+import com.example.senioron.domain.event.dto.response.EventDetailResponse;
 import com.example.senioron.domain.event.dto.response.InactivityResponse;
 import com.example.senioron.domain.event.dto.response.OutingReturnResponse;
 import com.example.senioron.domain.event.dto.response.SosEventResponse;
+import com.example.senioron.domain.event.entity.EventType;
 import com.example.senioron.domain.event.service.EventService;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.global.apiPayload.response.Response;
@@ -47,5 +49,14 @@ public class EventController {
             @Valid @RequestBody OutingReturnRequest request
     ) {
         return Response.ok(eventService.createOutingReturnEvent(user, request));
+    }
+
+    @Operation(summary = "이벤트 상세조회", description = "각 이벤트의 상세내역을 조회합니다.")
+    @GetMapping("/{eventId}")
+    public Response<EventDetailResponse> getEventDetail(
+            @AuthenticationPrincipal User user,
+            @PathVariable Long eventId
+            ) {
+        return Response.ok(eventService.getEventDetail(user, eventId));
     }
 }
