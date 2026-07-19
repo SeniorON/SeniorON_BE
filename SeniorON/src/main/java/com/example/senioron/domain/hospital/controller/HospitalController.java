@@ -1,6 +1,10 @@
 package com.example.senioron.domain.hospital.controller;
 
 import com.example.senioron.domain.hospital.dto.request.HospitalUpdateRequest;
+import java.time.LocalDate;
+
+import io.swagger.v3.oas.annotations.Parameter;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -102,13 +106,11 @@ public class HospitalController {
     }
 
     @GetMapping("/daily")
-    @Operation(summary = "특정 날짜의 진료 상세 조회 API", description = "달력에서 특정 날짜를 클릭했을 때 그날의 진료 일정 상세 목록을 조회합니다.")
     public Response<List<HospitalDetailResponse>> getHospitalByDate(
             @AuthenticationPrincipal User user,
-            @RequestParam("date") String date
+            @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) @Parameter(example = "2026-06-19") LocalDate date
     ) {
         List<HospitalDetailResponse> responses = hospitalService.getHospitalByDate(user, date);
         return Response.ok(ResultCode.OK, responses);
     }
-
 }

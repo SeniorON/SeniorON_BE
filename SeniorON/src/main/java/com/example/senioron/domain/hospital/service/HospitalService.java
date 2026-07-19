@@ -1,9 +1,9 @@
 package com.example.senioron.domain.hospital.service;
 
 import java.time.format.DateTimeParseException;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.time.LocalDate;
 import java.time.LocalTime;
 
 import com.example.senioron.domain.hospital.dto.request.HospitalUpdateRequest;
@@ -130,14 +130,7 @@ public class HospitalService {
     }
 
     // 특정 날짜의 진료 상세 조회
-    public List<HospitalDetailResponse> getHospitalByDate(User user, String dateStr) {
-        LocalDate date;
-        try {
-            date = LocalDate.parse(dateStr);
-        } catch (DateTimeParseException e) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST);
-        }
-
+    public List<HospitalDetailResponse> getHospitalByDate(User user, LocalDate date) {
         List<Hospital> hospitals = hospitalRepository.findByUserAndScheduleDateOrderByScheduleTimeAsc(user, date);
 
         return hospitals.stream()

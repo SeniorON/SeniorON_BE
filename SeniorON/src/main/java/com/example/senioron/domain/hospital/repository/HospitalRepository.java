@@ -3,6 +3,7 @@ package com.example.senioron.domain.hospital.repository;
 import com.example.senioron.domain.user.entity.User;
 import java.time.LocalDate;
 import java.util.List;
+
 import com.example.senioron.domain.hospital.entity.Hospital;
 import org.springframework.data.jpa.repository.JpaRepository;
 
