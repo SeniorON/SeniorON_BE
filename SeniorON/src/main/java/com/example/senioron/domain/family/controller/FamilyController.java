@@ -71,4 +71,14 @@ public class FamilyController {
         return Response.ok(familyService.getFamilyHome(user));
     }
 
+    @Operation(summary = "가족 공유 코드 조회", description = "현재 사용자가 속한 가족의 공유 코드와 구성원 수를 조회합니다.")
+    @GetMapping("/code")
+    public Response<FamilyCodeResponse> getFamilyCode(
+            @AuthenticationPrincipal User user
+    ) {
+        return Response.ok(
+                familyService.getFamilyCode(user)
+        );
+    }
+
 }

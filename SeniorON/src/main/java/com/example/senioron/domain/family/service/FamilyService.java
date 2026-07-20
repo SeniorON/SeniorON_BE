@@ -242,4 +242,20 @@ public class FamilyService {
                 .recentPhotos(recentPhotos)
                 .build();
     }
+
+    @Transactional(readOnly = true)
+    public FamilyCodeResponse getFamilyCode(User user) {
+        Family family = user.getFamily();
+
+        if (family == null) {
+            throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
+        }
+
+        long familyMemberCount = userRepository.countByFamily(family);
+
+        return FamilyCodeResponse.builder()
+                .familyCode(family.getFamilyCode())
+                .familyMemberCount(familyMemberCount)
+                .build();
+    }
 }
