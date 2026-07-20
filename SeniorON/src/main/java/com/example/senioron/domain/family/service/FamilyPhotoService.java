@@ -201,4 +201,19 @@ public class FamilyPhotoService {
                 }
         );
     }
+
+    // 최근 업로더 프로필 조회 메서드
+    @Transactional(readOnly = true)
+    public List<String> getRecentUploaderProfileImageUrls(
+            Family family,
+            int size
+    ) {
+        return familyPhotoRepository.findRecentUploaders(
+                        family,
+                        PageRequest.of(0, size)
+                ).stream()
+                .map(User::getProfileImageKey)
+                .map(profileImageKey -> profileImageKey == null
+                        ? null : s3Service.getFileUrl(profileImageKey)).toList();
+    }
 }
