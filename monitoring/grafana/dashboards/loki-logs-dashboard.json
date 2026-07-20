@@ -1,0 +1,34 @@
+{
+  "title": "Loki Logs Dashboard",
+  "uid": "loki-logs-dashboard",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-1h", "to": "now" },
+  "editable": true,
+  "timezone": "",
+  "panels": [
+    {
+      "id": 1,
+      "type": "logs",
+      "title": "Container Logs (All)",
+      "datasource": "Loki",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 20 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{compose_project=~\"senioron.*\"} |= \"\""
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "sortOrder": "Descending"
+      }
+    }
+  ]
+}
