@@ -23,3 +23,13 @@ logging:
     root: INFO
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+
+kakao:
+  client-id: local-dummy-kakao-client-id
+  redirect-uri: http://localhost:8080/api/social-accounts/login/kakao/callback
+
+cloud:
+  aws:
+    region: ap-northeast-2
+    s3:
+      bucket: senioron-local-dummy-bucket

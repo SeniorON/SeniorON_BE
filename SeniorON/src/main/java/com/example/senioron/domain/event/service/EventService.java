@@ -2,15 +2,18 @@ package com.example.senioron.domain.event.service;
 
 import com.example.senioron.domain.event.dto.request.InactivityRequest;
 import com.example.senioron.domain.event.dto.request.OutingReturnRequest;
+import com.example.senioron.domain.event.dto.request.RiskLinkRequest;
 import com.example.senioron.domain.event.dto.request.SosEventRequest;
 import com.example.senioron.domain.event.dto.response.EventDetailResponse;
 import com.example.senioron.domain.event.dto.response.InactivityResponse;
 import com.example.senioron.domain.event.dto.response.OutingReturnResponse;
+import com.example.senioron.domain.event.dto.response.RiskLinkResponse;
 import com.example.senioron.domain.event.dto.response.SosEventResponse;
 import com.example.senioron.domain.event.entity.Event;
 import com.example.senioron.domain.event.entity.EventType;
 import com.example.senioron.domain.event.repository.EventRepository;
 import com.example.senioron.domain.event.util.GeocodingClient;
+import com.example.senioron.domain.event.util.SafeBrowsingClient;
 import com.example.senioron.domain.notification.service.NotificationService;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
@@ -30,6 +33,7 @@ public class EventService {
     private final EventRepository eventRepository;
     private final NotificationService notificationService;
     private final GeocodingClient geocodingClient;
+    private final SafeBrowsingClient safeBrowsingClient;
     private final ApplicationContext applicationContext;
     private final UserRepository userRepository;
 
@@ -105,6 +109,31 @@ public class EventService {
         notificationService.createFormEvent(savedEvent);
 
         return OutingReturnResponse.of(savedEvent);
+    }
+
+    public RiskLinkResponse createRiskLinkEvent(User user, RiskLinkRequest req) {
+        boolean isDangerous = safeBrowsingClient.isDangerous(req.getLinkUrl());
+        EventService self = applicationContext.getBean(EventService.class);
+        return self.saveRiskLinkEvent(isDangerous, user, req);
+    }
+
+    @Transactional
+    public RiskLinkResponse saveRiskLinkEvent(boolean isDangerous, User user, RiskLinkRequest req) {
+        Event event = Event.builder()
+                .user(user)
+                .triggeredUser(user)
+                .deviceBattery(req.getDeviceBattery())
+                .eventType(EventType.RISK_LINK)
+                .linkUrl(req.getLinkUrl())
+                .isDangerous(isDangerous)
+                .build();
+
+        Event savedEvent = eventRepository.save(event);
+        if (isDangerous) {
+            notificationService.createFormEvent(savedEvent);
+        }
+
+        return RiskLinkResponse.of(savedEvent);
     }
 
     @Transactional(readOnly = true)

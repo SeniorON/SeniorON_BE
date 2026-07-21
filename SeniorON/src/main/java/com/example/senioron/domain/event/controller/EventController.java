@@ -2,10 +2,12 @@ package com.example.senioron.domain.event.controller;
 
 import com.example.senioron.domain.event.dto.request.InactivityRequest;
 import com.example.senioron.domain.event.dto.request.OutingReturnRequest;
+import com.example.senioron.domain.event.dto.request.RiskLinkRequest;
 import com.example.senioron.domain.event.dto.request.SosEventRequest;
 import com.example.senioron.domain.event.dto.response.EventDetailResponse;
 import com.example.senioron.domain.event.dto.response.InactivityResponse;
 import com.example.senioron.domain.event.dto.response.OutingReturnResponse;
+import com.example.senioron.domain.event.dto.response.RiskLinkResponse;
 import com.example.senioron.domain.event.dto.response.SosEventResponse;
 import com.example.senioron.domain.event.entity.EventType;
 import com.example.senioron.domain.event.service.EventService;
@@ -49,6 +51,15 @@ public class EventController {
             @Valid @RequestBody OutingReturnRequest request
     ) {
         return Response.ok(eventService.createOutingReturnEvent(user, request));
+    }
+
+    @Operation(summary = "위험링크 감지 이벤트 생성", description = "사용자 기기에서 감지된 위험링크 이벤트를 생성합니다")
+    @PostMapping("/risk-link")
+    public Response<RiskLinkResponse> createRiskLinkEvent(
+            @AuthenticationPrincipal User user,
+            @Valid @RequestBody RiskLinkRequest req
+    ) {
+        return Response.ok(eventService.createRiskLinkEvent(user, req));
     }
 
     @Operation(summary = "이벤트 상세조회", description = "각 이벤트의 상세내역을 조회합니다.")
