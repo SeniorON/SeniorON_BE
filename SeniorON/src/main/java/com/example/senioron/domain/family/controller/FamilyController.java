@@ -2,10 +2,7 @@ package com.example.senioron.domain.family.controller;
 
 import com.example.senioron.domain.family.dto.request.FamilyJoinRequest;
 import com.example.senioron.domain.family.dto.request.FamilyPrimaryManagerUpdateRequest;
-import com.example.senioron.domain.family.dto.response.FamilyCodeCreateResponse;
-import com.example.senioron.domain.family.dto.response.FamilyJoinResponse;
-import com.example.senioron.domain.family.dto.response.FamilyMemberResponse;
-import com.example.senioron.domain.family.dto.response.FamilyPrimaryManagerUpdateResponse;
+import com.example.senioron.domain.family.dto.response.*;
 import com.example.senioron.domain.family.service.FamilyService;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.global.apiPayload.response.Response;
@@ -64,6 +61,24 @@ public class FamilyController {
     ) {
         familyService.removeFamilyMember(user, targetUserId);
         return Response.ok();
+    }
+
+    @Operation(summary = "가족 메인 화면 조회", description = "가족 구성원, 최근 사진 업로더 프로필, 최근 가족 사진을 조회합니다.")
+    @GetMapping("/home")
+    public Response<FamilyHomeResponse> getFamilyHome(
+            @AuthenticationPrincipal User user
+    ){
+        return Response.ok(familyService.getFamilyHome(user));
+    }
+
+    @Operation(summary = "가족 공유 코드 조회", description = "현재 사용자가 속한 가족의 공유 코드와 구성원 수를 조회합니다.")
+    @GetMapping("/code")
+    public Response<FamilyCodeResponse> getFamilyCode(
+            @AuthenticationPrincipal User user
+    ) {
+        return Response.ok(
+                familyService.getFamilyCode(user)
+        );
     }
 
 }

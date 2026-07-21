@@ -91,6 +91,20 @@ services:
       app:
         condition: service_healthy
 
+  influxdb:
+    image: influxdb:1.8
+    restart: unless-stopped
+
+    expose:
+      - "8086"
+
+    environment:
+      INFLUXDB_DB: k6
+      INFLUXDB_HTTP_AUTH_ENABLED: "false"
+
+    volumes:
+      - influxdb-data:/var/lib/influxdb
+
   grafana:
     image: grafana/grafana:latest
 
@@ -105,9 +119,14 @@ services:
 
     volumes:
       - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/dashboards:/etc/grafana/dashboards
 
     depends_on:
       prometheus:
+        condition: service_started
+      influxdb:
         condition: service_started
 
   loki:
@@ -130,6 +149,22 @@ services:
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock
 
+  node-exporter:
+    image: prom/node-exporter:latest
+    restart: unless-stopped
+    expose:
+      - "9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+
 volumes:
   mariadb-data:
   grafana-data:
+  influxdb-data:

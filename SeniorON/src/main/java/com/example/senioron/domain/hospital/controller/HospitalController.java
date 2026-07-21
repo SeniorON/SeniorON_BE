@@ -1,6 +1,10 @@
 package com.example.senioron.domain.hospital.controller;
 
 import com.example.senioron.domain.hospital.dto.request.HospitalUpdateRequest;
+import java.time.LocalDate;
+
+import io.swagger.v3.oas.annotations.Parameter;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,6 +30,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.PutMapping;
+import com.example.senioron.domain.hospital.dto.response.HospitalDetailResponse;
 
 import java.util.List;
 
@@ -100,4 +105,12 @@ public class HospitalController {
         return Response.ok(ResultCode.OK, null);
     }
 
+    @GetMapping("/daily")
+    public Response<List<HospitalDetailResponse>> getHospitalByDate(
+            @AuthenticationPrincipal User user,
+            @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) @Parameter(example = "2026-06-19") LocalDate date
+    ) {
+        List<HospitalDetailResponse> responses = hospitalService.getHospitalByDate(user, date);
+        return Response.ok(ResultCode.OK, responses);
+    }
 }

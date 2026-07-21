@@ -2,10 +2,7 @@ package com.example.senioron.domain.family.service;
 
 import com.example.senioron.domain.family.dto.request.FamilyJoinRequest;
 import com.example.senioron.domain.family.dto.request.FamilyPrimaryManagerUpdateRequest;
-import com.example.senioron.domain.family.dto.response.FamilyCodeCreateResponse;
-import com.example.senioron.domain.family.dto.response.FamilyJoinResponse;
-import com.example.senioron.domain.family.dto.response.FamilyMemberResponse;
-import com.example.senioron.domain.family.dto.response.FamilyPrimaryManagerUpdateResponse;
+import com.example.senioron.domain.family.dto.response.*;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.user.entity.ManagerType;
@@ -32,6 +29,10 @@ public class FamilyService {
     private final FamilyRepository familyRepository;
     private final UserRepository userRepository;
     private final S3Service s3Service;
+    private final FamilyPhotoService familyPhotoService;
+
+    private static final int RECENT_UPLOADER_COUNT = 3;
+    private static final int RECENT_PHOTO_COUNT = 4;
 
     // 가족 생성 및 공유코드 발급 서비스
     public FamilyCodeCreateResponse createFamily(User principal) {
@@ -211,5 +212,50 @@ public class FamilyService {
 
         targetUser.removeFromFamily();
 
+    }
+
+    @Transactional(readOnly = true)
+    public FamilyHomeResponse getFamilyHome(User user) {
+        Family family = user.getFamily();
+
+        if (family == null) {
+            throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
+        }
+
+        List<FamilyMemberResponse> members = getFamilyMembers(user);
+
+        List<String> recentUploaderProfileImageUrls =
+                familyPhotoService.getRecentUploaderProfileImageUrls(
+                        family,
+                        RECENT_UPLOADER_COUNT
+                );
+
+        List<FamilyPhotoItemResponse> recentPhotos =
+                familyPhotoService.getPhotos(user, null, RECENT_PHOTO_COUNT)
+                        .getPhotos();
+
+        return FamilyHomeResponse.builder()
+                .members(members)
+                .recentUploaderProfileImageUrls(
+                        recentUploaderProfileImageUrls
+                )
+                .recentPhotos(recentPhotos)
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public FamilyCodeResponse getFamilyCode(User user) {
+        Family family = user.getFamily();
+
+        if (family == null) {
+            throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
+        }
+
+        long familyMemberCount = userRepository.countByFamily(family);
+
+        return FamilyCodeResponse.builder()
+                .familyCode(family.getFamilyCode())
+                .familyMemberCount(familyMemberCount)
+                .build();
     }
 }

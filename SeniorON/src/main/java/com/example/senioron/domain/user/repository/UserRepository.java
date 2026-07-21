@@ -15,6 +15,8 @@ import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, Long> {
 
+    long countByFamily(Family family);
+
     boolean existsByLoginId(String loginId);
 
     boolean existsByEmail(String email);

@@ -42,4 +42,8 @@ public class Event extends BaseEntity {
     private String address;
 
     private LocalDateTime lastSeenAt;
+
+    private String linkUrl;
+
+    private Boolean isDangerous;
 }

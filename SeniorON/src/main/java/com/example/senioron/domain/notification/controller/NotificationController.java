@@ -2,8 +2,10 @@ package com.example.senioron.domain.notification.controller;
 
 import com.example.senioron.domain.notification.dto.request.NotificationSettingRequest;
 import com.example.senioron.domain.notification.dto.response.NotificationHomeResponse;
+import com.example.senioron.domain.notification.dto.response.NotificationListResponse;
 import com.example.senioron.domain.notification.dto.response.NotificationSettingResponse;
 import com.example.senioron.domain.notification.entity.NotificationSettingType;
+import com.example.senioron.domain.notification.entity.NotificationType;
 import com.example.senioron.domain.notification.service.NotificationService;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
@@ -13,8 +15,11 @@ import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -23,6 +28,7 @@ import java.util.List;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/notification")
+@Validated
 public class NotificationController {
 
     private final NotificationService notificationService;
@@ -49,5 +55,17 @@ public class NotificationController {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
         return Response.ok(notificationService.updateSetting(user.getUsersId(), type, req.getEnabled()));
+    }
+
+    @Operation(summary = "알림 기록 조회", description = "SOS/무활동/위험사이트/외출·귀가 알림들의 내역을 조회합니다.")
+    @GetMapping
+    public Response<NotificationListResponse> getNotifications(
+            @AuthenticationPrincipal User user,
+            @RequestParam NotificationType type,
+            @RequestParam(required = false) Long cursor,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size
+
+            ){
+        return Response.ok(notificationService.getNotificationList(user.getUsersId(), type, cursor, size));
     }
 }
