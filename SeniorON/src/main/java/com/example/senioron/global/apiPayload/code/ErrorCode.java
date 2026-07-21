@@ -85,6 +85,7 @@ public enum ErrorCode implements BaseCode {
 
     // Event Error
     EVENT_NOT_FOUND(HttpStatus.NOT_FOUND, "EVENT404", "이벤트를 찾을 수 없습니다."),
+    RISK_LINK_CHECK_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "EVENT503", "위험 링크 검사에 실패했습니다. 잠시 후 다시 시도해주세요."),
 
     // Notification Error
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "NOTI404", "알림을 찾을 수 없습니다.");
