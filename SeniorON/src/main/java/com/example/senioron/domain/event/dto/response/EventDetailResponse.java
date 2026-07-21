@@ -26,12 +26,14 @@ public class EventDetailResponse {
 
     private OutingPhase phase;           // OUTING_RETURN 전용
     private LocalDateTime lastSeenAt;    // INACTIVITY 전용
+    private String linkUrl;              // RISK_LINK 전용
+    private Boolean isDangerous;         // RISK_LINK 전용
 
     public static EventDetailResponse of(Event event) {
         return EventDetailResponse.builder()
                 .eventId(event.getEventId())
                 .eventType(event.getEventType())
-                .message(resolveMessage(event.getEventType(), event.getPhase()))
+                .message(resolveMessage(event.getEventType(), event.getPhase(), event.getIsDangerous()))
                 .senderName(event.getTriggeredUser().getName())
                 .occurredAt(event.getCreatedAt())
                 .address(event.getAddress())
@@ -40,13 +42,15 @@ public class EventDetailResponse {
                 .deviceBattery(event.getDeviceBattery())
                 .phase(event.getPhase())
                 .lastSeenAt(event.getLastSeenAt())
+                .linkUrl(event.getLinkUrl())
+                .isDangerous(event.getIsDangerous())
                 .build();
     }
-    private static String resolveMessage(EventType eventType, OutingPhase phase) {
+    private static String resolveMessage(EventType eventType, OutingPhase phase, Boolean isDangerous) {
         return switch (eventType) {
             case SOS -> "도움이 필요해요";
             case INACTIVITY -> "무활동 감지됨";
-            case RISK_LINK -> "위험한 링크가 감지됐어요";
+            case RISK_LINK -> Boolean.TRUE.equals(isDangerous) ? "위험한 링크가 감지됐어요" : "안전한 링크로 확인됐어요";
             case OUTING_RETURN -> phase == OutingPhase.OUTING ? "외출하셨어요" : "귀가하셨어요";
         };
     }

@@ -64,6 +64,7 @@ public class NotificationService {
                     .notificationType(type)
                     .title(title)
                     .body(body)
+                    .linkUrl(event.getLinkUrl())
                     .isRead(false)
                     .build();
             notifications.add(notification); // 임시 저장
