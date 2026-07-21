@@ -26,7 +26,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Objects;
-
 @Service
 @RequiredArgsConstructor
 public class EventService {
@@ -39,12 +38,12 @@ public class EventService {
 
     public SosEventResponse createSosEvent(User user, SosEventRequest req){
         String address = geocodingClient.reverseGeocode(req.getLatitude(), req.getLongitude());
-        EventService self= applicationContext.getBean(EventService.class);
+        EventService self = applicationContext.getBean(EventService.class);
         return self.saveSosEvent(address, user, req);
     }
 
     @Transactional
-    public SosEventResponse saveSosEvent(String address,User user, SosEventRequest req){
+    public SosEventResponse saveSosEvent(String address, User user, SosEventRequest req){
         Event event = Event.builder()
                 .user(user)
                 .triggeredUser(user)
