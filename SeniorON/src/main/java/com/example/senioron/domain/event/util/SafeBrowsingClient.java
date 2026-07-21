@@ -16,17 +16,22 @@ import java.util.List;
 public class SafeBrowsingClient {
     private final RestClient safeBrowsingRestClient;
 
-    @Value("${google.safebrowsing.api-key}")
+    @Value("${google.safebrowsing.api-key:}")
     private String apiKey;
 
     @PostConstruct
     public void validateConfig() {
         if (apiKey == null || apiKey.isBlank()) {
-            throw new IllegalStateException("google.safebrowsing.api-key가 설정되지 않았습니다.");
+            log.warn("google.safebrowsing.api-key가 설정되지 않았습니다. 위험 링크 감지 기능이 비활성화됩니다.");
         }
     }
 
     public RiskCheckResult checkUrl(String url) {
+        if (apiKey == null || apiKey.isBlank()) {
+            log.warn("API 키 미설정으로 검사를 건너뜁니다: url={}", url);
+            return RiskCheckResult.UNAVAILABLE;
+        }
+
         try {
             SafeBrowsingRequest request = new SafeBrowsingRequest(
                     new SafeBrowsingRequest.Client("senioron", "1.0.0"),
