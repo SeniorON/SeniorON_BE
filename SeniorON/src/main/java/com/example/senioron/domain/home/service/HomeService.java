@@ -9,7 +9,6 @@ import com.example.senioron.domain.home.dto.request.SeniorProfileUpdateRequest;
 import com.example.senioron.domain.home.dto.response.ButtonOptionResponse;
 import com.example.senioron.domain.home.dto.response.HomeButtonCreateResponse;
 import com.example.senioron.domain.home.dto.response.HomeResponse;
-import com.example.senioron.domain.home.dto.response.ScheduleType;
 import com.example.senioron.domain.home.dto.response.SeniorHomeResponse;
 import com.example.senioron.domain.home.dto.response.SeniorProfileUpdateResponse;
 import com.example.senioron.domain.home.dto.response.TodayScheduleResponse;
@@ -20,8 +19,6 @@ import com.example.senioron.domain.home.repository.ButtonOptionRepository;
 import com.example.senioron.domain.home.repository.HomeRepository;
 import com.example.senioron.domain.hospital.entity.Hospital;
 import com.example.senioron.domain.hospital.repository.HospitalRepository;
-import com.example.senioron.domain.medication.entity.Medication;
-import com.example.senioron.domain.medication.repository.MedicationRepository;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
@@ -36,12 +33,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.Period;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -55,7 +48,6 @@ public class HomeService {
     private final ButtonOptionRepository buttonOptionRepository;
     private final UserRepository userRepository;
     private final HospitalRepository hospitalRepository;
-    private final MedicationRepository medicationRepository;
     private final DeviceRepository deviceRepository;
     private final SeniorRepository seniorRepository;
 
@@ -64,7 +56,6 @@ public class HomeService {
             ButtonOptionRepository buttonOptionRepository,
             UserRepository userRepository,
             HospitalRepository hospitalRepository,
-            MedicationRepository medicationRepository,
             DeviceRepository deviceRepository,
             SeniorRepository seniorRepository
     ) {
@@ -72,7 +63,6 @@ public class HomeService {
         this.buttonOptionRepository = buttonOptionRepository;
         this.userRepository = userRepository;
         this.hospitalRepository = hospitalRepository;
-        this.medicationRepository = medicationRepository;
         this.deviceRepository = deviceRepository;
         this.seniorRepository = seniorRepository;
     }
@@ -271,6 +261,9 @@ public class HomeService {
         );
     }
 
+    /**
+     * 홈 버튼 수정
+     */
     @Transactional
     public void updateButtons(
             HomeButtonUpdateRequest request
@@ -405,6 +398,9 @@ public class HomeService {
         }
     }
 
+    /**
+     * 추가 가능한 홈 버튼 옵션 조회
+     */
     @Transactional(readOnly = true)
     public List<ButtonOptionResponse> getButtonOptions() {
 
@@ -426,6 +422,9 @@ public class HomeService {
                 .toList();
     }
 
+    /**
+     * 홈 버튼 추가
+     */
     @Transactional
     public HomeButtonCreateResponse createButton(
             HomeButtonCreateRequest request
@@ -496,6 +495,9 @@ public class HomeService {
         );
     }
 
+    /**
+     * 홈 버튼 삭제
+     */
     @Transactional
     public void deleteButton(
             Long buttonId
@@ -534,6 +536,9 @@ public class HomeService {
         }
     }
 
+    /**
+     * 시니어 홈 화면 조회
+     */
     @Transactional(readOnly = true)
     public SeniorHomeResponse getSeniorHome() {
 
@@ -573,24 +578,29 @@ public class HomeService {
                         ? FontSize.MEDIUM
                         : homes.get(0).getFontSize();
 
-        List<TodayScheduleResponse> todaySchedules =
-                getTodaySchedules(parent);
+        TodayScheduleResponse todaySchedule =
+                getTodayHospitalSchedule(parent);
 
         return new SeniorHomeResponse(
                 fontSize,
-                todaySchedules,
+                todaySchedule,
                 buttons
         );
     }
 
-    private List<TodayScheduleResponse> getTodaySchedules(
+    /**
+     * 오늘 병원 일정 조회
+     *
+     * 일정이 없으면 NONE,
+     * 일정이 1개이면 상세 정보,
+     * 일정이 2개 이상이면 일정 개수만 반환합니다.
+     */
+    private TodayScheduleResponse getTodayHospitalSchedule(
             User parent
     ) {
 
-        LocalDate today = LocalDate.now();
-
-        List<TodayScheduleResponse> schedules =
-                new ArrayList<>();
+        LocalDate today =
+                LocalDate.now();
 
         List<Hospital> hospitals =
                 hospitalRepository
@@ -600,139 +610,34 @@ public class HomeService {
                                 today
                         );
 
-        for (Hospital hospital : hospitals) {
+        int scheduleCount =
+                hospitals.size();
 
-            schedules.add(
-                    TodayScheduleResponse.builder()
-                            .scheduleId(
-                                    hospital.getHospital_id()
-                            )
-                            .scheduleType(
-                                    ScheduleType.HOSPITAL
-                            )
-                            .title(
-                                    hospital.getHospitalName()
-                            )
-                            .description(
-                                    hospital.getDepartment()
-                            )
-                            .scheduledTime(
-                                    hospital.getScheduleTime()
-                            )
-                            .build()
+        if (scheduleCount == 0) {
+            return TodayScheduleResponse.empty();
+        }
+
+        if (scheduleCount == 1) {
+
+            Hospital hospital =
+                    hospitals.get(0);
+
+            return TodayScheduleResponse.detail(
+                    hospital.getHospital_id(),
+                    hospital.getHospitalName(),
+                    hospital.getDepartment(),
+                    hospital.getScheduleTime()
             );
         }
 
-        List<Medication> medications =
-                medicationRepository
-                        .findAllByUserOrderByMedicineTimeAsc(
-                                parent
-                        );
-
-        for (Medication medication : medications) {
-
-            if (!isMedicationScheduledToday(
-                    medication,
-                    today
-            )) {
-                continue;
-            }
-
-            schedules.add(
-                    TodayScheduleResponse.builder()
-                            .scheduleId(
-                                    medication.getMedication_id()
-                            )
-                            .scheduleType(
-                                    ScheduleType.MEDICATION
-                            )
-                            .title(
-                                    medication.getMedicineName()
-                            )
-                            .description(
-                                    medication.getIngredientName()
-                            )
-                            .scheduledTime(
-                                    medication.getMedicineTime()
-                            )
-                            .build()
-            );
-        }
-
-        schedules.sort(
-                Comparator.comparing(
-                        TodayScheduleResponse::getScheduledTime,
-                        Comparator.nullsLast(
-                                Comparator.naturalOrder()
-                        )
-                )
+        return TodayScheduleResponse.count(
+                scheduleCount
         );
-
-        return schedules;
     }
 
-    private boolean isMedicationScheduledToday(
-            Medication medication,
-            LocalDate today
-    ) {
-
-        String medicineDays =
-                medication.getMedicineDays();
-
-        if (medicineDays == null
-                || medicineDays.isBlank()) {
-
-            return false;
-        }
-
-        DayOfWeek dayOfWeek =
-                today.getDayOfWeek();
-
-        String koreanDay =
-                convertToKoreanDay(dayOfWeek);
-
-        String shortEnglishDay =
-                dayOfWeek
-                        .name()
-                        .substring(0, 3);
-
-        String fullEnglishDay =
-                dayOfWeek.name();
-
-        return Arrays.stream(
-                        medicineDays.split(",")
-                )
-                .map(String::trim)
-                .filter(day ->
-                        !day.isBlank()
-                )
-                .map(String::toUpperCase)
-                .anyMatch(day ->
-                        day.equals(koreanDay)
-                                || day.equals(
-                                shortEnglishDay
-                        )
-                                || day.equals(
-                                fullEnglishDay
-                        )
-                );
-    }
-
-    private String convertToKoreanDay(
-            DayOfWeek dayOfWeek
-    ) {
-
-        return switch (dayOfWeek) {
-            case MONDAY -> "월";
-            case TUESDAY -> "화";
-            case WEDNESDAY -> "수";
-            case THURSDAY -> "목";
-            case FRIDAY -> "금";
-            case SATURDAY -> "토";
-            case SUNDAY -> "일";
-        };
-    }
-
+    /**
+     * 홈 글씨 크기 수정
+     */
     @Transactional
     public void updateFontSize(
             HomeFontSizeUpdateRequest request
