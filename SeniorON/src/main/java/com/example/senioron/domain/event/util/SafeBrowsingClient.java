@@ -28,7 +28,7 @@ public class SafeBrowsingClient {
 
     public RiskCheckResult checkUrl(String url) {
         if (apiKey == null || apiKey.isBlank()) {
-            log.warn("API 키 미설정으로 검사를 건너뜁니다: url={}", url);
+            log.warn("API 키 미설정으로 검사를 건너뜁니다");
             return RiskCheckResult.UNAVAILABLE;
         }
 
@@ -52,12 +52,17 @@ public class SafeBrowsingClient {
                     .retrieve()
                     .body(SafeBrowsingResponse.class);
 
-            boolean isDangerous = response != null && response.matches() != null && !response.matches().isEmpty();
+            if (response == null) {
+                log.warn("Safe Browsing 응답이 비어있습니다: url={}", url);
+                return RiskCheckResult.UNAVAILABLE;
+            }
+
+            boolean isDangerous = response.matches() != null && !response.matches().isEmpty();
             return isDangerous ? RiskCheckResult.DANGEROUS : RiskCheckResult.SAFE;
 
         } catch (Exception e) {
             log.warn("세이프 브라우징 검사 실패: {}", e.getMessage());
-            return RiskCheckResult.UNAVAILABLE;   // false 대신 "판정 불가" 상태 반환
+            return RiskCheckResult.UNAVAILABLE;
         }
     }
 }
