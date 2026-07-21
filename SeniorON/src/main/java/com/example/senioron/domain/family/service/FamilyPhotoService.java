@@ -2,6 +2,7 @@ package com.example.senioron.domain.family.service;
 
 import com.example.senioron.domain.family.dto.request.FamilyPhotoCreateRequest;
 import com.example.senioron.domain.family.dto.response.FamilyPhotoCreateResponse;
+import com.example.senioron.domain.family.dto.response.FamilyPhotoCursorResponse;
 import com.example.senioron.domain.family.dto.response.FamilyPhotoItemResponse;
 import com.example.senioron.domain.family.dto.response.FamilyPhotoListResponse;
 import com.example.senioron.domain.family.entity.Family;
@@ -22,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
 
@@ -81,11 +83,18 @@ public class FamilyPhotoService {
     @Transactional(readOnly = true)
     public FamilyPhotoListResponse getPhotos(
             User principal,
-            Long cursor,
+            LocalDateTime cursorCreatedAt,
+            Long cursorId,
             int size
     ) {
         if (size < 1 || size > 50) {
             throw new IllegalArgumentException("사진 조회 개수는 1~50이어야 합니다.");
+        }
+
+        if ((cursorCreatedAt == null) != (cursorId == null)){
+            throw new IllegalArgumentException(
+                    "cursorCreatedAt과 cursorId는 함께 전달해야 합니다."
+            );
         }
 
         User user = userRepository.findById(principal.getUsersId())
@@ -101,15 +110,17 @@ public class FamilyPhotoService {
 
         List<FamilyPhoto> fetchedPhotos;
 
-        if (cursor == null) {
-            fetchedPhotos = familyPhotoRepository.findByFamilyOrderByFamilyPhotoIdDesc(
+        if (cursorCreatedAt == null) {
+            fetchedPhotos = familyPhotoRepository
+                    .findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
+                            family,
+                            pageable
+                    );
+        }else{
+            fetchedPhotos = familyPhotoRepository.findNextPageByCursor(
                     family,
-                    pageable
-            );
-        } else {
-            fetchedPhotos = familyPhotoRepository.findByFamilyAndFamilyPhotoIdLessThanOrderByFamilyPhotoIdDesc(
-                    family,
-                    cursor,
+                    cursorCreatedAt,
+                    cursorId,
                     pageable
             );
         }
@@ -120,9 +131,16 @@ public class FamilyPhotoService {
                 ? fetchedPhotos.subList(0, size)
                 : fetchedPhotos;
 
-        Long nextCursor = hasNext
-                ? pagePhotos.get(pagePhotos.size() - 1).getFamilyPhotoId()
-                : null;
+        FamilyPhotoCursorResponse nextCursor = null;
+
+        if (hasNext) {
+            FamilyPhoto lastPhoto = pagePhotos.get(pagePhotos.size() - 1);
+
+            nextCursor = FamilyPhotoCursorResponse.builder()
+                    .createdAt(lastPhoto.getCreatedAt())
+                    .familyPhotoId(lastPhoto.getFamilyPhotoId())
+                    .build();
+        }
 
         List<FamilyPhotoItemResponse> photoResponses = pagePhotos.stream()
                 .map(photo -> FamilyPhotoItemResponse.builder()

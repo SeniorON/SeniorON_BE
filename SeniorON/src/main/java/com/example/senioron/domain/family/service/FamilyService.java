@@ -252,7 +252,7 @@ public class FamilyService {
 
         // 최신 가족 사진 4개 조회
         List<FamilyPhoto> recentPhotoEntities =
-                familyPhotoRepository.findByFamilyOrderByFamilyPhotoIdDesc(
+                familyPhotoRepository.findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
                         family,
                         PageRequest.of(0, RECENT_PHOTO_COUNT)
                 );
@@ -277,9 +277,7 @@ public class FamilyService {
         // 사진 업로더를 최근 업로드 순으로 중복 없이 저장
         Map<Long, User> recentUploaderById = new LinkedHashMap<>();
 
-        recentPhotoEntities.stream()
-                .sorted(Comparator.comparing(FamilyPhoto::getCreatedAt).reversed())
-                .forEach(photo -> {
+        recentPhotoEntities.forEach(photo -> {
                     Long uploaderId = photo.getUser().getUsersId();
                     User uploader = memberById.get(uploaderId);
 

@@ -9,6 +9,6 @@ import java.util.List;
 @Getter
 public class FamilyPhotoListResponse {
     private List<FamilyPhotoItemResponse> photos;
-    private Long nextCursor;
+    private FamilyPhotoCursorResponse nextCursor;
     private boolean hasNext;
 }
