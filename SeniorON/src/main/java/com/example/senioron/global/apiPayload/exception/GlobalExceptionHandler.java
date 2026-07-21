@@ -38,6 +38,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<Response<Void>> handleBusinessException(BusinessException ex) {
+        log.warn("BusinessException: {}", ex.getMessage());
         return ResponseEntity
                 .status(ex.getStatus())
                 .body(Response.fail(ex.getCode()));
@@ -45,6 +46,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(GlobalException.class)
     public ResponseEntity<Response<Void>> handleGlobalException(GlobalException ex) {
+        log.warn("GlobalException: {}", ex.getMessage());
         return ResponseEntity
                 .status(ex.getStatus())
                 .body(Response.fail(ex.getCode()));
@@ -60,6 +62,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         ex.getBindingResult().getFieldErrors()
                 .forEach(error -> errors.put(error.getField(), error.getDefaultMessage()));
 
+        log.warn("Validation Error: {}", errors);
+
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(Response.fail(ErrorCode.BAD_REQUEST, errors));
@@ -68,6 +72,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @Override
     protected ResponseEntity<Object> handleHttpMessageNotReadable(
             HttpMessageNotReadableException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        
+        log.warn("HttpMessageNotReadableException: {}", ex.getMessage());
 
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
@@ -83,6 +89,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             NoSuchElementException.class
     })
     public ResponseEntity<Object> handleBadRequestExceptions(Exception ex) {
+        log.warn("BadRequestException: {}", ex.getMessage());
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(Response.fail(ErrorCode.BAD_REQUEST));
