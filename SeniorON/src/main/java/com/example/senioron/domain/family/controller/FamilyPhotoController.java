@@ -11,9 +11,12 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDateTime;
 
 @Tag(name = "가족 사진", description = "가족 사진 관련 API")
 @RestController
@@ -36,11 +39,13 @@ public class FamilyPhotoController {
     @GetMapping
     public Response<FamilyPhotoListResponse> getPhotos(
             @AuthenticationPrincipal User user,
-            @RequestParam(name = "cursor", required = false) Long cursor,
+            @RequestParam(name = "cursorCreatedAt", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime cursorCreatedAt,
+            @RequestParam(name = "cursorId", required = false) Long cursorId,
             @RequestParam(name = "size", defaultValue = "10") int size
     ) {
         return Response.ok(
-                familyPhotoService.getPhotos(user, cursor, size)
+                familyPhotoService.getPhotos(user, cursorCreatedAt, cursorId, size)
         );
     }
 
