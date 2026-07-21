@@ -1,5 +1,7 @@
 package com.example.senioron.domain.event.util;
 
+import com.example.senioron.domain.event.entity.RiskCheckResult;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -14,10 +16,17 @@ import java.util.List;
 public class SafeBrowsingClient {
     private final RestClient safeBrowsingRestClient;
 
-    @Value("${google.safebrowsing.api-key:}")
+    @Value("${google.safebrowsing.api-key}")
     private String apiKey;
 
-    public boolean isDangerous(String url) {
+    @PostConstruct
+    public void validateConfig() {
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new IllegalStateException("google.safebrowsing.api-key가 설정되지 않았습니다.");
+        }
+    }
+
+    public RiskCheckResult checkUrl(String url) {
         try {
             SafeBrowsingRequest request = new SafeBrowsingRequest(
                     new SafeBrowsingRequest.Client("senioron", "1.0.0"),
@@ -38,10 +47,12 @@ public class SafeBrowsingClient {
                     .retrieve()
                     .body(SafeBrowsingResponse.class);
 
-            return response != null && response.matches() != null && !response.matches().isEmpty();
+            boolean isDangerous = response != null && response.matches() != null && !response.matches().isEmpty();
+            return isDangerous ? RiskCheckResult.DANGEROUS : RiskCheckResult.SAFE;
+
         } catch (Exception e) {
             log.warn("세이프 브라우징 검사 실패: {}", e.getMessage());
-            return false;
+            return RiskCheckResult.UNAVAILABLE;   // false 대신 "판정 불가" 상태 반환
         }
     }
 }

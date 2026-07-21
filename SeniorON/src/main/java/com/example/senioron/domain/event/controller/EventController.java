@@ -59,7 +59,7 @@ public class EventController {
             @AuthenticationPrincipal User user,
             @Valid @RequestBody RiskLinkRequest req
     ) {
-        return Response.ok(eventService.createRiskLinkEvent(user, req));
+        return Response.ok(eventService.saveRiskLinkEvent(user, req));
     }
 
     @Operation(summary = "이벤트 상세조회", description = "각 이벤트의 상세내역을 조회합니다.")
