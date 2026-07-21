@@ -4,6 +4,8 @@ import com.example.senioron.domain.family.dto.request.FamilyJoinRequest;
 import com.example.senioron.domain.family.dto.request.FamilyPrimaryManagerUpdateRequest;
 import com.example.senioron.domain.family.dto.response.*;
 import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyPhoto;
+import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
@@ -13,13 +15,12 @@ import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.storage.S3Service;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Comparator;
-import java.util.List;
-import java.util.Objects;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -29,7 +30,7 @@ public class FamilyService {
     private final FamilyRepository familyRepository;
     private final UserRepository userRepository;
     private final S3Service s3Service;
-    private final FamilyPhotoService familyPhotoService;
+    private final FamilyPhotoRepository familyPhotoRepository;
 
     private static final int RECENT_UPLOADER_COUNT = 3;
     private static final int RECENT_PHOTO_COUNT = 4;
@@ -126,13 +127,7 @@ public class FamilyService {
                 .sorted(Comparator.comparing(
                         member -> !Objects.equals(member.getUsersId(),user.getUsersId())
                 ))
-                .map(member -> FamilyMemberResponse.builder()
-                        .usersId(member.getUsersId())
-                        .name(member.getName())
-                        .managerType(member.getManagerType())
-                        .profileImageUrl(s3Service.getFileUrl(member.getProfileImageKey()))
-                        .me(Objects.equals(member.getUsersId(),user.getUsersId()))
-                        .build())
+                .map(member -> toFamilyMemberResponse(member, user))
                 .toList();
     }
 
@@ -214,6 +209,36 @@ public class FamilyService {
 
     }
 
+    private FamilyMemberResponse toFamilyMemberResponse(
+            User member,
+            User currentUser
+    ) {
+        return FamilyMemberResponse.builder()
+                .usersId(member.getUsersId())
+                .name(member.getName())
+                .managerType(member.getManagerType())
+                .profileImageUrl(
+                        s3Service.getFileUrl(member.getProfileImageKey())
+                )
+                .me(Objects.equals(
+                        member.getUsersId(),
+                        currentUser.getUsersId()
+                ))
+                .build();
+    }
+
+    private FamilyPhotoItemResponse toFamilyPhotoItemResponse(
+            FamilyPhoto photo
+    ) {
+        return FamilyPhotoItemResponse.builder()
+                .familyPhotoId(photo.getFamilyPhotoId())
+                .imageUrl(s3Service.getFileUrl(photo.getImageKey()))
+                .uploaderName(photo.getUser().getName())
+                .description(photo.getDescription())
+                .createdAt(photo.getCreatedAt())
+                .build();
+    }
+
     @Transactional(readOnly = true)
     public FamilyHomeResponse getFamilyHome(User user) {
         Family family = user.getFamily();
@@ -222,17 +247,64 @@ public class FamilyService {
             throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
         }
 
-        List<FamilyMemberResponse> members = getFamilyMembers(user);
+        // 가족 구성원 조회
+        List<User> familyMembers = userRepository.findAllByFamily(family);
 
-        List<String> recentUploaderProfileImageUrls =
-                familyPhotoService.getRecentUploaderProfileImageUrls(
+        // 최신 가족 사진 4개 조회
+        List<FamilyPhoto> recentPhotoEntities =
+                familyPhotoRepository.findByFamilyOrderByFamilyPhotoIdDesc(
                         family,
-                        RECENT_UPLOADER_COUNT
+                        PageRequest.of(0, RECENT_PHOTO_COUNT)
                 );
 
+        // 가족 구성원 응답 생성
+        List<FamilyMemberResponse> members = familyMembers.stream()
+                .sorted(Comparator.comparing(member -> !Objects.equals(
+                                member.getUsersId(),
+                                user.getUsersId()
+                        )
+                ))
+                .map(member -> toFamilyMemberResponse(member, user))
+                .toList();
+
+        // 현재 가족 구성원을 ID로 찾을 수 있게 변환
+        Map<Long, User> memberById = familyMembers.stream()
+                .collect(Collectors.toMap(
+                        User::getUsersId,
+                        member -> member
+                ));
+
+        // 사진 업로더를 최근 업로드 순으로 중복 없이 저장
+        Map<Long, User> recentUploaderById = new LinkedHashMap<>();
+
+        recentPhotoEntities.stream()
+                .sorted(Comparator.comparing(FamilyPhoto::getCreatedAt).reversed())
+                .forEach(photo -> {
+                    Long uploaderId = photo.getUser().getUsersId();
+                    User uploader = memberById.get(uploaderId);
+
+                    // 현재 가족 구성원인 업로더만 포함
+                    if (uploader != null) {
+                        recentUploaderById.putIfAbsent(uploaderId, uploader);
+                    }
+                });
+
+        // 최근 업로더 프로필 최대 3개 생성
+        List<String> recentUploaderProfileImageUrls =
+                recentUploaderById.values().stream()
+                        .limit(RECENT_UPLOADER_COUNT)
+                        .map(User::getProfileImageKey)
+                        .map(profileImageKey -> profileImageKey == null
+                                ? null
+                                : s3Service.getFileUrl(profileImageKey))
+                        .toList();
+
+        // 최신 사진 응답 생성
         List<FamilyPhotoItemResponse> recentPhotos =
-                familyPhotoService.getPhotos(user, null, RECENT_PHOTO_COUNT)
-                        .getPhotos();
+                recentPhotoEntities.stream()
+                        .map(this::toFamilyPhotoItemResponse)
+                        .toList();
+
 
         return FamilyHomeResponse.builder()
                 .members(members)
