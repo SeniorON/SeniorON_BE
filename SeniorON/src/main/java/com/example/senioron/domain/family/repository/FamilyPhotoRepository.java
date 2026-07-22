@@ -2,6 +2,7 @@ package com.example.senioron.domain.family.repository;
 
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
+import com.example.senioron.domain.user.entity.User;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -48,5 +49,30 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
     Optional<FamilyPhoto> findByFamilyPhotoIdAndFamily(
             Long familyPhotoId,
             Family family
+    );
+
+    @Query("""
+        SELECT fp.user
+        FROM FamilyPhoto fp
+        WHERE fp.family = :family
+          AND fp.user.family = :family
+          AND NOT EXISTS (
+              SELECT newer.familyPhotoId
+              FROM FamilyPhoto newer
+              WHERE newer.family = :family
+                AND newer.user = fp.user
+                AND (
+                    newer.createdAt > fp.createdAt
+                    OR (
+                        newer.createdAt = fp.createdAt
+                        AND newer.familyPhotoId > fp.familyPhotoId
+                    )
+                )
+          )
+        ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
+        """)
+    List<User> findRecentUploaders(
+            @Param("family") Family family,
+            Pageable pageable
     );
 }
