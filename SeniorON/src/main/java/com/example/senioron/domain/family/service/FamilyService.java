@@ -138,7 +138,7 @@ public class FamilyService {
             FamilyPrimaryManagerUpdateRequest request
     ){
         // 현재 로그인한 사용자가 실제 DB에 없는 경우
-        User currentUser = userRepository.findById(principal.getUsersId())
+        User currentUser = userRepository.findByIdForUpdate(principal.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         Family family = currentUser.getFamily();
@@ -152,11 +152,15 @@ public class FamilyService {
         }
 
         // 요청으로 받은 대상 사용자 ID가 실제 DB에 없는 경우
-        User targetUser = userRepository.findById(request.getTargetUserId())
+        User targetUser = userRepository.findByIdForUpdate(request.getTargetUserId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         if(targetUser.getFamily() == null || !Objects.equals(family.getFamilyId(), targetUser.getFamily().getFamilyId())) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+
+        if (targetUser.getRole() != Role.CHILD) {
+            throw new BusinessException(ErrorCode.PRIMARY_MANAGER_MUST_BE_CHILD);
         }
 
         // 자신은 주 담당자 변경 대상 불가
@@ -177,7 +181,7 @@ public class FamilyService {
     // 가족 구성원 제거 메서드
     public void removeFamilyMember(User principal, Long targetUserId) {
         // 로그인한 사용자 조회
-        User currentUser = userRepository.findById(principal.getUsersId())
+        User currentUser = userRepository.findByIdForUpdate(principal.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         // 요청자가 가족에 소속되어 있는지 확인
@@ -193,7 +197,7 @@ public class FamilyService {
         }
 
         // 제외할 사용자 조회
-        User targetUser = userRepository.findById(targetUserId)
+        User targetUser = userRepository.findByIdForUpdate(targetUserId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         // 대상자가 요청자와 같은 가족인지 확인
