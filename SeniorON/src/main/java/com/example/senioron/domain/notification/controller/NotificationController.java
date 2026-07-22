@@ -4,6 +4,7 @@ import com.example.senioron.domain.notification.dto.request.NotificationSettingR
 import com.example.senioron.domain.notification.dto.response.NotificationHomeResponse;
 import com.example.senioron.domain.notification.dto.response.NotificationListResponse;
 import com.example.senioron.domain.notification.dto.response.NotificationSettingResponse;
+import com.example.senioron.domain.notification.dto.response.ParentDeviceStatusResponse;
 import com.example.senioron.domain.notification.entity.NotificationSettingType;
 import com.example.senioron.domain.notification.entity.NotificationType;
 import com.example.senioron.domain.notification.service.NotificationService;
@@ -42,6 +43,17 @@ public class NotificationController {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
         return Response.ok(notificationService.getHomeSettings(user.getUsersId()));
+    }
+
+    @Operation(summary = "부모님 기기 연결상태 조회", description = "같은 가족 부모님(PARENT) 기기가 온라인인지 조회합니다. 가족/부모/기기 정보가 없으면 false를 반환합니다.")
+    @GetMapping("/parent-device-status")
+    public Response<ParentDeviceStatusResponse> getParentDeviceStatus(
+            @AuthenticationPrincipal User user
+    ){
+        if (user.getRole() != Role.CHILD) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+        return Response.ok(notificationService.getParentDeviceStatus(user.getUsersId()));
     }
 
     @Operation(summary = "알림 설정 토글 기능")

@@ -1,5 +1,8 @@
 package com.example.senioron.domain.notification.service;
 
+import com.example.senioron.domain.device.entity.Device;
+import com.example.senioron.domain.device.entity.DeviceStatus;
+import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.event.entity.Event;
 import com.example.senioron.domain.event.entity.EventType;
 import com.example.senioron.domain.event.entity.OutingPhase;
@@ -7,6 +10,7 @@ import com.example.senioron.domain.event.util.FcmSender;
 import com.example.senioron.domain.notification.dto.response.NotificationHomeResponse;
 import com.example.senioron.domain.notification.dto.response.NotificationListResponse;
 import com.example.senioron.domain.notification.dto.response.NotificationSettingResponse;
+import com.example.senioron.domain.notification.dto.response.ParentDeviceStatusResponse;
 import com.example.senioron.domain.notification.entity.Notification;
 import com.example.senioron.domain.notification.entity.NotificationSetting;
 import com.example.senioron.domain.notification.entity.NotificationSettingType;
@@ -39,6 +43,7 @@ public class NotificationService {
     private final NotificationRepository notificationRepository;
     private final NotificationSettingRepository notificationSettingRepository;
     private final UserRepository userRepository;
+    private final DeviceRepository deviceRepository;
     private final FcmSender fcmSender;
 
     @Transactional
@@ -201,6 +206,7 @@ public class NotificationService {
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        validateParentDeviceOnline(user);
         NotificationSetting setting = notificationSettingRepository.findById(user.getUsersId())
                 .orElseGet(() -> createDefaultSettingInternal(user));
 
@@ -212,6 +218,44 @@ public class NotificationService {
         }
 
         return NotificationSettingResponse.from(type, enabled);
+    }
+
+    // 자녀가 알림 설정을 변경하기 전, 같은 가족의 부모님 기기가 하나라도 오프라인이면 변경을 차단 (fail-safe)
+    private void validateParentDeviceOnline(User child) {
+        boolean anyOffline = findParentDeviceStatuses(child).stream()
+                .anyMatch(status -> status == DeviceStatus.OFFLINE);
+        if (anyOffline) {
+            throw new BusinessException(ErrorCode.PARENT_DEVICE_OFFLINE);
+        }
+    }
+
+    // 자녀가 부모님 기기의 온/오프라인 상태만 조회
+    @Transactional(readOnly = true)
+    public ParentDeviceStatusResponse getParentDeviceStatus(Long childUserId) {
+        User child = userRepository.findById(childUserId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        List<DeviceStatus> statuses = findParentDeviceStatuses(child);
+        boolean online = !statuses.isEmpty() && statuses.stream().allMatch(status -> status == DeviceStatus.ONLINE);
+
+        return ParentDeviceStatusResponse.builder()
+                .online(online)
+                .build();
+    }
+
+    //매칭되는 모든 기기의 상태를 모아서 반환
+    private List<DeviceStatus> findParentDeviceStatuses(User child) {
+        if (child.getFamily() == null) {
+            return List.of();
+        }
+        List<User> parents = userRepository.findByFamilyAndUsersIdNotAndRole(
+                child.getFamily(), child.getUsersId(), Role.PARENT);
+        if (parents.isEmpty()) {
+            return List.of();
+        }
+        return deviceRepository.findAllByUserIn(parents).stream()
+                .map(Device::getConnectionStatus)
+                .toList();
     }
 
     @Transactional(readOnly = true)
