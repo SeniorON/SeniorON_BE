@@ -40,6 +40,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.Comparator;
 
 @Service
 public class HomeService {
@@ -561,13 +562,9 @@ public class HomeService {
                         ? FontSize.MEDIUM
                         : homes.get(0).getFontSize();
 
-        /*
-         * 병원 일정은 주담당자가 등록하므로
-         * 시니어 계정이 아니라 주담당자 계정 기준으로 조회한다.
-         */
         TodayScheduleResponse todaySchedule =
                 getTodayHospitalSchedule(
-                        primaryChild
+                        parent
                 );
 
         return new SeniorHomeResponse(
@@ -580,26 +577,60 @@ public class HomeService {
     /**
      * 오늘 병원 일정 조회
      *
-     * 주담당자가 등록한 병원 일정을 조회한다.
-     *
      * 일정이 없으면 NONE,
      * 일정이 1개이면 상세 정보,
      * 일정이 2개 이상이면 일정 개수만 반환
      */
     private TodayScheduleResponse getTodayHospitalSchedule(
-            User scheduleOwner
+            User parent
     ) {
+
+        if (parent.getFamily() == null) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_NOT_CONNECTED
+            );
+        }
 
         LocalDate today =
                 LocalDate.now();
 
+        List<User> childManagers =
+                userRepository
+                        .findAllByFamily(
+                                parent.getFamily()
+                        )
+                        .stream()
+                        .filter(user ->
+                                user.getRole() == Role.CHILD
+                        )
+                        .filter(user ->
+                                user.getManagerType()
+                                        == ManagerType.PRIMARY
+                                        || user.getManagerType()
+                                        == ManagerType.SUB
+                        )
+                        .toList();
+
         List<Hospital> hospitals =
-                hospitalRepository
-                        .findByUserAndScheduleDateBetweenOrderByScheduleDateAscScheduleTimeAsc(
-                                scheduleOwner,
-                                today,
-                                today
-                        );
+                childManagers.stream()
+                        .flatMap(childManager ->
+                                hospitalRepository
+                                        .findByUserAndScheduleDateBetweenOrderByScheduleDateAscScheduleTimeAsc(
+                                                childManager,
+                                                today,
+                                                today
+                                        )
+                                        .stream()
+                        )
+                        .sorted(
+                                Comparator.comparing(
+                                                Hospital::getScheduleDate
+                                        )
+                                        .thenComparing(
+                                                Hospital::getScheduleTime
+                                        )
+                        )
+                        .toList();
 
         int scheduleCount =
                 hospitals.size();
