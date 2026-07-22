@@ -138,7 +138,7 @@ public class FamilyService {
             FamilyPrimaryManagerUpdateRequest request
     ){
         // 현재 로그인한 사용자가 실제 DB에 없는 경우
-        User currentUser = userRepository.findById(principal.getUsersId())
+        User currentUser = userRepository.findByIdForUpdate(principal.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         Family family = currentUser.getFamily();
@@ -157,6 +157,10 @@ public class FamilyService {
 
         if(targetUser.getFamily() == null || !Objects.equals(family.getFamilyId(), targetUser.getFamily().getFamilyId())) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+
+        if (targetUser.getRole() != Role.CHILD) {
+            throw new BusinessException(ErrorCode.PRIMARY_MANAGER_MUST_BE_CHILD);
         }
 
         // 자신은 주 담당자 변경 대상 불가
