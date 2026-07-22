@@ -34,7 +34,6 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -221,45 +220,42 @@ public class NotificationService {
         return NotificationSettingResponse.from(type, enabled);
     }
 
-    // 자녀가 알림 설정을 변경하기 전, 같은 가족의 부모님 기기가 오프라인이면 변경을 차단
+    // 자녀가 알림 설정을 변경하기 전, 같은 가족의 부모님 기기가 하나라도 오프라인이면 변경을 차단 (fail-safe)
     private void validateParentDeviceOnline(User child) {
-        boolean isOffline = findParentDeviceStatus(child)
-                .filter(status -> status == DeviceStatus.OFFLINE)
-                .isPresent();
-        if (isOffline) {
+        boolean anyOffline = findParentDeviceStatuses(child).stream()
+                .anyMatch(status -> status == DeviceStatus.OFFLINE);
+        if (anyOffline) {
             throw new BusinessException(ErrorCode.PARENT_DEVICE_OFFLINE);
         }
     }
 
-    // 자녀가 부모님 기기의 온/오프라인 상태만 조회 (설정 변경과 분리된 조회용 API)
+    // 자녀가 부모님 기기의 온/오프라인 상태만 조회
     @Transactional(readOnly = true)
     public ParentDeviceStatusResponse getParentDeviceStatus(Long childUserId) {
         User child = userRepository.findById(childUserId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        boolean online = findParentDeviceStatus(child)
-                .map(status -> status == DeviceStatus.ONLINE)
-                .orElse(false);
+        List<DeviceStatus> statuses = findParentDeviceStatuses(child);
+        boolean online = !statuses.isEmpty() && statuses.stream().allMatch(status -> status == DeviceStatus.ONLINE);
 
         return ParentDeviceStatusResponse.builder()
                 .online(online)
                 .build();
     }
 
-    // 같은 가족의 부모님 기기 연결상태 조회. 가족/부모/기기 정보가 없으면 판단 불가(empty)로 취급
-    private Optional<DeviceStatus> findParentDeviceStatus(User child) {
+    //매칭되는 모든 기기의 상태를 모아서 반환
+    private List<DeviceStatus> findParentDeviceStatuses(User child) {
         if (child.getFamily() == null) {
-            return Optional.empty();
+            return List.of();
         }
-
         List<User> parents = userRepository.findByFamilyAndUsersIdNotAndRole(
                 child.getFamily(), child.getUsersId(), Role.PARENT);
         if (parents.isEmpty()) {
-            return Optional.empty();
+            return List.of();
         }
-
-        return deviceRepository.findFirstByUser(parents.get(0))
-                .map(Device::getConnectionStatus);
+        return deviceRepository.findAllByUserIn(parents).stream()
+                .map(Device::getConnectionStatus)
+                .toList();
     }
 
     @Transactional(readOnly = true)
