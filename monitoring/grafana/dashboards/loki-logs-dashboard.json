@@ -4,7 +4,10 @@
   "schemaVersion": 38,
   "version": 1,
   "refresh": "5s",
-  "time": { "from": "now-1h", "to": "now" },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
   "editable": true,
   "timezone": "",
   "panels": [
@@ -13,7 +16,12 @@
       "type": "logs",
       "title": "Container Logs (All)",
       "datasource": "Loki",
-      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 20 },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 20
+      },
       "targets": [
         {
           "refId": "A",
@@ -30,5 +38,6 @@
         "sortOrder": "Descending"
       }
     }
-  ]
+  ],
+  "id": null
 }
