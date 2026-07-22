@@ -20,7 +20,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -261,6 +260,13 @@ public class FamilyService {
                         PageRequest.of(0, RECENT_PHOTO_COUNT)
                 );
 
+        // 전체 가족사진을 기준으로 최근 업로더 3명 조회
+        List<User> recentUploaders =
+                familyPhotoRepository.findRecentUploaders(
+                        family,
+                        PageRequest.of(0, RECENT_UPLOADER_COUNT)
+                );
+
         // 가족 구성원 응답 생성
         List<FamilyMemberResponse> members = familyMembers.stream()
                 .sorted(Comparator.comparing(member -> !Objects.equals(
@@ -271,30 +277,9 @@ public class FamilyService {
                 .map(member -> toFamilyMemberResponse(member, user))
                 .toList();
 
-        // 현재 가족 구성원을 ID로 찾을 수 있게 변환
-        Map<Long, User> memberById = familyMembers.stream()
-                .collect(Collectors.toMap(
-                        User::getUsersId,
-                        member -> member
-                ));
-
-        // 사진 업로더를 최근 업로드 순으로 중복 없이 저장
-        Map<Long, User> recentUploaderById = new LinkedHashMap<>();
-
-        recentPhotoEntities.forEach(photo -> {
-                    Long uploaderId = photo.getUser().getUsersId();
-                    User uploader = memberById.get(uploaderId);
-
-                    // 현재 가족 구성원인 업로더만 포함
-                    if (uploader != null) {
-                        recentUploaderById.putIfAbsent(uploaderId, uploader);
-                    }
-                });
-
         // 최근 업로더 프로필 최대 3개 생성
         List<String> recentUploaderProfileImageUrls =
-                recentUploaderById.values().stream()
-                        .limit(RECENT_UPLOADER_COUNT)
+                recentUploaders.stream()
                         .map(User::getProfileImageKey)
                         .map(profileImageKey -> profileImageKey == null
                                 ? null
