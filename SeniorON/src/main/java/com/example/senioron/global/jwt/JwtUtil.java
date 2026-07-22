@@ -49,7 +49,13 @@ public class JwtUtil {
     }
 
     public Long getUsersId(String token) {
-        return Long.valueOf(parseClaims(token).getSubject());
+        String subject = parseClaims(token).getSubject();
+
+        if (subject == null || subject.isBlank()) {
+            throw new IllegalArgumentException("JWT subject is missing");
+        }
+
+        return Long.valueOf(subject);
     }
 
     private Claims parseClaims(String token) {
