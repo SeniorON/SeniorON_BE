@@ -153,9 +153,6 @@ public class HomeService {
             );
         }
 
-        /*
-         * OTHER 관계인 경우 직접 입력한 관계가 반드시 존재해야 합니다.
-         */
         String resolvedCustomRelation =
                 resolveCustomRelation(
                         request.relation(),
@@ -173,8 +170,7 @@ public class HomeService {
         Senior currentUserSenior;
 
         /*
-         * 현재 담당자에게 등록된 시니어 정보가 없으면
-         * 최초 등록으로 처리합니다.
+         * 현재 담당자에게 등록된 시니어 정보가 없으면 최초 등록으로 처리
          */
         if (currentUserSeniorOptional.isEmpty()) {
 
@@ -196,12 +192,6 @@ public class HomeService {
 
         } else {
 
-            /*
-             * 기존 정보가 있으면 공통 프로필 정보만 수정합니다.
-             *
-             * relation과 customRelation은 담당자별로 다를 수 있으므로
-             * 기존 값을 유지합니다.
-             */
             currentUserSenior =
                     currentUserSeniorOptional.get();
 
@@ -214,13 +204,6 @@ public class HomeService {
             );
         }
 
-        /*
-         * 같은 가족의 다른 자녀 담당자가 이미 등록한 Senior 정보가 있다면
-         * 이름, 생년월일, 전화번호, 주소 등 공통 정보만 동기화합니다.
-         *
-         * 다른 담당자의 Senior 정보가 없는 경우에는 관계를 알 수 없으므로
-         * 서버에서 임의로 새 행을 생성하지 않습니다.
-         */
         List<User> familyMembers =
                 userRepository.findAllByFamily(
                         currentUser.getFamily()
@@ -578,8 +561,14 @@ public class HomeService {
                         ? FontSize.MEDIUM
                         : homes.get(0).getFontSize();
 
+        /*
+         * 병원 일정은 주담당자가 등록하므로
+         * 시니어 계정이 아니라 주담당자 계정 기준으로 조회한다.
+         */
         TodayScheduleResponse todaySchedule =
-                getTodayHospitalSchedule(parent);
+                getTodayHospitalSchedule(
+                        primaryChild
+                );
 
         return new SeniorHomeResponse(
                 fontSize,
@@ -591,12 +580,14 @@ public class HomeService {
     /**
      * 오늘 병원 일정 조회
      *
+     * 주담당자가 등록한 병원 일정을 조회한다.
+     *
      * 일정이 없으면 NONE,
      * 일정이 1개이면 상세 정보,
-     * 일정이 2개 이상이면 일정 개수만 반환합니다.
+     * 일정이 2개 이상이면 일정 개수만 반환
      */
     private TodayScheduleResponse getTodayHospitalSchedule(
-            User parent
+            User scheduleOwner
     ) {
 
         LocalDate today =
@@ -605,7 +596,7 @@ public class HomeService {
         List<Hospital> hospitals =
                 hospitalRepository
                         .findByUserAndScheduleDateBetweenOrderByScheduleDateAscScheduleTimeAsc(
-                                parent,
+                                scheduleOwner,
                                 today,
                                 today
                         );
@@ -811,12 +802,6 @@ public class HomeService {
         return senior.getRelation().name();
     }
 
-    /**
-     * OTHER 관계라면 직접 입력한 관계값을 검증합니다.
-     *
-     * 별도의 ErrorCode를 추가하지 않고 HomeService 내부에서 검증해
-     * Senior 도메인의 변경을 피합니다.
-     */
     private String resolveCustomRelation(
             SeniorRelation relation,
             String customRelation
