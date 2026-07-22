@@ -49,8 +49,6 @@ public class User extends BaseEntity {
     @Builder.Default
     private UserStatus status = UserStatus.ACTIVE;
 
-    private String fcmToken;
-
     @Column(name = "profile_image_key")
     private String profileImageKey;
 
@@ -69,10 +67,6 @@ public class User extends BaseEntity {
     public void removeFromFamily() {
         this.family = null;
         this.managerType = null;
-    }
-
-    public void updateFcmToken(String fcmToken) {
-        this.fcmToken = fcmToken;
     }
 
     public void updateName(String name) {

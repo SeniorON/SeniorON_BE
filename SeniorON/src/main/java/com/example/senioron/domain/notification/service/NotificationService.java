@@ -34,6 +34,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -77,6 +79,15 @@ public class NotificationService {
         if (notifications.isEmpty()) {return;}
         notificationRepository.saveAll(notifications); // 레포 저장
 
+        //수신자들의 기기 토큰을 미리 한 번에 조회
+        Map<Long, String> deviceTokensByUserId = deviceRepository.findAllByUserIn(receivers).stream()
+                .filter(device -> device.getDeviceToken() != null && !device.getDeviceToken().isBlank())
+                .collect(Collectors.toMap(
+                        device -> device.getUser().getUsersId(),
+                        Device::getDeviceToken,
+                        (existing, duplicate) -> existing
+                ));
+
         // 커밋 성공 이후에만 FCM 발송이 실행되도록 등록
         TransactionSynchronizationManager.registerSynchronization(
                 new TransactionSynchronization() {
@@ -84,9 +95,10 @@ public class NotificationService {
                     public void afterCommit() {
                         for (Notification notification : notifications) {
                             User receiver = notification.getReceiverUser();
-                            if (receiver.getFcmToken() != null) {
+                            String deviceToken = deviceTokensByUserId.get(receiver.getUsersId());
+                            if (deviceToken != null) {
                                 try {
-                                    fcmSender.send(receiver.getFcmToken(), notification.getTitle(), notification.getBody());
+                                    fcmSender.send(deviceToken, notification.getTitle(), notification.getBody());
                                 } catch (Exception e) {
                                     log.warn("FCM 발송 처리 중 예외 발생, receiverId={}", receiver.getUsersId(), e);
                                 }

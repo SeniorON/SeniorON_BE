@@ -44,4 +44,8 @@ public class Device extends BaseEntity {
         this.batteryLevel = batteryLevel;
         this.lastConnectedAt = lastConnectedAt;
     }
+
+    public void updateDeviceToken(String deviceToken) {
+        this.deviceToken = deviceToken;
+    }
 }

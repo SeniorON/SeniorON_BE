@@ -4,6 +4,7 @@ import com.example.senioron.domain.user.dto.request.UserLoginRequest;
 import com.example.senioron.domain.user.dto.request.UserRoleUpdateRequest;
 import com.example.senioron.domain.user.dto.request.UserSignUpRequest;
 import com.example.senioron.domain.user.dto.response.*;
+import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.inactivity.service.InactivitySettingService;
 import com.example.senioron.domain.notification.service.NotificationService;
 import com.example.senioron.domain.user.entity.User;
@@ -27,6 +28,7 @@ public class UserService {
     private final JwtUtil jwtUtil;
     private final NotificationService notificationService;
     private final InactivitySettingService inactivitySettingService;
+    private final DeviceService deviceService;
 
     // 아이디 중복 확인 서비스
     public LoginIdCheckResponse checkLoginId(String loginId) {
@@ -83,7 +85,7 @@ public class UserService {
         }
 
         if(request.getFcmToken() != null && !request.getFcmToken().isBlank()){
-            user.updateFcmToken(request.getFcmToken());
+            deviceService.registerToken(user, request.getFcmToken());
         }
 
         String accessToken = jwtUtil.createAccessToken(user);
