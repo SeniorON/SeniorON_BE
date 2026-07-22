@@ -33,6 +33,7 @@ public class EventService {
     private final EventRepository eventRepository;
     private final NotificationService notificationService;
     private final GeocodingClient geocodingClient;
+    private final SafeBrowsingClient safeBrowsingClient;
     private final ApplicationContext applicationContext;
     private final UserRepository userRepository;
 

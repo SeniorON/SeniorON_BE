@@ -1,5 +1,8 @@
 package com.example.senioron.domain.notification.service;
 
+import com.example.senioron.domain.device.entity.Device;
+import com.example.senioron.domain.device.entity.DeviceStatus;
+import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.event.entity.Event;
 import com.example.senioron.domain.event.entity.EventType;
 import com.example.senioron.domain.event.entity.OutingPhase;
@@ -7,6 +10,7 @@ import com.example.senioron.domain.event.util.FcmSender;
 import com.example.senioron.domain.notification.dto.response.NotificationHomeResponse;
 import com.example.senioron.domain.notification.dto.response.NotificationListResponse;
 import com.example.senioron.domain.notification.dto.response.NotificationSettingResponse;
+import com.example.senioron.domain.notification.dto.response.ParentDeviceStatusResponse;
 import com.example.senioron.domain.notification.entity.Notification;
 import com.example.senioron.domain.notification.entity.NotificationSetting;
 import com.example.senioron.domain.notification.entity.NotificationSettingType;
@@ -30,6 +34,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -39,6 +44,7 @@ public class NotificationService {
     private final NotificationRepository notificationRepository;
     private final NotificationSettingRepository notificationSettingRepository;
     private final UserRepository userRepository;
+    private final DeviceRepository deviceRepository;
     private final FcmSender fcmSender;
 
     @Transactional
@@ -201,6 +207,7 @@ public class NotificationService {
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        validateParentDeviceOnline(user);
         NotificationSetting setting = notificationSettingRepository.findById(user.getUsersId())
                 .orElseGet(() -> createDefaultSettingInternal(user));
 
@@ -212,6 +219,47 @@ public class NotificationService {
         }
 
         return NotificationSettingResponse.from(type, enabled);
+    }
+
+    // 자녀가 알림 설정을 변경하기 전, 같은 가족의 부모님 기기가 오프라인이면 변경을 차단
+    private void validateParentDeviceOnline(User child) {
+        boolean isOffline = findParentDeviceStatus(child)
+                .filter(status -> status == DeviceStatus.OFFLINE)
+                .isPresent();
+        if (isOffline) {
+            throw new BusinessException(ErrorCode.PARENT_DEVICE_OFFLINE);
+        }
+    }
+
+    // 자녀가 부모님 기기의 온/오프라인 상태만 조회 (설정 변경과 분리된 조회용 API)
+    @Transactional(readOnly = true)
+    public ParentDeviceStatusResponse getParentDeviceStatus(Long childUserId) {
+        User child = userRepository.findById(childUserId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        boolean online = findParentDeviceStatus(child)
+                .map(status -> status == DeviceStatus.ONLINE)
+                .orElse(false);
+
+        return ParentDeviceStatusResponse.builder()
+                .online(online)
+                .build();
+    }
+
+    // 같은 가족의 부모님 기기 연결상태 조회. 가족/부모/기기 정보가 없으면 판단 불가(empty)로 취급
+    private Optional<DeviceStatus> findParentDeviceStatus(User child) {
+        if (child.getFamily() == null) {
+            return Optional.empty();
+        }
+
+        List<User> parents = userRepository.findByFamilyAndUsersIdNotAndRole(
+                child.getFamily(), child.getUsersId(), Role.PARENT);
+        if (parents.isEmpty()) {
+            return Optional.empty();
+        }
+
+        return deviceRepository.findFirstByUser(parents.get(0))
+                .map(Device::getConnectionStatus);
     }
 
     @Transactional(readOnly = true)
