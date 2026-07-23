@@ -22,10 +22,6 @@ public class NotificationSetting extends BaseEntity {
 
     @Builder.Default
     @Column(nullable = false)
-    private Boolean sosEnabled = true;
-
-    @Builder.Default
-    @Column(nullable = false)
     private Boolean inactivityEnabled = true;
 
     @Builder.Default
@@ -36,9 +32,6 @@ public class NotificationSetting extends BaseEntity {
     @Column(nullable = false)
     private Boolean outingReturnEnabled = true;
 
-    public void updateSosEnabled(Boolean sosEnabled) {
-        this.sosEnabled = sosEnabled;
-    }
     public void updateInactivityEnabled(Boolean inactivityEnabled) {
         this.inactivityEnabled = inactivityEnabled;
     }

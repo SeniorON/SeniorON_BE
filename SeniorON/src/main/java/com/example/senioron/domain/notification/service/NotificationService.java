@@ -110,9 +110,11 @@ public class NotificationService {
 
     @Transactional(readOnly = true)
     public  boolean isEnabled(User receiver, NotificationType type) {
+        if (type == NotificationType.SOS) {
+            return true; // SOS 알림은 필수 알림이라 끌 수 없음
+        }
         return notificationSettingRepository.findById(receiver.getUsersId())
                 .map(setting -> switch (type) {
-                    case SOS -> setting.getSosEnabled();
                     case INACTIVITY -> setting.getInactivityEnabled();
                     case RISK_LINK -> setting.getRiskLinkEnabled();
                     case OUTING_RETURN -> setting.getOutingReturnEnabled();
@@ -187,7 +189,7 @@ public class NotificationService {
         NotificationSetting setting = notificationSettingRepository.findById(user.getUsersId())
                 .orElseGet(() -> createDefaultSettingInternal(user));
         return List.of(
-                buildGroup(userId, NotificationType.SOS, setting.getSosEnabled()),
+                buildGroup(userId, NotificationType.SOS, true), // SOS 알림은 필수 알림이라 항상 on으로 표시
                 buildGroup(userId, NotificationType.INACTIVITY, setting.getInactivityEnabled()),
                 buildGroup(userId, NotificationType.RISK_LINK, setting.getRiskLinkEnabled()),
                 buildGroup(userId, NotificationType.OUTING_RETURN, setting.getOutingReturnEnabled())
@@ -222,7 +224,6 @@ public class NotificationService {
                 .orElseGet(() -> createDefaultSettingInternal(user));
 
         switch (type) {
-            case SOS -> setting.updateSosEnabled(enabled);
             case INACTIVITY -> setting.updateInactivityEnabled(enabled);
             case RISK_LINK -> setting.updateRiskLinkEnabled(enabled);
             case OUTING_RETURN -> setting.updateOutingReturnEnabled(enabled);

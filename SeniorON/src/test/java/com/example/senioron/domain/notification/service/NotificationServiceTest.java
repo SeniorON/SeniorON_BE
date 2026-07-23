@@ -66,7 +66,7 @@ class NotificationServiceTest {
                 Device.builder().connectionStatus(DeviceStatus.OFFLINE).build()
         ));
 
-        assertThatThrownBy(() -> notificationService.updateSetting(CHILD_ID, NotificationSettingType.SOS, true))
+        assertThatThrownBy(() -> notificationService.updateSetting(CHILD_ID, NotificationSettingType.INACTIVITY, true))
                 .asInstanceOf(type(BusinessException.class))
                 .extracting(BusinessException::getCode)
                 .isEqualTo(ErrorCode.PARENT_DEVICE_OFFLINE);
@@ -82,7 +82,7 @@ class NotificationServiceTest {
                 Device.builder().connectionStatus(DeviceStatus.OFFLINE).build()
         ));
 
-        assertThatThrownBy(() -> notificationService.updateSetting(CHILD_ID, NotificationSettingType.SOS, true))
+        assertThatThrownBy(() -> notificationService.updateSetting(CHILD_ID, NotificationSettingType.INACTIVITY, true))
                 .asInstanceOf(type(BusinessException.class))
                 .extracting(BusinessException::getCode)
                 .isEqualTo(ErrorCode.PARENT_DEVICE_OFFLINE);
@@ -97,7 +97,7 @@ class NotificationServiceTest {
                 Device.builder().connectionStatus(DeviceStatus.ONLINE).build()
         ));
 
-        assertThat(notificationService.updateSetting(CHILD_ID, NotificationSettingType.SOS, true)).isNotNull();
+        assertThat(notificationService.updateSetting(CHILD_ID, NotificationSettingType.INACTIVITY, true)).isNotNull();
     }
 
     @Test
@@ -106,7 +106,7 @@ class NotificationServiceTest {
                 .willReturn(List.of(parentA));
         given(deviceRepository.findAllByUserIn(List.of(parentA))).willReturn(List.of());
 
-        assertThat(notificationService.updateSetting(CHILD_ID, NotificationSettingType.SOS, true)).isNotNull();
+        assertThat(notificationService.updateSetting(CHILD_ID, NotificationSettingType.INACTIVITY, true)).isNotNull();
     }
 
     @Test
@@ -116,7 +116,7 @@ class NotificationServiceTest {
         given(notificationSettingRepository.findById(CHILD_ID))
                 .willReturn(Optional.of(NotificationSetting.builder().user(lonelyChild).build()));
 
-        assertThat(notificationService.updateSetting(CHILD_ID, NotificationSettingType.SOS, true)).isNotNull();
+        assertThat(notificationService.updateSetting(CHILD_ID, NotificationSettingType.INACTIVITY, true)).isNotNull();
     }
 
     @Test
@@ -141,5 +141,12 @@ class NotificationServiceTest {
         ParentDeviceStatusResponse response = notificationService.getParentDeviceStatus(CHILD_ID);
 
         assertThat(response.isOnline()).isFalse();
+    }
+
+    // SOS 알림은 필수 알림이라 개인 설정과 무관하게 항상 발송 대상이어야 한다.
+    @Test
+    void sosNotificationIsAlwaysEnabledRegardlessOfSetting() {
+        assertThat(notificationService.isEnabled(child, com.example.senioron.domain.notification.entity.NotificationType.SOS))
+                .isTrue();
     }
 }

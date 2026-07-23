@@ -39,7 +39,7 @@ public class NotificationController {
     public Response<List<NotificationHomeResponse>> getNotificationHome(
             @AuthenticationPrincipal User user
     ){
-        if (user.getRole() != Role.CHILD) {
+        if (user.getRole() != Role.CHILD && user.getRole() != Role.PARENT) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
         return Response.ok(notificationService.getHomeSettings(user.getUsersId()));
@@ -56,14 +56,14 @@ public class NotificationController {
         return Response.ok(notificationService.getParentDeviceStatus(user.getUsersId()));
     }
 
-    @Operation(summary = "알림 설정 토글 기능")
+    @Operation(summary = "알림 설정 토글 기능", description = "SOS 알림은 필수 알림이라 토글 대상에서 제외됩니다.")
     @PatchMapping("/setting/{type}")
     public Response<NotificationSettingResponse> updateSetting(
             @PathVariable NotificationSettingType type,
             @Valid @RequestBody NotificationSettingRequest req,
             @AuthenticationPrincipal User user
     ){
-        if (user.getRole() != Role.CHILD) {
+        if (user.getRole() != Role.CHILD && user.getRole() != Role.PARENT) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
         return Response.ok(notificationService.updateSetting(user.getUsersId(), type, req.getEnabled()));
