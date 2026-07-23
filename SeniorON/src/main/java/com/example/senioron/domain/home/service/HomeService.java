@@ -140,12 +140,18 @@ public class HomeService {
         HomeResponse.MusicCardResponse musicCard =
                 getMusicCardResponse(homeOwner);
 
+        TodayScheduleResponse todaySchedule =
+                seniorUser
+                        .map(this::getTodayHospitalSchedule)
+                        .orElse(null);
+
         return new HomeResponse(
                 currentUser.getName(),
                 connection,
                 seniorProfileResponse,
                 fontSize,
                 musicCard,
+                todaySchedule,
                 buttons
         );
     }

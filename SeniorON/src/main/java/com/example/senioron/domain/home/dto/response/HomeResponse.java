@@ -24,6 +24,9 @@ public class HomeResponse {
     @JsonProperty("music_card")
     private MusicCardResponse musicCard;
 
+    @JsonProperty("today_schedule")
+    private TodayScheduleResponse todaySchedule;
+
     private List<HomeButtonResponse> buttons;
 
     public HomeResponse(
@@ -32,6 +35,7 @@ public class HomeResponse {
             SeniorProfileResponse seniorProfile,
             FontSize fontSize,
             MusicCardResponse musicCard,
+            TodayScheduleResponse todaySchedule,
             List<HomeButtonResponse> buttons
     ) {
         this.userName = userName;
@@ -39,6 +43,7 @@ public class HomeResponse {
         this.seniorProfile = seniorProfile;
         this.fontSize = fontSize;
         this.musicCard = musicCard;
+        this.todaySchedule = todaySchedule;
         this.buttons = buttons;
     }
 
@@ -60,6 +65,10 @@ public class HomeResponse {
 
     public MusicCardResponse getMusicCard() {
         return musicCard;
+    }
+
+    public TodayScheduleResponse getTodaySchedule() {
+        return todaySchedule;
     }
 
     public List<HomeButtonResponse> getButtons() {
