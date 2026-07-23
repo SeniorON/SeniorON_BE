@@ -74,7 +74,8 @@ class UserSettingsServiceTest {
                 passwordEncoder,
                 new JwtUtil("12345678901234567890123456789012", 3600000L),
                 org.mockito.Mockito.mock(NotificationService.class),
-                org.mockito.Mockito.mock(InactivitySettingService.class)
+                org.mockito.Mockito.mock(InactivitySettingService.class),
+                org.mockito.Mockito.mock(com.example.senioron.domain.device.service.DeviceService.class)
         );
 
         UserLoginResponse beforeChange = userService.login(createLoginRequest(CURRENT_PASSWORD));

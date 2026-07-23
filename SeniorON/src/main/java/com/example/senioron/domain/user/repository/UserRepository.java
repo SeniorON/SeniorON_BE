@@ -6,7 +6,6 @@ import com.example.senioron.domain.user.entity.User;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -38,8 +37,4 @@ public interface UserRepository extends JpaRepository<User, Long> {
             @Param("family")Family family,
             @Param("excludeUserId")Long excludeUserId,
             @Param("role")Role role);
-
-        @Modifying
-        @Query("UPDATE User u SET u.fcmToken = null WHERE u.fcmToken = :fcmToken")
-        void clearFcmToken(@Param("fcmToken") String fcmToken);
-    }
+}

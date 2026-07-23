@@ -8,6 +8,7 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
+@Table(uniqueConstraints = @UniqueConstraint(columnNames = {"users_id", "device_identifier"}))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
@@ -43,5 +44,9 @@ public class Device extends BaseEntity {
         this.connectionStatus = connectionStatus;
         this.batteryLevel = batteryLevel;
         this.lastConnectedAt = lastConnectedAt;
+    }
+
+    public void updateDeviceToken(String deviceToken) {
+        this.deviceToken = deviceToken;
     }
 }

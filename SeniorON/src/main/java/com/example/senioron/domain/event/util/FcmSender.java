@@ -1,6 +1,6 @@
 package com.example.senioron.domain.event.util;
 
-import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.global.config.FirebaseConfig;
 import com.google.firebase.messaging.*;
 import lombok.RequiredArgsConstructor;
@@ -16,7 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class FcmSender {
 
     private final FirebaseConfig firebaseConfig;
-    private final UserRepository userRepository;
+    private final DeviceRepository deviceRepository;
     private final ApplicationContext applicationContext;
 
     public void send(String fcmToken, String title, String body) {
@@ -57,6 +57,6 @@ public class FcmSender {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void  clearInvalidToken(String token) {
-        userRepository.clearFcmToken(token);
+        deviceRepository.clearDeviceToken(token);
     }
 }
