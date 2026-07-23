@@ -7,6 +7,7 @@ import com.example.senioron.domain.event.entity.Event;
 import com.example.senioron.domain.event.entity.EventType;
 import com.example.senioron.domain.event.entity.OutingPhase;
 import com.example.senioron.domain.event.util.FcmSender;
+import com.example.senioron.domain.notification.dto.response.NotificationHomeListResponse;
 import com.example.senioron.domain.notification.dto.response.NotificationHomeResponse;
 import com.example.senioron.domain.notification.dto.response.NotificationListResponse;
 import com.example.senioron.domain.notification.dto.response.NotificationSettingResponse;
@@ -35,6 +36,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -113,7 +115,8 @@ public class NotificationService {
         if (type == NotificationType.SOS) {
             return true; // SOS 알림은 필수 알림이라 끌 수 없음
         }
-        return notificationSettingRepository.findById(receiver.getUsersId())
+        return resolveSeniorOwner(receiver)
+                .flatMap(senior -> notificationSettingRepository.findById(senior.getUsersId()))
                 .map(setting -> switch (type) {
                     case INACTIVITY -> setting.getInactivityEnabled();
                     case RISK_LINK -> setting.getRiskLinkEnabled();
@@ -121,6 +124,21 @@ public class NotificationService {
                     default -> throw new BusinessException(ErrorCode.FORBIDDEN);
                 })
                 .orElse(true);
+    }
+
+    //알림 설정은 유저 개인이 아니라 가족의 시니어(PARENT) 기준으로 공유
+    //본인이 PARENT면 자기 자신, CHILD면 같은 가족의 PARENT를 반환
+    private Optional<User> resolveSeniorOwner(User user) {
+        if (user.getRole() == Role.PARENT) {
+            return Optional.of(user);
+        }
+        if (user.getFamily() == null) {
+            return Optional.empty();
+        }
+        return userRepository.findByFamilyAndUsersIdNotAndRole(
+                        user.getFamily(), user.getUsersId(), Role.PARENT)
+                .stream()
+                .findFirst();
     }
 
     private NotificationType resolveType(EventType eventType) {
@@ -159,16 +177,6 @@ public class NotificationService {
         };
     }
 
-    // 디폴트 세팅 설정
-    @Transactional
-    public void createDefaultSetting(User user) {
-        NotificationSetting setting = NotificationSetting.builder()
-                .user(user)
-                .build();
-
-        notificationSettingRepository.save(setting);
-    }
-
     // 백필 대응 메소드 (기존 세팅 없을 경우 즉시 생성)
     private NotificationSetting createDefaultSettingInternal(User user){
         try{
@@ -183,18 +191,20 @@ public class NotificationService {
     }
     //알람 탭 홈화면 조회
     @Transactional(readOnly = true)
-    public List<NotificationHomeResponse> getHomeSettings(Long userId) {
+    public NotificationHomeListResponse getHomeSettings(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        NotificationSetting setting = notificationSettingRepository.findById(user.getUsersId())
-                .orElseGet(() -> createDefaultSettingInternal(user));
-        return List.of(
+        User senior = resolveSeniorOwner(user)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND));
+        NotificationSetting setting = notificationSettingRepository.findById(senior.getUsersId())
+                .orElseGet(() -> createDefaultSettingInternal(senior));
+        List<NotificationHomeResponse> items = List.of(
                 buildGroup(userId, NotificationType.SOS, true), // SOS 알림은 필수 알림이라 항상 on으로 표시
                 buildGroup(userId, NotificationType.INACTIVITY, setting.getInactivityEnabled()),
                 buildGroup(userId, NotificationType.RISK_LINK, setting.getRiskLinkEnabled()),
                 buildGroup(userId, NotificationType.OUTING_RETURN, setting.getOutingReturnEnabled())
-
         );
+        return NotificationHomeListResponse.of(items);
     }
 
     private NotificationHomeResponse buildGroup(Long userId, NotificationType type, boolean enabled) {
@@ -220,8 +230,10 @@ public class NotificationService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         validateParentDeviceOnline(user);
-        NotificationSetting setting = notificationSettingRepository.findById(user.getUsersId())
-                .orElseGet(() -> createDefaultSettingInternal(user));
+        User senior = resolveSeniorOwner(user)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND));
+        NotificationSetting setting = notificationSettingRepository.findById(senior.getUsersId())
+                .orElseGet(() -> createDefaultSettingInternal(senior));
 
         switch (type) {
             case INACTIVITY -> setting.updateInactivityEnabled(enabled);

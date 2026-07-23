@@ -6,7 +6,6 @@ import com.example.senioron.domain.user.dto.request.UserSignUpRequest;
 import com.example.senioron.domain.user.dto.response.*;
 import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.inactivity.service.InactivitySettingService;
-import com.example.senioron.domain.notification.service.NotificationService;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.entity.UserStatus;
 import com.example.senioron.domain.user.repository.UserRepository;
@@ -26,7 +25,6 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
-    private final NotificationService notificationService;
     private final InactivitySettingService inactivitySettingService;
     private final DeviceService deviceService;
 
@@ -64,7 +62,6 @@ public class UserService {
                 .build();
 
         User savedUser = userRepository.save(user);
-        notificationService.createDefaultSetting(savedUser);
         inactivitySettingService.createDefaultSetting(savedUser);
 
         return UserSignUpResponse.builder()

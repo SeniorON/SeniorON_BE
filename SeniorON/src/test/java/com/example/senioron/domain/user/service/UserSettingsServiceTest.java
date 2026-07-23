@@ -9,7 +9,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.example.senioron.domain.inactivity.service.InactivitySettingService;
-import com.example.senioron.domain.notification.service.NotificationService;
 import com.example.senioron.domain.user.dto.request.UserLoginRequest;
 import com.example.senioron.domain.user.dto.request.PasswordChangeRequest;
 import com.example.senioron.domain.user.dto.response.UserLoginResponse;
@@ -73,7 +72,6 @@ class UserSettingsServiceTest {
                 userRepository,
                 passwordEncoder,
                 new JwtUtil("12345678901234567890123456789012", 3600000L),
-                org.mockito.Mockito.mock(NotificationService.class),
                 org.mockito.Mockito.mock(InactivitySettingService.class),
                 org.mockito.Mockito.mock(com.example.senioron.domain.device.service.DeviceService.class)
         );
