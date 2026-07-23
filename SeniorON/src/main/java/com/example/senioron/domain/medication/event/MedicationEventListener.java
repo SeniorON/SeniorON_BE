@@ -9,7 +9,6 @@ import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -26,7 +25,6 @@ public class MedicationEventListener {
     private final DeviceRepository deviceRepository;
     private final FcmSender fcmSender;
 
-    @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleMedicationCheckedEvent(MedicationCheckedEvent event) {
         try {
@@ -61,13 +59,13 @@ public class MedicationEventListener {
                         }
                     }
                 } else {
-                    log.info("[FCM 미발송] 알림을 받을 자식 계정(Role.CHILD)이 존재하지 않습니다.");
+                    log.info(" [FCM 미발송] 알림을 받을 자식 계정(Role.CHILD)이 존재하지 않습니다.");
                 }
             } else {
-                log.info("[FCM 미발송] 속한 패밀리(Family)가 없습니다.");
+                log.info(" [FCM 미발송] 속한 패밀리(Family)가 없습니다.");
             }
         } catch (Exception e) {
-            log.error("[FCM 이벤트 처리 중 에러 발생] userId: {}, error: {}", event.userId(), e.getMessage(), e);
+            log.error(" [FCM 이벤트 처리 중 에러 발생] userId: {}, error: {}", event.userId(), e.getMessage(), e);
         }
     }
 

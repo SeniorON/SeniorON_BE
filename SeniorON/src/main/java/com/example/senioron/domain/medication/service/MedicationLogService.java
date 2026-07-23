@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -53,13 +54,19 @@ public class MedicationLogService {
             return MedicationCheckResponse.from(logEntity);
         }
 
-        logEntity.markAsTaken();
+        LocalDateTime now = LocalDateTime.now();
+        int updatedRows = medicationLogRepository.markAsTakenIfUntaken(medicationLogId, now);
 
-        eventPublisher.publishEvent(new MedicationCheckedEvent(
-                user.getUsersId(),
-                logEntity.getUser().getName()
-        ));
+        if (updatedRows > 0) {
+            eventPublisher.publishEvent(new MedicationCheckedEvent(
+                    user.getUsersId(),
+                    logEntity.getUser().getName()
+            ));
+        }
 
-        return MedicationCheckResponse.from(logEntity);
+        MedicationLog updatedLog = medicationLogRepository.findById(medicationLogId)
+                .orElse(logEntity);
+
+        return MedicationCheckResponse.from(updatedLog);
     }
 }
