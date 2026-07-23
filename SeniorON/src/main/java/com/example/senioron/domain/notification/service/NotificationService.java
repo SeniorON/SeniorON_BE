@@ -135,6 +135,7 @@ public class NotificationService {
         if (user.getFamily() == null) {
             return Optional.empty();
         }
+        // 부모가 2명 이상이면 usersId가 가장 작은 한 명으로 고정 (쿼리에 ORDER BY u.usersId ASC 있음)
         return userRepository.findByFamilyAndUsersIdNotAndRole(
                         user.getFamily(), user.getUsersId(), Role.PARENT)
                 .stream()

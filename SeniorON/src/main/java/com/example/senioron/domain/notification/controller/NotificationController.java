@@ -37,7 +37,7 @@ public class NotificationController {
     public Response<NotificationHomeListResponse> getNotificationHome(
             @AuthenticationPrincipal User user
     ){
-        if (user.getRole() != Role.CHILD && user.getRole() != Role.PARENT) {
+        if (user.getRole() != Role.CHILD) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
         return Response.ok(notificationService.getHomeSettings(user.getUsersId()));
@@ -61,7 +61,7 @@ public class NotificationController {
             @Valid @RequestBody NotificationSettingRequest req,
             @AuthenticationPrincipal User user
     ){
-        if (user.getRole() != Role.CHILD && user.getRole() != Role.PARENT) {
+        if (user.getRole() != Role.CHILD) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
         return Response.ok(notificationService.updateSetting(user.getUsersId(), type, req.getEnabled()));
