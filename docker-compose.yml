@@ -165,6 +165,10 @@ services:
     command:
       - "--mysqld.address=${DB_HOST}:3306"
       - "--mysqld.username=${DB_USERNAME}"
+      - "--config.my-cnf=/etc/mysqld-exporter/.my.cnf"
+
+    volumes:
+      - ./monitoring/mysqld-exporter:/etc/mysqld-exporter:ro
 
 volumes:
   grafana-data:
