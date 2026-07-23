@@ -30,6 +30,7 @@ public class FamilyService {
     private final UserRepository userRepository;
     private final S3Service s3Service;
     private final FamilyPhotoRepository familyPhotoRepository;
+    private final FamilyPhotoPermissionService familyPhotoPermissionService;
 
     private static final int RECENT_UPLOADER_COUNT = 3;
     private static final int RECENT_PHOTO_COUNT = 4;
@@ -219,7 +220,12 @@ public class FamilyService {
         return FamilyMemberResponse.builder()
                 .usersId(member.getUsersId())
                 .name(member.getName())
+                .role(member.getRole())
                 .managerType(member.getManagerType())
+                .canBecomePrimary(
+                        member.getRole() == Role.CHILD
+                        && member.getManagerType() != ManagerType.PRIMARY
+                )
                 .profileImageUrl(
                         s3Service.getFileUrl(member.getProfileImageKey())
                 )
@@ -231,13 +237,16 @@ public class FamilyService {
     }
 
     private FamilyPhotoItemResponse toFamilyPhotoItemResponse(
-            FamilyPhoto photo
+            FamilyPhoto photo,
+            User currentUser
     ) {
         return FamilyPhotoItemResponse.builder()
                 .familyPhotoId(photo.getFamilyPhotoId())
                 .imageUrl(s3Service.getFileUrl(photo.getImageKey()))
+                .uploaderUserId(photo.getUser().getUsersId())
                 .uploaderName(photo.getUser().getName())
                 .description(photo.getDescription())
+                .canDelete(familyPhotoPermissionService.canDelete(photo, currentUser))
                 .createdAt(photo.getCreatedAt())
                 .build();
     }
@@ -286,12 +295,10 @@ public class FamilyService {
                                 : s3Service.getFileUrl(profileImageKey))
                         .toList();
 
-        // 최신 사진 응답 생성
         List<FamilyPhotoItemResponse> recentPhotos =
                 recentPhotoEntities.stream()
-                        .map(this::toFamilyPhotoItemResponse)
+                        .map(photo -> toFamilyPhotoItemResponse(photo, user))
                         .toList();
-
 
         return FamilyHomeResponse.builder()
                 .members(members)
