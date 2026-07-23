@@ -15,25 +15,17 @@ import java.time.LocalDateTime;
 public class DeviceService {
 
     private final DeviceRepository deviceRepository;
-
-    // 로그인 시 호출. 유저당 기기 1개를 유지하며 토큰/연결상태를 갱신한다.
     @Transactional
-    public void registerToken(User user, String deviceToken) {
-        Device device = deviceRepository.findFirstByUser(user).orElse(null);
-
-        if (device == null) {
-            deviceRepository.save(
-                    Device.builder()
-                            .user(user)
-                            .deviceToken(deviceToken)
-                            .connectionStatus(DeviceStatus.ONLINE)
-                            .lastConnectedAt(LocalDateTime.now())
-                            .build()
-            );
-            return;
-        }
+    public void registerToken(User user, String deviceToken, String deviceIdentifier) {
+        Device device = deviceRepository.findByUserAndDeviceIdentifier(user, deviceIdentifier)
+                .orElseGet(() -> Device.builder()
+                        .user(user)
+                        .deviceIdentifier(deviceIdentifier)
+                        .build());
 
         device.updateDeviceToken(deviceToken);
         device.updateDeviceStatus(DeviceStatus.ONLINE, device.getBatteryLevel(), LocalDateTime.now());
+
+        deviceRepository.save(device);
     }
 }

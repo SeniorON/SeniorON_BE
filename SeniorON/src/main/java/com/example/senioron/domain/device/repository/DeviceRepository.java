@@ -20,4 +20,8 @@ public interface DeviceRepository
     @Modifying
     @Query("UPDATE Device d SET d.deviceToken = null WHERE d.deviceToken = :token")
     void clearDeviceToken(@Param("token") String token);
+
+    List<Device> findAllByUser(User user);
+
+    Optional<Device> findByUserAndDeviceIdentifier(User user, String deviceIdentifier);
 }

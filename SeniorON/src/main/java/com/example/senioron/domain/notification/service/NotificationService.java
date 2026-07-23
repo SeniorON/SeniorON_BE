@@ -80,12 +80,11 @@ public class NotificationService {
         notificationRepository.saveAll(notifications); // 레포 저장
 
         //수신자들의 기기 토큰을 미리 한 번에 조회
-        Map<Long, String> deviceTokensByUserId = deviceRepository.findAllByUserIn(receivers).stream()
+        Map<Long, List<String>> deviceTokensByUserId = deviceRepository.findAllByUserIn(receivers).stream()
                 .filter(device -> device.getDeviceToken() != null && !device.getDeviceToken().isBlank())
-                .collect(Collectors.toMap(
+                .collect(Collectors.groupingBy(
                         device -> device.getUser().getUsersId(),
-                        Device::getDeviceToken,
-                        (existing, duplicate) -> existing
+                        Collectors.mapping(Device::getDeviceToken, Collectors.toList())
                 ));
 
         // 커밋 성공 이후에만 FCM 발송이 실행되도록 등록
@@ -95,8 +94,8 @@ public class NotificationService {
                     public void afterCommit() {
                         for (Notification notification : notifications) {
                             User receiver = notification.getReceiverUser();
-                            String deviceToken = deviceTokensByUserId.get(receiver.getUsersId());
-                            if (deviceToken != null) {
+                            List<String> tokens = deviceTokensByUserId.getOrDefault(receiver.getUsersId(), List.of());
+                            for (String deviceToken : tokens) {
                                 try {
                                     fcmSender.send(deviceToken, notification.getTitle(), notification.getBody());
                                 } catch (Exception e) {
