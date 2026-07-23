@@ -78,6 +78,7 @@ public enum ErrorCode implements BaseCode {
     // Device Error
     DEVICE_NOT_FOUND(HttpStatus.NOT_FOUND, "DEVICE404", "기기를 찾을 수 없습니다."),
     PARENT_DEVICE_OFFLINE(HttpStatus.BAD_REQUEST, "DEVICE400", "부모님 기기가 오프라인 상태라 설정을 변경할 수 없습니다."),
+    DEVICE_IDENTIFIER_REQUIRED(HttpStatus.BAD_REQUEST, "DEVICE400_1", "기기 식별자(deviceIdentifier)가 필요합니다."),
     
     // Receipt Error
     RECEIPT_NOT_FOUND(HttpStatus.NOT_FOUND, "RECEIPT404", "영수증을 찾을 수 없습니다."),
