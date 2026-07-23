@@ -85,7 +85,7 @@ public class UserService {
         }
 
         if(request.getFcmToken() != null && !request.getFcmToken().isBlank()){
-            deviceService.registerToken(user, request.getFcmToken());
+            deviceService.registerToken(user, request.getFcmToken(), request.getDeviceIdentifier());
         }
 
         String accessToken = jwtUtil.createAccessToken(user);

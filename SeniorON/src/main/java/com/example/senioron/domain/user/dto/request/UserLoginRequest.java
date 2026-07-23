@@ -15,4 +15,6 @@ public class UserLoginRequest {
     private String password;
 
     private String fcmToken;
+
+    private String deviceIdentifier;
 }
