@@ -45,15 +45,20 @@ public class MedicationEventListener {
                         String token = device.getDeviceToken();
                         if (token != null && !token.isBlank()) {
 
-                            log.info("📢 [FCM 전송 시도] 수신자 ID: {}, 디바이스 토큰: {}", parent.getUsersId(), maskToken(token));
+                            log.info(" [FCM 전송 시도] 수신자 ID: {}, 디바이스 토큰: {}", parent.getUsersId(), maskToken(token));
 
-                            fcmSender.send(
-                                    token,
-                                    "복약 알림",
-                                    parent.getName() + "님이 약을 복용하셨습니다."
-                            );
+                            try {
+                                fcmSender.send(
+                                        token,
+                                        "복약 알림",
+                                        parent.getName() + "님이 약을 복용하셨습니다."
+                                );
+                                log.info(" [FCM 전송 완료] fcmSender.send() 성공적으로 호출됨!");
+                            } catch (Exception sendException) {
+                                log.error(" [개별 FCM 발송 실패] deviceToken: {}, error: {}", maskToken(token), sendException.getMessage(), sendException);
+                                log.error(" [개별 FCM 발송 실패] deviceToken: {}, error: {}", maskToken(token), sendException.getMessage(), sendException);
+                            }
 
-                            log.info(" [FCM 전송 완료] fcmSender.send() 성공적으로 호출됨!");
                         } else {
                             log.warn(" [FCM 전송 불가] 해당 유저의 디바이스 토큰이 비어있습니다.");
                         }
