@@ -9,7 +9,6 @@ import com.example.senioron.domain.home.dto.request.SeniorProfileUpdateRequest;
 import com.example.senioron.domain.home.dto.response.ButtonOptionResponse;
 import com.example.senioron.domain.home.dto.response.HomeButtonCreateResponse;
 import com.example.senioron.domain.home.dto.response.HomeResponse;
-import com.example.senioron.domain.home.dto.response.ScheduleType;
 import com.example.senioron.domain.home.dto.response.SeniorHomeResponse;
 import com.example.senioron.domain.home.dto.response.SeniorProfileUpdateResponse;
 import com.example.senioron.domain.home.dto.response.TodayScheduleResponse;
@@ -20,8 +19,6 @@ import com.example.senioron.domain.home.repository.ButtonOptionRepository;
 import com.example.senioron.domain.home.repository.HomeRepository;
 import com.example.senioron.domain.hospital.entity.Hospital;
 import com.example.senioron.domain.hospital.repository.HospitalRepository;
-import com.example.senioron.domain.medication.entity.Medication;
-import com.example.senioron.domain.medication.repository.MedicationRepository;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
@@ -36,17 +33,14 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.Period;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.Comparator;
 
 @Service
 public class HomeService {
@@ -55,7 +49,6 @@ public class HomeService {
     private final ButtonOptionRepository buttonOptionRepository;
     private final UserRepository userRepository;
     private final HospitalRepository hospitalRepository;
-    private final MedicationRepository medicationRepository;
     private final DeviceRepository deviceRepository;
     private final SeniorRepository seniorRepository;
 
@@ -64,7 +57,6 @@ public class HomeService {
             ButtonOptionRepository buttonOptionRepository,
             UserRepository userRepository,
             HospitalRepository hospitalRepository,
-            MedicationRepository medicationRepository,
             DeviceRepository deviceRepository,
             SeniorRepository seniorRepository
     ) {
@@ -72,7 +64,6 @@ public class HomeService {
         this.buttonOptionRepository = buttonOptionRepository;
         this.userRepository = userRepository;
         this.hospitalRepository = hospitalRepository;
-        this.medicationRepository = medicationRepository;
         this.deviceRepository = deviceRepository;
         this.seniorRepository = seniorRepository;
     }
@@ -163,9 +154,6 @@ public class HomeService {
             );
         }
 
-        /*
-         * OTHER 관계인 경우 직접 입력한 관계가 반드시 존재해야 합니다.
-         */
         String resolvedCustomRelation =
                 resolveCustomRelation(
                         request.relation(),
@@ -183,8 +171,7 @@ public class HomeService {
         Senior currentUserSenior;
 
         /*
-         * 현재 담당자에게 등록된 시니어 정보가 없으면
-         * 최초 등록으로 처리합니다.
+         * 현재 담당자에게 등록된 시니어 정보가 없으면 최초 등록으로 처리
          */
         if (currentUserSeniorOptional.isEmpty()) {
 
@@ -206,12 +193,6 @@ public class HomeService {
 
         } else {
 
-            /*
-             * 기존 정보가 있으면 공통 프로필 정보만 수정합니다.
-             *
-             * relation과 customRelation은 담당자별로 다를 수 있으므로
-             * 기존 값을 유지합니다.
-             */
             currentUserSenior =
                     currentUserSeniorOptional.get();
 
@@ -224,13 +205,6 @@ public class HomeService {
             );
         }
 
-        /*
-         * 같은 가족의 다른 자녀 담당자가 이미 등록한 Senior 정보가 있다면
-         * 이름, 생년월일, 전화번호, 주소 등 공통 정보만 동기화합니다.
-         *
-         * 다른 담당자의 Senior 정보가 없는 경우에는 관계를 알 수 없으므로
-         * 서버에서 임의로 새 행을 생성하지 않습니다.
-         */
         List<User> familyMembers =
                 userRepository.findAllByFamily(
                         currentUser.getFamily()
@@ -271,6 +245,9 @@ public class HomeService {
         );
     }
 
+    /**
+     * 홈 버튼 수정
+     */
     @Transactional
     public void updateButtons(
             HomeButtonUpdateRequest request
@@ -405,6 +382,9 @@ public class HomeService {
         }
     }
 
+    /**
+     * 추가 가능한 홈 버튼 옵션 조회
+     */
     @Transactional(readOnly = true)
     public List<ButtonOptionResponse> getButtonOptions() {
 
@@ -426,6 +406,9 @@ public class HomeService {
                 .toList();
     }
 
+    /**
+     * 홈 버튼 추가
+     */
     @Transactional
     public HomeButtonCreateResponse createButton(
             HomeButtonCreateRequest request
@@ -496,6 +479,9 @@ public class HomeService {
         );
     }
 
+    /**
+     * 홈 버튼 삭제
+     */
     @Transactional
     public void deleteButton(
             Long buttonId
@@ -534,6 +520,9 @@ public class HomeService {
         }
     }
 
+    /**
+     * 시니어 홈 화면 조회
+     */
     @Transactional(readOnly = true)
     public SeniorHomeResponse getSeniorHome() {
 
@@ -573,166 +562,104 @@ public class HomeService {
                         ? FontSize.MEDIUM
                         : homes.get(0).getFontSize();
 
-        List<TodayScheduleResponse> todaySchedules =
-                getTodaySchedules(parent);
+        TodayScheduleResponse todaySchedule =
+                getTodayHospitalSchedule(
+                        parent
+                );
 
         return new SeniorHomeResponse(
                 fontSize,
-                todaySchedules,
+                todaySchedule,
                 buttons
         );
     }
 
-    private List<TodayScheduleResponse> getTodaySchedules(
+    /**
+     * 오늘 병원 일정 조회
+     *
+     * 일정이 없으면 NONE,
+     * 일정이 1개이면 상세 정보,
+     * 일정이 2개 이상이면 일정 개수만 반환
+     */
+    private TodayScheduleResponse getTodayHospitalSchedule(
             User parent
     ) {
 
-        LocalDate today = LocalDate.now();
+        if (parent.getFamily() == null) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_NOT_CONNECTED
+            );
+        }
 
-        List<TodayScheduleResponse> schedules =
-                new ArrayList<>();
+        LocalDate today =
+                LocalDate.now();
+
+        List<User> childManagers =
+                userRepository
+                        .findAllByFamily(
+                                parent.getFamily()
+                        )
+                        .stream()
+                        .filter(user ->
+                                user.getRole() == Role.CHILD
+                        )
+                        .filter(user ->
+                                user.getManagerType()
+                                        == ManagerType.PRIMARY
+                                        || user.getManagerType()
+                                        == ManagerType.SUB
+                        )
+                        .toList();
 
         List<Hospital> hospitals =
-                hospitalRepository
-                        .findByUserAndScheduleDateBetweenOrderByScheduleDateAscScheduleTimeAsc(
-                                parent,
-                                today,
-                                today
-                        );
-
-        for (Hospital hospital : hospitals) {
-
-            schedules.add(
-                    TodayScheduleResponse.builder()
-                            .scheduleId(
-                                    hospital.getHospital_id()
-                            )
-                            .scheduleType(
-                                    ScheduleType.HOSPITAL
-                            )
-                            .title(
-                                    hospital.getHospitalName()
-                            )
-                            .description(
-                                    hospital.getDepartment()
-                            )
-                            .scheduledTime(
-                                    hospital.getScheduleTime()
-                            )
-                            .build()
-            );
-        }
-
-        List<Medication> medications =
-                medicationRepository
-                        .findAllByUserOrderByMedicineTimeAsc(
-                                parent
-                        );
-
-        for (Medication medication : medications) {
-
-            if (!isMedicationScheduledToday(
-                    medication,
-                    today
-            )) {
-                continue;
-            }
-
-            schedules.add(
-                    TodayScheduleResponse.builder()
-                            .scheduleId(
-                                    medication.getMedication_id()
-                            )
-                            .scheduleType(
-                                    ScheduleType.MEDICATION
-                            )
-                            .title(
-                                    medication.getMedicineName()
-                            )
-                            .description(
-                                    medication.getIngredientName()
-                            )
-                            .scheduledTime(
-                                    medication.getMedicineTime()
-                            )
-                            .build()
-            );
-        }
-
-        schedules.sort(
-                Comparator.comparing(
-                        TodayScheduleResponse::getScheduledTime,
-                        Comparator.nullsLast(
-                                Comparator.naturalOrder()
+                childManagers.stream()
+                        .flatMap(childManager ->
+                                hospitalRepository
+                                        .findByUserAndScheduleDateBetweenOrderByScheduleDateAscScheduleTimeAsc(
+                                                childManager,
+                                                today,
+                                                today
+                                        )
+                                        .stream()
                         )
-                )
+                        .sorted(
+                                Comparator.comparing(
+                                                Hospital::getScheduleDate
+                                        )
+                                        .thenComparing(
+                                                Hospital::getScheduleTime
+                                        )
+                        )
+                        .toList();
+
+        int scheduleCount =
+                hospitals.size();
+
+        if (scheduleCount == 0) {
+            return TodayScheduleResponse.empty();
+        }
+
+        if (scheduleCount == 1) {
+
+            Hospital hospital =
+                    hospitals.get(0);
+
+            return TodayScheduleResponse.detail(
+                    hospital.getHospital_id(),
+                    hospital.getHospitalName(),
+                    hospital.getDepartment(),
+                    hospital.getScheduleTime()
+            );
+        }
+
+        return TodayScheduleResponse.count(
+                scheduleCount
         );
-
-        return schedules;
     }
 
-    private boolean isMedicationScheduledToday(
-            Medication medication,
-            LocalDate today
-    ) {
-
-        String medicineDays =
-                medication.getMedicineDays();
-
-        if (medicineDays == null
-                || medicineDays.isBlank()) {
-
-            return false;
-        }
-
-        DayOfWeek dayOfWeek =
-                today.getDayOfWeek();
-
-        String koreanDay =
-                convertToKoreanDay(dayOfWeek);
-
-        String shortEnglishDay =
-                dayOfWeek
-                        .name()
-                        .substring(0, 3);
-
-        String fullEnglishDay =
-                dayOfWeek.name();
-
-        return Arrays.stream(
-                        medicineDays.split(",")
-                )
-                .map(String::trim)
-                .filter(day ->
-                        !day.isBlank()
-                )
-                .map(String::toUpperCase)
-                .anyMatch(day ->
-                        day.equals(koreanDay)
-                                || day.equals(
-                                shortEnglishDay
-                        )
-                                || day.equals(
-                                fullEnglishDay
-                        )
-                );
-    }
-
-    private String convertToKoreanDay(
-            DayOfWeek dayOfWeek
-    ) {
-
-        return switch (dayOfWeek) {
-            case MONDAY -> "월";
-            case TUESDAY -> "화";
-            case WEDNESDAY -> "수";
-            case THURSDAY -> "목";
-            case FRIDAY -> "금";
-            case SATURDAY -> "토";
-            case SUNDAY -> "일";
-        };
-    }
-
+    /**
+     * 홈 글씨 크기 수정
+     */
     @Transactional
     public void updateFontSize(
             HomeFontSizeUpdateRequest request
@@ -906,12 +833,6 @@ public class HomeService {
         return senior.getRelation().name();
     }
 
-    /**
-     * OTHER 관계라면 직접 입력한 관계값을 검증합니다.
-     *
-     * 별도의 ErrorCode를 추가하지 않고 HomeService 내부에서 검증해
-     * Senior 도메인의 변경을 피합니다.
-     */
     private String resolveCustomRelation(
             SeniorRelation relation,
             String customRelation
