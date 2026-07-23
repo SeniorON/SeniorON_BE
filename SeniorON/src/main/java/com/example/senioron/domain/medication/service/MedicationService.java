@@ -85,20 +85,16 @@ public class MedicationService {
             medicationIds.add(savedMedication.getMedication_id());
             medicineTimes.add(savedMedication.getMedicineTime().toString());
 
-            // 30일치 로그 생성
             LocalDate startDate = LocalDate.now();
-            LocalDate endDate = startDate.plusDays(LOG_SCHEDULE_DAYS);
 
-            for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
-                String dateKorean = convertDayOfWeekToKorean(date.getDayOfWeek());
-
-                final String dayEng = date.getDayOfWeek().name().substring(0, 3);
-                final LocalDate currentDate = date;
+            for (int i = 0; i < LOG_SCHEDULE_DAYS; i++) {
+                LocalDate currentDate = startDate.plusDays(i);
+                String normalizedCurrentDay = normalizeDay(currentDate.getDayOfWeek().name());
 
                 boolean isDayIncluded = request.getMedicineDays().stream()
                         .map(String::trim)
-                        .map(String::toUpperCase)
-                        .anyMatch(day -> day.equals(dateKorean) || day.contains(dateKorean) || day.equals(dayEng));
+                        .map(this::normalizeDay)
+                        .anyMatch(day -> day != null && day.equals(normalizedCurrentDay));
 
                 if (isDayIncluded) {
                     logsToSave.add(MedicationLog.builder()
