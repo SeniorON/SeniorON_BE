@@ -45,6 +45,12 @@ management:
 kakao:
   client-id: ${KAKAO_CLIENT_ID}
   redirect-uri: ${KAKAO_REDIRECT_URI}
+  local:
+    api-key: ${KAKAO_LOCAL_API_KEY:}
+
+google:
+  safebrowsing:
+    api-key: ${GOOGLE_SAFEBROWSING_API_KEY:}
 
 cloud:
   aws:
@@ -52,4 +58,4 @@ cloud:
     s3:
       bucket: ${S3_BUCKET}
 firebase:
-  service-account-path: senioron-8c2e1-firebase-adminsdk-fbsvc-ba018605fb.json
+  service-account-path: ${FIREBASE_SERVICE_ACCOUNT_PATH:}

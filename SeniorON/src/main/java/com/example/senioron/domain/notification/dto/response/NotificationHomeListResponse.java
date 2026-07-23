@@ -8,7 +8,7 @@ import java.util.List;
 @Getter
 @Builder
 public class NotificationHomeListResponse {
-    private long enabledCount;
+    private long enabledCount;  //받고 있는 알람 갯수
     private List<NotificationHomeResponse> items;
 
     public static NotificationHomeListResponse of(List<NotificationHomeResponse> items) {
