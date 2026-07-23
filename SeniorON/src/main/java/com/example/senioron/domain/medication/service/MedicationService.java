@@ -17,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -31,6 +32,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class MedicationService {
+
+    private static final int LOG_SCHEDULE_DAYS = 30;
 
     private static final List<String> DAY_ORDER = List.of(
             "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"
@@ -58,36 +61,12 @@ public class MedicationService {
         User user = getUserOrThrow(userId);
 
         String medicineDays = String.join(",", request.getMedicineDays());
-
         String medicationGroupId = java.util.UUID.randomUUID().toString();
 
         List<Long> medicationIds = new ArrayList<>();
         List<String> medicineTimes = new ArrayList<>();
 
-        String todayKorean = switch (java.time.LocalDate.now().getDayOfWeek()) {
-            case MONDAY -> "월";
-            case TUESDAY -> "화";
-            case WEDNESDAY -> "수";
-            case THURSDAY -> "목";
-            case FRIDAY -> "금";
-            case SATURDAY -> "토";
-            case SUNDAY -> "일";
-        };
-
-        String todayEnglish = switch (java.time.LocalDate.now().getDayOfWeek()) {
-            case MONDAY -> "MON";
-            case TUESDAY -> "TUE";
-            case WEDNESDAY -> "WED";
-            case THURSDAY -> "THU";
-            case FRIDAY -> "FRI";
-            case SATURDAY -> "SAT";
-            case SUNDAY -> "SUN";
-        };
-
-        boolean isTodayIncluded = request.getMedicineDays().stream()
-                .map(String::trim)
-                .map(String::toUpperCase)
-                .anyMatch(day -> day.equals(todayKorean) || day.equals(todayEnglish) || day.contains(todayKorean));
+        List<MedicationLog> logsToSave = new ArrayList<>();
 
         for (String timeStr : request.getMedicineTimes()) {
             LocalTime medicineTime = LocalTime.parse(timeStr);
@@ -106,17 +85,36 @@ public class MedicationService {
             medicationIds.add(savedMedication.getMedication_id());
             medicineTimes.add(savedMedication.getMedicineTime().toString());
 
-            if (isTodayIncluded) {
-                MedicationLog todayLog = MedicationLog.builder()
-                        .user(user)
-                        .medication(savedMedication)
-                        .plannedDate(java.time.LocalDate.now())
-                        .plannedTime(medicineTime)
-                        .isTaken(false)
-                        .build();
+            // 30일치 로그 생성
+            LocalDate startDate = LocalDate.now();
+            LocalDate endDate = startDate.plusDays(LOG_SCHEDULE_DAYS);
 
-                medicationLogRepository.save(todayLog);
+            for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
+                String dateKorean = convertDayOfWeekToKorean(date.getDayOfWeek());
+
+                final String dayEng = date.getDayOfWeek().name().substring(0, 3);
+                final LocalDate currentDate = date;
+
+                boolean isDayIncluded = request.getMedicineDays().stream()
+                        .map(String::trim)
+                        .map(String::toUpperCase)
+                        .anyMatch(day -> day.equals(dateKorean) || day.contains(dateKorean) || day.equals(dayEng));
+
+                if (isDayIncluded) {
+                    logsToSave.add(MedicationLog.builder()
+                            .user(user)
+                            .medication(savedMedication)
+                            .plannedDate(currentDate)
+                            .plannedTime(medicineTime)
+                            .isTaken(false)
+                            .build());
+                }
             }
+        }
+
+
+        if (!logsToSave.isEmpty()) {
+            medicationLogRepository.saveAll(logsToSave);
         }
 
         return new MedicationCreateResponse(
@@ -127,6 +125,18 @@ public class MedicationService {
                 medicineTimes,
                 request.getMedicineDays()
         );
+    }
+
+    private String convertDayOfWeekToKorean(java.time.DayOfWeek dayOfWeek) {
+        return switch (dayOfWeek) {
+            case MONDAY -> "월";
+            case TUESDAY -> "화";
+            case WEDNESDAY -> "수";
+            case THURSDAY -> "목";
+            case FRIDAY -> "금";
+            case SATURDAY -> "토";
+            case SUNDAY -> "일";
+        };
     }
 
     public List<MedicationReadResponse> getMedications(Long userId) {

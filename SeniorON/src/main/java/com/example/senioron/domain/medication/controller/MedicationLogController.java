@@ -1,6 +1,7 @@
 package com.example.senioron.domain.medication.controller;
 
 import com.example.senioron.global.apiPayload.response.Response;
+import com.example.senioron.domain.medication.dto.response.MedicationCheckResponse;
 import com.example.senioron.domain.medication.dto.response.MedicationScheduleResponse;
 import com.example.senioron.domain.medication.service.MedicationLogService;
 import com.example.senioron.domain.user.entity.User;
@@ -21,6 +22,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.List;
+
+
 
 @Tag(name = "복약 관리 API", description = "복약 로그 및 일정 관련 API")
 @RestController
@@ -52,5 +55,21 @@ public class MedicationLogController {
         Long userId = user.getUsersId();
         List<MedicationScheduleResponse> responses = medicationLogService.getDailyMedicationSchedules(userId, date);
         return Response.ok(responses);
+    }
+    @PatchMapping("/{medicationLogId}/check")
+    @Operation(
+            summary = "복약 상태 변경 (복용 체크) API",
+            description = "알람을 보내 특정 복약 로그의 상태를 미복용에서 복용 상태로 변경하고 시간을 기록합니다."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "복약 체크 성공"),
+            @ApiResponse(responseCode = "404", description = "존재하지 않는 복약 기록", content = @Content(schema = @Schema(implementation = Response.class)))
+    })
+    public Response<MedicationCheckResponse> checkMedication(
+            @Parameter(description = "복약 로그 ID", example = "1")
+            @PathVariable Long medicationLogId
+    ) {
+        MedicationCheckResponse response = medicationLogService.checkMedication(medicationLogId);
+        return Response.ok(response);
     }
 }
