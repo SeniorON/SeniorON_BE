@@ -10,7 +10,9 @@ import java.time.LocalDateTime;
 public class FamilyPhotoItemResponse {
     private Long familyPhotoId;
     private String imageUrl;
+    private Long uploaderUserId;
     private String uploaderName;
     private String description;
+    private boolean canDelete;
     private LocalDateTime createdAt;
 }

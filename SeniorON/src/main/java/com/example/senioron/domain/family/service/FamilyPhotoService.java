@@ -8,7 +8,6 @@ import com.example.senioron.domain.family.dto.response.FamilyPhotoListResponse;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
-import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
@@ -25,7 +24,6 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Objects;
 
 @Slf4j
 @Service
@@ -35,6 +33,7 @@ public class FamilyPhotoService {
     private final FamilyPhotoRepository familyPhotoRepository;
     private final UserRepository userRepository;
     private final S3Service s3Service;
+    private final FamilyPhotoPermissionService familyPhotoPermissionService;
 
     @Transactional
     public FamilyPhotoCreateResponse createPhoto(
@@ -146,8 +145,10 @@ public class FamilyPhotoService {
                 .map(photo -> FamilyPhotoItemResponse.builder()
                         .familyPhotoId(photo.getFamilyPhotoId())
                         .imageUrl(s3Service.getFileUrl(photo.getImageKey()))
+                        .uploaderUserId(photo.getUser().getUsersId())
                         .uploaderName(photo.getUser().getName())
                         .description(photo.getDescription())
+                        .canDelete(familyPhotoPermissionService.canDelete(photo, user))
                         .createdAt(photo.getCreatedAt())
                         .build())
                 .toList();
@@ -174,24 +175,7 @@ public class FamilyPhotoService {
                 .findByFamilyPhotoIdAndFamily(familyPhotoId, family)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_PHOTO_NOT_FOUND));
 
-        boolean isUploader = Objects.equals(
-                photo.getUser().getUsersId(),
-                currentUser.getUsersId()
-        );
-
-        boolean uploaderStillInFamily =
-                photo.getUser().getFamily() != null && Objects.equals(
-                        photo.getUser().getFamily().getFamilyId(),
-                        family.getFamilyId()
-                );
-
-        boolean isPrimaryManager =
-                currentUser.getManagerType() == ManagerType.PRIMARY;
-
-        boolean canDelete =
-                isUploader || (!uploaderStillInFamily && isPrimaryManager);
-
-        if (!canDelete) {
+        if (!familyPhotoPermissionService.canDelete(photo, currentUser)) {
             throw new BusinessException(ErrorCode.FAMILY_PHOTO_DELETE_FORBIDDEN);
         }
 

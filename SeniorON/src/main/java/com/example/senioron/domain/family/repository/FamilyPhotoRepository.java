@@ -16,14 +16,14 @@ import java.util.Optional;
 public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> {
 
     // 첫 페이지 조회 메서드
-    @EntityGraph(attributePaths = "user")
+    @EntityGraph(attributePaths = {"user", "user.family"})
     List<FamilyPhoto> findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
             Family family,
             Pageable pageable
     );
 
     // 다음 페이지 조회 메서드
-    @EntityGraph(attributePaths = "user")
+    @EntityGraph(attributePaths = {"user", "user.family"})
     @Query("""
             SELECT fp
             FROM FamilyPhoto fp
