@@ -1,7 +1,6 @@
 package com.example.senioron.domain.family.service;
 
 import com.example.senioron.domain.family.dto.request.FamilyPhotoCreateRequest;
-import com.example.senioron.domain.family.dto.response.FamilyPhotoCreateResponse;
 import com.example.senioron.domain.family.dto.response.FamilyPhotoCursorResponse;
 import com.example.senioron.domain.family.dto.response.FamilyPhotoItemResponse;
 import com.example.senioron.domain.family.dto.response.FamilyPhotoListResponse;
@@ -36,7 +35,7 @@ public class FamilyPhotoService {
     private final FamilyPhotoPermissionService familyPhotoPermissionService;
 
     @Transactional
-    public FamilyPhotoCreateResponse createPhoto(
+    public FamilyPhotoItemResponse createPhoto(
             User principal,
             FamilyPhotoCreateRequest request
     ) {
@@ -66,17 +65,32 @@ public class FamilyPhotoService {
 
             FamilyPhoto savedPhoto = familyPhotoRepository.saveAndFlush(familyPhoto);
 
-            return FamilyPhotoCreateResponse.builder()
-                    .familyPhotoId(savedPhoto.getFamilyPhotoId())
-                    .imageKey(savedPhoto.getImageKey())
-                    .uploaderName(user.getName())
-                    .description(savedPhoto.getDescription())
-                    .createdAt(savedPhoto.getCreatedAt())
-                    .build();
+            return toItemResponse(savedPhoto, user);
+
         } catch(RuntimeException e) {
             s3Service.delete(imageKey);
             throw e;
         }
+    }
+
+    private FamilyPhotoItemResponse toItemResponse(
+            FamilyPhoto photo,
+            User currentUser
+    ){
+        return FamilyPhotoItemResponse.builder()
+                .familyPhotoId(photo.getFamilyPhotoId())
+                .imageUrl(s3Service.getFileUrl(photo.getImageKey()))
+                .uploaderUserId(photo.getUser().getUsersId())
+                .uploaderName(photo.getUser().getName())
+                .description(photo.getDescription())
+                .canDelete(
+                        familyPhotoPermissionService.canDelete(
+                                photo,
+                                currentUser
+                        )
+                )
+                .createdAt(photo.getCreatedAt())
+                .build();
     }
 
     @Transactional(readOnly = true)
@@ -142,15 +156,7 @@ public class FamilyPhotoService {
         }
 
         List<FamilyPhotoItemResponse> photoResponses = pagePhotos.stream()
-                .map(photo -> FamilyPhotoItemResponse.builder()
-                        .familyPhotoId(photo.getFamilyPhotoId())
-                        .imageUrl(s3Service.getFileUrl(photo.getImageKey()))
-                        .uploaderUserId(photo.getUser().getUsersId())
-                        .uploaderName(photo.getUser().getName())
-                        .description(photo.getDescription())
-                        .canDelete(familyPhotoPermissionService.canDelete(photo, user))
-                        .createdAt(photo.getCreatedAt())
-                        .build())
+                .map(photo -> toItemResponse(photo, user))
                 .toList();
 
         return FamilyPhotoListResponse.builder()
