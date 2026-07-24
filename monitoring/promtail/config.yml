@@ -20,27 +20,28 @@ scrape_configs:
 
     relabel_configs:
 
-      # Loki 로그 제외
-      - source_labels: ['__meta_docker_container_name']
-        regex: '/senioron_be-loki-1'
+      # Loki / Promtail 자체 로그 제외
+      # Compose 프로젝트명이 변경되어도 유지
+      - source_labels:
+          ['__meta_docker_container_label_com_docker_compose_service']
+        regex: 'loki|promtail'
         action: drop
 
 
-      # Promtail 로그 제외
-      - source_labels: ['__meta_docker_container_name']
-        regex: '/senioron_be-promtail-1'
-        action: drop
-
-
-      - source_labels: ['__meta_docker_container_name']
+      # 컨테이너 이름
+      - source_labels:
+          ['__meta_docker_container_name']
         regex: '/(.*)'
         target_label: container
 
 
-      - source_labels: ['__meta_docker_container_image']
+      # 이미지 이름
+      - source_labels:
+          ['__meta_docker_container_image']
         target_label: image
 
 
+      # Docker 로그 파일 위치
       - replacement: /var/lib/docker/containers/*/*-json.log
         target_label: __path__
 
