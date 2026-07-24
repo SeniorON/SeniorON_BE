@@ -3,7 +3,6 @@ package com.example.senioron.domain.notification.entity;
 import com.example.senioron.domain.event.entity.Event;
 import com.example.senioron.domain.user.entity.User;
 import jakarta.persistence.*;
-import java.time.*;
 import lombok.*;
 import com.example.senioron.common.entity.BaseEntity;
 
@@ -40,4 +39,7 @@ public class Notification extends BaseEntity {
 
     private Boolean isRead;
 
-    private LocalDateTime readAt;}
+    public void markAsRead() {
+        this.isRead = true;
+    }
+}
