@@ -722,6 +722,12 @@ public class HomeService {
 
         User currentUser = getCurrentUser();
 
+        if (currentUser.getRole() != Role.PARENT) {
+            throw new BusinessException(
+                    ErrorCode.SENIOR_HOME_ACCESS_DENIED
+            );
+        }
+
         List<Hospital> hospitals =
                 findTodayHospitalSchedules(
                         currentUser

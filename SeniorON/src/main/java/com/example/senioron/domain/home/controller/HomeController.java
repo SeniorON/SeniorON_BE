@@ -120,7 +120,7 @@ public class HomeController {
     }
     @Operation(
             summary = "오늘 병원 일정 상세 목록 조회",
-            description = "가족 내 주담당자와 보조담당자가 등록한 오늘 병원 일정을 시간순으로 조회"
+            description = "시니어가 가족 내 주담당자와 보조담당자가 등록한 오늘 병원 일정을 시간순으로 조회"
     )
     @GetMapping("/hospitals/today")
     public Response<List<TodayHospitalListResponse>>
