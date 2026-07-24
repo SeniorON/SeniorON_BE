@@ -7,6 +7,7 @@ import com.example.senioron.domain.event.entity.Event;
 import com.example.senioron.domain.event.entity.EventType;
 import com.example.senioron.domain.event.entity.OutingPhase;
 import com.example.senioron.domain.event.util.FcmSender;
+import com.example.senioron.domain.notification.dto.response.NotificationHomeListResponse;
 import com.example.senioron.domain.notification.dto.response.NotificationHomeResponse;
 import com.example.senioron.domain.notification.dto.response.NotificationListResponse;
 import com.example.senioron.domain.notification.dto.response.NotificationSettingResponse;
@@ -31,10 +32,12 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -58,7 +61,7 @@ public class NotificationService {
 
         NotificationType type = resolveType(event.getEventType());
         String title = resolveTitle(event.getEventType());
-        String body = resolveBody(event.getEventType(), event.getPhase());
+        String body = resolveBody(event);
         List<Notification> notifications = new ArrayList<>();
         for (User receiver : receivers) {
             if (!isEnabled(receiver, type)) {
@@ -110,15 +113,34 @@ public class NotificationService {
 
     @Transactional(readOnly = true)
     public  boolean isEnabled(User receiver, NotificationType type) {
-        return notificationSettingRepository.findById(receiver.getUsersId())
+        if (type == NotificationType.SOS) {
+            return true; // SOS 알림은 필수 알림이라 끌 수 없음
+        }
+        return resolveSeniorOwner(receiver)
+                .flatMap(senior -> notificationSettingRepository.findById(senior.getUsersId()))
                 .map(setting -> switch (type) {
-                    case SOS -> setting.getSosEnabled();
                     case INACTIVITY -> setting.getInactivityEnabled();
                     case RISK_LINK -> setting.getRiskLinkEnabled();
                     case OUTING_RETURN -> setting.getOutingReturnEnabled();
                     default -> throw new BusinessException(ErrorCode.FORBIDDEN);
                 })
                 .orElse(true);
+    }
+
+    //알림 설정은 유저 개인이 아니라 가족의 시니어(PARENT) 기준으로 공유
+    //본인이 PARENT면 자기 자신, CHILD면 같은 가족의 PARENT를 반환
+    private Optional<User> resolveSeniorOwner(User user) {
+        if (user.getRole() == Role.PARENT) {
+            return Optional.of(user);
+        }
+        if (user.getFamily() == null) {
+            return Optional.empty();
+        }
+        // 부모가 2명 이상이면 usersId가 가장 작은 한 명으로 고정 (쿼리에 ORDER BY u.usersId ASC 있음)
+        return userRepository.findByFamilyAndUsersIdNotAndRole(
+                        user.getFamily(), user.getUsersId(), Role.PARENT)
+                .stream()
+                .findFirst();
     }
 
     private NotificationType resolveType(EventType eventType) {
@@ -139,14 +161,22 @@ public class NotificationService {
         };
     }
 
-    private String resolveBody(EventType eventType, OutingPhase phase) {
-        return switch (eventType) {
+    private String resolveBody(Event event) {
+        return switch (event.getEventType()) {
             case SOS -> "도움이 필요해요";
-            case INACTIVITY -> "무활동 감지됨";
+            case INACTIVITY -> resolveInactivityMessage(event.getLastSeenAt(), event.getCreatedAt());
             case RISK_LINK -> "위험링크 감지됨";
-            case OUTING_RETURN -> resolveOutingReturnMessage(phase);
-            default -> "알림 감지";
+            case OUTING_RETURN -> resolveOutingReturnMessage(event.getPhase());
         };
+    }
+
+    // "4시간 미사용 감지됨" — 마지막 활동 시각부터 감지 시각까지 경과 시간
+    private String resolveInactivityMessage(LocalDateTime lastSeenAt, LocalDateTime detectedAt) {
+        if (lastSeenAt == null || detectedAt == null) {
+            return "무활동 감지됨";
+        }
+        long hours = Duration.between(lastSeenAt, detectedAt).toHours();
+        return hours + "시간 미사용 감지됨";
     }
 
     private String resolveOutingReturnMessage(OutingPhase phase) {
@@ -155,16 +185,6 @@ public class NotificationService {
             case OUTING -> "외출하셨어요";
             case RETURN -> "귀가하셨어요";
         };
-    }
-
-    // 디폴트 세팅 설정
-    @Transactional
-    public void createDefaultSetting(User user) {
-        NotificationSetting setting = NotificationSetting.builder()
-                .user(user)
-                .build();
-
-        notificationSettingRepository.save(setting);
     }
 
     // 백필 대응 메소드 (기존 세팅 없을 경우 즉시 생성)
@@ -180,19 +200,21 @@ public class NotificationService {
         }
     }
     //알람 탭 홈화면 조회
-    @Transactional(readOnly = true)
-    public List<NotificationHomeResponse> getHomeSettings(Long userId) {
+    @Transactional
+    public NotificationHomeListResponse getHomeSettings(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        NotificationSetting setting = notificationSettingRepository.findById(user.getUsersId())
-                .orElseGet(() -> createDefaultSettingInternal(user));
-        return List.of(
-                buildGroup(userId, NotificationType.SOS, setting.getSosEnabled()),
+        User senior = resolveSeniorOwner(user)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND));
+        NotificationSetting setting = notificationSettingRepository.findById(senior.getUsersId())
+                .orElseGet(() -> createDefaultSettingInternal(senior));
+        List<NotificationHomeResponse> items = List.of(
+                buildGroup(userId, NotificationType.SOS, true), // SOS 알림은 필수 알림이라 항상 on으로 표시
                 buildGroup(userId, NotificationType.INACTIVITY, setting.getInactivityEnabled()),
                 buildGroup(userId, NotificationType.RISK_LINK, setting.getRiskLinkEnabled()),
                 buildGroup(userId, NotificationType.OUTING_RETURN, setting.getOutingReturnEnabled())
-
         );
+        return NotificationHomeListResponse.of(items);
     }
 
     private NotificationHomeResponse buildGroup(Long userId, NotificationType type, boolean enabled) {
@@ -218,11 +240,12 @@ public class NotificationService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         validateParentDeviceOnline(user);
-        NotificationSetting setting = notificationSettingRepository.findById(user.getUsersId())
-                .orElseGet(() -> createDefaultSettingInternal(user));
+        User senior = resolveSeniorOwner(user)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND));
+        NotificationSetting setting = notificationSettingRepository.findById(senior.getUsersId())
+                .orElseGet(() -> createDefaultSettingInternal(senior));
 
         switch (type) {
-            case SOS -> setting.updateSosEnabled(enabled);
             case INACTIVITY -> setting.updateInactivityEnabled(enabled);
             case RISK_LINK -> setting.updateRiskLinkEnabled(enabled);
             case OUTING_RETURN -> setting.updateOutingReturnEnabled(enabled);

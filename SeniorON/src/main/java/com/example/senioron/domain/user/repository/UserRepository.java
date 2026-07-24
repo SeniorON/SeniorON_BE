@@ -32,7 +32,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     List<User> findAllByFamily(Family family);
 
-    @Query("SELECT u FROM User u WHERE u.family = :family AND u.usersId != :excludeUserId AND u.role = :role")
+    @Query("SELECT u FROM User u WHERE u.family = :family AND u.usersId != :excludeUserId AND u.role = :role ORDER BY u.usersId ASC")
     List<User> findByFamilyAndUsersIdNotAndRole(
             @Param("family")Family family,
             @Param("excludeUserId")Long excludeUserId,

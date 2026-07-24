@@ -1,7 +1,7 @@
 package com.example.senioron.domain.notification.controller;
 
 import com.example.senioron.domain.notification.dto.request.NotificationSettingRequest;
-import com.example.senioron.domain.notification.dto.response.NotificationHomeResponse;
+import com.example.senioron.domain.notification.dto.response.NotificationHomeListResponse;
 import com.example.senioron.domain.notification.dto.response.NotificationListResponse;
 import com.example.senioron.domain.notification.dto.response.NotificationSettingResponse;
 import com.example.senioron.domain.notification.dto.response.ParentDeviceStatusResponse;
@@ -23,8 +23,6 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-
 @Tag(name = "알림",description = "알림 관련 메소드")
 @RestController
 @RequiredArgsConstructor
@@ -34,9 +32,9 @@ public class NotificationController {
 
     private final NotificationService notificationService;
 
-    @Operation(summary = "알림 설정 홈화면 조회", description = "SOS/무활동/위험사이트/외출·귀가 4가지 알림 설정의 현재 on-off 상태를 조회합니다")
+    @Operation(summary = "알림 설정 홈화면 조회", description = "SOS/무활동/위험사이트/외출·귀가 4가지 알림 설정의 현재 on-off 상태와 활성화된 개수를 조회합니다")
     @GetMapping("/setting")
-    public Response<List<NotificationHomeResponse>> getNotificationHome(
+    public Response<NotificationHomeListResponse> getNotificationHome(
             @AuthenticationPrincipal User user
     ){
         if (user.getRole() != Role.CHILD) {
@@ -56,7 +54,7 @@ public class NotificationController {
         return Response.ok(notificationService.getParentDeviceStatus(user.getUsersId()));
     }
 
-    @Operation(summary = "알림 설정 토글 기능")
+    @Operation(summary = "알림 설정 토글 기능", description = "SOS 알림은 필수 알림이라 토글 대상에서 제외됩니다.")
     @PatchMapping("/setting/{type}")
     public Response<NotificationSettingResponse> updateSetting(
             @PathVariable NotificationSettingType type,
