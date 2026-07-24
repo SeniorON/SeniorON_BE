@@ -1,17 +1,13 @@
 package com.example.senioron.domain.home.controller;
 
 import com.example.senioron.domain.home.dto.request.*;
-import com.example.senioron.domain.home.dto.response.ButtonOptionResponse;
-import com.example.senioron.domain.home.dto.response.HomeButtonCreateResponse;
-import com.example.senioron.domain.home.dto.response.HomeResponse;
-import com.example.senioron.domain.home.dto.response.SeniorHomeResponse;
+import com.example.senioron.domain.home.dto.response.*;
 import com.example.senioron.domain.home.service.HomeService;
 import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
-import com.example.senioron.domain.home.dto.response.SeniorProfileUpdateResponse;
 
 import java.util.List;
 
@@ -121,5 +117,17 @@ public class HomeController {
     ) {
         homeService.saveButtons(request);
         return Response.ok();
+    }
+    @Operation(
+            summary = "오늘 병원 일정 상세 목록 조회",
+            description = "시니어가 가족 내 주담당자와 보조담당자가 등록한 오늘 병원 일정을 시간순으로 조회"
+    )
+    @GetMapping("/hospitals/today")
+    public Response<List<TodayHospitalListResponse>>
+    getTodayHospitalSchedules() {
+
+        return Response.ok(
+                homeService.getTodayHospitalSchedules()
+        );
     }
 }
