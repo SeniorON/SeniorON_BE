@@ -15,6 +15,8 @@ services:
     depends_on:
       app:
         condition: service_healthy
+      grafana:
+        condition: service_started
 
   app:
     #build: .
@@ -73,6 +75,12 @@ services:
 
   grafana:
     image: grafana/grafana:latest
+    restart: unless-stopped
+
+    networks:
+      default:
+        aliases:
+          - grafana
 
     expose:
       - "3000"
@@ -98,6 +106,11 @@ services:
   loki:
     image: grafana/loki:2.9.8
     command: -config.file=/etc/loki/config.yml
+
+    networks:
+      default:
+        aliases:
+          - loki
 
     expose:
       - "3100"
