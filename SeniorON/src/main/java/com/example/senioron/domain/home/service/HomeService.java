@@ -8,6 +8,7 @@ import com.example.senioron.domain.home.dto.request.HomeButtonUpdateRequest;
 import com.example.senioron.domain.home.dto.request.HomeFontSizeUpdateRequest;
 import com.example.senioron.domain.home.dto.request.SeniorProfileUpdateRequest;
 import com.example.senioron.domain.home.dto.response.*;
+import com.example.senioron.domain.home.dto.response.DeviceDetailResponse;
 import com.example.senioron.domain.home.entity.ActionType;
 import com.example.senioron.domain.home.entity.ButtonOption;
 import com.example.senioron.domain.home.entity.FontSize;
@@ -712,6 +713,52 @@ public class HomeService {
                 todaySchedule,
                 buttons
         );
+    }
+
+    /**
+     * 시니어 기기 연결 상태 상세 조회
+     */
+    @Transactional(readOnly = true)
+    public DeviceDetailResponse getDeviceDetail() {
+
+        User currentUser = getCurrentUser();
+
+        if (currentUser.getRole() != Role.CHILD) {
+            throw new BusinessException(
+                    ErrorCode.CHILD_HOME_ACCESS_DENIED
+            );
+        }
+
+        Optional<User> seniorUser =
+                findSeniorUser(currentUser);
+
+        if (seniorUser.isEmpty()) {
+            return DeviceDetailResponse.disconnected();
+        }
+
+        return deviceRepository
+                .findFirstByUser(
+                        seniorUser.get()
+                )
+                .map(device -> {
+
+                    boolean connected =
+                            device.getConnectionStatus()
+                                    == DeviceStatus.ONLINE;
+
+                    return new DeviceDetailResponse(
+                            device.getDeviceName(),
+                            connected,
+                            device.getConnectionStatus(),
+                            device.getBatteryLevel(),
+                            connected,
+                            device.getLastConnectedAt(),
+                            null
+                    );
+                })
+                .orElseGet(
+                        DeviceDetailResponse::disconnected
+                );
     }
 
     /**
