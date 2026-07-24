@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.time.ZoneId;
 
 @Slf4j
 @Service
@@ -80,7 +81,9 @@ public class MedicationService {
         List<String> medicineTimes = new ArrayList<>();
         List<MedicationLog> logsToSave = new ArrayList<>();
 
-        LocalDate startDate = LocalDate.now();
+        LocalDate startDate = LocalDate.now(
+                ZoneId.of("Asia/Seoul")
+        );
 
         for (String timeStr : request.getMedicineTimes()) {
             LocalTime medicineTime = parseMedicineTime(timeStr);

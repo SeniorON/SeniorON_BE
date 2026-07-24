@@ -4,6 +4,7 @@ import com.example.senioron.domain.medication.dto.response.MedicationCheckRespon
 import com.example.senioron.domain.medication.dto.response.MedicationScheduleResponse;
 import com.example.senioron.domain.medication.service.MedicationLogService;
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.code.ResultCode;
 import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
@@ -18,8 +19,12 @@ import java.time.LocalDate;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -27,7 +32,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "복약 관리 API", description = "복약 일정 조회 및 복약 체크 관련 API")
+@Tag(
+        name = "복약 관리 API",
+        description = "복약 일정 조회 및 복약 체크 관련 API"
+)
 @RestController
 @RequiredArgsConstructor
 @Validated
@@ -48,7 +56,7 @@ public class MedicationLogController {
             ),
             @ApiResponse(
                     responseCode = "400",
-                    description = "날짜 누락 등 잘못된 요청",
+                    description = "날짜 누락 또는 잘못된 날짜 형식",
                     content = @Content(
                             schema = @Schema(
                                     implementation = Response.class
@@ -62,13 +70,14 @@ public class MedicationLogController {
 
             @Parameter(
                     description = "조회할 날짜",
+                    required = true,
                     schema = @Schema(
                             type = "string",
                             format = "date",
                             example = "2026-07-17"
                     )
             )
-            @RequestParam
+            @RequestParam("date")
             @NotNull(message = "날짜는 필수 입력값입니다.")
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
             LocalDate date
@@ -89,6 +98,11 @@ public class MedicationLogController {
     )
     public Response<MedicationCheckResponse> checkMedication(
             @AuthenticationPrincipal User user,
+            @Parameter(
+                    description = "복약 로그 ID",
+                    example = "1",
+                    required = true
+            )
             @PathVariable("medicationLogId") Long medicationLogId
     ) {
         MedicationCheckResponse response =
@@ -98,5 +112,14 @@ public class MedicationLogController {
                 );
 
         return Response.ok(ResultCode.OK, response);
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<Object> handleMissingServletRequestParameter(
+            MissingServletRequestParameterException exception
+    ) {
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(Response.fail(ErrorCode.BAD_REQUEST));
     }
 }
