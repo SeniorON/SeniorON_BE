@@ -1,5 +1,7 @@
 package com.example.senioron.global.storage;
 
+import com.example.senioron.global.apiPayload.code.ErrorCode;
+import com.example.senioron.global.apiPayload.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -127,8 +129,8 @@ public class S3Service {
 
         if (contentType == null
                 || !IMAGE_EXTENSIONS.containsKey(contentType)) {
-            throw new IllegalArgumentException(
-                    "JPG, PNG, WEBP 형식만 업로드할 수 있습니다."
+            throw new BusinessException(
+                    ErrorCode.UNSUPPORTED_IMAGE_TYPE
             );
         }
     }

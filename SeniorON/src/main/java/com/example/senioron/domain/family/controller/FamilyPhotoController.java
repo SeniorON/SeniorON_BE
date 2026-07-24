@@ -1,7 +1,7 @@
 package com.example.senioron.domain.family.controller;
 
 import com.example.senioron.domain.family.dto.request.FamilyPhotoCreateRequest;
-import com.example.senioron.domain.family.dto.response.FamilyPhotoCreateResponse;
+import com.example.senioron.domain.family.dto.response.FamilyPhotoItemResponse;
 import com.example.senioron.domain.family.dto.response.FamilyPhotoListResponse;
 import com.example.senioron.domain.family.service.FamilyPhotoService;
 import com.example.senioron.domain.user.entity.User;
@@ -28,7 +28,7 @@ public class FamilyPhotoController {
 
     @Operation(summary = "가족 사진 등록", description = "현재 로그인한 사용자의 가족에 사진을 등록합니다.")
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public Response<FamilyPhotoCreateResponse> createPhoto(
+    public Response<FamilyPhotoItemResponse> createPhoto(
             @AuthenticationPrincipal User user,
             @Valid @ModelAttribute FamilyPhotoCreateRequest request
     ) {
