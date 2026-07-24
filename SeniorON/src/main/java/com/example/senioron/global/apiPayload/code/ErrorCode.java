@@ -59,6 +59,7 @@ public enum ErrorCode implements BaseCode {
 
     // Senior Error
     CUSTOM_RELATION_REQUIRED(HttpStatus.BAD_REQUEST, "SENIOR4001", "직접 작성 관계를 입력해 주세요."),
+    SENIOR_ALREADY_EXISTS(HttpStatus.CONFLICT, "SENIOR409", "이미 등록된 시니어 정보가 있습니다."),
 
     // Family Error
     FAMILY_NOT_FOUND(HttpStatus.NOT_FOUND, "FAMILY404", "가족 정보를 찾을 수 없습니다."),

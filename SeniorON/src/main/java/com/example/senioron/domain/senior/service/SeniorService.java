@@ -4,7 +4,9 @@ import com.example.senioron.domain.senior.dto.request.SeniorCreateRequest;
 import com.example.senioron.domain.senior.dto.response.SeniorCreateResponse;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
+import com.example.senioron.domain.senior.entity.UserSenior;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
+import com.example.senioron.domain.senior.repository.UserSeniorRepository;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
@@ -18,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class SeniorService {
 
     private final SeniorRepository seniorRepository;
+    private final UserSeniorRepository userSeniorRepository;
 
     /**
      * 로그인한 사용자가 관리할 시니어 정보를 등록합니다.
@@ -27,22 +30,37 @@ public class SeniorService {
             User user,
             SeniorCreateRequest request
     ) {
+        if (user.getFamily() == null) {
+            throw new BusinessException(ErrorCode.FAMILY_NOT_CONNECTED);
+        }
+
         validateCustomRelation(request);
+
+        if (seniorRepository.findFirstByFamily(user.getFamily()).isPresent()) {
+            throw new BusinessException(ErrorCode.SENIOR_ALREADY_EXISTS);
+        }
 
         Senior senior = Senior.builder()
                 .name(request.name())
-                .relation(request.relation())
-                .customRelation(resolveCustomRelation(request))
                 .birth(request.birth())
                 .phoneNumber(normalizePhoneNumber(request.phoneNumber()))
                 .address(request.address())
                 .detailAddress(request.detailAddress())
+                .family(user.getFamily())
                 .registeredBy(user)
                 .build();
 
         Senior savedSenior = seniorRepository.save(senior);
+        UserSenior userSenior = userSeniorRepository.save(
+                UserSenior.builder()
+                        .user(user)
+                        .senior(savedSenior)
+                        .relation(request.relation())
+                        .customRelation(resolveCustomRelation(request))
+                        .build()
+        );
 
-        return SeniorCreateResponse.from(savedSenior);
+        return SeniorCreateResponse.from(savedSenior, userSenior);
     }
 
     /**

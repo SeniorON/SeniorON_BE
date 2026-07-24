@@ -7,6 +7,7 @@ import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
+import com.example.senioron.domain.senior.repository.UserSeniorRepository;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
@@ -31,6 +32,7 @@ public class FamilyService {
     private final S3Service s3Service;
     private final FamilyPhotoRepository familyPhotoRepository;
     private final FamilyPhotoPermissionService familyPhotoPermissionService;
+    private final UserSeniorRepository userSeniorRepository;
 
     private static final int RECENT_UPLOADER_COUNT = 3;
     private static final int RECENT_PHOTO_COUNT = 4;
@@ -209,8 +211,9 @@ public class FamilyService {
             throw new BusinessException(ErrorCode.CANNOT_REMOVE_SELF);
         }
 
-        targetUser.removeFromFamily();
+        userSeniorRepository.deleteAllByUser(targetUser);
 
+        targetUser.removeFromFamily();
     }
 
     private FamilyMemberResponse toFamilyMemberResponse(
