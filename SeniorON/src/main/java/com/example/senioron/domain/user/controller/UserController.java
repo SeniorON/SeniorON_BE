@@ -3,6 +3,7 @@ package com.example.senioron.domain.user.controller;
 import com.example.senioron.domain.socialaccount.dto.kakao.request.KakaoLoginRequest;
 import com.example.senioron.domain.socialaccount.dto.kakao.response.KakaoLoginResponse;
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeSendRequest;
+import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeVerifyRequest;
 import com.example.senioron.domain.user.dto.request.UserLoginRequest;
 import com.example.senioron.domain.user.dto.request.UserRoleUpdateRequest;
 import com.example.senioron.domain.user.dto.request.UserSignUpRequest;
@@ -45,6 +46,14 @@ public class UserController {
             @Valid @RequestBody SignupEmailVerificationCodeSendRequest request
     ) {
         return Response.ok(userService.sendSignupEmailVerificationCode(request));
+    }
+
+    @Operation(summary = "회원가입 이메일 인증 코드 확인", description = "회원가입 전 입력한 이메일 인증 코드를 확인합니다.")
+    @PostMapping("/signup/email/verification-code/verify")
+    public Response<SignupEmailVerificationCodeVerifyResponse> verifySignupEmailVerificationCode(
+            @Valid @RequestBody SignupEmailVerificationCodeVerifyRequest request
+    ) {
+        return Response.ok(userService.verifySignupEmailVerificationCode(request));
     }
 
     @Operation(summary = "로그인", description = "아이디와 비밀번호로 로그인하고 JWT accessToken을 발급합니다.")

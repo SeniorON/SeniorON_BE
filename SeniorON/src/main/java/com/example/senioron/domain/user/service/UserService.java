@@ -1,6 +1,7 @@
 package com.example.senioron.domain.user.service;
 
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeSendRequest;
+import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeVerifyRequest;
 import com.example.senioron.domain.user.dto.request.UserLoginRequest;
 import com.example.senioron.domain.user.dto.request.UserRoleUpdateRequest;
 import com.example.senioron.domain.user.dto.request.UserSignUpRequest;
@@ -121,6 +122,36 @@ public class UserService {
         return SignupEmailVerificationCodeSendResponse.builder()
                 .sent(true)
                 .verificationId(savedCode.getSignupEmailVerificationCodeId())
+                .build();
+    }
+
+    public SignupEmailVerificationCodeVerifyResponse verifySignupEmailVerificationCode(
+            SignupEmailVerificationCodeVerifyRequest request
+    ) {
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
+        }
+
+        SignupEmailVerificationCode savedCode = signupEmailVerificationCodeRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new BusinessException(ErrorCode.SIGNUP_EMAIL_VERIFICATION_CODE_NOT_FOUND));
+
+        if (savedCode.isVerified()) {
+            throw new BusinessException(ErrorCode.SIGNUP_EMAIL_ALREADY_VERIFIED);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        if (savedCode.isExpired(now)) {
+            throw new BusinessException(ErrorCode.EXPIRED_SIGNUP_EMAIL_VERIFICATION_CODE);
+        }
+
+        if (!passwordEncoder.matches(request.getVerificationCode(), savedCode.getCodeHash())) {
+            throw new BusinessException(ErrorCode.INVALID_SIGNUP_EMAIL_VERIFICATION_CODE);
+        }
+
+        savedCode.verify(now);
+
+        return SignupEmailVerificationCodeVerifyResponse.builder()
+                .verified(true)
                 .build();
     }
 

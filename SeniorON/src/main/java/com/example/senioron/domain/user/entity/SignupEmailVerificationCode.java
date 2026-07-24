@@ -36,9 +36,30 @@ public class SignupEmailVerificationCode extends BaseEntity {
     @Column(nullable = false)
     private LocalDateTime expiresAt;
 
+    @Builder.Default
+    @Column(nullable = false)
+    private Boolean verified = false;
+
+    private LocalDateTime verifiedAt;
+
     public void reissue(String codeHash, LocalDateTime issuedAt, LocalDateTime expiresAt) {
         this.codeHash = codeHash;
         this.issuedAt = issuedAt;
         this.expiresAt = expiresAt;
+        this.verified = false;
+        this.verifiedAt = null;
+    }
+
+    public void verify(LocalDateTime verifiedAt) {
+        this.verified = true;
+        this.verifiedAt = verifiedAt;
+    }
+
+    public boolean isExpired(LocalDateTime now) {
+        return !expiresAt.isAfter(now);
+    }
+
+    public boolean isVerified() {
+        return Boolean.TRUE.equals(verified);
     }
 }
