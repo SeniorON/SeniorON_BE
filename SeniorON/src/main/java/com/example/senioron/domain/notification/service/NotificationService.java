@@ -191,7 +191,7 @@ public class NotificationService {
         }
     }
     //알람 탭 홈화면 조회
-    @Transactional(readOnly = true)
+    @Transactional
     public NotificationHomeListResponse getHomeSettings(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
