@@ -1,6 +1,7 @@
 package com.example.senioron.domain.notification.dto.response;
 
 import com.example.senioron.domain.event.entity.Event;
+import com.example.senioron.domain.event.entity.OutingPhase;
 import com.example.senioron.domain.notification.entity.Notification;
 import com.example.senioron.domain.notification.entity.NotificationType;
 import lombok.Builder;
@@ -24,6 +25,8 @@ public class NotificationHomeResponse {
     private String senderName;
     private Integer deviceBattery;
     private String address;
+    private String linkUrl;
+    private OutingPhase phase;
 
     private String emptyMessage;
 
@@ -54,6 +57,8 @@ public class NotificationHomeResponse {
                     .senderName(senderName)
                     .deviceBattery(event != null ? event.getDeviceBattery() : null)
                     .address(address)
+                    .linkUrl(latest.getLinkUrl())
+                    .phase(event != null ? event.getPhase() : null)
                     .build();
         }
     }
