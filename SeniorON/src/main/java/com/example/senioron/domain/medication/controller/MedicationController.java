@@ -28,16 +28,21 @@ public class MedicationController {
 
     @Operation(
             summary = "약 등록",
-            description = "로그인한 사용자가 부모님의 복약 정보를 등록합니다."
+            description = "주담당자가 같은 가족에 속한 부모님의 복약 정보를 등록합니다."
     )
-    @PostMapping
+    @PostMapping("/parents/{parentUserId}")
     @ResponseStatus(HttpStatus.CREATED)
     public Response<MedicationCreateResponse> createMedication(
             @AuthenticationPrincipal User user,
+            @PathVariable Long parentUserId,
             @Valid @RequestBody MedicationCreateRequest request
     ) {
         MedicationCreateResponse result =
-                medicationService.createMedication(user.getUsersId(), request);
+                medicationService.createMedication(
+                        user.getUsersId(),
+                        parentUserId,
+                        request
+                );
 
         return Response.ok(ResultCode.CREATED, result);
     }
