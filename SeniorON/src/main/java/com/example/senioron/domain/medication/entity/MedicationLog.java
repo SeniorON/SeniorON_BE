@@ -38,4 +38,9 @@ public class MedicationLog extends BaseEntity {
 
     @Column(name = "taken_at")
     private LocalDateTime takenAt;
+
+    public void markAsTaken() {
+        this.isTaken = true;
+        this.takenAt = LocalDateTime.now();
+    }
 }

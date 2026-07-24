@@ -105,6 +105,10 @@ public class HospitalController {
         return Response.ok(ResultCode.OK, null);
     }
 
+    @Operation(
+            summary = "특정 날짜 진료 상세 조회",
+            description = "특정 날짜(LocalDate)를 파라미터로 받아 해당 일의 진료 상세 카드 UI에 필요한 데이터를 반환합니다. (ISO 날짜 형식 검증 적용)"
+    )
     @GetMapping("/daily")
     public Response<List<HospitalDetailResponse>> getHospitalByDate(
             @AuthenticationPrincipal User user,
