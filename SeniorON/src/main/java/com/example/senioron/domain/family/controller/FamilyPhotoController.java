@@ -1,6 +1,7 @@
 package com.example.senioron.domain.family.controller;
 
 import com.example.senioron.domain.family.dto.request.FamilyPhotoCreateRequest;
+import com.example.senioron.domain.family.dto.response.FamilyPhotoAlbumResponse;
 import com.example.senioron.domain.family.dto.response.FamilyPhotoItemResponse;
 import com.example.senioron.domain.family.dto.response.FamilyPhotoListResponse;
 import com.example.senioron.domain.family.service.FamilyPhotoService;
@@ -17,6 +18,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Tag(name = "가족 사진", description = "가족 사진 관련 API")
 @RestController
@@ -58,5 +60,15 @@ public class FamilyPhotoController {
         familyPhotoService.deletePhoto(user, familyPhotoId);
 
         return Response.ok(ResultCode.OK, null);
+    }
+
+    @Operation(summary = "자녀별 가족 사진 앨범 조회", description = "부모가 같은 가족 자녀의 최신 사진과 전체 사진 수, 새로운 사진 여부를 조회합니다.")
+    @GetMapping("/albums")
+    public Response<List<FamilyPhotoAlbumResponse>> getPhotoAlbums(
+            @AuthenticationPrincipal User user
+    ){
+        return Response.ok(
+                familyPhotoService.getPhotoAlbums(user)
+        );
     }
 }
