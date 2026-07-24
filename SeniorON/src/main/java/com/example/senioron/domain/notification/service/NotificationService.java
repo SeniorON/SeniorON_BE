@@ -325,17 +325,30 @@ public class NotificationService {
     // 알림 읽음 처리
     @Transactional
     public void markAsRead(Long userId, Long notificationId) {
+        Notification notification = findOwnedNotification(userId, notificationId);
+
+        if (Boolean.TRUE.equals(notification.getIsRead())) {
+            return;
+        }
+        notification.markAsRead();
+    }
+
+    // 알림 삭제
+    @Transactional
+    public void deleteNotification(Long userId, Long notificationId) {
+        Notification notification = findOwnedNotification(userId, notificationId);
+        notificationRepository.delete(notification);
+    }
+
+    // 본인이 받은 알림인지 검증 후 반환 (아니면 404/403)
+    private Notification findOwnedNotification(Long userId, Long notificationId) {
         Notification notification = notificationRepository.findById(notificationId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND));
 
         if (!notification.getReceiverUser().getUsersId().equals(userId)) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
-
-        if (Boolean.TRUE.equals(notification.getIsRead())) {
-            return;
-        }
-        notification.markAsRead();
+        return notification;
     }
 }
 
