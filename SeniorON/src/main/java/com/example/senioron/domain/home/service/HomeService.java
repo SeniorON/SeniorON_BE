@@ -7,12 +7,7 @@ import com.example.senioron.domain.home.dto.request.HomeButtonSaveRequest;
 import com.example.senioron.domain.home.dto.request.HomeButtonUpdateRequest;
 import com.example.senioron.domain.home.dto.request.HomeFontSizeUpdateRequest;
 import com.example.senioron.domain.home.dto.request.SeniorProfileUpdateRequest;
-import com.example.senioron.domain.home.dto.response.ButtonOptionResponse;
-import com.example.senioron.domain.home.dto.response.HomeButtonCreateResponse;
-import com.example.senioron.domain.home.dto.response.HomeResponse;
-import com.example.senioron.domain.home.dto.response.SeniorHomeResponse;
-import com.example.senioron.domain.home.dto.response.SeniorProfileUpdateResponse;
-import com.example.senioron.domain.home.dto.response.TodayScheduleResponse;
+import com.example.senioron.domain.home.dto.response.*;
 import com.example.senioron.domain.home.entity.ActionType;
 import com.example.senioron.domain.home.entity.ButtonOption;
 import com.example.senioron.domain.home.entity.FontSize;
@@ -720,58 +715,34 @@ public class HomeService {
     }
 
     /**
-     * 오늘 병원 일정 조회
+     * 오늘 병원 일정 상세 목록 조회
      */
-    private TodayScheduleResponse getTodayHospitalSchedule(
-            User parent
-    ) {
+    @Transactional(readOnly = true)
+    public List<TodayHospitalListResponse> getTodayHospitalSchedules() {
 
-        if (parent.getFamily() == null) {
-            throw new BusinessException(
-                    ErrorCode.FAMILY_NOT_CONNECTED
-            );
-        }
-
-        LocalDate today =
-                LocalDate.now();
-
-        List<User> childManagers =
-                userRepository
-                        .findAllByFamily(
-                                parent.getFamily()
-                        )
-                        .stream()
-                        .filter(user ->
-                                user.getRole() == Role.CHILD
-                        )
-                        .filter(user ->
-                                user.getManagerType()
-                                        == ManagerType.PRIMARY
-                                        || user.getManagerType()
-                                        == ManagerType.SUB
-                        )
-                        .toList();
+        User currentUser = getCurrentUser();
 
         List<Hospital> hospitals =
-                childManagers.stream()
-                        .flatMap(childManager ->
-                                hospitalRepository
-                                        .findByUserAndScheduleDateBetweenOrderByScheduleDateAscScheduleTimeAsc(
-                                                childManager,
-                                                today,
-                                                today
-                                        )
-                                        .stream()
-                        )
-                        .sorted(
-                                Comparator.comparing(
-                                                Hospital::getScheduleDate
-                                        )
-                                        .thenComparing(
-                                                Hospital::getScheduleTime
-                                        )
-                        )
-                        .toList();
+                findTodayHospitalSchedules(
+                        currentUser
+                );
+
+        return hospitals.stream()
+                .map(TodayHospitalListResponse::from)
+                .toList();
+    }
+
+    /**
+     * 홈 화면 오늘 병원 일정 요약 조회
+     */
+    private TodayScheduleResponse getTodayHospitalSchedule(
+            User currentUser
+    ) {
+
+        List<Hospital> hospitals =
+                findTodayHospitalSchedules(
+                        currentUser
+                );
 
         int scheduleCount =
                 hospitals.size();
@@ -796,6 +767,61 @@ public class HomeService {
         return TodayScheduleResponse.count(
                 scheduleCount
         );
+    }
+
+    /**
+     * 가족 내 주담당자와 보조담당자가 등록한
+     * 오늘 병원 일정을 시간순으로 조회
+     */
+    private List<Hospital> findTodayHospitalSchedules(
+            User currentUser
+    ) {
+
+        if (currentUser.getFamily() == null) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_NOT_CONNECTED
+            );
+        }
+
+        LocalDate today =
+                LocalDate.now();
+
+        List<User> childManagers =
+                userRepository
+                        .findAllByFamily(
+                                currentUser.getFamily()
+                        )
+                        .stream()
+                        .filter(user ->
+                                user.getRole() == Role.CHILD
+                        )
+                        .filter(user ->
+                                user.getManagerType()
+                                        == ManagerType.PRIMARY
+                                        || user.getManagerType()
+                                        == ManagerType.SUB
+                        )
+                        .toList();
+
+        return childManagers.stream()
+                .flatMap(childManager ->
+                        hospitalRepository
+                                .findByUserAndScheduleDateBetweenOrderByScheduleDateAscScheduleTimeAsc(
+                                        childManager,
+                                        today,
+                                        today
+                                )
+                                .stream()
+                )
+                .sorted(
+                        Comparator.comparing(
+                                        Hospital::getScheduleDate
+                                )
+                                .thenComparing(
+                                        Hospital::getScheduleTime
+                                )
+                )
+                .toList();
     }
 
     /**
