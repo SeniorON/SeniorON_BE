@@ -1,5 +1,8 @@
 package com.example.senioron.domain.medication.service;
 
+
+import java.util.Locale;
+
 import com.example.senioron.domain.medication.dto.request.MedicationCreateRequest;
 import com.example.senioron.domain.medication.dto.request.MedicationUpdateRequest;
 import com.example.senioron.domain.medication.dto.response.MedicationCreateResponse;
@@ -115,7 +118,7 @@ public class MedicationService {
                 boolean isDayIncluded =
                         request.getMedicineDays().stream()
                                 .map(String::trim)
-                                .map(String::toUpperCase)
+                                .map(value -> value.toUpperCase(Locale.ROOT))
                                 .map(this::normalizeDay)
                                 .anyMatch(day ->
                                         Objects.equals(
@@ -286,7 +289,7 @@ public class MedicationService {
         Set<String> normalizedDays =
                 Arrays.stream(medicineDays.split(","))
                         .map(String::trim)
-                        .map(String::toUpperCase)
+                        .map(value -> value.toUpperCase(Locale.ROOT))
                         .map(day -> {
                             String normalizedDay =
                                     normalizeDay(day);
