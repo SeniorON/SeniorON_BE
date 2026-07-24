@@ -1,18 +1,25 @@
 package com.example.senioron.domain.user.service;
 
+import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeSendRequest;
 import com.example.senioron.domain.user.dto.request.UserLoginRequest;
 import com.example.senioron.domain.user.dto.request.UserRoleUpdateRequest;
 import com.example.senioron.domain.user.dto.request.UserSignUpRequest;
 import com.example.senioron.domain.user.dto.response.*;
+import com.example.senioron.domain.user.entity.SignupEmailVerificationCode;
 import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.inactivity.service.InactivitySettingService;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.entity.UserStatus;
+import com.example.senioron.domain.user.event.SignupEmailVerificationCodeSendEvent;
+import com.example.senioron.domain.user.repository.SignupEmailVerificationCodeRepository;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.jwt.JwtUtil;
+import java.security.SecureRandom;
+import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,11 +29,17 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class UserService {
 
+    private static final int VERIFICATION_CODE_BOUND = 1_000_000;
+    private static final int VERIFICATION_CODE_EXPIRATION_MINUTES = 5;
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
     private final UserRepository userRepository;
+    private final SignupEmailVerificationCodeRepository signupEmailVerificationCodeRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final InactivitySettingService inactivitySettingService;
     private final DeviceService deviceService;
+    private final ApplicationEventPublisher eventPublisher;
 
     // 아이디 중복 확인 서비스
     public LoginIdCheckResponse checkLoginId(String loginId) {
@@ -68,6 +81,46 @@ public class UserService {
                 .usersId(savedUser.getUsersId())
                 .name(savedUser.getName())
                 .loginId(savedUser.getLoginId())
+                .build();
+    }
+
+    public SignupEmailVerificationCodeSendResponse sendSignupEmailVerificationCode(
+            SignupEmailVerificationCodeSendRequest request
+    ) {
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        String verificationCode = generateVerificationCode();
+        String codeHash = passwordEncoder.encode(verificationCode);
+
+        SignupEmailVerificationCode savedCode = signupEmailVerificationCodeRepository.findByEmail(request.getEmail())
+                .map(existingCode -> {
+                    existingCode.reissue(
+                            codeHash,
+                            now,
+                            now.plusMinutes(VERIFICATION_CODE_EXPIRATION_MINUTES)
+                    );
+                    return existingCode;
+                })
+                .orElseGet(() -> signupEmailVerificationCodeRepository.save(
+                        SignupEmailVerificationCode.builder()
+                                .email(request.getEmail())
+                                .codeHash(codeHash)
+                                .issuedAt(now)
+                                .expiresAt(now.plusMinutes(VERIFICATION_CODE_EXPIRATION_MINUTES))
+                                .build()
+                ));
+
+        eventPublisher.publishEvent(new SignupEmailVerificationCodeSendEvent(
+                savedCode.getEmail(),
+                verificationCode
+        ));
+
+        return SignupEmailVerificationCodeSendResponse.builder()
+                .sent(true)
+                .verificationId(savedCode.getSignupEmailVerificationCodeId())
                 .build();
     }
 
@@ -120,5 +173,9 @@ public class UserService {
                 .name(user.getName())
                 .role(user.getRole())
                 .build();
+    }
+
+    private String generateVerificationCode() {
+        return String.format("%06d", SECURE_RANDOM.nextInt(VERIFICATION_CODE_BOUND));
     }
 }

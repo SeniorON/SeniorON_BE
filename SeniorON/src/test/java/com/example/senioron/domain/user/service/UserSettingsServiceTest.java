@@ -70,10 +70,12 @@ class UserSettingsServiceTest {
 
         UserService userService = new UserService(
                 userRepository,
+                org.mockito.Mockito.mock(com.example.senioron.domain.user.repository.SignupEmailVerificationCodeRepository.class),
                 passwordEncoder,
                 new JwtUtil("12345678901234567890123456789012", 3600000L),
                 org.mockito.Mockito.mock(InactivitySettingService.class),
-                org.mockito.Mockito.mock(com.example.senioron.domain.device.service.DeviceService.class)
+                org.mockito.Mockito.mock(com.example.senioron.domain.device.service.DeviceService.class),
+                org.mockito.Mockito.mock(org.springframework.context.ApplicationEventPublisher.class)
         );
 
         UserLoginResponse beforeChange = userService.login(createLoginRequest(CURRENT_PASSWORD));
