@@ -8,7 +8,7 @@ import com.example.senioron.domain.home.dto.request.HomeButtonUpdateRequest;
 import com.example.senioron.domain.home.dto.request.HomeFontSizeUpdateRequest;
 import com.example.senioron.domain.home.dto.request.SeniorProfileUpdateRequest;
 import com.example.senioron.domain.home.dto.response.*;
-import com.example.senioron.domain.home.dto.response.DeviceDetailResponse;
+import com.example.senioron.domain.device.dto.response.DeviceDetailResponse;
 import com.example.senioron.domain.home.entity.ActionType;
 import com.example.senioron.domain.home.entity.ButtonOption;
 import com.example.senioron.domain.home.entity.FontSize;

@@ -2,7 +2,7 @@ package com.example.senioron.domain.home.controller;
 
 import com.example.senioron.domain.home.dto.request.*;
 import com.example.senioron.domain.home.dto.response.*;
-import com.example.senioron.domain.home.dto.response.DeviceDetailResponse;
+import com.example.senioron.domain.device.dto.response.DeviceDetailResponse;
 import com.example.senioron.domain.home.service.HomeService;
 import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;

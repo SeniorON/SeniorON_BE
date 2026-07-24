@@ -1,4 +1,4 @@
-package com.example.senioron.domain.home.dto.response;
+package com.example.senioron.domain.device.dto.response;
 
 import com.example.senioron.domain.device.entity.DeviceStatus;
 
