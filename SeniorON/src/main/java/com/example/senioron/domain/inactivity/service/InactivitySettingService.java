@@ -41,7 +41,7 @@ public class InactivitySettingService {
                     .isEnabled(true)
                     .thresholdHours(4)
                     .build();
-            return inactivitySettingRepository.save(setting);
+            return inactivitySettingRepository.saveAndFlush(setting);
         } catch (DataIntegrityViolationException e) {
             // 동시에 다른 요청이 먼저 만들어버린 경우 그냥 다시 조회 후 반환
             return inactivitySettingRepository.findById(targetUser.getUsersId())
