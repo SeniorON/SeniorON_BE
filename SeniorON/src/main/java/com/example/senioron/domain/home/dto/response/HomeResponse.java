@@ -1,6 +1,8 @@
 package com.example.senioron.domain.home.dto.response;
 
+import com.example.senioron.domain.home.entity.ActionType;
 import com.example.senioron.domain.home.entity.FontSize;
+import com.example.senioron.domain.home.entity.MusicApp;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.LocalDate;
@@ -19,6 +21,12 @@ public class HomeResponse {
     @JsonProperty("font_size")
     private FontSize fontSize;
 
+    @JsonProperty("music_card")
+    private MusicCardResponse musicCard;
+
+    @JsonProperty("today_schedule")
+    private TodayScheduleResponse todaySchedule;
+
     private List<HomeButtonResponse> buttons;
 
     public HomeResponse(
@@ -26,12 +34,16 @@ public class HomeResponse {
             ConnectionResponse connection,
             SeniorProfileResponse seniorProfile,
             FontSize fontSize,
+            MusicCardResponse musicCard,
+            TodayScheduleResponse todaySchedule,
             List<HomeButtonResponse> buttons
     ) {
         this.userName = userName;
         this.connection = connection;
         this.seniorProfile = seniorProfile;
         this.fontSize = fontSize;
+        this.musicCard = musicCard;
+        this.todaySchedule = todaySchedule;
         this.buttons = buttons;
     }
 
@@ -49,6 +61,14 @@ public class HomeResponse {
 
     public FontSize getFontSize() {
         return fontSize;
+    }
+
+    public MusicCardResponse getMusicCard() {
+        return musicCard;
+    }
+
+    public TodayScheduleResponse getTodaySchedule() {
+        return todaySchedule;
     }
 
     public List<HomeButtonResponse> getButtons() {
@@ -155,6 +175,76 @@ public class HomeResponse {
         }
     }
 
+    public static class MusicCardResponse {
+
+        private Boolean enabled;
+
+        @JsonProperty("music_app")
+        private MusicApp musicApp;
+
+        @JsonProperty("app_name")
+        private String appName;
+
+        private String icon;
+
+        @JsonProperty("action_type")
+        private ActionType actionType;
+
+        @JsonProperty("action_value")
+        private String actionValue;
+
+        public MusicCardResponse(
+                Boolean enabled,
+                MusicApp musicApp,
+                String appName,
+                String icon,
+                ActionType actionType,
+                String actionValue
+        ) {
+            this.enabled = enabled;
+            this.musicApp = musicApp;
+            this.appName = appName;
+            this.icon = icon;
+            this.actionType = actionType;
+            this.actionValue = actionValue;
+        }
+
+        public static MusicCardResponse empty() {
+            return new MusicCardResponse(
+                    false,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+            );
+        }
+
+        public Boolean getEnabled() {
+            return enabled;
+        }
+
+        public MusicApp getMusicApp() {
+            return musicApp;
+        }
+
+        public String getAppName() {
+            return appName;
+        }
+
+        public String getIcon() {
+            return icon;
+        }
+
+        public ActionType getActionType() {
+            return actionType;
+        }
+
+        public String getActionValue() {
+            return actionValue;
+        }
+    }
+
     public static class HomeButtonResponse {
 
         @JsonProperty("button_id")
@@ -168,16 +258,26 @@ public class HomeResponse {
 
         private String icon;
 
+        @JsonProperty("action_type")
+        private ActionType actionType;
+
+        @JsonProperty("action_value")
+        private String actionValue;
+
         public HomeButtonResponse(
                 Long buttonId,
                 Integer buttonOrder,
                 String buttonName,
-                String icon
+                String icon,
+                ActionType actionType,
+                String actionValue
         ) {
             this.buttonId = buttonId;
             this.buttonOrder = buttonOrder;
             this.buttonName = buttonName;
             this.icon = icon;
+            this.actionType = actionType;
+            this.actionValue = actionValue;
         }
 
         public Long getButtonId() {
@@ -194,6 +294,14 @@ public class HomeResponse {
 
         public String getIcon() {
             return icon;
+        }
+
+        public ActionType getActionType() {
+            return actionType;
+        }
+
+        public String getActionValue() {
+            return actionValue;
         }
     }
 }

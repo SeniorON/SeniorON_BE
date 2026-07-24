@@ -19,6 +19,7 @@ public interface HomeRepository extends JpaRepository<Home, Long> {
     );
 
     void deleteAllByHomeIdIn(List<Long> homeIds);
+    void deleteAllByUser(User user);
 
     Optional<Home> findByHomeIdAndUser(Long homeId, User user);
 }

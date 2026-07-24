@@ -3,6 +3,7 @@ package com.example.senioron.domain.home.service;
 import com.example.senioron.domain.device.entity.DeviceStatus;
 import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.home.dto.request.HomeButtonCreateRequest;
+import com.example.senioron.domain.home.dto.request.HomeButtonSaveRequest;
 import com.example.senioron.domain.home.dto.request.HomeButtonUpdateRequest;
 import com.example.senioron.domain.home.dto.request.HomeFontSizeUpdateRequest;
 import com.example.senioron.domain.home.dto.request.SeniorProfileUpdateRequest;
@@ -12,11 +13,15 @@ import com.example.senioron.domain.home.dto.response.HomeResponse;
 import com.example.senioron.domain.home.dto.response.SeniorHomeResponse;
 import com.example.senioron.domain.home.dto.response.SeniorProfileUpdateResponse;
 import com.example.senioron.domain.home.dto.response.TodayScheduleResponse;
+import com.example.senioron.domain.home.entity.ActionType;
 import com.example.senioron.domain.home.entity.ButtonOption;
 import com.example.senioron.domain.home.entity.FontSize;
 import com.example.senioron.domain.home.entity.Home;
+import com.example.senioron.domain.home.entity.HomeSetting;
+import com.example.senioron.domain.home.entity.MusicApp;
 import com.example.senioron.domain.home.repository.ButtonOptionRepository;
 import com.example.senioron.domain.home.repository.HomeRepository;
+import com.example.senioron.domain.home.repository.HomeSettingRepository;
 import com.example.senioron.domain.hospital.entity.Hospital;
 import com.example.senioron.domain.hospital.repository.HospitalRepository;
 import com.example.senioron.domain.senior.entity.Senior;
@@ -35,15 +40,19 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.Period;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.Comparator;
 
 @Service
 public class HomeService {
+
+    private static final int MAX_BUTTON_COUNT_WITH_MUSIC_CARD = 10;
+    private static final int MAX_BUTTON_COUNT_WITHOUT_MUSIC_CARD = 12;
 
     private final HomeRepository homeRepository;
     private final ButtonOptionRepository buttonOptionRepository;
@@ -51,6 +60,7 @@ public class HomeService {
     private final HospitalRepository hospitalRepository;
     private final DeviceRepository deviceRepository;
     private final SeniorRepository seniorRepository;
+    private final HomeSettingRepository homeSettingRepository;
 
     public HomeService(
             HomeRepository homeRepository,
@@ -58,7 +68,8 @@ public class HomeService {
             UserRepository userRepository,
             HospitalRepository hospitalRepository,
             DeviceRepository deviceRepository,
-            SeniorRepository seniorRepository
+            SeniorRepository seniorRepository,
+            HomeSettingRepository homeSettingRepository
     ) {
         this.homeRepository = homeRepository;
         this.buttonOptionRepository = buttonOptionRepository;
@@ -66,6 +77,7 @@ public class HomeService {
         this.hospitalRepository = hospitalRepository;
         this.deviceRepository = deviceRepository;
         this.seniorRepository = seniorRepository;
+        this.homeSettingRepository = homeSettingRepository;
     }
 
     /**
@@ -106,7 +118,9 @@ public class HomeService {
                                         home.getHomeId(),
                                         home.getButtonOrder(),
                                         home.getButtonName(),
-                                        home.getIcon()
+                                        home.getIcon(),
+                                        home.getActionType(),
+                                        home.getActionValue()
                                 )
                         )
                         .toList();
@@ -123,11 +137,21 @@ public class HomeService {
                         ? FontSize.MEDIUM
                         : homes.get(0).getFontSize();
 
+        HomeResponse.MusicCardResponse musicCard =
+                getMusicCardResponse(homeOwner);
+
+        TodayScheduleResponse todaySchedule =
+                seniorUser
+                        .map(this::getTodayHospitalSchedule)
+                        .orElse(null);
+
         return new HomeResponse(
                 currentUser.getName(),
                 connection,
                 seniorProfileResponse,
                 fontSize,
+                musicCard,
+                todaySchedule,
                 buttons
         );
     }
@@ -170,9 +194,6 @@ public class HomeService {
 
         Senior currentUserSenior;
 
-        /*
-         * 현재 담당자에게 등록된 시니어 정보가 없으면 최초 등록으로 처리
-         */
         if (currentUserSeniorOptional.isEmpty()) {
 
             currentUserSenior = Senior.builder()
@@ -246,7 +267,117 @@ public class HomeService {
     }
 
     /**
-     * 홈 버튼 수정
+     * 홈 버튼과 노래 카드 전체 저장
+     */
+    @Transactional
+    public void saveButtons(
+            HomeButtonSaveRequest request
+    ) {
+
+        User user = getCurrentUser();
+        validatePrimaryManager(user);
+
+        List<HomeButtonSaveRequest.ButtonRequest> buttonRequests =
+                request.getButtons();
+
+        if (buttonRequests == null) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_HOME_BUTTON_REQUEST
+            );
+        }
+
+        int maxButtonCount =
+                request.getMusicApp() == null
+                        ? MAX_BUTTON_COUNT_WITHOUT_MUSIC_CARD
+                        : MAX_BUTTON_COUNT_WITH_MUSIC_CARD;
+
+        if (buttonRequests.size() > maxButtonCount) {
+            throw new BusinessException(
+                    ErrorCode.HOME_BUTTON_LIMIT_EXCEEDED
+            );
+        }
+
+        validateSaveButtonRequests(buttonRequests);
+
+        Set<Long> optionIds =
+                buttonRequests.stream()
+                        .map(
+                                HomeButtonSaveRequest.ButtonRequest
+                                        ::getOptionId
+                        )
+                        .collect(Collectors.toSet());
+
+        Map<Long, ButtonOption> optionMap =
+                buttonOptionRepository
+                        .findAllById(optionIds)
+                        .stream()
+                        .collect(
+                                Collectors.toMap(
+                                        ButtonOption::getOptionId,
+                                        Function.identity()
+                                )
+                        );
+
+        if (optionMap.size() != optionIds.size()) {
+            throw new BusinessException(
+                    ErrorCode.BUTTON_OPTION_NOT_FOUND
+            );
+        }
+
+        List<Home> existingHomes =
+                homeRepository
+                        .findAllByUserOrderByButtonOrderAsc(
+                                user
+                        );
+
+        FontSize fontSize =
+                existingHomes.isEmpty()
+                        ? FontSize.MEDIUM
+                        : existingHomes.get(0).getFontSize();
+
+        homeRepository.deleteAllByUser(user);
+
+        List<Home> newHomes =
+                buttonRequests.stream()
+                        .map(buttonRequest -> {
+
+                            ButtonOption option =
+                                    optionMap.get(
+                                            buttonRequest.getOptionId()
+                                    );
+
+                            return Home.createButton(
+                                    user,
+                                    buttonRequest.getButtonOrder(),
+                                    option.getButtonName(),
+                                    option.getIcon(),
+                                    option.getActionType(),
+                                    option.getActionValue(),
+                                    fontSize
+                            );
+                        })
+                        .toList();
+
+        homeRepository.saveAll(newHomes);
+
+        HomeSetting homeSetting =
+                homeSettingRepository
+                        .findByUser(user)
+                        .orElseGet(() ->
+                                HomeSetting.builder()
+                                        .user(user)
+                                        .build()
+                        );
+
+        homeSetting.updateMusicApp(
+                request.getMusicApp()
+        );
+
+        homeSettingRepository.save(homeSetting);
+    }
+
+    /**
+     * 기존 홈 버튼 이름, 아이콘, 순서 수정
      */
     @Transactional
     public void updateButtons(
@@ -351,14 +482,7 @@ public class HomeService {
                         .sorted()
                         .toList();
 
-        for (int i = 0; i < sortedOrders.size(); i++) {
-
-            if (!sortedOrders.get(i).equals(i + 1)) {
-                throw new BusinessException(
-                        ErrorCode.INVALID_HOME_BUTTON_ORDER
-                );
-            }
-        }
+        validateSequentialOrders(sortedOrders);
 
         for (HomeButtonUpdateRequest.ButtonRequest buttonRequest
                 : request.getButtons()) {
@@ -407,7 +531,7 @@ public class HomeService {
     }
 
     /**
-     * 홈 버튼 추가
+     * 홈 버튼 개별 추가
      */
     @Transactional
     public HomeButtonCreateResponse createButton(
@@ -446,6 +570,23 @@ public class HomeService {
                                 user
                         );
 
+        MusicApp musicApp =
+                homeSettingRepository
+                        .findByUser(user)
+                        .map(HomeSetting::getMusicApp)
+                        .orElse(null);
+
+        int maxButtonCount =
+                musicApp == null
+                        ? MAX_BUTTON_COUNT_WITHOUT_MUSIC_CARD
+                        : MAX_BUTTON_COUNT_WITH_MUSIC_CARD;
+
+        if (homes.size() >= maxButtonCount) {
+            throw new BusinessException(
+                    ErrorCode.HOME_BUTTON_LIMIT_EXCEEDED
+            );
+        }
+
         int newButtonOrder =
                 homes.stream()
                         .mapToInt(Home::getButtonOrder)
@@ -480,7 +621,7 @@ public class HomeService {
     }
 
     /**
-     * 홈 버튼 삭제
+     * 홈 버튼 개별 삭제
      */
     @Transactional
     public void deleteButton(
@@ -567,8 +708,12 @@ public class HomeService {
                         parent
                 );
 
+        HomeResponse.MusicCardResponse musicCard =
+                getMusicCardResponse(primaryChild);
+
         return new SeniorHomeResponse(
                 fontSize,
+                musicCard,
                 todaySchedule,
                 buttons
         );
@@ -576,10 +721,6 @@ public class HomeService {
 
     /**
      * 오늘 병원 일정 조회
-     *
-     * 일정이 없으면 NONE,
-     * 일정이 1개이면 상세 정보,
-     * 일정이 2개 이상이면 일정 개수만 반환
      */
     private TodayScheduleResponse getTodayHospitalSchedule(
             User parent
@@ -685,6 +826,137 @@ public class HomeService {
                     request.getFontSize()
             );
         }
+    }
+
+    private void validateSaveButtonRequests(
+            List<HomeButtonSaveRequest.ButtonRequest> buttonRequests
+    ) {
+
+        boolean hasNullOptionId =
+                buttonRequests.stream()
+                        .anyMatch(buttonRequest ->
+                                buttonRequest.getOptionId() == null
+                        );
+
+        if (hasNullOptionId) {
+            throw new BusinessException(
+                    ErrorCode.BUTTON_OPTION_NOT_FOUND
+            );
+        }
+
+        long optionIdCount =
+                buttonRequests.stream()
+                        .map(
+                                HomeButtonSaveRequest.ButtonRequest
+                                        ::getOptionId
+                        )
+                        .distinct()
+                        .count();
+
+        if (optionIdCount != buttonRequests.size()) {
+            throw new BusinessException(
+                    ErrorCode.DUPLICATE_HOME_BUTTON_ID
+            );
+        }
+
+        boolean hasNullButtonOrder =
+                buttonRequests.stream()
+                        .anyMatch(buttonRequest ->
+                                buttonRequest.getButtonOrder() == null
+                        );
+
+        if (hasNullButtonOrder) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_HOME_BUTTON_ORDER
+            );
+        }
+
+        long buttonOrderCount =
+                buttonRequests.stream()
+                        .map(
+                                HomeButtonSaveRequest.ButtonRequest
+                                        ::getButtonOrder
+                        )
+                        .distinct()
+                        .count();
+
+        if (buttonOrderCount != buttonRequests.size()) {
+            throw new BusinessException(
+                    ErrorCode.DUPLICATE_HOME_BUTTON_ORDER
+            );
+        }
+
+        List<Integer> sortedOrders =
+                buttonRequests.stream()
+                        .map(
+                                HomeButtonSaveRequest.ButtonRequest
+                                        ::getButtonOrder
+                        )
+                        .sorted()
+                        .toList();
+
+        validateSequentialOrders(sortedOrders);
+    }
+
+    private void validateSequentialOrders(
+            List<Integer> sortedOrders
+    ) {
+
+        for (int i = 0; i < sortedOrders.size(); i++) {
+
+            if (!sortedOrders.get(i).equals(i + 1)) {
+                throw new BusinessException(
+                        ErrorCode.INVALID_HOME_BUTTON_ORDER
+                );
+            }
+        }
+    }
+
+    private HomeResponse.MusicCardResponse getMusicCardResponse(
+            User homeOwner
+    ) {
+
+        return homeSettingRepository
+                .findByUser(homeOwner)
+                .map(HomeSetting::getMusicApp)
+                .map(this::createMusicCardResponse)
+                .orElseGet(
+                        HomeResponse.MusicCardResponse::empty
+                );
+    }
+
+    private HomeResponse.MusicCardResponse createMusicCardResponse(
+            MusicApp musicApp
+    ) {
+
+        if (musicApp == null) {
+            return HomeResponse
+                    .MusicCardResponse
+                    .empty();
+        }
+
+        return switch (musicApp) {
+
+            case MELON ->
+                    new HomeResponse.MusicCardResponse(
+                            true,
+                            MusicApp.MELON,
+                            "멜론",
+                            "melon",
+                            ActionType.APP,
+                            "melon"
+                    );
+
+            case SPOTIFY ->
+                    new HomeResponse.MusicCardResponse(
+                            true,
+                            MusicApp.SPOTIFY,
+                            "스포티파이",
+                            "spotify",
+                            ActionType.APP,
+                            "spotify"
+                    );
+        };
     }
 
     private User resolvePrimaryChild(

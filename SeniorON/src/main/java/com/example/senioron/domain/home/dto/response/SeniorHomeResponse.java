@@ -11,17 +11,24 @@ public class SeniorHomeResponse {
     @JsonProperty("font_size")
     private FontSize fontSize;
 
+    @JsonProperty("music_card")
+    private HomeResponse.MusicCardResponse musicCard;
+
+
     @JsonProperty("today_schedule")
     private TodayScheduleResponse todaySchedule;
+
 
     private List<ButtonResponse> buttons;
 
     public SeniorHomeResponse(
             FontSize fontSize,
+            HomeResponse.MusicCardResponse musicCard,
             TodayScheduleResponse todaySchedule,
             List<ButtonResponse> buttons
     ) {
         this.fontSize = fontSize;
+        this.musicCard = musicCard;
         this.todaySchedule = todaySchedule;
         this.buttons = buttons;
     }
@@ -32,6 +39,10 @@ public class SeniorHomeResponse {
 
     public TodayScheduleResponse getTodaySchedule() {
         return todaySchedule;
+    }
+
+    public HomeResponse.MusicCardResponse getMusicCard() {
+        return musicCard;
     }
 
     public List<ButtonResponse> getButtons() {
