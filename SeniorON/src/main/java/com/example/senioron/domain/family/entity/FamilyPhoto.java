@@ -33,4 +33,8 @@ public class FamilyPhoto extends BaseEntity {
 
     @Column(name = "description", length = 30)
     private String description;
+
+    @Builder.Default
+    @Column(name = "viewed_by_parent", nullable = false)
+    private boolean viewedByParent = false;
 }
