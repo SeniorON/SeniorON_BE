@@ -203,15 +203,14 @@ public class MedicationService {
         LocalDateTime changedAt =
                 LocalDateTime.now(KOREA_ZONE_ID);
 
+        existingMedications.forEach(
+                medication -> medication.endMedication(changedAt)
+        );
+
         medicationLogRepository.deleteFutureUntakenLogs(
                 existingMedications,
                 changedAt.toLocalDate(),
                 changedAt.toLocalTime()
-        );
-
-        existingMedications.forEach(
-                medication ->
-                        medication.endMedication(changedAt)
         );
 
         String medicineDays = normalizeAndJoinDays(
@@ -278,17 +277,15 @@ public class MedicationService {
         LocalDateTime deletedAt =
                 LocalDateTime.now(KOREA_ZONE_ID);
 
+        medications.forEach(
+                medication -> medication.endMedication(deletedAt)
+        );
+
         medicationLogRepository.deleteFutureUntakenLogs(
                 medications,
                 deletedAt.toLocalDate(),
                 deletedAt.toLocalTime()
         );
-
-        medications.forEach(
-                medication ->
-                        medication.endMedication(deletedAt)
-        );
-
         log.info(
                 "약 삭제 처리 완료. requesterUserId: {}, parentUserId: {}, groupId: {}",
                 requesterUserId,
