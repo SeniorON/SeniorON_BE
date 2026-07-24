@@ -32,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -60,7 +61,7 @@ public class NotificationService {
 
         NotificationType type = resolveType(event.getEventType());
         String title = resolveTitle(event.getEventType());
-        String body = resolveBody(event.getEventType(), event.getPhase());
+        String body = resolveBody(event);
         List<Notification> notifications = new ArrayList<>();
         for (User receiver : receivers) {
             if (!isEnabled(receiver, type)) {
@@ -160,14 +161,22 @@ public class NotificationService {
         };
     }
 
-    private String resolveBody(EventType eventType, OutingPhase phase) {
-        return switch (eventType) {
+    private String resolveBody(Event event) {
+        return switch (event.getEventType()) {
             case SOS -> "도움이 필요해요";
-            case INACTIVITY -> "무활동 감지됨";
+            case INACTIVITY -> resolveInactivityMessage(event.getLastSeenAt(), event.getCreatedAt());
             case RISK_LINK -> "위험링크 감지됨";
-            case OUTING_RETURN -> resolveOutingReturnMessage(phase);
-            default -> "알림 감지";
+            case OUTING_RETURN -> resolveOutingReturnMessage(event.getPhase());
         };
+    }
+
+    // "4시간 미사용 감지됨" — 마지막 활동 시각부터 감지 시각까지 경과 시간
+    private String resolveInactivityMessage(LocalDateTime lastSeenAt, LocalDateTime detectedAt) {
+        if (lastSeenAt == null || detectedAt == null) {
+            return "무활동 감지됨";
+        }
+        long hours = Duration.between(lastSeenAt, detectedAt).toHours();
+        return hours + "시간 미사용 감지됨";
     }
 
     private String resolveOutingReturnMessage(OutingPhase phase) {
