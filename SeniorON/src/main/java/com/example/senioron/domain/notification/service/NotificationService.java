@@ -321,5 +321,21 @@ public class NotificationService {
                 .build();
 
     }
+
+    // 알림 읽음 처리
+    @Transactional
+    public void markAsRead(Long userId, Long notificationId) {
+        Notification notification = notificationRepository.findById(notificationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND));
+
+        if (!notification.getReceiverUser().getUsersId().equals(userId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+
+        if (Boolean.TRUE.equals(notification.getIsRead())) {
+            return;
+        }
+        notification.markAsRead();
+    }
 }
 
