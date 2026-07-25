@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 
 @Service
 public class WeatherService {
@@ -75,15 +76,18 @@ public class WeatherService {
                         response.current().weatherCode()
                 );
 
+        LocalDateTime observedAt =
+                parseObservedAt(
+                        response.current().time()
+                );
+
         return new WeatherResponse(
                 (int) Math.round(
                         response.current().temperature()
                 ),
                 weatherStatus.name(),
                 weatherStatus.getDescription(),
-                LocalDateTime.parse(
-                        response.current().time()
-                )
+                observedAt
         );
     }
 
@@ -92,7 +96,9 @@ public class WeatherService {
             double longitude
     ) {
 
-        if (latitude < -90
+        if (!Double.isFinite(latitude)
+                || !Double.isFinite(longitude)
+                || latitude < -90
                 || latitude > 90
                 || longitude < -180
                 || longitude > 180) {
@@ -113,6 +119,22 @@ public class WeatherService {
                 || response.current().weatherCode() == null
                 || response.current().time() == null) {
 
+            throw new BusinessException(
+                    ErrorCode.WEATHER_DATA_NOT_FOUND
+            );
+        }
+    }
+
+    private LocalDateTime parseObservedAt(
+            String observedAt
+    ) {
+
+        try {
+            return LocalDateTime.parse(
+                    observedAt
+            );
+
+        } catch (DateTimeParseException e) {
             throw new BusinessException(
                     ErrorCode.WEATHER_DATA_NOT_FOUND
             );
