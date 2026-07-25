@@ -127,4 +127,41 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
             @Param("role") Role role,
             @Param("newPhotoCutoff") LocalDateTime newPhotoCutoff
     );
+
+    @EntityGraph(attributePaths = {"user", "user.family"})
+    List<FamilyPhoto> findByFamilyAndUserOrderByCreatedAtDescFamilyPhotoIdDesc(
+            Family family,
+            User uploader,
+            Pageable pageable
+    );
+
+    @EntityGraph(attributePaths = {"user", "user.family"})
+    @Query("""
+        SELECT fp
+        FROM FamilyPhoto fp
+        WHERE fp.family = :family
+          AND fp.user = :uploader
+          AND (
+              fp.createdAt < :cursorCreatedAt
+              OR (
+                  fp.createdAt = :cursorCreatedAt
+                  AND fp.familyPhotoId < :cursorId
+              )
+          )
+        ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
+        """)
+    List<FamilyPhoto> findNextPageByUploaderAndCursor(
+            @Param("family") Family family,
+            @Param("uploader") User uploader,
+            @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
+            @Param("cursorId") Long cursorId,
+            Pageable pageable
+    );
+
+    long countByFamily(Family family);
+
+    long countByFamilyAndUser(
+            Family family,
+            User uploader
+    );
 }
