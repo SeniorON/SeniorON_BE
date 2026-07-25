@@ -39,7 +39,7 @@ scrape_configs:
       # Docker Compose
       - source_labels:
           ['__meta_docker_container_label_com_docker_compose_project']
-        target_label: project
+        target_label: compose_project
 
       # 로그 파일
       - replacement: /var/lib/docker/containers/*/*-json.log

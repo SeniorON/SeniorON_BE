@@ -7,8 +7,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
-import org.springframework.web.util.ContentCachingRequestWrapper;
-import org.springframework.web.util.ContentCachingResponseWrapper;
 
 import java.io.IOException;
 
@@ -25,7 +23,7 @@ public class ApiLoggingFilter extends OncePerRequestFilter {
 
         String uri = request.getRequestURI();
 
-        // 모니터링 관련 요청은 제외
+        // 모니터링 관련 요청 제외
         if (uri.startsWith("/actuator")
                 || uri.startsWith("/prometheus")
                 || uri.equals("/favicon.ico")) {
@@ -34,18 +32,10 @@ public class ApiLoggingFilter extends OncePerRequestFilter {
             return;
         }
 
-        ContentCachingRequestWrapper requestWrapper =
-                new ContentCachingRequestWrapper(request,10240);
-
-        ContentCachingResponseWrapper responseWrapper =
-                new ContentCachingResponseWrapper(response);
-
         long start = System.currentTimeMillis();
 
-        String queryString = request.getQueryString();
-        String fullUri = queryString == null
-                ? uri
-                : uri + "?" + queryString;
+        // QueryString은 기록하지 않음 (민감정보 노출 방지)
+        String requestUri = request.getRequestURI();
 
         String clientIp = request.getHeader("X-Forwarded-For");
         if (clientIp == null || clientIp.isBlank()) {
@@ -59,22 +49,36 @@ public class ApiLoggingFilter extends OncePerRequestFilter {
             log.info(
                     "[REQUEST] {} {} | IP={}",
                     request.getMethod(),
-                    fullUri,
+                    requestUri,
                     clientIp
             );
 
-            filterChain.doFilter(requestWrapper, responseWrapper);
+            filterChain.doFilter(request, response);
+
+        } catch (Exception e) {
+
+            long duration = System.currentTimeMillis() - start;
+
+            log.error(
+                    "[EXCEPTION] {} {} | {}ms",
+                    request.getMethod(),
+                    requestUri,
+                    duration,
+                    e
+            );
+
+            throw e;
 
         } finally {
 
             long duration = System.currentTimeMillis() - start;
-            int status = responseWrapper.getStatus();
+            int status = response.getStatus();
 
             if (status >= 500) {
                 log.error(
                         "[RESPONSE] {} {} | {} | {}ms",
                         request.getMethod(),
-                        fullUri,
+                        requestUri,
                         status,
                         duration
                 );
@@ -82,13 +86,11 @@ public class ApiLoggingFilter extends OncePerRequestFilter {
                 log.info(
                         "[RESPONSE] {} {} | {} | {}ms",
                         request.getMethod(),
-                        fullUri,
+                        requestUri,
                         status,
                         duration
                 );
             }
-
-            responseWrapper.copyBodyToResponse();
         }
     }
 }
