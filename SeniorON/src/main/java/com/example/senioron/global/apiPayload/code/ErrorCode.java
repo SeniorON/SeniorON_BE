@@ -37,6 +37,9 @@ public enum ErrorCode implements BaseCode {
     // Email Error
     EMAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "EMAIL500", "이메일 발송에 실패했습니다."),
 
+    // Device Error
+    SENIOR_DEVICE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "DEVICE_403", "시니어 기기 정보 갱신 권한이 없습니다."),
+
     // Home Error
     HOME_BUTTON_NOT_FOUND(HttpStatus.NOT_FOUND, "HOME404", "버튼을 찾을 수 없습니다."),
     BUTTON_OPTION_NOT_FOUND(HttpStatus.NOT_FOUND, "HOME4001", "존재하지 않는 버튼 옵션입니다."),

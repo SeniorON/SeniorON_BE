@@ -2,6 +2,7 @@ package com.example.senioron.domain.home.controller;
 
 import com.example.senioron.domain.home.dto.request.*;
 import com.example.senioron.domain.home.dto.response.*;
+import com.example.senioron.domain.device.dto.response.DeviceDetailResponse;
 import com.example.senioron.domain.home.service.HomeService;
 import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
@@ -128,6 +129,17 @@ public class HomeController {
 
         return Response.ok(
                 homeService.getTodayHospitalSchedules()
+        );
+    }
+    @Operation(
+            summary = "시니어 기기 연결 상태 상세 조회",
+            description = "자녀가 연결된 시니어 기기의 기기명, 연결 상태, 배터리 및 마지막 연결 시각을 조회"
+    )
+    @GetMapping("/device")
+    public Response<DeviceDetailResponse> getDeviceDetail() {
+
+        return Response.ok(
+                homeService.getDeviceDetail()
         );
     }
 }

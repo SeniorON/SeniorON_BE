@@ -8,6 +8,7 @@ import com.example.senioron.domain.home.dto.request.HomeButtonUpdateRequest;
 import com.example.senioron.domain.home.dto.request.HomeFontSizeUpdateRequest;
 import com.example.senioron.domain.home.dto.request.SeniorProfileUpdateRequest;
 import com.example.senioron.domain.home.dto.response.*;
+import com.example.senioron.domain.device.dto.response.DeviceDetailResponse;
 import com.example.senioron.domain.home.entity.ActionType;
 import com.example.senioron.domain.home.entity.ButtonOption;
 import com.example.senioron.domain.home.entity.FontSize;
@@ -42,6 +43,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.time.LocalDateTime;
 
 @Service
 public class HomeService {
@@ -56,6 +58,26 @@ public class HomeService {
     private final DeviceRepository deviceRepository;
     private final SeniorRepository seniorRepository;
     private final HomeSettingRepository homeSettingRepository;
+    private static final long DEVICE_OFFLINE_THRESHOLD_MINUTES = 30;
+
+    private boolean isDeviceConnected(
+            LocalDateTime lastConnectedAt
+    ) {
+        if (lastConnectedAt == null) {
+            return false;
+        }
+
+        LocalDateTime offlineThreshold =
+                LocalDateTime.now()
+                        .minusMinutes(
+                                DEVICE_OFFLINE_THRESHOLD_MINUTES
+                        );
+
+        return lastConnectedAt.isAfter(
+                offlineThreshold
+        );
+    }
+
 
     public HomeService(
             HomeRepository homeRepository,
@@ -715,6 +737,58 @@ public class HomeService {
     }
 
     /**
+     * 시니어 기기 연결 상태 상세 조회
+     */
+    @Transactional(readOnly = true)
+    public DeviceDetailResponse getDeviceDetail() {
+
+        User currentUser = getCurrentUser();
+
+        if (currentUser.getRole() != Role.CHILD) {
+            throw new BusinessException(
+                    ErrorCode.CHILD_HOME_ACCESS_DENIED
+            );
+        }
+
+        Optional<User> seniorUser =
+                findSeniorUser(currentUser);
+
+        if (seniorUser.isEmpty()) {
+            return DeviceDetailResponse.disconnected();
+        }
+
+        return deviceRepository
+                .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
+                        seniorUser.get()
+                )
+                .map(device -> {
+
+                    boolean connected =
+                            isDeviceConnected(
+                                    device.getLastConnectedAt()
+                            );
+
+                    DeviceStatus currentStatus =
+                            connected
+                                    ? DeviceStatus.ONLINE
+                                    : DeviceStatus.OFFLINE;
+
+                    return new DeviceDetailResponse(
+                            device.getDeviceName(),
+                            connected,
+                            currentStatus,
+                            device.getBatteryLevel(),
+                            connected,
+                            device.getLastConnectedAt(),
+                            null
+                    );
+                })
+                .orElseGet(
+                        DeviceDetailResponse::disconnected
+                );
+    }
+
+    /**
      * 오늘 병원 일정 상세 목록 조회
      */
     @Transactional(readOnly = true)
@@ -1076,14 +1150,15 @@ public class HomeService {
         }
 
         return deviceRepository
-                .findFirstByUser(
+                .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
                         seniorUser.get()
                 )
                 .map(device ->
                         new HomeResponse.ConnectionResponse(
                                 device.getDeviceName(),
-                                device.getConnectionStatus()
-                                        == DeviceStatus.ONLINE,
+                                isDeviceConnected(
+                                        device.getLastConnectedAt()
+                                ),
                                 device.getBatteryLevel()
                         )
                 )
