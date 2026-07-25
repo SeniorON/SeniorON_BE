@@ -41,6 +41,8 @@ public class FamilyPhotoService {
     private final S3Service s3Service;
     private final FamilyPhotoPermissionService familyPhotoPermissionService;
 
+    private static final int NEW_PHOTO_WINDOW_HOURS = 24;
+
     @Transactional
     public FamilyPhotoItemResponse createPhoto(
             User principal,
@@ -78,7 +80,7 @@ public class FamilyPhotoService {
             return toItemResponse(
                     savedPhoto,
                     user,
-                    LocalDateTime.now().minusHours(24)
+                    LocalDateTime.now().minusHours(NEW_PHOTO_WINDOW_HOURS)
             );
 
         } catch(RuntimeException e) {
@@ -247,7 +249,7 @@ public class FamilyPhotoService {
         }
 
         LocalDateTime newPhotoCutoff =
-                LocalDateTime.now().minusHours(24);
+                LocalDateTime.now().minusHours(NEW_PHOTO_WINDOW_HOURS);
 
         List<FamilyPhotoItemResponse> photoResponses =
                 pagePhotos.stream()
@@ -340,7 +342,7 @@ public class FamilyPhotoService {
         }
 
         // 현재 시각으로부터 24시간 전을 새로운 사진 판단 기준으로 사용
-        LocalDateTime newPhotoCutoff = LocalDateTime.now().minusHours(24);
+        LocalDateTime newPhotoCutoff = LocalDateTime.now().minusHours(NEW_PHOTO_WINDOW_HOURS);
 
         // 자녀마다 가장 최근에 올린 사진 한 장 조회
         List<FamilyPhoto> latestPhotos = familyPhotoRepository.findLatestPhotosByUploader(
