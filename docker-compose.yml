@@ -109,7 +109,7 @@ services:
       retries: 12
       start_period: 30s
 
-    mem_limit: 150m
+    mem_limit: 512m
 
     environment:
       GF_SERVER_ROOT_URL: https://senioron.site/grafana/
