@@ -20,12 +20,16 @@ services:
 
   nginx-exporter:
     image: nginx/nginx-prometheus-exporter:latest
+    restart: unless-stopped
 
     expose:
       - "9113"
 
+    depends_on:
+      - nginx
+
     command:
-      - "-nginx.scrape-uri=http://nginx/nginx_status"
+      - "-nginx.scrape-uri=http://nginx:8081/nginx_status"
 
   app:
     #build: .

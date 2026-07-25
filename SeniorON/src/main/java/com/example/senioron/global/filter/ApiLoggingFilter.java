@@ -17,29 +17,76 @@ import java.io.IOException;
 public class ApiLoggingFilter extends OncePerRequestFilter {
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
-            throws ServletException, IOException {
+    protected void doFilterInternal(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            FilterChain filterChain
+    ) throws ServletException, IOException {
 
-        // Actuator 및 Prometheus 메트릭 엔드포인트는 로깅에서 제외하여 로그 폭주 방지
-        String requestUri = request.getRequestURI();
-        if (requestUri.startsWith("/actuator") || requestUri.startsWith("/prometheus")) {
+        String uri = request.getRequestURI();
+
+        // 모니터링 관련 요청은 제외
+        if (uri.startsWith("/actuator")
+                || uri.startsWith("/prometheus")
+                || uri.equals("/favicon.ico")) {
+
             filterChain.doFilter(request, response);
             return;
         }
 
-        ContentCachingRequestWrapper requestWrapper = new ContentCachingRequestWrapper(request, 10240);
-        ContentCachingResponseWrapper responseWrapper = new ContentCachingResponseWrapper(response);
+        ContentCachingRequestWrapper requestWrapper =
+                new ContentCachingRequestWrapper(request,10240);
 
-        long startTime = System.currentTimeMillis();
+        ContentCachingResponseWrapper responseWrapper =
+                new ContentCachingResponseWrapper(response);
+
+        long start = System.currentTimeMillis();
+
+        String queryString = request.getQueryString();
+        String fullUri = queryString == null
+                ? uri
+                : uri + "?" + queryString;
+
+        String clientIp = request.getHeader("X-Forwarded-For");
+        if (clientIp == null || clientIp.isBlank()) {
+            clientIp = request.getRemoteAddr();
+        } else {
+            clientIp = clientIp.split(",")[0].trim();
+        }
 
         try {
-            log.info("[API Request] {} {}", request.getMethod(), requestUri);
+
+            log.info(
+                    "[REQUEST] {} {} | IP={}",
+                    request.getMethod(),
+                    fullUri,
+                    clientIp
+            );
+
             filterChain.doFilter(requestWrapper, responseWrapper);
+
         } finally {
-            long duration = System.currentTimeMillis() - startTime;
+
+            long duration = System.currentTimeMillis() - start;
             int status = responseWrapper.getStatus();
 
-            log.info("[API Response] {} {} - Status: {} ({}ms)", request.getMethod(), requestUri, status, duration);
+            if (status >= 500) {
+                log.error(
+                        "[RESPONSE] {} {} | {} | {}ms",
+                        request.getMethod(),
+                        fullUri,
+                        status,
+                        duration
+                );
+            } else {
+                log.info(
+                        "[RESPONSE] {} {} | {} | {}ms",
+                        request.getMethod(),
+                        fullUri,
+                        status,
+                        duration
+                );
+            }
 
             responseWrapper.copyBodyToResponse();
         }
