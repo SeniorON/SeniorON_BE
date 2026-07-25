@@ -18,6 +18,15 @@ services:
       grafana:
         condition: service_healthy
 
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:latest
+
+    expose:
+      - "9113"
+
+    command:
+      - "-nginx.scrape-uri=http://nginx/nginx_status"
+
   app:
     #build: .
     image: jsh424/senioron:latest
