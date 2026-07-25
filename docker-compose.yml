@@ -18,6 +18,19 @@ services:
       grafana:
         condition: service_healthy
 
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:latest
+    restart: unless-stopped
+
+    expose:
+      - "9113"
+
+    depends_on:
+      - nginx
+
+    command:
+      - "-nginx.scrape-uri=http://nginx:8081/nginx_status"
+
   app:
     #build: .
     image: jsh424/senioron:latest
@@ -46,8 +59,12 @@ services:
 
   prometheus:
     image: prom/prometheus:latest
-
     restart: unless-stopped
+
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=3d"
 
     expose:
       - "9090"
@@ -91,6 +108,8 @@ services:
       timeout: 5s
       retries: 12
       start_period: 30s
+
+    mem_limit: 512m
 
     environment:
       GF_SERVER_ROOT_URL: https://senioron.site/grafana/
@@ -161,6 +180,10 @@ services:
 
     expose:
       - "8080"
+
+    command:
+      - "--housekeeping_interval=30s"
+      - "--docker_only=true"
 
     volumes:
       - /:/rootfs:ro
