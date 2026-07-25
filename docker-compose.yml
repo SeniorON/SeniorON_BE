@@ -46,10 +46,11 @@ services:
 
   prometheus:
     image: prom/prometheus:latest
-
     restart: unless-stopped
 
     command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
       - "--storage.tsdb.retention.time=3d"
 
     expose:
