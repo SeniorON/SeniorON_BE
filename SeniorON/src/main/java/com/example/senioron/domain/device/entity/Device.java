@@ -17,7 +17,8 @@ public class Device extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long device_id;
+    @Column(name = "device_id")
+    private Long deviceId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "users_id")

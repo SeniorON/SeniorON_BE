@@ -13,7 +13,7 @@ import java.util.Optional;
 public interface DeviceRepository
         extends JpaRepository<Device, Long> {
 
-    Optional<Device> findFirstByUserOrderByLastConnectedAtDesc(
+    Optional<Device> findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
             User user
     );
 

@@ -758,7 +758,7 @@ public class HomeService {
         }
 
         return deviceRepository
-                .findFirstByUserOrderByLastConnectedAtDesc(
+                .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
                         seniorUser.get()
                 )
                 .map(device -> {
@@ -1150,7 +1150,7 @@ public class HomeService {
         }
 
         return deviceRepository
-                .findFirstByUserOrderByLastConnectedAtDesc(
+                .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
                         seniorUser.get()
                 )
                 .map(device ->
