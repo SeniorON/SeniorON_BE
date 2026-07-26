@@ -1,7 +1,10 @@
 package com.example.senioron.domain.socialaccount.controller;
 
+import com.example.senioron.domain.socialaccount.dto.google.request.GoogleLoginRequest;
+import com.example.senioron.domain.socialaccount.dto.google.response.GoogleLoginResponse;
 import com.example.senioron.domain.socialaccount.dto.kakao.request.KakaoLoginRequest;
 import com.example.senioron.domain.socialaccount.dto.kakao.response.KakaoLoginResponse;
+import com.example.senioron.domain.socialaccount.service.GoogleLoginService;
 import com.example.senioron.domain.socialaccount.service.KakaoLoginService;
 import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
@@ -19,6 +22,7 @@ import org.springframework.web.bind.annotation.*;
 public class SocialAccountController {
 
     private final KakaoLoginService kakaoLoginService;
+    private final GoogleLoginService googleLoginService;
 
     @Operation(
             summary = "카카오 로그인",
@@ -31,6 +35,17 @@ public class SocialAccountController {
         return Response.ok(
                 kakaoLoginService.kakaoLogin(request)
         );
+    }
+
+    @Operation(
+            summary = "구글 로그인",
+            description = "Firebase Authentication에서 발급받은 ID 토큰으로 구글 로그인을 진행합니다."
+    )
+    @PostMapping("/login/google")
+    public Response<GoogleLoginResponse> googleLogin(
+            @Valid @RequestBody GoogleLoginRequest request
+    ) {
+        return Response.ok(googleLoginService.googleLogin(request));
     }
 
 

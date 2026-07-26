@@ -1,10 +1,5 @@
 package com.example.senioron.domain.user.controller;
 
-import com.example.senioron.domain.socialaccount.dto.kakao.request.KakaoLoginRequest;
-import com.example.senioron.domain.socialaccount.dto.google.request.GoogleLoginRequest;
-import com.example.senioron.domain.socialaccount.dto.google.response.GoogleLoginResponse;
-import com.example.senioron.domain.socialaccount.dto.kakao.response.KakaoLoginResponse;
-import com.example.senioron.domain.socialaccount.service.GoogleLoginService;
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeSendRequest;
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeVerifyRequest;
 import com.example.senioron.domain.user.dto.request.UserLoginRequest;
@@ -12,7 +7,6 @@ import com.example.senioron.domain.user.dto.request.UserRoleUpdateRequest;
 import com.example.senioron.domain.user.dto.request.UserSignUpRequest;
 import com.example.senioron.domain.user.dto.response.*;
 import com.example.senioron.domain.user.entity.User;
-import com.example.senioron.domain.socialaccount.service.KakaoLoginService;
 import com.example.senioron.domain.user.service.UserService;
 import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
@@ -29,7 +23,6 @@ import org.springframework.web.bind.annotation.*;
 public class UserController {
 
     private final UserService userService;
-    private final GoogleLoginService googleLoginService;
 
 
     @Operation(summary = "아이디 중복 확인", description = "회원가입 시 입력한 아이디가 이미 사용 중인지 확인합니다.")
@@ -65,15 +58,6 @@ public class UserController {
     public Response<UserLoginResponse> login(@Valid @RequestBody UserLoginRequest request) {
         return Response.ok(userService.login(request));
     }
-
-    @Operation(summary = "구글 로그인", description = "Firebase Authentication에서 발급받은 ID 토큰으로 구글 로그인을 진행합니다.")
-    @PostMapping("/login/google")
-    public Response<GoogleLoginResponse> googleLogin(
-            @Valid @RequestBody GoogleLoginRequest request
-    ) {
-        return Response.ok(googleLoginService.googleLogin(request));
-    }
-
 
     @Operation(summary = "역할 선택/변경", description = "현재 로그인한 사용자의 역할을 선택하거나 변경합니다.")
     @PatchMapping("/me/role")
