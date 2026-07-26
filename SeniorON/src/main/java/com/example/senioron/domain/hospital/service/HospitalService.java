@@ -1,21 +1,22 @@
 package com.example.senioron.domain.hospital.service;
 
-import java.time.format.DateTimeParseException;
-import java.util.List;
-import java.util.stream.Collectors;
-import java.time.LocalDate;
-import java.time.LocalTime;
-
-import com.example.senioron.domain.hospital.dto.request.HospitalUpdateRequest;
-import com.example.senioron.domain.hospital.dto.response.HospitalListResponse;
-import com.example.senioron.global.apiPayload.code.ErrorCode;
-import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.domain.hospital.dto.request.HospitalCreateRequest;
+import com.example.senioron.domain.hospital.dto.request.HospitalUpdateRequest;
 import com.example.senioron.domain.hospital.dto.response.HospitalCreateResponse;
+import com.example.senioron.domain.hospital.dto.response.HospitalDetailResponse;
+import com.example.senioron.domain.hospital.dto.response.HospitalListResponse;
 import com.example.senioron.domain.hospital.entity.Hospital;
 import com.example.senioron.domain.hospital.repository.HospitalRepository;
-import com.example.senioron.domain.hospital.dto.response.HospitalDetailResponse;
+import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.global.apiPayload.code.ErrorCode;
+import com.example.senioron.global.apiPayload.exception.BusinessException;
+import jakarta.persistence.EntityManager;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.format.DateTimeParseException;
+import java.util.List;
+import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,13 +27,18 @@ import org.springframework.transaction.annotation.Transactional;
 public class HospitalService {
 
     private final HospitalRepository hospitalRepository;
+    private final EntityManager entityManager;
 
-    // 병원 일정 등록 부분
     @Transactional
     public HospitalCreateResponse createHospital(
-            User user,
+            Long requesterUserId,
+            Long parentUserId,
             HospitalCreateRequest request
     ) {
+        User parentUser = getWritableParentOrThrow(
+                requesterUserId,
+                parentUserId
+        );
 
         LocalDate date;
         LocalTime time;
@@ -40,84 +46,153 @@ public class HospitalService {
         try {
             date = LocalDate.parse(request.getScheduleDate());
             time = LocalTime.parse(request.getScheduleTime());
-        } catch (DateTimeParseException e) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        } catch (DateTimeParseException exception) {
+            throw new BusinessException(
+                    ErrorCode.BAD_REQUEST
+            );
         }
 
         Hospital hospital = Hospital.builder()
-                .user(user)
+                .user(parentUser)
                 .hospitalName(request.getHospitalName())
+                .department(request.getDepartment())
                 .scheduleDate(date)
                 .scheduleTime(time)
-                .department(request.getDepartment())
                 .reminderType(request.getReminderType())
                 .build();
 
-        Hospital savedHospital = hospitalRepository.save(hospital);
+        Hospital savedHospital =
+                hospitalRepository.save(hospital);
 
         return HospitalCreateResponse.builder()
-                .hospitalId(savedHospital.getHospital_id())
-                .hospitalName(savedHospital.getHospitalName())
-                .department(savedHospital.getDepartment())
-                .scheduleDate(savedHospital.getScheduleDate())
-                .scheduleTime(savedHospital.getScheduleTime())
-                .reminderType(savedHospital.getReminderType())
+                .hospitalId(
+                        savedHospital.getHospital_id()
+                )
+                .hospitalName(
+                        savedHospital.getHospitalName()
+                )
+                .department(
+                        savedHospital.getDepartment()
+                )
+                .scheduleDate(
+                        savedHospital.getScheduleDate()
+                )
+                .scheduleTime(
+                        savedHospital.getScheduleTime()
+                )
+                .reminderType(
+                        savedHospital.getReminderType()
+                )
                 .build();
     }
 
-    // 일정 목록 조회 부분
-    public List<HospitalListResponse> getHospitalByMonth(User user, int year, int month) {
+    public List<HospitalListResponse> getHospitalByMonth(
+            Long requesterUserId,
+            Long parentUserId,
+            int year,
+            int month
+    ) {
+        User parentUser = getReadableParentOrThrow(
+                requesterUserId,
+                parentUserId
+        );
 
-        LocalDate startDate = LocalDate.of(year, month, 1);
-        LocalDate endDate = startDate.withDayOfMonth(startDate.lengthOfMonth());
+        LocalDate startDate =
+                LocalDate.of(year, month, 1);
 
-        List<Hospital> hospitals = hospitalRepository.findByUserAndScheduleDateBetweenOrderByScheduleDateAscScheduleTimeAsc(user, startDate, endDate);
-
-        return hospitals.stream()
-                .map(hospital -> HospitalListResponse.builder()
-                        .hospitalId(hospital.getHospital_id())
-                        .hospitalName(hospital.getHospitalName())
-                        .department(hospital.getDepartment())
-                        .scheduleDate(hospital.getScheduleDate())
-                        .scheduleTime(hospital.getScheduleTime())
-                        .reminderType(hospital.getReminderType() != null ? hospital.getReminderType().name() : null)
-                        .build())
-                .collect(Collectors.toList());
-    }
-
-    // 병원 일정 삭제 부분
-    @Transactional
-    public void deleteHospital(User user, Long hospitalId) {
-        Hospital hospital = hospitalRepository.findById(hospitalId)
-                .orElseThrow(() ->
-                        new BusinessException(ErrorCode.HOSPITAL_SCHEDULE_NOT_FOUND)
+        LocalDate endDate =
+                startDate.withDayOfMonth(
+                        startDate.lengthOfMonth()
                 );
 
-        if (!hospital.getUser().getUsersId().equals(user.getUsersId())) {
-            throw new BusinessException(ErrorCode.HOSPITAL_SCHEDULE_NOT_FOUND);
-        }
+        List<Hospital> hospitals =
+                hospitalRepository
+                        .findByUserAndScheduleDateBetweenOrderByScheduleDateAscScheduleTimeAsc(
+                                parentUser,
+                                startDate,
+                                endDate
+                        );
+
+        return hospitals.stream()
+                .map(hospital ->
+                        HospitalListResponse.builder()
+                                .hospitalId(
+                                        hospital.getHospital_id()
+                                )
+                                .hospitalName(
+                                        hospital.getHospitalName()
+                                )
+                                .department(
+                                        hospital.getDepartment()
+                                )
+                                .scheduleDate(
+                                        hospital.getScheduleDate()
+                                )
+                                .scheduleTime(
+                                        hospital.getScheduleTime()
+                                )
+                                .reminderType(
+                                        hospital.getReminderType() != null
+                                                ? hospital.getReminderType().name()
+                                                : null
+                                )
+                                .build()
+                )
+                .toList();
+    }
+
+    @Transactional
+    public void deleteHospital(
+            Long requesterUserId,
+            Long parentUserId,
+            Long hospitalId
+    ) {
+        User parentUser = getWritableParentOrThrow(
+                requesterUserId,
+                parentUserId
+        );
+
+        Hospital hospital =
+                getHospitalOwnedByParentOrThrow(
+                        hospitalId,
+                        parentUser
+                );
 
         hospitalRepository.delete(hospital);
     }
 
-    // 병원 일정 수정 부분
     @Transactional
-    public void updateHospital(User user, Long hospitalId, HospitalUpdateRequest request){
-        Hospital hospital = hospitalRepository.findById(hospitalId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.HOSPITAL_SCHEDULE_NOT_FOUND));
+    public void updateHospital(
+            Long requesterUserId,
+            Long parentUserId,
+            Long hospitalId,
+            HospitalUpdateRequest request
+    ) {
+        User parentUser = getWritableParentOrThrow(
+                requesterUserId,
+                parentUserId
+        );
 
-        if (!hospital.getUser().getUsersId().equals(user.getUsersId())) {
-            throw new BusinessException(ErrorCode.HOSPITAL_SCHEDULE_NOT_FOUND);
-        }
+        Hospital hospital =
+                getHospitalOwnedByParentOrThrow(
+                        hospitalId,
+                        parentUser
+                );
 
         LocalDate date;
         LocalTime time;
 
         try {
-            date = LocalDate.parse(request.getScheduleDate());
-            time = LocalTime.parse(request.getScheduleTime());
-        } catch (DateTimeParseException e) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST);
+            date = LocalDate.parse(
+                    request.getScheduleDate()
+            );
+            time = LocalTime.parse(
+                    request.getScheduleTime()
+            );
+        } catch (DateTimeParseException exception) {
+            throw new BusinessException(
+                    ErrorCode.BAD_REQUEST
+            );
         }
 
         hospital.updateHospital(
@@ -129,19 +204,194 @@ public class HospitalService {
         );
     }
 
-    // 특정 날짜의 진료 상세 조회
-    public List<HospitalDetailResponse> getHospitalByDate(User user, LocalDate date) {
-        List<Hospital> hospitals = hospitalRepository.findByUserAndScheduleDateOrderByScheduleTimeAsc(user, date);
+    public List<HospitalDetailResponse> getHospitalByDate(
+            Long requesterUserId,
+            Long parentUserId,
+            LocalDate date
+    ) {
+        User parentUser = getReadableParentOrThrow(
+                requesterUserId,
+                parentUserId
+        );
+
+        List<Hospital> hospitals =
+                hospitalRepository
+                        .findByUserAndScheduleDateOrderByScheduleTimeAsc(
+                                parentUser,
+                                date
+                        );
 
         return hospitals.stream()
-                .map(hospital -> HospitalDetailResponse.builder()
-                        .hospitalId(hospital.getHospital_id())
-                        .hospitalName(hospital.getHospitalName())
-                        .department(hospital.getDepartment())
-                        .scheduleDate(hospital.getScheduleDate())
-                        .scheduleTime(hospital.getScheduleTime())
-                        .reminderType(hospital.getReminderType() != null ? hospital.getReminderType().name() : null)
-                        .build())
-                .collect(Collectors.toList());
+                .map(hospital ->
+                        HospitalDetailResponse.builder()
+                                .hospitalId(
+                                        hospital.getHospital_id()
+                                )
+                                .hospitalName(
+                                        hospital.getHospitalName()
+                                )
+                                .department(
+                                        hospital.getDepartment()
+                                )
+                                .scheduleDate(
+                                        hospital.getScheduleDate()
+                                )
+                                .scheduleTime(
+                                        hospital.getScheduleTime()
+                                )
+                                .reminderType(
+                                        hospital.getReminderType() != null
+                                                ? hospital.getReminderType().name()
+                                                : null
+                                )
+                                .build()
+                )
+                .toList();
+    }
+
+    private User getReadableParentOrThrow(
+            Long requesterUserId,
+            Long parentUserId
+    ) {
+        User requester = getUserOrThrow(
+                requesterUserId
+        );
+
+        if (requester.getRole() == Role.PARENT) {
+            if (!Objects.equals(
+                    requester.getUsersId(),
+                    parentUserId
+            )) {
+                throw new BusinessException(
+                        ErrorCode.FORBIDDEN
+                );
+            }
+
+            return requester;
+        }
+
+        validateChild(requester);
+
+        return getSameFamilyParentOrThrow(
+                requester,
+                parentUserId
+        );
+    }
+
+    private User getWritableParentOrThrow(
+            Long requesterUserId,
+            Long parentUserId
+    ) {
+        User requester = getUserOrThrow(
+                requesterUserId
+        );
+
+        validateChild(requester);
+
+        return getSameFamilyParentOrThrow(
+                requester,
+                parentUserId
+        );
+    }
+
+    private void validateChild(User requester) {
+        if (requester.getRole() != Role.CHILD) {
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN
+            );
+        }
+
+        if (requester.getFamily() == null) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_NOT_FOUND
+            );
+        }
+    }
+
+    private User getSameFamilyParentOrThrow(
+            User requester,
+            Long parentUserId
+    ) {
+        User parentUser = getUserOrThrow(
+                parentUserId
+        );
+
+        if (parentUser.getRole() != Role.PARENT) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_MEMBER_NOT_FOUND
+            );
+        }
+
+        boolean belongsToSameFamily =
+                parentUser.getFamily() != null
+                        && Objects.equals(
+                        requester.getFamily().getFamilyId(),
+                        parentUser.getFamily().getFamilyId()
+                );
+
+        if (!belongsToSameFamily) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_MEMBER_NOT_FOUND
+            );
+        }
+
+        return parentUser;
+    }
+
+    private User getUserOrThrow(Long userId) {
+        return entityManager.createQuery(
+                        """
+                        SELECT u
+                        FROM User u
+                        LEFT JOIN FETCH u.family
+                        WHERE u.usersId = :userId
+                        """,
+                        User.class
+                )
+                .setParameter(
+                        "userId",
+                        userId
+                )
+                .getResultStream()
+                .findFirst()
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.USER_NOT_FOUND
+                        )
+                );
+    }
+
+    private Hospital getHospitalOwnedByParentOrThrow(
+            Long hospitalId,
+            User parentUser
+    ) {
+        Hospital hospital =
+                hospitalRepository.findById(hospitalId)
+                        .orElseThrow(() ->
+                                new BusinessException(
+                                        ErrorCode.HOSPITAL_SCHEDULE_NOT_FOUND
+                                )
+                        );
+
+        validateHospitalOwner(
+                hospital,
+                parentUser
+        );
+
+        return hospital;
+    }
+
+    private void validateHospitalOwner(
+            Hospital hospital,
+            User parentUser
+    ) {
+        if (!Objects.equals(
+                hospital.getUser().getUsersId(),
+                parentUser.getUsersId()
+        )) {
+            throw new BusinessException(
+                    ErrorCode.HOSPITAL_SCHEDULE_NOT_FOUND
+            );
+        }
     }
 }
