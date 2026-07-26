@@ -45,7 +45,7 @@ public enum ErrorCode implements BaseCode {
     BUTTON_OPTION_NOT_FOUND(HttpStatus.NOT_FOUND, "HOME4001", "존재하지 않는 버튼 옵션입니다."),
     HOME_BUTTON_ALREADY_EXISTS(HttpStatus.CONFLICT, "HOME4002", "이미 추가된 홈 버튼입니다."),
     INVALID_HOME_BUTTON_REQUEST(HttpStatus.BAD_REQUEST, "HOME_4002", "현재 홈 버튼 전체를 요청해야 합니다."),
-    DUPLICATE_HOME_BUTTON_ID(HttpStatus.BAD_REQUEST, "HOME_4003", "중복된 홈 버튼 ID가 있습니다."),
+    DUPLICATE_HOME_BUTTON_ID(HttpStatus.BAD_REQUEST, "HOME_4003", "중복된 홈 버튼이 있습니다."),
     DUPLICATE_HOME_BUTTON_ORDER(HttpStatus.BAD_REQUEST, "HOME_4004", "중복된 홈 버튼 순서가 있습니다."),
     INVALID_HOME_BUTTON_ORDER(HttpStatus.BAD_REQUEST, "HOME_4005", "홈 버튼 순서는 1부터 연속되어야 합니다."),
     HOME_SETTING_ACCESS_DENIED(HttpStatus.FORBIDDEN, "HOME403", "주 담당 자녀만 홈 설정을 수정할 수 있습니다."),
@@ -55,6 +55,10 @@ public enum ErrorCode implements BaseCode {
     PRIMARY_MANAGER_NOT_FOUND(HttpStatus.NOT_FOUND, "HOME407", "가족의 주 담당자를 찾을 수 없습니다."),
     SENIOR_NOT_FOUND(HttpStatus.NOT_FOUND, "SENIOR404", "등록된 시니어 정보를 찾을 수 없습니다."),
     HOME_BUTTON_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "HOME_4008", "노래 카드 선택 여부에 따른 홈 버튼 최대 개수를 초과했습니다."),
+    WEATHER_DATA_NOT_SUPPORTED(HttpStatus.INTERNAL_SERVER_ERROR, "WEATHER5001", "지원하지 않는 날씨 상태입니다."),
+    WEATHER_API_CALL_FAILED(HttpStatus.BAD_GATEWAY, "WEATHER5021", "날씨 정보를 불러오는 데 실패했습니다."),
+    WEATHER_DATA_NOT_FOUND(HttpStatus.BAD_GATEWAY, "WEATHER5022", "날씨 응답 데이터가 올바르지 않습니다."),
+    INVALID_LOCATION_COORDINATES(HttpStatus.BAD_REQUEST, "WEATHER4001", "유효하지 않은 위치 좌표입니다."),
 
     // Senior Error
     CUSTOM_RELATION_REQUIRED(HttpStatus.BAD_REQUEST, "SENIOR4001", "직접 작성 관계를 입력해 주세요."),
