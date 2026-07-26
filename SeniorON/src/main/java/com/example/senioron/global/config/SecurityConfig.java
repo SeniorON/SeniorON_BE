@@ -47,6 +47,8 @@ public class SecurityConfig {
                                 "/v3/api-docs/**",
                                 "/swagger-ui.html",
                                 "/api/users/signup",
+                                "/api/users/signup/email/verification-code",
+                                "/api/users/signup/email/verification-code/verify",
                                 "/api/users/login",
                                 "/api/users/check-login-id",
                                 "/api/users/account-recovery/login-id",

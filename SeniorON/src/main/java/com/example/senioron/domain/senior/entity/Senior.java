@@ -1,5 +1,6 @@
 package com.example.senioron.domain.senior.entity;
 
+import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
@@ -21,16 +22,6 @@ public class Senior {
     @Column(nullable = false)
     private String name;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private SeniorRelation relation;
-
-    /*
-     * relation이 OTHER인 경우 사용자가 직접 입력한 관계
-     * 예: 이모, 삼촌, 지인
-     */
-    private String customRelation;
-
     @Column(nullable = false)
     private LocalDate birth;
 
@@ -40,6 +31,10 @@ public class Senior {
     private String address;
 
     private String detailAddress;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "family_id", nullable = false, unique = true)
+    private Family family;
 
     /*
      * 해당 시니어 정보를 등록한 사용자

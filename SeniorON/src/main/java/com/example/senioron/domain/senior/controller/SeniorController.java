@@ -1,7 +1,9 @@
 package com.example.senioron.domain.senior.controller;
 
 import com.example.senioron.domain.senior.dto.request.SeniorCreateRequest;
+import com.example.senioron.domain.senior.dto.request.SeniorRelationUpdateRequest;
 import com.example.senioron.domain.senior.dto.response.SeniorCreateResponse;
+import com.example.senioron.domain.senior.dto.response.SeniorRelationUpdateResponse;
 import com.example.senioron.domain.senior.service.SeniorService;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.global.apiPayload.response.Response;
@@ -28,6 +30,18 @@ public class SeniorController {
     ) {
         return Response.ok(
                 seniorService.createSenior(user, request)
+        );
+    }
+
+    @Operation(summary = "시니어 관계 수정", description = "현재 로그인한 사용자와 시니어 사이의 관계만 생성하거나 수정합니다.")
+    @PatchMapping("/{seniorId}/relation")
+    public Response<SeniorRelationUpdateResponse> updateSeniorRelation(
+            @AuthenticationPrincipal User user,
+            @PathVariable Long seniorId,
+            @Valid @RequestBody SeniorRelationUpdateRequest request
+    ) {
+        return Response.ok(
+                seniorService.updateSeniorRelation(user, seniorId, request)
         );
     }
 }
