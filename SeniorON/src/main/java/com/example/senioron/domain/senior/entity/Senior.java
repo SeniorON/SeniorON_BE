@@ -33,7 +33,7 @@ public class Senior {
     private String detailAddress;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "family_id", nullable = false)
+    @JoinColumn(name = "family_id", nullable = false, unique = true)
     private Family family;
 
     /*

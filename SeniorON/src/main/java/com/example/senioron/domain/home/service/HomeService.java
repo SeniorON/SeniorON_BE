@@ -2,6 +2,8 @@ package com.example.senioron.domain.home.service;
 
 import com.example.senioron.domain.device.entity.DeviceStatus;
 import com.example.senioron.domain.device.repository.DeviceRepository;
+import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.home.dto.request.HomeButtonCreateRequest;
 import com.example.senioron.domain.home.dto.request.HomeButtonSaveRequest;
 import com.example.senioron.domain.home.dto.request.HomeButtonUpdateRequest;
@@ -35,6 +37,7 @@ import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -64,6 +67,7 @@ public class HomeService {
     private final SeniorRepository seniorRepository;
     private final UserSeniorRepository userSeniorRepository;
     private final HomeSettingRepository homeSettingRepository;
+    private final FamilyRepository familyRepository;
 
     public HomeService(
             HomeRepository homeRepository,
@@ -73,7 +77,8 @@ public class HomeService {
             DeviceRepository deviceRepository,
             SeniorRepository seniorRepository,
             UserSeniorRepository userSeniorRepository,
-            HomeSettingRepository homeSettingRepository
+            HomeSettingRepository homeSettingRepository,
+            FamilyRepository familyRepository
     ) {
         this.homeRepository = homeRepository;
         this.buttonOptionRepository = buttonOptionRepository;
@@ -83,6 +88,7 @@ public class HomeService {
         this.seniorRepository = seniorRepository;
         this.userSeniorRepository = userSeniorRepository;
         this.homeSettingRepository = homeSettingRepository;
+        this.familyRepository = familyRepository;
     }
 
     /**
@@ -210,8 +216,19 @@ public class HomeService {
                         request.phoneNumber()
                 );
 
+        Family lockedFamily =
+                familyRepository.findByIdForUpdate(
+                                currentUser.getFamily()
+                                        .getFamilyId()
+                        )
+                        .orElseThrow(() ->
+                                new BusinessException(
+                                        ErrorCode.FAMILY_NOT_FOUND
+                                )
+                        );
+
         Optional<Senior> familySeniorOptional =
-                findFamilySenior(currentUser);
+                seniorRepository.findFirstByFamily(lockedFamily);
 
         Senior senior;
 
@@ -223,12 +240,12 @@ public class HomeService {
                     .phoneNumber(normalizedPhoneNumber)
                     .address(request.address())
                     .detailAddress(request.detailAddress())
-                    .family(currentUser.getFamily())
+                    .family(lockedFamily)
                     .registeredBy(currentUser)
                     .build();
 
             senior =
-                    seniorRepository.save(
+                    saveSeniorOrThrowAlreadyExists(
                             senior
                     );
 
@@ -1174,6 +1191,21 @@ public class HomeService {
         return phoneNumber
                 .replace("-", "")
                 .replace(" ", "");
+    }
+
+    private Senior saveSeniorOrThrowAlreadyExists(
+            Senior senior
+    ) {
+
+        try {
+            return seniorRepository.saveAndFlush(
+                    senior
+            );
+        } catch (DataIntegrityViolationException e) {
+            throw new BusinessException(
+                    ErrorCode.SENIOR_ALREADY_EXISTS
+            );
+        }
     }
 
     private UserSenior upsertUserSenior(

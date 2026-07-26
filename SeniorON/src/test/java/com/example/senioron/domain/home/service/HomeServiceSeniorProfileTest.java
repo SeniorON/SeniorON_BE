@@ -8,6 +8,7 @@ import static org.mockito.BDDMockito.given;
 
 import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.home.dto.request.SeniorProfileUpdateRequest;
 import com.example.senioron.domain.home.dto.response.HomeResponse;
 import com.example.senioron.domain.home.dto.response.SeniorProfileUpdateResponse;
@@ -34,6 +35,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.dao.DataIntegrityViolationException;
 
 class HomeServiceSeniorProfileTest {
 
@@ -45,6 +47,7 @@ class HomeServiceSeniorProfileTest {
     private final SeniorRepository seniorRepository = org.mockito.Mockito.mock(SeniorRepository.class);
     private final UserSeniorRepository userSeniorRepository = org.mockito.Mockito.mock(UserSeniorRepository.class);
     private final HomeSettingRepository homeSettingRepository = org.mockito.Mockito.mock(HomeSettingRepository.class);
+    private final FamilyRepository familyRepository = org.mockito.Mockito.mock(FamilyRepository.class);
 
     private HomeService homeService;
 
@@ -58,7 +61,8 @@ class HomeServiceSeniorProfileTest {
                 deviceRepository,
                 seniorRepository,
                 userSeniorRepository,
-                homeSettingRepository
+                homeSettingRepository,
+                familyRepository
         );
     }
 
@@ -72,8 +76,9 @@ class HomeServiceSeniorProfileTest {
         Family family = Family.builder().familyId(1L).build();
         User primaryChild = createChild(1L, family, ManagerType.PRIMARY);
         setCurrentUser(primaryChild);
+        given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
         given(seniorRepository.findFirstByFamily(family)).willReturn(Optional.empty());
-        given(seniorRepository.save(any(Senior.class))).willAnswer(invocation -> invocation.getArgument(0));
+        given(seniorRepository.saveAndFlush(any(Senior.class))).willAnswer(invocation -> invocation.getArgument(0));
         given(userSeniorRepository.findByUserAndSenior(any(User.class), any(Senior.class)))
                 .willReturn(Optional.empty());
         given(userSeniorRepository.save(any(UserSenior.class))).willAnswer(invocation -> invocation.getArgument(0));
@@ -95,6 +100,7 @@ class HomeServiceSeniorProfileTest {
         UserSenior primaryRelation = createUserSenior(primaryChild, senior, SeniorRelation.MOTHER, null);
         UserSenior subRelation = createUserSenior(subChild, senior, SeniorRelation.GRANDPARENT, null);
         setCurrentUser(subChild);
+        given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
         given(seniorRepository.findFirstByFamily(family)).willReturn(Optional.of(senior));
         given(userSeniorRepository.findByUserAndSenior(subChild, senior)).willReturn(Optional.of(subRelation));
         given(userSeniorRepository.save(any(UserSenior.class))).willAnswer(invocation -> invocation.getArgument(0));
@@ -117,6 +123,7 @@ class HomeServiceSeniorProfileTest {
         User child = createChild(1L, family, ManagerType.PRIMARY);
         Senior otherFamilySenior = createSenior(10L, otherFamily, child);
         setCurrentUser(child);
+        given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
         given(seniorRepository.findFirstByFamily(family)).willReturn(Optional.of(otherFamilySenior));
         given(userSeniorRepository.findByUserAndSenior(child, otherFamilySenior)).willReturn(Optional.empty());
 
@@ -127,6 +134,25 @@ class HomeServiceSeniorProfileTest {
                 .asInstanceOf(type(BusinessException.class))
                 .extracting(BusinessException::getCode)
                 .isEqualTo(ErrorCode.FORBIDDEN);
+    }
+
+    @Test
+    void updateSeniorProfileConvertsUniqueViolationToSeniorAlreadyExists() {
+        Family family = Family.builder().familyId(1L).build();
+        User primaryChild = createChild(1L, family, ManagerType.PRIMARY);
+        setCurrentUser(primaryChild);
+        given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
+        given(seniorRepository.findFirstByFamily(family)).willReturn(Optional.empty());
+        given(seniorRepository.saveAndFlush(any(Senior.class)))
+                .willThrow(new DataIntegrityViolationException("duplicate family senior"));
+
+        assertThatThrownBy(() -> homeService.updateSeniorProfile(
+                createRequest("김영희", SeniorRelation.MOTHER, null)
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_ALREADY_EXISTS);
     }
 
     @Test

@@ -1,5 +1,7 @@
 package com.example.senioron.domain.senior.service;
 
+import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.senior.dto.request.SeniorCreateRequest;
 import com.example.senioron.domain.senior.dto.request.SeniorRelationUpdateRequest;
 import com.example.senioron.domain.senior.dto.response.SeniorCreateResponse;
@@ -14,6 +16,7 @@ import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +28,7 @@ public class SeniorService {
     private final SeniorRepository seniorRepository;
     private final UserSeniorRepository userSeniorRepository;
     private final UserRepository userRepository;
+    private final FamilyRepository familyRepository;
 
     /**
      * 로그인한 사용자가 관리할 시니어 정보를 등록합니다.
@@ -40,7 +44,10 @@ public class SeniorService {
 
         validateCustomRelation(request);
 
-        if (seniorRepository.findFirstByFamily(user.getFamily()).isPresent()) {
+        Family lockedFamily = familyRepository.findByIdForUpdate(user.getFamily().getFamilyId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND));
+
+        if (seniorRepository.findFirstByFamily(lockedFamily).isPresent()) {
             throw new BusinessException(ErrorCode.SENIOR_ALREADY_EXISTS);
         }
 
@@ -50,11 +57,11 @@ public class SeniorService {
                 .phoneNumber(normalizePhoneNumber(request.phoneNumber()))
                 .address(request.address())
                 .detailAddress(request.detailAddress())
-                .family(user.getFamily())
+                .family(lockedFamily)
                 .registeredBy(user)
                 .build();
 
-        Senior savedSenior = seniorRepository.save(senior);
+        Senior savedSenior = saveSeniorOrThrowAlreadyExists(senior);
         UserSenior userSenior = userSeniorRepository.save(
                 UserSenior.builder()
                         .user(user)
@@ -65,6 +72,14 @@ public class SeniorService {
         );
 
         return SeniorCreateResponse.from(savedSenior, userSenior);
+    }
+
+    private Senior saveSeniorOrThrowAlreadyExists(Senior senior) {
+        try {
+            return seniorRepository.saveAndFlush(senior);
+        } catch (DataIntegrityViolationException e) {
+            throw new BusinessException(ErrorCode.SENIOR_ALREADY_EXISTS);
+        }
     }
 
     @Transactional

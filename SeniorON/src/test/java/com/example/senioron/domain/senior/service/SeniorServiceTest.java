@@ -8,6 +8,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 
 import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.senior.dto.request.SeniorCreateRequest;
 import com.example.senioron.domain.senior.dto.request.SeniorRelationUpdateRequest;
 import com.example.senioron.domain.senior.dto.response.SeniorCreateResponse;
@@ -27,18 +28,20 @@ import java.time.LocalDate;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 
 class SeniorServiceTest {
 
     private final SeniorRepository seniorRepository = org.mockito.Mockito.mock(SeniorRepository.class);
     private final UserSeniorRepository userSeniorRepository = org.mockito.Mockito.mock(UserSeniorRepository.class);
     private final UserRepository userRepository = org.mockito.Mockito.mock(UserRepository.class);
+    private final FamilyRepository familyRepository = org.mockito.Mockito.mock(FamilyRepository.class);
 
     private SeniorService seniorService;
 
     @BeforeEach
     void setUp() {
-        seniorService = new SeniorService(seniorRepository, userSeniorRepository, userRepository);
+        seniorService = new SeniorService(seniorRepository, userSeniorRepository, userRepository, familyRepository);
     }
 
     @Test
@@ -52,15 +55,16 @@ class SeniorServiceTest {
                 .senior(savedSenior)
                 .relation(SeniorRelation.MOTHER)
                 .build();
+        given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
         given(seniorRepository.findFirstByFamily(family)).willReturn(Optional.empty());
-        given(seniorRepository.save(any(Senior.class))).willReturn(savedSenior);
+        given(seniorRepository.saveAndFlush(any(Senior.class))).willReturn(savedSenior);
         given(userSeniorRepository.save(any(UserSenior.class))).willReturn(savedUserSenior);
 
         SeniorCreateResponse response = seniorService.createSenior(user, createRequest(SeniorRelation.MOTHER, null));
 
         assertThat(response.seniorId()).isEqualTo(10L);
         assertThat(response.relation()).isEqualTo(SeniorRelation.MOTHER);
-        verify(seniorRepository).save(any(Senior.class));
+        verify(seniorRepository).saveAndFlush(any(Senior.class));
         verify(userSeniorRepository).save(any(UserSenior.class));
     }
 
@@ -68,6 +72,7 @@ class SeniorServiceTest {
     void createSeniorThrowsExceptionWhenFamilyAlreadyHasSenior() {
         Family family = Family.builder().familyId(1L).build();
         User user = createChild(1L, family, ManagerType.PRIMARY);
+        given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
         given(seniorRepository.findFirstByFamily(family)).willReturn(Optional.of(createSenior(10L, family, user)));
 
         assertThatThrownBy(() -> seniorService.createSenior(user, createRequest(SeniorRelation.MOTHER, null)))
@@ -86,6 +91,22 @@ class SeniorServiceTest {
                 .asInstanceOf(type(BusinessException.class))
                 .extracting(BusinessException::getCode)
                 .isEqualTo(ErrorCode.FAMILY_NOT_CONNECTED);
+    }
+
+    @Test
+    void createSeniorConvertsUniqueViolationToSeniorAlreadyExists() {
+        Family family = Family.builder().familyId(1L).build();
+        User user = createChild(1L, family, ManagerType.PRIMARY);
+        given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
+        given(seniorRepository.findFirstByFamily(family)).willReturn(Optional.empty());
+        given(seniorRepository.saveAndFlush(any(Senior.class)))
+                .willThrow(new DataIntegrityViolationException("duplicate family senior"));
+
+        assertThatThrownBy(() -> seniorService.createSenior(user, createRequest(SeniorRelation.MOTHER, null)))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_ALREADY_EXISTS);
     }
 
     @Test
