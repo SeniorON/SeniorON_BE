@@ -1,38 +1,36 @@
 package com.example.senioron.domain.hospital.controller;
 
-import com.example.senioron.domain.hospital.dto.request.HospitalUpdateRequest;
-import java.time.LocalDate;
-
-import io.swagger.v3.oas.annotations.Parameter;
-import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import com.example.senioron.domain.hospital.dto.request.HospitalCreateRequest;
+import com.example.senioron.domain.hospital.dto.request.HospitalUpdateRequest;
 import com.example.senioron.domain.hospital.dto.response.HospitalCreateResponse;
+import com.example.senioron.domain.hospital.dto.response.HospitalDetailResponse;
 import com.example.senioron.domain.hospital.dto.response.HospitalListResponse;
 import com.example.senioron.domain.hospital.service.HospitalService;
 import com.example.senioron.domain.user.entity.User;
-import com.example.senioron.global.apiPayload.code.ResultCode;
-import com.example.senioron.global.apiPayload.response.Response;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
+import com.example.senioron.global.apiPayload.code.ResultCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
+import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.time.LocalDate;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.bind.annotation.PutMapping;
-import com.example.senioron.domain.hospital.dto.response.HospitalDetailResponse;
-
-import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
@@ -44,77 +42,115 @@ public class HospitalController {
 
     @Operation(
             summary = "병원 일정 등록",
-            description = "로그인한 사용자가 부모님의 병원 진료 일정을 등록합니다."
+            description = "로그인한 자녀가 같은 가족에 속한 부모님의 병원 진료 일정을 등록합니다."
     )
-    @PostMapping
+    @PostMapping("/parents/{parentUserId}")
     @ResponseStatus(HttpStatus.CREATED)
     public Response<HospitalCreateResponse> createHospital(
             @AuthenticationPrincipal User user,
+            @PathVariable Long parentUserId,
             @Valid @RequestBody HospitalCreateRequest request
     ) {
         HospitalCreateResponse result =
-                hospitalService.createHospital(user, request);
+                hospitalService.createHospital(
+                        user.getUsersId(),
+                        parentUserId,
+                        request
+                );
 
         return Response.ok(ResultCode.CREATED, result);
     }
 
     @Operation(
             summary = "병원 일정 삭제",
-            description = "등록된 특정 병원 진료 일정을 삭제합니다."
+            description = "로그인한 자녀가 같은 가족에 속한 부모님의 특정 병원 진료 일정을 삭제합니다."
     )
-    @DeleteMapping("/{hospitalId}")
+    @DeleteMapping("/parents/{parentUserId}/{hospitalId}")
     @ResponseStatus(HttpStatus.OK)
     public Response<Void> deleteHospital(
             @AuthenticationPrincipal User user,
-            @PathVariable("hospitalId") Long hospitalId
+            @PathVariable Long parentUserId,
+            @PathVariable Long hospitalId
     ) {
-        hospitalService.deleteHospital(user, hospitalId);
+        hospitalService.deleteHospital(
+                user.getUsersId(),
+                parentUserId,
+                hospitalId
+        );
+
         return Response.ok(ResultCode.OK, null);
     }
 
     @Operation(
             summary = "부모님 병원 일정 월별 목록 조회",
-            description = "특정 연도(year)와 월(month)에 해당하는 병원 일정을 날짜순으로 조회합니다."
+            description = "특정 부모님의 연도와 월에 해당하는 병원 일정을 날짜순으로 조회합니다."
     )
-    @GetMapping
+    @GetMapping("/parents/{parentUserId}")
     @ResponseStatus(HttpStatus.OK)
     public Response<List<HospitalListResponse>> getHospitalByMonth(
-                                                                    @AuthenticationPrincipal User user,
-                                                                    @RequestParam(value = "year") int year,
-                                                                    @RequestParam(value = "month") int month
+            @AuthenticationPrincipal User user,
+            @PathVariable Long parentUserId,
+            @RequestParam int year,
+            @RequestParam int month
     ) {
         if (month < 1 || month > 12) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
 
-        List<HospitalListResponse> responses = hospitalService.getHospitalByMonth(user, year, month);
+        List<HospitalListResponse> responses =
+                hospitalService.getHospitalByMonth(
+                        user.getUsersId(),
+                        parentUserId,
+                        year,
+                        month
+                );
+
         return Response.ok(ResultCode.OK, responses);
     }
+
     @Operation(
             summary = "병원 일정 수정",
-            description = "등록된 특정 병원 진료 일정을 수정합니다."
+            description = "로그인한 자녀가 같은 가족에 속한 부모님의 특정 병원 진료 일정을 수정합니다."
     )
-    @PutMapping("/{hospitalId}")
+    @PutMapping("/parents/{parentUserId}/{hospitalId}")
     @ResponseStatus(HttpStatus.OK)
     public Response<Void> updateHospital(
             @AuthenticationPrincipal User user,
-            @PathVariable("hospitalId") Long hospitalId,
+            @PathVariable Long parentUserId,
+            @PathVariable Long hospitalId,
             @Valid @RequestBody HospitalUpdateRequest request
     ) {
-        hospitalService.updateHospital(user, hospitalId, request);
+        hospitalService.updateHospital(
+                user.getUsersId(),
+                parentUserId,
+                hospitalId,
+                request
+        );
+
         return Response.ok(ResultCode.OK, null);
     }
 
     @Operation(
             summary = "특정 날짜 진료 상세 조회",
-            description = "특정 날짜(LocalDate)를 파라미터로 받아 해당 일의 진료 상세 카드 UI에 필요한 데이터를 반환합니다. (ISO 날짜 형식 검증 적용)"
+            description = "특정 부모님의 지정된 날짜에 해당하는 진료 상세 정보를 조회합니다."
     )
-    @GetMapping("/daily")
+    @GetMapping("/parents/{parentUserId}/daily")
+    @ResponseStatus(HttpStatus.OK)
     public Response<List<HospitalDetailResponse>> getHospitalByDate(
             @AuthenticationPrincipal User user,
-            @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) @Parameter(example = "2026-06-19") LocalDate date
+            @PathVariable Long parentUserId,
+            @RequestParam
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            @Parameter(example = "2026-06-19")
+            LocalDate date
     ) {
-        List<HospitalDetailResponse> responses = hospitalService.getHospitalByDate(user, date);
+        List<HospitalDetailResponse> responses =
+                hospitalService.getHospitalByDate(
+                        user.getUsersId(),
+                        parentUserId,
+                        date
+                );
+
         return Response.ok(ResultCode.OK, responses);
     }
 }
