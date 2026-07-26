@@ -21,6 +21,7 @@ import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,6 +37,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final SignupEmailVerificationCodeRepository signupEmailVerificationCodeRepository;
+    private final SignupEmailVerificationCodeIssuer signupEmailVerificationCodeIssuer;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final InactivitySettingService inactivitySettingService;
@@ -96,23 +98,13 @@ public class UserService {
         String verificationCode = generateVerificationCode();
         String codeHash = passwordEncoder.encode(verificationCode);
 
-        SignupEmailVerificationCode savedCode = signupEmailVerificationCodeRepository.findByEmail(request.getEmail())
-                .map(existingCode -> {
-                    existingCode.reissue(
-                            codeHash,
-                            now,
-                            now.plusMinutes(VERIFICATION_CODE_EXPIRATION_MINUTES)
-                    );
-                    return existingCode;
-                })
-                .orElseGet(() -> signupEmailVerificationCodeRepository.save(
-                        SignupEmailVerificationCode.builder()
-                                .email(request.getEmail())
-                                .codeHash(codeHash)
-                                .issuedAt(now)
-                                .expiresAt(now.plusMinutes(VERIFICATION_CODE_EXPIRATION_MINUTES))
-                                .build()
-                ));
+        LocalDateTime expiresAt = now.plusMinutes(VERIFICATION_CODE_EXPIRATION_MINUTES);
+        SignupEmailVerificationCode savedCode = issueSignupEmailVerificationCode(
+                request.getEmail(),
+                codeHash,
+                now,
+                expiresAt
+        );
 
         eventPublisher.publishEvent(new SignupEmailVerificationCodeSendEvent(
                 savedCode.getEmail(),
@@ -123,6 +115,29 @@ public class UserService {
                 .sent(true)
                 .verificationId(savedCode.getSignupEmailVerificationCodeId())
                 .build();
+    }
+
+    private SignupEmailVerificationCode issueSignupEmailVerificationCode(
+            String email,
+            String codeHash,
+            LocalDateTime issuedAt,
+            LocalDateTime expiresAt
+    ) {
+        try {
+            return signupEmailVerificationCodeIssuer.createOrReissue(
+                    email,
+                    codeHash,
+                    issuedAt,
+                    expiresAt
+            );
+        } catch (DataIntegrityViolationException e) {
+            return signupEmailVerificationCodeIssuer.reissueExisting(
+                    email,
+                    codeHash,
+                    issuedAt,
+                    expiresAt
+            );
+        }
     }
 
     public SignupEmailVerificationCodeVerifyResponse verifySignupEmailVerificationCode(

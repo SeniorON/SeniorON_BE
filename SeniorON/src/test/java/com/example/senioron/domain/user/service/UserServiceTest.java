@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -25,6 +26,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -37,6 +39,8 @@ class UserServiceTest {
     private final UserRepository userRepository = mock(UserRepository.class);
     private final SignupEmailVerificationCodeRepository signupEmailVerificationCodeRepository =
             mock(SignupEmailVerificationCodeRepository.class);
+    private final SignupEmailVerificationCodeIssuer signupEmailVerificationCodeIssuer =
+            mock(SignupEmailVerificationCodeIssuer.class);
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
 
@@ -47,6 +51,7 @@ class UserServiceTest {
         userService = new UserService(
                 userRepository,
                 signupEmailVerificationCodeRepository,
+                signupEmailVerificationCodeIssuer,
                 passwordEncoder,
                 new JwtUtil("12345678901234567890123456789012", 3600000L),
                 mock(InactivitySettingService.class),
@@ -170,12 +175,56 @@ class UserServiceTest {
         );
         savedCode.verify(LocalDateTime.now());
         given(userRepository.existsByEmail(EMAIL)).willReturn(false);
-        given(signupEmailVerificationCodeRepository.findByEmail(EMAIL)).willReturn(Optional.of(savedCode));
+        given(signupEmailVerificationCodeIssuer.createOrReissue(
+                anyString(),
+                anyString(),
+                any(LocalDateTime.class),
+                any(LocalDateTime.class)
+        )).willAnswer(invocation -> {
+            savedCode.reissue(
+                    invocation.getArgument(1),
+                    invocation.getArgument(2),
+                    invocation.getArgument(3)
+            );
+            return savedCode;
+        });
 
         userService.sendSignupEmailVerificationCode(createSendRequest(EMAIL));
 
         assertThat(savedCode.isVerified()).isFalse();
         assertThat(savedCode.getVerifiedAt()).isNull();
+        verify(eventPublisher).publishEvent(any(SignupEmailVerificationCodeSendEvent.class));
+    }
+
+    @Test
+    void sendSignupEmailVerificationCodeRetriesWhenInitialInsertRaceOccurs() {
+        SignupEmailVerificationCode savedCode = createVerificationCode(
+                passwordEncoder.encode(VERIFICATION_CODE),
+                LocalDateTime.now().minusMinutes(1),
+                LocalDateTime.now().plusMinutes(4)
+        );
+        given(userRepository.existsByEmail(EMAIL)).willReturn(false);
+        given(signupEmailVerificationCodeIssuer.createOrReissue(
+                anyString(),
+                anyString(),
+                any(LocalDateTime.class),
+                any(LocalDateTime.class)
+        )).willThrow(new DataIntegrityViolationException("duplicate email"));
+        given(signupEmailVerificationCodeIssuer.reissueExisting(
+                anyString(),
+                anyString(),
+                any(LocalDateTime.class),
+                any(LocalDateTime.class)
+        )).willReturn(savedCode);
+
+        userService.sendSignupEmailVerificationCode(createSendRequest(EMAIL));
+
+        verify(signupEmailVerificationCodeIssuer).reissueExisting(
+                anyString(),
+                anyString(),
+                any(LocalDateTime.class),
+                any(LocalDateTime.class)
+        );
         verify(eventPublisher).publishEvent(any(SignupEmailVerificationCodeSendEvent.class));
     }
 
