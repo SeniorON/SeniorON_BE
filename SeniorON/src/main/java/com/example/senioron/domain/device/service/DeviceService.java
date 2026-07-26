@@ -11,6 +11,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.example.senioron.domain.device.dto.request.DeviceStatusUpdateRequest;
 import com.example.senioron.domain.user.entity.Role;
+import com.example.senioron.domain.user.entity.ManagerType;
+import java.util.List;
 
 import java.time.LocalDateTime;
 
@@ -76,5 +78,47 @@ public class DeviceService {
         );
 
         deviceRepository.save(device);
+    }
+
+    @Transactional
+    public void disconnectDevice(User currentUser) {
+
+        validateDeviceDisconnectAuthority(currentUser);
+
+        if (currentUser.getFamily() == null) {
+            throw new BusinessException(ErrorCode.FAMILY_NOT_CONNECTED);
+        }
+
+        List<Device> devices =
+                deviceRepository.findAllByUser_FamilyAndUser_Role(
+                        currentUser.getFamily(),
+                        Role.PARENT
+                );
+
+        if (devices.isEmpty()) {
+            throw new BusinessException(ErrorCode.DEVICE_NOT_CONNECTED);
+        }
+
+        deviceRepository.deleteAll(devices);
+    }
+
+    private void validateDeviceDisconnectAuthority(
+            User currentUser
+    ) {
+        if (currentUser.getRole() != Role.CHILD) {
+            throw new BusinessException(
+                    ErrorCode.DEVICE_DISCONNECT_ACCESS_DENIED
+            );
+        }
+
+        ManagerType managerType =
+                currentUser.getManagerType();
+
+        if (managerType != ManagerType.PRIMARY
+                && managerType != ManagerType.SUB) {
+            throw new BusinessException(
+                    ErrorCode.DEVICE_DISCONNECT_ACCESS_DENIED
+            );
+        }
     }
 }

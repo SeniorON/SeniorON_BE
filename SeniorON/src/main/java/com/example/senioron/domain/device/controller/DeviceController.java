@@ -41,4 +41,21 @@ public class DeviceController {
 
         return ResponseEntity.noContent().build();
     }
+
+    @Operation(
+            summary = "시니어 기기 연결 해제",
+            description = "주담당자 또는 보조담당자가 같은 가족의 시니어 기기 연결을 해제"
+    )
+
+    @DeleteMapping("/connection")
+    public ResponseEntity<Void> disconnectDevice(
+            Authentication authentication
+    ) {
+        User currentUser =
+                (User) authentication.getPrincipal();
+
+        deviceService.disconnectDevice(currentUser);
+
+        return ResponseEntity.noContent().build();
+    }
 }
