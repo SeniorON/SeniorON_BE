@@ -26,4 +26,19 @@ public class EmailService {
             throw new BusinessException(ErrorCode.EMAIL_SEND_FAILED);
         }
     }
+
+    public void sendSignupVerificationCode(String to, String code) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setTo(to);
+        message.setSubject("[SeniorON] 회원가입 이메일 인증 코드 안내");
+        message.setText("회원가입을 위한 이메일 인증 코드는 다음과 같습니다.\n"
+                + "인증 코드: " + code + "\n"
+                + "해당 코드는 5분 후 만료됩니다.");
+
+        try {
+            javaMailSender.send(message);
+        } catch (MailException e) {
+            throw new BusinessException(ErrorCode.EMAIL_SEND_FAILED);
+        }
+    }
 }

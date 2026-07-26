@@ -33,6 +33,10 @@ public enum ErrorCode implements BaseCode {
     PROFILE_IMAGE_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "USER500_1", "프로필 이미지 업로드에 실패했어요"),
     LOGIN_ID_NOT_FOUND(HttpStatus.NOT_FOUND, "USER404_1", "일치하는 아이디를 찾지 못했어요"),
     ACCOUNT_RECOVERY_USER_NOT_FOUND(HttpStatus.NOT_FOUND, "USER404_2", "일치하는 계정을 찾지 못했어요"),
+    SIGNUP_EMAIL_VERIFICATION_CODE_NOT_FOUND(HttpStatus.NOT_FOUND, "USER404_3", "회원가입 이메일 인증 요청 이력이 없습니다."),
+    INVALID_SIGNUP_EMAIL_VERIFICATION_CODE(HttpStatus.BAD_REQUEST, "USER400_11", "회원가입 이메일 인증 코드가 올바르지 않습니다."),
+    EXPIRED_SIGNUP_EMAIL_VERIFICATION_CODE(HttpStatus.BAD_REQUEST, "USER400_12", "회원가입 이메일 인증 코드가 만료되었습니다."),
+    SIGNUP_EMAIL_ALREADY_VERIFIED(HttpStatus.CONFLICT, "USER409_2", "이미 인증이 완료된 이메일입니다."),
 
     // Email Error
     EMAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "EMAIL500", "이메일 발송에 실패했습니다."),
@@ -62,6 +66,7 @@ public enum ErrorCode implements BaseCode {
 
     // Senior Error
     CUSTOM_RELATION_REQUIRED(HttpStatus.BAD_REQUEST, "SENIOR4001", "직접 작성 관계를 입력해 주세요."),
+    SENIOR_ALREADY_EXISTS(HttpStatus.CONFLICT, "SENIOR409", "이미 등록된 시니어 정보가 있습니다."),
 
     // Family Error
     FAMILY_NOT_FOUND(HttpStatus.NOT_FOUND, "FAMILY404", "가족 정보를 찾을 수 없습니다."),
