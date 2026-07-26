@@ -95,7 +95,7 @@ public enum ErrorCode implements BaseCode {
     DEVICE_NOT_FOUND(HttpStatus.NOT_FOUND, "DEVICE404", "기기를 찾을 수 없습니다."),
     PARENT_DEVICE_OFFLINE(HttpStatus.BAD_REQUEST, "DEVICE400", "부모님 기기가 오프라인 상태라 설정을 변경할 수 없습니다."),
     DEVICE_IDENTIFIER_REQUIRED(HttpStatus.BAD_REQUEST, "DEVICE400_1", "기기 식별자(deviceIdentifier)가 필요합니다."),
-    DEVICE_NOT_CONNECTED(HttpStatus.NOT_FOUND, "DEVICE404", "연결된 기기가 없습니다."),
+    DEVICE_NOT_CONNECTED(HttpStatus.NOT_FOUND, "DEVICE405", "연결된 기기가 없습니다."),
     DEVICE_DISCONNECT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "DEVICE403", "기기 연결을 해제할 권한이 없습니다."),
     
     // Receipt Error
