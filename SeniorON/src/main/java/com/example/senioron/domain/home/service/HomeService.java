@@ -9,12 +9,8 @@ import com.example.senioron.domain.home.dto.request.HomeButtonSaveRequest;
 import com.example.senioron.domain.home.dto.request.HomeButtonUpdateRequest;
 import com.example.senioron.domain.home.dto.request.HomeFontSizeUpdateRequest;
 import com.example.senioron.domain.home.dto.request.SeniorProfileUpdateRequest;
-import com.example.senioron.domain.home.dto.response.ButtonOptionResponse;
-import com.example.senioron.domain.home.dto.response.HomeButtonCreateResponse;
-import com.example.senioron.domain.home.dto.response.HomeResponse;
-import com.example.senioron.domain.home.dto.response.SeniorHomeResponse;
-import com.example.senioron.domain.home.dto.response.SeniorProfileUpdateResponse;
-import com.example.senioron.domain.home.dto.response.TodayScheduleResponse;
+import com.example.senioron.domain.home.dto.response.*;
+import com.example.senioron.domain.device.dto.response.DeviceDetailResponse;
 import com.example.senioron.domain.home.entity.ActionType;
 import com.example.senioron.domain.home.entity.ButtonOption;
 import com.example.senioron.domain.home.entity.FontSize;
@@ -52,6 +48,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.time.LocalDateTime;
 
 @Service
 public class HomeService {
@@ -68,6 +65,26 @@ public class HomeService {
     private final UserSeniorRepository userSeniorRepository;
     private final HomeSettingRepository homeSettingRepository;
     private final FamilyRepository familyRepository;
+    private static final long DEVICE_OFFLINE_THRESHOLD_MINUTES = 30;
+
+    private boolean isDeviceConnected(
+            LocalDateTime lastConnectedAt
+    ) {
+        if (lastConnectedAt == null) {
+            return false;
+        }
+
+        LocalDateTime offlineThreshold =
+                LocalDateTime.now()
+                        .minusMinutes(
+                                DEVICE_OFFLINE_THRESHOLD_MINUTES
+                        );
+
+        return lastConnectedAt.isAfter(
+                offlineThreshold
+        );
+    }
+
 
     public HomeService(
             HomeRepository homeRepository,
@@ -731,58 +748,92 @@ public class HomeService {
     }
 
     /**
-     * 오늘 병원 일정 조회
+     * 시니어 기기 연결 상태 상세 조회
      */
-    private TodayScheduleResponse getTodayHospitalSchedule(
-            User parent
-    ) {
+    @Transactional(readOnly = true)
+    public DeviceDetailResponse getDeviceDetail() {
 
-        if (parent.getFamily() == null) {
+        User currentUser = getCurrentUser();
+
+        if (currentUser.getRole() != Role.CHILD) {
             throw new BusinessException(
-                    ErrorCode.FAMILY_NOT_CONNECTED
+                    ErrorCode.CHILD_HOME_ACCESS_DENIED
             );
         }
 
-        LocalDate today =
-                LocalDate.now();
+        Optional<User> seniorUser =
+                findSeniorUser(currentUser);
 
-        List<User> childManagers =
-                userRepository
-                        .findAllByFamily(
-                                parent.getFamily()
-                        )
-                        .stream()
-                        .filter(user ->
-                                user.getRole() == Role.CHILD
-                        )
-                        .filter(user ->
-                                user.getManagerType()
-                                        == ManagerType.PRIMARY
-                                        || user.getManagerType()
-                                        == ManagerType.SUB
-                        )
-                        .toList();
+        if (seniorUser.isEmpty()) {
+            return DeviceDetailResponse.disconnected();
+        }
+
+        return deviceRepository
+                .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
+                        seniorUser.get()
+                )
+                .map(device -> {
+
+                    boolean connected =
+                            isDeviceConnected(
+                                    device.getLastConnectedAt()
+                            );
+
+                    DeviceStatus currentStatus =
+                            connected
+                                    ? DeviceStatus.ONLINE
+                                    : DeviceStatus.OFFLINE;
+
+                    return new DeviceDetailResponse(
+                            device.getDeviceName(),
+                            connected,
+                            currentStatus,
+                            device.getBatteryLevel(),
+                            connected,
+                            device.getLastConnectedAt(),
+                            null
+                    );
+                })
+                .orElseGet(
+                        DeviceDetailResponse::disconnected
+                );
+    }
+
+    /**
+     * 오늘 병원 일정 상세 목록 조회
+     */
+    @Transactional(readOnly = true)
+    public List<TodayHospitalListResponse> getTodayHospitalSchedules() {
+
+        User currentUser = getCurrentUser();
+
+        if (currentUser.getRole() != Role.PARENT) {
+            throw new BusinessException(
+                    ErrorCode.SENIOR_HOME_ACCESS_DENIED
+            );
+        }
 
         List<Hospital> hospitals =
-                childManagers.stream()
-                        .flatMap(childManager ->
-                                hospitalRepository
-                                        .findByUserAndScheduleDateBetweenOrderByScheduleDateAscScheduleTimeAsc(
-                                                childManager,
-                                                today,
-                                                today
-                                        )
-                                        .stream()
-                        )
-                        .sorted(
-                                Comparator.comparing(
-                                                Hospital::getScheduleDate
-                                        )
-                                        .thenComparing(
-                                                Hospital::getScheduleTime
-                                        )
-                        )
-                        .toList();
+                findTodayHospitalSchedules(
+                        currentUser
+                );
+
+        return hospitals.stream()
+                .map(TodayHospitalListResponse::from)
+                .toList();
+    }
+
+    /**
+     * 홈 화면 오늘 병원 일정 요약 조회
+     */
+    private TodayScheduleResponse getTodayHospitalSchedule(
+            User currentUser
+    ) {
+
+        List<Hospital> hospitals =
+                findTodayHospitalSchedules(
+                        currentUser
+                );
 
         int scheduleCount =
                 hospitals.size();
@@ -807,6 +858,61 @@ public class HomeService {
         return TodayScheduleResponse.count(
                 scheduleCount
         );
+    }
+
+    /**
+     * 가족 내 주담당자와 보조담당자가 등록한
+     * 오늘 병원 일정을 시간순으로 조회
+     */
+    private List<Hospital> findTodayHospitalSchedules(
+            User currentUser
+    ) {
+
+        if (currentUser.getFamily() == null) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_NOT_CONNECTED
+            );
+        }
+
+        LocalDate today =
+                LocalDate.now();
+
+        List<User> childManagers =
+                userRepository
+                        .findAllByFamily(
+                                currentUser.getFamily()
+                        )
+                        .stream()
+                        .filter(user ->
+                                user.getRole() == Role.CHILD
+                        )
+                        .filter(user ->
+                                user.getManagerType()
+                                        == ManagerType.PRIMARY
+                                        || user.getManagerType()
+                                        == ManagerType.SUB
+                        )
+                        .toList();
+
+        return childManagers.stream()
+                .flatMap(childManager ->
+                        hospitalRepository
+                                .findByUserAndScheduleDateBetweenOrderByScheduleDateAscScheduleTimeAsc(
+                                        childManager,
+                                        today,
+                                        today
+                                )
+                                .stream()
+                )
+                .sorted(
+                        Comparator.comparing(
+                                        Hospital::getScheduleDate
+                                )
+                                .thenComparing(
+                                        Hospital::getScheduleTime
+                                )
+                )
+                .toList();
     }
 
     /**
@@ -1074,14 +1180,15 @@ public class HomeService {
         }
 
         return deviceRepository
-                .findFirstByUser(
+                .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
                         seniorUser.get()
                 )
                 .map(device ->
                         new HomeResponse.ConnectionResponse(
                                 device.getDeviceName(),
-                                device.getConnectionStatus()
-                                        == DeviceStatus.ONLINE,
+                                isDeviceConnected(
+                                        device.getLastConnectedAt()
+                                ),
                                 device.getBatteryLevel()
                         )
                 )

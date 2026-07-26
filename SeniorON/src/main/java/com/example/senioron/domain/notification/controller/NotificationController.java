@@ -78,4 +78,24 @@ public class NotificationController {
             ){
         return Response.ok(notificationService.getNotificationList(user.getUsersId(), type, cursor, size));
     }
+
+    @Operation(summary = "알림 읽음 처리", description = "본인이 받은 알림만 읽음 처리할 수 있습니다.")
+    @PatchMapping("/{notificationId}/read")
+    public Response<Void> markAsRead(
+            @AuthenticationPrincipal User user,
+            @PathVariable Long notificationId
+    ){
+        notificationService.markAsRead(user.getUsersId(), notificationId);
+        return Response.ok();
+    }
+
+    @Operation(summary = "알림 삭제", description = "본인이 받은 알림만 삭제할 수 있습니다.")
+    @DeleteMapping("/{notificationId}")
+    public Response<Void> deleteNotification(
+            @AuthenticationPrincipal User user,
+            @PathVariable Long notificationId
+    ){
+        notificationService.deleteNotification(user.getUsersId(), notificationId);
+        return Response.ok();
+    }
 }

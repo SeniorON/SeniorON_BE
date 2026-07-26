@@ -1,6 +1,7 @@
 package com.example.senioron.domain.family.controller;
 
 import com.example.senioron.domain.family.dto.request.FamilyPhotoCreateRequest;
+import com.example.senioron.domain.family.dto.response.FamilyPhotoAlbumResponse;
 import com.example.senioron.domain.family.dto.response.FamilyPhotoItemResponse;
 import com.example.senioron.domain.family.dto.response.FamilyPhotoListResponse;
 import com.example.senioron.domain.family.service.FamilyPhotoService;
@@ -17,6 +18,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Tag(name = "가족 사진", description = "가족 사진 관련 API")
 @RestController
@@ -35,17 +37,18 @@ public class FamilyPhotoController {
         return Response.ok(familyPhotoService.createPhoto(user, request));
     }
 
-    @Operation(summary = "가족 사진 목록 조회", description = "현재 사용자가 속한 가족의 사진을 최신순으로 조회합니다.")
+    @Operation(summary = "가족 사진 목록 조회", description = "현재 사용자가 속한 가족의 사진을 최신순으로 조회합니다. " + "uploaderUserId를 전달하면 해당 자녀의 사진만 조회합니다.")
     @GetMapping
     public Response<FamilyPhotoListResponse> getPhotos(
             @AuthenticationPrincipal User user,
+            @RequestParam(name = "uploaderUserId", required = false) Long uploaderUserId,
             @RequestParam(name = "cursorCreatedAt", required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime cursorCreatedAt,
             @RequestParam(name = "cursorId", required = false) Long cursorId,
             @RequestParam(name = "size", defaultValue = "10") int size
     ) {
         return Response.ok(
-                familyPhotoService.getPhotos(user, cursorCreatedAt, cursorId, size)
+                familyPhotoService.getPhotos(user, uploaderUserId, cursorCreatedAt, cursorId, size)
         );
     }
 
@@ -58,5 +61,28 @@ public class FamilyPhotoController {
         familyPhotoService.deletePhoto(user, familyPhotoId);
 
         return Response.ok(ResultCode.OK, null);
+    }
+
+    @Operation(summary = "자녀별 가족 사진 앨범 조회", description = "부모가 같은 가족 자녀의 최신 사진과 전체 사진 수, 새로운 사진 여부를 조회합니다.")
+    @GetMapping("/albums")
+    public Response<List<FamilyPhotoAlbumResponse>> getPhotoAlbums(
+            @AuthenticationPrincipal User user
+    ){
+        return Response.ok(
+                familyPhotoService.getPhotoAlbums(user)
+        );
+    }
+
+    @Operation(summary = "가족 사진 확인 처리", description = "부모가 사진 상세 화면을 열었을 때 해당 사진 한 장을 확인 처리합니다.")
+    @PatchMapping("/{familyPhotoId}/viewed")
+    public Response<Void> markPhotoAsViewed(
+            @AuthenticationPrincipal User user,
+            @PathVariable("familyPhotoId") Long familyPhotoId
+    ) {
+        familyPhotoService.markPhotoAsViewed(
+                user,
+                familyPhotoId
+        );
+        return Response.ok();
     }
 }

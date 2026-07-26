@@ -9,6 +9,8 @@ import com.example.senioron.global.apiPayload.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.example.senioron.domain.device.dto.request.DeviceStatusUpdateRequest;
+import com.example.senioron.domain.user.entity.Role;
 
 import java.time.LocalDateTime;
 
@@ -31,6 +33,47 @@ public class DeviceService {
 
         device.updateDeviceToken(deviceToken);
         device.updateDeviceStatus(DeviceStatus.ONLINE, device.getBatteryLevel(), LocalDateTime.now());
+
+        deviceRepository.save(device);
+    }
+
+    @Transactional
+    public void updateDeviceStatus(
+            User user,
+            DeviceStatusUpdateRequest request
+    ) {
+        if (user.getRole() != Role.PARENT) {
+            throw new BusinessException(
+                    ErrorCode.SENIOR_DEVICE_ACCESS_DENIED
+            );
+        }
+
+        if (user.getFamily() == null) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_NOT_CONNECTED
+            );
+        }
+
+        Device device = deviceRepository
+                .findByUserAndDeviceIdentifier(
+                        user,
+                        request.deviceIdentifier()
+                )
+                .orElseGet(() ->
+                        Device.builder()
+                                .user(user)
+                                .deviceIdentifier(
+                                        request.deviceIdentifier()
+                                )
+                                .build()
+                );
+
+        device.updateDeviceInfo(
+                request.deviceName(),
+                DeviceStatus.ONLINE,
+                request.batteryLevel(),
+                LocalDateTime.now()
+        );
 
         deviceRepository.save(device);
     }

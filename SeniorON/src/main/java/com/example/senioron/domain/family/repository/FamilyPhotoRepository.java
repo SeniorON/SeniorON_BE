@@ -2,6 +2,8 @@ package com.example.senioron.domain.family.repository;
 
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
+import com.example.senioron.domain.family.repository.projection.FamilyPhotoAlbumCountProjection;
+import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -74,5 +76,92 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
     List<User> findRecentUploaders(
             @Param("family") Family family,
             Pageable pageable
+    );
+
+    @EntityGraph(attributePaths = {"user"})
+    @Query("""
+        SELECT fp
+        FROM FamilyPhoto fp
+        WHERE fp.family = :family
+          AND fp.user.family = :family
+          AND fp.user.role = :role
+          AND NOT EXISTS (
+              SELECT newer.familyPhotoId
+              FROM FamilyPhoto newer
+              WHERE newer.family = :family
+                AND newer.user = fp.user
+                AND (
+                    newer.createdAt > fp.createdAt
+                    OR (
+                        newer.createdAt = fp.createdAt
+                        AND newer.familyPhotoId > fp.familyPhotoId
+                    )
+                )
+          )
+        ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
+        """)
+    List<FamilyPhoto> findLatestPhotosByUploader(
+            @Param("family") Family family,
+            @Param("role") Role role
+    );
+
+    @Query("""
+        SELECT fp.user.usersId AS uploaderUserId,
+               COUNT(fp.familyPhotoId) AS photoCount,
+               SUM(
+                   CASE
+                       WHEN fp.viewedByParent = false
+                            AND fp.createdAt >= :newPhotoCutoff
+                       THEN 1
+                       ELSE 0
+                   END
+               ) AS newPhotoCount
+        FROM FamilyPhoto fp
+        WHERE fp.family = :family
+          AND fp.user.family = :family
+          AND fp.user.role = :role
+        GROUP BY fp.user.usersId
+        """)
+    List<FamilyPhotoAlbumCountProjection> countAlbumPhotosByUploader(
+            @Param("family") Family family,
+            @Param("role") Role role,
+            @Param("newPhotoCutoff") LocalDateTime newPhotoCutoff
+    );
+
+    @EntityGraph(attributePaths = {"user", "user.family"})
+    List<FamilyPhoto> findByFamilyAndUserOrderByCreatedAtDescFamilyPhotoIdDesc(
+            Family family,
+            User uploader,
+            Pageable pageable
+    );
+
+    @EntityGraph(attributePaths = {"user", "user.family"})
+    @Query("""
+        SELECT fp
+        FROM FamilyPhoto fp
+        WHERE fp.family = :family
+          AND fp.user = :uploader
+          AND (
+              fp.createdAt < :cursorCreatedAt
+              OR (
+                  fp.createdAt = :cursorCreatedAt
+                  AND fp.familyPhotoId < :cursorId
+              )
+          )
+        ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
+        """)
+    List<FamilyPhoto> findNextPageByUploaderAndCursor(
+            @Param("family") Family family,
+            @Param("uploader") User uploader,
+            @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
+            @Param("cursorId") Long cursorId,
+            Pageable pageable
+    );
+
+    long countByFamily(Family family);
+
+    long countByFamilyAndUser(
+            Family family,
+            User uploader
     );
 }

@@ -17,7 +17,8 @@ public class Device extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long device_id;
+    @Column(name = "device_id")
+    private Long deviceId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "users_id")
@@ -48,5 +49,17 @@ public class Device extends BaseEntity {
 
     public void updateDeviceToken(String deviceToken) {
         this.deviceToken = deviceToken;
+    }
+
+    public void updateDeviceInfo(
+            String deviceName,
+            DeviceStatus connectionStatus,
+            Integer batteryLevel,
+            LocalDateTime lastConnectedAt
+    ) {
+        this.deviceName = deviceName;
+        this.connectionStatus = connectionStatus;
+        this.batteryLevel = batteryLevel;
+        this.lastConnectedAt = lastConnectedAt;
     }
 }

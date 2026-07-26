@@ -1,47 +1,49 @@
 server:
   http_listen_port: 9080
 
-
 positions:
   filename: /tmp/positions.yaml
-
 
 clients:
   - url: http://loki:3100/loki/api/v1/push
 
-
 scrape_configs:
-
   - job_name: docker
 
     docker_sd_configs:
       - host: unix:///var/run/docker.sock
 
-
     relabel_configs:
+      # Loki / Promtail 제외
+      - source_labels:
+          ['__meta_docker_container_label_com_docker_compose_service']
+        regex: 'loki|promtail'
+        action: drop
 
-      # 컨테이너 이름
-      - source_labels: ['__meta_docker_container_name']
+      # Compose 서비스명 (app, nginx, prometheus ...)
+      - source_labels:
+          ['__meta_docker_container_label_com_docker_compose_service']
+        target_label: service
+
+      # 컨테이너
+      - source_labels:
+          ['__meta_docker_container_name']
         regex: '/(.*)'
         target_label: container
 
-
-      # 이미지 이름
-      - source_labels: ['__meta_docker_container_image']
+      # 이미지
+      - source_labels:
+          ['__meta_docker_container_image']
         target_label: image
 
+      # Docker Compose
+      - source_labels:
+          ['__meta_docker_container_label_com_docker_compose_project']
+        target_label: compose_project
 
-      # 로그 파일 위치 직접 지정
+      # 로그 파일
       - replacement: /var/lib/docker/containers/*/*-json.log
         target_label: __path__
 
-
     pipeline_stages:
       - docker: {}
-      - json:
-          expressions:
-            level: level
-            logger: logger
-            message: message
-      - labels:
-          level:

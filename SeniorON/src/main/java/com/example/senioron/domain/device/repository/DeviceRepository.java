@@ -13,15 +13,26 @@ import java.util.Optional;
 public interface DeviceRepository
         extends JpaRepository<Device, Long> {
 
-    Optional<Device> findFirstByUser(User user);
+    Optional<Device> findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
+            User user
+    );
 
     List<Device> findAllByUserIn(List<User> users);
 
     @Modifying
-    @Query("UPDATE Device d SET d.deviceToken = null WHERE d.deviceToken = :token")
-    void clearDeviceToken(@Param("token") String token);
+    @Query("""
+            UPDATE Device d
+            SET d.deviceToken = null
+            WHERE d.deviceToken = :token
+            """)
+    void clearDeviceToken(
+            @Param("token") String token
+    );
 
     List<Device> findAllByUser(User user);
 
-    Optional<Device> findByUserAndDeviceIdentifier(User user, String deviceIdentifier);
+    Optional<Device> findByUserAndDeviceIdentifier(
+            User user,
+            String deviceIdentifier
+    );
 }

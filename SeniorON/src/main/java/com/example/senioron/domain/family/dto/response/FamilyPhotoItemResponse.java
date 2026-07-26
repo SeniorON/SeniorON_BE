@@ -15,4 +15,5 @@ public class FamilyPhotoItemResponse {
     private String description;
     private boolean canDelete;
     private LocalDateTime createdAt;
+    private boolean newPhoto;
 }

@@ -1,17 +1,15 @@
 package com.example.senioron.domain.home.controller;
 
 import com.example.senioron.domain.home.dto.request.*;
-import com.example.senioron.domain.home.dto.response.ButtonOptionResponse;
-import com.example.senioron.domain.home.dto.response.HomeButtonCreateResponse;
-import com.example.senioron.domain.home.dto.response.HomeResponse;
-import com.example.senioron.domain.home.dto.response.SeniorHomeResponse;
+import com.example.senioron.domain.home.dto.response.*;
+import com.example.senioron.domain.device.dto.response.DeviceDetailResponse;
 import com.example.senioron.domain.home.service.HomeService;
+import com.example.senioron.domain.home.service.WeatherService;
 import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
-import com.example.senioron.domain.home.dto.response.SeniorProfileUpdateResponse;
 
 import java.util.List;
 
@@ -21,9 +19,14 @@ import java.util.List;
 public class HomeController {
 
     private final HomeService homeService;
+    private final WeatherService weatherService;
 
-    public HomeController(HomeService homeService) {
+    public HomeController(
+            HomeService homeService,
+            WeatherService weatherService
+    ) {
         this.homeService = homeService;
+        this.weatherService = weatherService;
     }
 
     @Operation(
@@ -121,5 +124,46 @@ public class HomeController {
     ) {
         homeService.saveButtons(request);
         return Response.ok();
+    }
+    @Operation(
+            summary = "오늘 병원 일정 상세 목록 조회",
+            description = "시니어가 가족 내 주담당자와 보조담당자가 등록한 오늘 병원 일정을 시간순으로 조회"
+    )
+    @GetMapping("/hospitals/today")
+    public Response<List<TodayHospitalListResponse>>
+    getTodayHospitalSchedules() {
+
+        return Response.ok(
+                homeService.getTodayHospitalSchedules()
+        );
+    }
+    @Operation(
+            summary = "시니어 기기 연결 상태 상세 조회",
+            description = "자녀가 연결된 시니어 기기의 기기명, 연결 상태, 배터리 및 마지막 연결 시각을 조회"
+    )
+    @GetMapping("/device")
+    public Response<DeviceDetailResponse> getDeviceDetail() {
+
+        return Response.ok(
+                homeService.getDeviceDetail()
+        );
+    }
+
+    @Operation(
+            summary = "현재 날씨 조회",
+            description = "전달받은 위도와 경도를 기준으로 현재 기온과 날씨 상태를 조회"
+    )
+    @GetMapping("/weather")
+    public Response<WeatherResponse> getCurrentWeather(
+            @RequestParam double latitude,
+            @RequestParam double longitude
+    ) {
+
+        return Response.ok(
+                weatherService.getCurrentWeather(
+                        latitude,
+                        longitude
+                )
+        );
     }
 }

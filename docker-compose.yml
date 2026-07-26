@@ -15,6 +15,21 @@ services:
     depends_on:
       app:
         condition: service_healthy
+      grafana:
+        condition: service_healthy
+
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:latest
+    restart: unless-stopped
+
+    expose:
+      - "9113"
+
+    depends_on:
+      - nginx
+
+    command:
+      - "-nginx.scrape-uri=http://nginx:8081/nginx_status"
 
   app:
     #build: .
@@ -44,8 +59,12 @@ services:
 
   prometheus:
     image: prom/prometheus:latest
-
     restart: unless-stopped
+
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=3d"
 
     expose:
       - "9090"
@@ -73,9 +92,24 @@ services:
 
   grafana:
     image: grafana/grafana:latest
+    restart: unless-stopped
+
+    networks:
+      default:
+        aliases:
+          - grafana
 
     expose:
       - "3000"
+
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+    mem_limit: 512m
 
     environment:
       GF_SERVER_ROOT_URL: https://senioron.site/grafana/
@@ -98,6 +132,11 @@ services:
   loki:
     image: grafana/loki:2.9.8
     command: -config.file=/etc/loki/config.yml
+
+    networks:
+      default:
+        aliases:
+          - loki
 
     expose:
       - "3100"
@@ -141,6 +180,10 @@ services:
 
     expose:
       - "8080"
+
+    command:
+      - "--housekeeping_interval=30s"
+      - "--docker_only=true"
 
     volumes:
       - /:/rootfs:ro

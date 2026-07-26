@@ -7,8 +7,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
-import org.springframework.web.util.ContentCachingRequestWrapper;
-import org.springframework.web.util.ContentCachingResponseWrapper;
 
 import java.io.IOException;
 
@@ -17,31 +15,82 @@ import java.io.IOException;
 public class ApiLoggingFilter extends OncePerRequestFilter {
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
-            throws ServletException, IOException {
+    protected void doFilterInternal(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            FilterChain filterChain
+    ) throws ServletException, IOException {
 
-        // Actuator 및 Prometheus 메트릭 엔드포인트는 로깅에서 제외하여 로그 폭주 방지
-        String requestUri = request.getRequestURI();
-        if (requestUri.startsWith("/actuator") || requestUri.startsWith("/prometheus")) {
+        String uri = request.getRequestURI();
+
+        // 모니터링 관련 요청 제외
+        if (uri.startsWith("/actuator")
+                || uri.startsWith("/prometheus")
+                || uri.equals("/favicon.ico")) {
+
             filterChain.doFilter(request, response);
             return;
         }
 
-        ContentCachingRequestWrapper requestWrapper = new ContentCachingRequestWrapper(request, 10240);
-        ContentCachingResponseWrapper responseWrapper = new ContentCachingResponseWrapper(response);
+        long start = System.currentTimeMillis();
 
-        long startTime = System.currentTimeMillis();
+        // QueryString은 기록하지 않음 (민감정보 노출 방지)
+        String requestUri = request.getRequestURI();
+
+        String clientIp = request.getHeader("X-Forwarded-For");
+        if (clientIp == null || clientIp.isBlank()) {
+            clientIp = request.getRemoteAddr();
+        } else {
+            clientIp = clientIp.split(",")[0].trim();
+        }
 
         try {
-            log.info("[API Request] {} {}", request.getMethod(), requestUri);
-            filterChain.doFilter(requestWrapper, responseWrapper);
+
+            log.info(
+                    "[REQUEST] {} {} | IP={}",
+                    request.getMethod(),
+                    requestUri,
+                    clientIp
+            );
+
+            filterChain.doFilter(request, response);
+
+        } catch (Exception e) {
+
+            long duration = System.currentTimeMillis() - start;
+
+            log.error(
+                    "[EXCEPTION] {} {} | {}ms",
+                    request.getMethod(),
+                    requestUri,
+                    duration,
+                    e
+            );
+
+            throw e;
+
         } finally {
-            long duration = System.currentTimeMillis() - startTime;
-            int status = responseWrapper.getStatus();
 
-            log.info("[API Response] {} {} - Status: {} ({}ms)", request.getMethod(), requestUri, status, duration);
+            long duration = System.currentTimeMillis() - start;
+            int status = response.getStatus();
 
-            responseWrapper.copyBodyToResponse();
+            if (status >= 500) {
+                log.error(
+                        "[RESPONSE] {} {} | {} | {}ms",
+                        request.getMethod(),
+                        requestUri,
+                        status,
+                        duration
+                );
+            } else {
+                log.info(
+                        "[RESPONSE] {} {} | {} | {}ms",
+                        request.getMethod(),
+                        requestUri,
+                        status,
+                        duration
+                );
+            }
         }
     }
 }
