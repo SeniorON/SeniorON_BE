@@ -27,6 +27,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -40,6 +41,8 @@ public class FamilyPhotoService {
     private final S3Service s3Service;
     private final FamilyPhotoPermissionService familyPhotoPermissionService;
 
+    private static final int NEW_PHOTO_WINDOW_HOURS = 24;
+
     @Transactional
     public FamilyPhotoItemResponse createPhoto(
             User principal,
@@ -48,6 +51,9 @@ public class FamilyPhotoService {
         User user = userRepository.findById(principal.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
+        if (user.getRole() != Role.CHILD) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
         Family family = user.getFamily();
 
         if (family == null) {
@@ -71,7 +77,11 @@ public class FamilyPhotoService {
 
             FamilyPhoto savedPhoto = familyPhotoRepository.saveAndFlush(familyPhoto);
 
-            return toItemResponse(savedPhoto, user);
+            return toItemResponse(
+                    savedPhoto,
+                    user,
+                    LocalDateTime.now().minusHours(NEW_PHOTO_WINDOW_HOURS)
+            );
 
         } catch(RuntimeException e) {
             s3Service.delete(imageKey);
@@ -79,10 +89,37 @@ public class FamilyPhotoService {
         }
     }
 
+    private User findFamilyChildUploader(
+            Long uploaderUserId,
+            Family family
+    ) {
+        User uploader = userRepository.findById(uploaderUserId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_MEMBER_NOT_FOUND));
+
+        boolean sameFamily = uploader.getFamily() != null
+                && Objects.equals(
+                uploader.getFamily().getFamilyId(),
+                family.getFamilyId()
+        );
+
+        if (!sameFamily || uploader.getRole() != Role.CHILD) {
+            throw new BusinessException(ErrorCode.FAMILY_MEMBER_NOT_FOUND);
+        }
+
+        return uploader;
+    }
+
     private FamilyPhotoItemResponse toItemResponse(
             FamilyPhoto photo,
-            User currentUser
-    ){
+            User currentUser,
+            LocalDateTime newPhotoCutoff
+    ) {
+        boolean newPhoto =
+                currentUser.getRole() == Role.PARENT
+                        && photo.getUser().getRole() == Role.CHILD
+                        && !photo.isViewedByParent()
+                        && !photo.getCreatedAt().isBefore(newPhotoCutoff);
+
         return FamilyPhotoItemResponse.builder()
                 .familyPhotoId(photo.getFamilyPhotoId())
                 .imageUrl(s3Service.getFileUrl(photo.getImageKey()))
@@ -96,52 +133,101 @@ public class FamilyPhotoService {
                         )
                 )
                 .createdAt(photo.getCreatedAt())
+                .newPhoto(newPhoto)
                 .build();
     }
 
     @Transactional(readOnly = true)
     public FamilyPhotoListResponse getPhotos(
             User principal,
+            Long uploaderUserId,
             LocalDateTime cursorCreatedAt,
             Long cursorId,
             int size
     ) {
         if (size < 1 || size > 50) {
-            throw new IllegalArgumentException("사진 조회 개수는 1~50이어야 합니다.");
+            throw new IllegalArgumentException(
+                    "사진 조회 개수는 1~50이어야 합니다."
+            );
         }
 
-        if ((cursorCreatedAt == null) != (cursorId == null)){
+        if ((cursorCreatedAt == null) != (cursorId == null)) {
             throw new IllegalArgumentException(
                     "cursorCreatedAt과 cursorId는 함께 전달해야 합니다."
             );
         }
 
-        User user = userRepository.findById(principal.getUsersId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        User currentUser = userRepository.findById(
+                        principal.getUsersId()
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.USER_NOT_FOUND
+                        )
+                );
 
-        Family family = user.getFamily();
+        Family family = currentUser.getFamily();
 
         if (family == null) {
-            throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
+            throw new BusinessException(
+                    ErrorCode.FAMILY_NOT_FOUND
+            );
         }
+
+        /*
+         * uploaderUserId를 사용한 자녀 앨범 조회는
+         * 부모 화면에서만 허용한다.
+         */
+        if (uploaderUserId != null
+                && currentUser.getRole() != Role.PARENT) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+
+        User uploader = uploaderUserId == null
+                ? null
+                : findFamilyChildUploader(
+                uploaderUserId,
+                family
+        );
 
         Pageable pageable = PageRequest.of(0, size + 1);
 
         List<FamilyPhoto> fetchedPhotos;
 
-        if (cursorCreatedAt == null) {
-            fetchedPhotos = familyPhotoRepository
-                    .findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
-                            family,
-                            pageable
-                    );
-        }else{
-            fetchedPhotos = familyPhotoRepository.findNextPageByCursor(
-                    family,
-                    cursorCreatedAt,
-                    cursorId,
-                    pageable
-            );
+        if (uploader == null) {
+            if (cursorCreatedAt == null) {
+                fetchedPhotos = familyPhotoRepository
+                        .findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
+                                family,
+                                pageable
+                        );
+            } else {
+                fetchedPhotos =
+                        familyPhotoRepository.findNextPageByCursor(
+                                family,
+                                cursorCreatedAt,
+                                cursorId,
+                                pageable
+                        );
+            }
+        } else {
+            if (cursorCreatedAt == null) {
+                fetchedPhotos = familyPhotoRepository
+                        .findByFamilyAndUserOrderByCreatedAtDescFamilyPhotoIdDesc(
+                                family,
+                                uploader,
+                                pageable
+                        );
+            } else {
+                fetchedPhotos = familyPhotoRepository
+                        .findNextPageByUploaderAndCursor(
+                                family,
+                                uploader,
+                                cursorCreatedAt,
+                                cursorId,
+                                pageable
+                        );
+            }
         }
 
         boolean hasNext = fetchedPhotos.size() > size;
@@ -153,7 +239,8 @@ public class FamilyPhotoService {
         FamilyPhotoCursorResponse nextCursor = null;
 
         if (hasNext) {
-            FamilyPhoto lastPhoto = pagePhotos.get(pagePhotos.size() - 1);
+            FamilyPhoto lastPhoto =
+                    pagePhotos.get(pagePhotos.size() - 1);
 
             nextCursor = FamilyPhotoCursorResponse.builder()
                     .createdAt(lastPhoto.getCreatedAt())
@@ -161,12 +248,30 @@ public class FamilyPhotoService {
                     .build();
         }
 
-        List<FamilyPhotoItemResponse> photoResponses = pagePhotos.stream()
-                .map(photo -> toItemResponse(photo, user))
-                .toList();
+        LocalDateTime newPhotoCutoff =
+                LocalDateTime.now().minusHours(NEW_PHOTO_WINDOW_HOURS);
+
+        List<FamilyPhotoItemResponse> photoResponses =
+                pagePhotos.stream()
+                        .map(photo ->
+                                toItemResponse(
+                                        photo,
+                                        currentUser,
+                                        newPhotoCutoff
+                                )
+                        )
+                        .toList();
+
+        long totalCount = uploader == null
+                ? familyPhotoRepository.countByFamily(family)
+                : familyPhotoRepository.countByFamilyAndUser(
+                family,
+                uploader
+        );
 
         return FamilyPhotoListResponse.builder()
                 .photos(photoResponses)
+                .totalCount(totalCount)
                 .nextCursor(nextCursor)
                 .hasNext(hasNext)
                 .build();
@@ -237,7 +342,7 @@ public class FamilyPhotoService {
         }
 
         // 현재 시각으로부터 24시간 전을 새로운 사진 판단 기준으로 사용
-        LocalDateTime newPhotoCutoff = LocalDateTime.now().minusHours(24);
+        LocalDateTime newPhotoCutoff = LocalDateTime.now().minusHours(NEW_PHOTO_WINDOW_HOURS);
 
         // 자녀마다 가장 최근에 올린 사진 한 장 조회
         List<FamilyPhoto> latestPhotos = familyPhotoRepository.findLatestPhotosByUploader(
@@ -290,5 +395,46 @@ public class FamilyPhotoService {
                 })
                 .toList();
 
+    }
+
+    // 사진 한 장 확인 처리 Service 추가
+    @Transactional
+    public void markPhotoAsViewed(
+            User principal,
+            Long familyPhotoId
+    ) {
+        User parent = userRepository.findById(
+                        principal.getUsersId()
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.USER_NOT_FOUND
+                        )
+                );
+
+        if (parent.getRole() != Role.PARENT) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+
+        Family family = parent.getFamily();
+
+        if (family == null) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_NOT_FOUND
+            );
+        }
+
+        FamilyPhoto photo = familyPhotoRepository
+                .findByFamilyPhotoIdAndFamily(
+                        familyPhotoId,
+                        family
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.FAMILY_PHOTO_NOT_FOUND
+                        )
+                );
+
+        photo.markAsViewedByParent();
     }
 }
