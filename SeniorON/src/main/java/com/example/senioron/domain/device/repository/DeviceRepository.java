@@ -1,5 +1,7 @@
 package com.example.senioron.domain.device.repository;
 
+import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.device.entity.Device;
 import com.example.senioron.domain.user.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -34,5 +36,9 @@ public interface DeviceRepository
     Optional<Device> findByUserAndDeviceIdentifier(
             User user,
             String deviceIdentifier
+    );
+    List<Device> findAllByUser_FamilyAndUser_Role(
+            Family family,
+            Role role
     );
 }
