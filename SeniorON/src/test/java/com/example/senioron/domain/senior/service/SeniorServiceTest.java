@@ -20,6 +20,7 @@ import com.example.senioron.domain.senior.repository.UserSeniorRepository;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import java.time.LocalDate;
@@ -31,12 +32,13 @@ class SeniorServiceTest {
 
     private final SeniorRepository seniorRepository = org.mockito.Mockito.mock(SeniorRepository.class);
     private final UserSeniorRepository userSeniorRepository = org.mockito.Mockito.mock(UserSeniorRepository.class);
+    private final UserRepository userRepository = org.mockito.Mockito.mock(UserRepository.class);
 
     private SeniorService seniorService;
 
     @BeforeEach
     void setUp() {
-        seniorService = new SeniorService(seniorRepository, userSeniorRepository);
+        seniorService = new SeniorService(seniorRepository, userSeniorRepository, userRepository);
     }
 
     @Test
@@ -91,6 +93,7 @@ class SeniorServiceTest {
         Family family = Family.builder().familyId(1L).build();
         User subChild = createChild(2L, family, ManagerType.SUB);
         Senior senior = createSenior(10L, family, subChild);
+        given(userRepository.findByIdForUpdate(2L)).willReturn(Optional.of(subChild));
         given(seniorRepository.findById(10L)).willReturn(Optional.of(senior));
         given(userSeniorRepository.findByUserAndSenior(subChild, senior)).willReturn(Optional.empty());
         given(userSeniorRepository.save(any(UserSenior.class))).willAnswer(invocation -> invocation.getArgument(0));
@@ -121,6 +124,7 @@ class SeniorServiceTest {
                 .senior(senior)
                 .relation(SeniorRelation.GRANDPARENT)
                 .build();
+        given(userRepository.findByIdForUpdate(2L)).willReturn(Optional.of(subChild));
         given(seniorRepository.findById(10L)).willReturn(Optional.of(senior));
         given(userSeniorRepository.findByUserAndSenior(subChild, senior)).willReturn(Optional.of(subRelation));
         given(userSeniorRepository.save(any(UserSenior.class))).willAnswer(invocation -> invocation.getArgument(0));
@@ -142,6 +146,7 @@ class SeniorServiceTest {
         Family otherFamily = Family.builder().familyId(2L).build();
         User subChild = createChild(2L, family, ManagerType.SUB);
         Senior senior = createSenior(10L, otherFamily, subChild);
+        given(userRepository.findByIdForUpdate(2L)).willReturn(Optional.of(subChild));
         given(seniorRepository.findById(10L)).willReturn(Optional.of(senior));
 
         assertThatThrownBy(() -> seniorService.updateSeniorRelation(
@@ -159,6 +164,7 @@ class SeniorServiceTest {
     void updateSeniorRelationRequiresCustomRelationWhenOther() {
         Family family = Family.builder().familyId(1L).build();
         User subChild = createChild(2L, family, ManagerType.SUB);
+        given(userRepository.findByIdForUpdate(2L)).willReturn(Optional.of(subChild));
 
         assertThatThrownBy(() -> seniorService.updateSeniorRelation(
                 subChild,
@@ -169,6 +175,28 @@ class SeniorServiceTest {
                 .asInstanceOf(type(BusinessException.class))
                 .extracting(BusinessException::getCode)
                 .isEqualTo(ErrorCode.CUSTOM_RELATION_REQUIRED);
+    }
+
+    @Test
+    void updateSeniorRelationUsesLockedUserForFamilyValidationAndUpsert() {
+        Family staleFamily = Family.builder().familyId(1L).build();
+        Family currentFamily = Family.builder().familyId(2L).build();
+        User stalePrincipal = createChild(2L, staleFamily, ManagerType.SUB);
+        User lockedUser = createChild(2L, currentFamily, ManagerType.SUB);
+        Senior senior = createSenior(10L, currentFamily, lockedUser);
+        given(userRepository.findByIdForUpdate(2L)).willReturn(Optional.of(lockedUser));
+        given(seniorRepository.findById(10L)).willReturn(Optional.of(senior));
+        given(userSeniorRepository.findByUserAndSenior(lockedUser, senior)).willReturn(Optional.empty());
+        given(userSeniorRepository.save(any(UserSenior.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        seniorService.updateSeniorRelation(
+                stalePrincipal,
+                10L,
+                new SeniorRelationUpdateRequest(SeniorRelation.GRANDPARENT, null)
+        );
+
+        verify(userRepository).findByIdForUpdate(2L);
+        verify(userSeniorRepository).findByUserAndSenior(lockedUser, senior);
     }
 
     private SeniorCreateRequest createRequest(SeniorRelation relation, String customRelation) {

@@ -10,6 +10,7 @@ import com.example.senioron.domain.senior.entity.UserSenior;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.senior.repository.UserSeniorRepository;
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ public class SeniorService {
 
     private final SeniorRepository seniorRepository;
     private final UserSeniorRepository userSeniorRepository;
+    private final UserRepository userRepository;
 
     /**
      * 로그인한 사용자가 관리할 시니어 정보를 등록합니다.
@@ -71,7 +73,10 @@ public class SeniorService {
             Long seniorId,
             SeniorRelationUpdateRequest request
     ) {
-        if (user.getFamily() == null) {
+        User lockedUser = userRepository.findByIdForUpdate(user.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        if (lockedUser.getFamily() == null) {
             throw new BusinessException(ErrorCode.FAMILY_NOT_CONNECTED);
         }
 
@@ -80,7 +85,7 @@ public class SeniorService {
         Senior senior = seniorRepository.findById(seniorId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SENIOR_NOT_FOUND));
 
-        validateSameFamily(user, senior);
+        validateSameFamily(lockedUser, senior);
 
         String resolvedCustomRelation =
                 resolveCustomRelation(
@@ -88,9 +93,9 @@ public class SeniorService {
                         request.customRelation()
                 );
 
-        UserSenior userSenior = userSeniorRepository.findByUserAndSenior(user, senior)
+        UserSenior userSenior = userSeniorRepository.findByUserAndSenior(lockedUser, senior)
                 .orElseGet(() -> UserSenior.builder()
-                        .user(user)
+                        .user(lockedUser)
                         .senior(senior)
                         .relation(request.relation())
                         .customRelation(resolvedCustomRelation)
