@@ -217,4 +217,17 @@ class NotificationServiceTest {
 
         assertThat(response.getEnabledCount()).isEqualTo(4);
     }
+
+    // 30일이 지난 알림을 생성 시각 기준으로 일괄 삭제해야 한다.
+    @Test
+    void deleteOldNotificationsDeletesByThirtyDayThreshold() {
+        var thresholdCaptor = org.mockito.ArgumentCaptor.forClass(java.time.LocalDateTime.class);
+        given(notificationRepository.deleteAllByCreatedAtBefore(thresholdCaptor.capture())).willReturn(2);
+
+        notificationService.deleteOldNotifications();
+
+        java.time.LocalDateTime captured = thresholdCaptor.getValue();
+        java.time.LocalDateTime expected = java.time.LocalDateTime.now().minusDays(30);
+        assertThat(java.time.Duration.between(captured, expected).abs()).isLessThan(java.time.Duration.ofSeconds(5));
+    }
 }
