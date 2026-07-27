@@ -6,6 +6,7 @@ import com.example.senioron.domain.notification.entity.Notification;
 import com.example.senioron.domain.notification.entity.NotificationType;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -26,21 +27,29 @@ class NotificationRepositoryTest {
 
     @Test
     void deleteAllByCreatedAtBeforeRemovesOnlyNotificationsOlderThanThreshold() {
-        Notification oldNotification = notificationRepository.save(
-                Notification.builder().notificationType(NotificationType.SOS).body("old").isRead(false).build());
-        Notification recentNotification = notificationRepository.save(
-                Notification.builder().notificationType(NotificationType.SOS).body("recent").isRead(false).build());
+        LocalDateTime threshold = LocalDateTime.now().minusDays(30).truncatedTo(ChronoUnit.MILLIS);
+
+        Notification oldNotification = save("old");
+        Notification boundaryNotification = save("boundary");
+        Notification recentNotification = save("recent");
         entityManager.flush();
 
-        backdate(oldNotification.getNotificationId(), LocalDateTime.now().minusDays(40));
-        backdate(recentNotification.getNotificationId(), LocalDateTime.now().minusDays(10));
+        backdate(oldNotification.getNotificationId(), threshold.minusDays(10));
+        backdate(boundaryNotification.getNotificationId(), threshold);
+        backdate(recentNotification.getNotificationId(), threshold.plusDays(20));
         entityManager.clear();
 
-        int deletedCount = notificationRepository.deleteAllByCreatedAtBefore(LocalDateTime.now().minusDays(30));
+        int deletedCount = notificationRepository.deleteAllByCreatedAtBefore(threshold);
 
         assertThat(deletedCount).isEqualTo(1);
         assertThat(notificationRepository.findById(oldNotification.getNotificationId())).isEmpty();
+        assertThat(notificationRepository.findById(boundaryNotification.getNotificationId())).isPresent();
         assertThat(notificationRepository.findById(recentNotification.getNotificationId())).isPresent();
+    }
+
+    private Notification save(String body) {
+        return notificationRepository.save(
+                Notification.builder().notificationType(NotificationType.SOS).body(body).isRead(false).build());
     }
 
     private void backdate(Long notificationId, LocalDateTime createdAt) {
