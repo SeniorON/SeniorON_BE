@@ -71,13 +71,20 @@ public class HomeService {
             String requestedButtonName,
             String defaultButtonName
     ) {
-
         if (requestedButtonName == null
                 || requestedButtonName.isBlank()) {
             return defaultButtonName;
         }
 
-        return requestedButtonName.trim();
+        String trimmedName = requestedButtonName.trim();
+
+        if (trimmedName.length() > 6) {
+            throw new BusinessException(
+                    ErrorCode.HOME_BUTTON_NAME_TOO_LONG
+            );
+        }
+
+        return trimmedName;
     }
 
     private boolean isDeviceConnected(

@@ -5,7 +5,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -34,7 +33,6 @@ public class HomeButtonSaveRequest {
         private Integer buttonOrder;
 
         @JsonProperty("button_name")
-        @Size(max = 6, message = "버튼 이름은 6자 이하여야 합니다.")
         private String buttonName;
     }
 }

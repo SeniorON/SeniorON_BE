@@ -63,6 +63,7 @@ public enum ErrorCode implements BaseCode {
     WEATHER_API_CALL_FAILED(HttpStatus.BAD_GATEWAY, "WEATHER5021", "날씨 정보를 불러오는 데 실패했습니다."),
     WEATHER_DATA_NOT_FOUND(HttpStatus.BAD_GATEWAY, "WEATHER5022", "날씨 응답 데이터가 올바르지 않습니다."),
     INVALID_LOCATION_COORDINATES(HttpStatus.BAD_REQUEST, "WEATHER4001", "유효하지 않은 위치 좌표입니다."),
+    HOME_BUTTON_NAME_TOO_LONG(HttpStatus.BAD_REQUEST, "HOME_4003", "버튼 이름은 6자 이하여야 합니다."),
 
     // Senior Error
     CUSTOM_RELATION_REQUIRED(HttpStatus.BAD_REQUEST, "SENIOR4001", "직접 작성 관계를 입력해 주세요."),
