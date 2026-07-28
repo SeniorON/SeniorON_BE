@@ -68,8 +68,7 @@ public class HomeService {
 
     private Home createHomeButton(
             User user,
-            HomeButtonSaveRequest.ButtonRequest buttonRequest,
-            FontSize fontSize
+            HomeButtonSaveRequest.ButtonRequest buttonRequest
     ) {
 
         String buttonName =
@@ -87,8 +86,7 @@ public class HomeService {
                 buttonName,
                 null,
                 ActionType.APP,
-                packageName,
-                fontSize
+                packageName
         );
     }
 
@@ -232,9 +230,9 @@ public class HomeService {
                         );
 
         FontSize fontSize =
-                homes.isEmpty()
-                        ? FontSize.MEDIUM
-                        : homes.get(0).getFontSize();
+                getFontSize(
+                        homeOwner
+                );
 
         HomeResponse.MusicCardResponse musicCard =
                 getMusicCardResponse(homeOwner);
@@ -382,17 +380,6 @@ public class HomeService {
 
         validateSaveButtonRequests(buttonRequests);
 
-        List<Home> existingHomes =
-                homeRepository
-                        .findAllByUserOrderByButtonOrderAsc(
-                                user
-                        );
-
-        FontSize fontSize =
-                existingHomes.isEmpty()
-                        ? FontSize.MEDIUM
-                        : existingHomes.get(0).getFontSize();
-
         homeRepository.deleteAllByUser(user);
 
         List<Home> newHomes =
@@ -400,8 +387,7 @@ public class HomeService {
                         .map(buttonRequest ->
                                 createHomeButton(
                                         user,
-                                        buttonRequest,
-                                        fontSize
+                                        buttonRequest
                                 )
                         )
                         .toList();
@@ -414,6 +400,7 @@ public class HomeService {
                         .orElseGet(() ->
                                 HomeSetting.builder()
                                         .user(user)
+                                        .fontSize(FontSize.MEDIUM)
                                         .build()
                         );
 
@@ -642,11 +629,6 @@ public class HomeService {
                         .orElse(0)
                         + 1;
 
-        FontSize fontSize =
-                homes.isEmpty()
-                        ? FontSize.MEDIUM
-                        : homes.get(0).getFontSize();
-
         Home newButton =
                 Home.createButton(
                         user,
@@ -654,8 +636,7 @@ public class HomeService {
                         buttonOption.getButtonName(),
                         buttonOption.getIcon(),
                         buttonOption.getActionType(),
-                        buttonOption.getActionValue(),
-                        fontSize
+                        buttonOption.getActionValue()
                 );
 
         Home savedButton =
@@ -747,9 +728,9 @@ public class HomeService {
                         .toList();
 
         FontSize fontSize =
-                homes.isEmpty()
-                        ? FontSize.MEDIUM
-                        : homes.get(0).getFontSize();
+                getFontSize(
+                        primaryChild
+                );
 
         TodayScheduleResponse todaySchedule =
                 getTodayHospitalSchedule(
@@ -946,23 +927,23 @@ public class HomeService {
         User user = getCurrentUser();
         validatePrimaryManager(user);
 
-        List<Home> homes =
-                homeRepository
-                        .findAllByUserOrderByButtonOrderAsc(
-                                user
+        HomeSetting homeSetting =
+                homeSettingRepository
+                        .findByUser(user)
+                        .orElseGet(() ->
+                                HomeSetting.builder()
+                                        .user(user)
+                                        .fontSize(FontSize.MEDIUM)
+                                        .build()
                         );
 
-        if (homes.isEmpty()) {
-            throw new BusinessException(
-                    ErrorCode.HOME_BUTTON_NOT_FOUND
-            );
-        }
+        homeSetting.updateFontSize(
+                request.getFontSize()
+        );
 
-        for (Home home : homes) {
-            home.updateFontSize(
-                    request.getFontSize()
-            );
-        }
+        homeSettingRepository.save(
+                homeSetting
+        );
     }
 
     private void validateSaveButtonRequests(
@@ -1051,6 +1032,16 @@ public class HomeService {
                 );
             }
         }
+    }
+
+    private FontSize getFontSize(
+            User homeOwner
+    ) {
+
+        return homeSettingRepository
+                .findByUser(homeOwner)
+                .map(HomeSetting::getFontSize)
+                .orElse(FontSize.MEDIUM);
     }
 
     private HomeResponse.MusicCardResponse getMusicCardResponse(

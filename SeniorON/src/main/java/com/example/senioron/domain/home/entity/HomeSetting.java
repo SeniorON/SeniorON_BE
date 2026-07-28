@@ -32,7 +32,20 @@ public class HomeSetting extends BaseEntity {
     @Enumerated(EnumType.STRING)
     private MusicApp musicApp;
 
-    public void updateMusicApp(MusicApp musicApp) {
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private FontSize fontSize = FontSize.MEDIUM;
+
+    public void updateMusicApp(
+            MusicApp musicApp
+    ) {
         this.musicApp = musicApp;
+    }
+
+    public void updateFontSize(
+            FontSize fontSize
+    ) {
+        this.fontSize = fontSize;
     }
 }
