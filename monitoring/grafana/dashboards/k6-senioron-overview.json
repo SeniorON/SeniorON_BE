@@ -2,7 +2,7 @@
   "title": "k6 + SeniorON (Spring Boot / JVM / HikariCP) Overview",
   "uid": "k6-senioron-overview",
   "schemaVersion": 38,
-  "version": 1,
+  "version": 2,
   "refresh": "5s",
   "time": { "from": "now-15m", "to": "now" },
   "editable": true,
@@ -352,6 +352,46 @@
         }
       },
       "options": { "legend": { "displayMode": "list" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 500,
+      "type": "row",
+      "title": "🔔 Notification / SOS Delivery",
+      "gridPos": { "x": 0, "y": 60, "w": 24, "h": 1 }
+    },
+    {
+      "id": 50,
+      "type": "timeseries",
+      "title": "SOS 발송 결과 (sos_dispatch_total)",
+      "datasource": { "type": "prometheus", "uid": "$DS_PROM" },
+      "targets": [
+        { "refId": "A", "expr": "sum by (result) (increase(sos_dispatch_total[$__rate_interval]))", "legendFormat": "{{result}}" }
+      ],
+      "gridPos": { "x": 0, "y": 61, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 15, "gradientMode": "scheme" }
+        }
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 51,
+      "type": "timeseries",
+      "title": "FCM 발송 결과 (fcm_send_total)",
+      "datasource": { "type": "prometheus", "uid": "$DS_PROM" },
+      "targets": [
+        { "refId": "A", "expr": "sum by (result) (increase(fcm_send_total[$__rate_interval]))", "legendFormat": "{{result}}" }
+      ],
+      "gridPos": { "x": 12, "y": 61, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 15, "gradientMode": "scheme" }
+        }
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
     }
   ]
 }
