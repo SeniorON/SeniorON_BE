@@ -53,7 +53,7 @@ import java.time.LocalDateTime;
 @Service
 public class HomeService {
 
-    private static final int MAX_BUTTON_COUNT_WITH_MUSIC_CARD = 10;
+    private static final int MAX_BUTTON_COUNT_WITH_MUSIC_CARD = 11;
     private static final int MAX_BUTTON_COUNT_WITHOUT_MUSIC_CARD = 12;
 
     private final HomeRepository homeRepository;
