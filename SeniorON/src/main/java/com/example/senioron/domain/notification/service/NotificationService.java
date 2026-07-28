@@ -73,7 +73,7 @@ public class NotificationService {
                 new TransactionSynchronization() {
                     @Override
                     public void afterCommit() {
-                        dispatch(targets, false);
+                        dispatch(targets);
                     }
                 }
         );
@@ -89,8 +89,7 @@ public class NotificationService {
     }
 
     /**
-     * SOS 알림을 동기 발송한다. 긴급 알림이라 일시적 오류에는 재시도한다.
-     * 트랜잭션 커밋 이후에 호출해야 외부 API 호출이 DB 커넥션을 붙잡지 않는다.
+     * SOS 알림을 동기 발송한다.
      */
     public NotificationDispatchResult dispatchSos(List<NotificationDispatchTarget> targets) {
         if (targets.isEmpty()) {
@@ -100,7 +99,7 @@ public class NotificationService {
             return NotificationDispatchResult.noReceiver();
         }
 
-        NotificationDispatchResult result = dispatch(targets, true);
+        NotificationDispatchResult result = dispatch(targets);
 
         if (result.notifiedCount() == 0) {
             countSosDispatch("undelivered");
@@ -181,16 +180,14 @@ public class NotificationService {
     /**
      * 수신자별로 등록된 모든 기기에 발송한다. 한 대라도 성공하면 그 수신자는 발송 성공으로 센다.
      */
-    private NotificationDispatchResult dispatch(List<NotificationDispatchTarget> targets, boolean withRetry) {
+    private NotificationDispatchResult dispatch(List<NotificationDispatchTarget> targets) {
         int notifiedCount = 0;
 
         for (NotificationDispatchTarget target : targets) {
             boolean delivered = false;
             for (String deviceToken : target.deviceTokens()) {
                 try {
-                    boolean sent = withRetry
-                            ? fcmSender.sendWithRetry(deviceToken, target.title(), target.body())
-                            : fcmSender.send(deviceToken, target.title(), target.body());
+                    boolean sent = fcmSender.send(deviceToken, target.title(), target.body());
                     delivered = delivered || sent;
                 } catch (Exception e) {
                     log.warn("FCM 발송 처리 중 예외 발생, receiverId={}", target.receiverId(), e);
