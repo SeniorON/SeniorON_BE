@@ -79,6 +79,13 @@ public enum ErrorCode implements BaseCode {
     FAMILY_PHOTO_DELETE_FORBIDDEN(HttpStatus.FORBIDDEN, "FAMILY_PHOTO403", "해당 가족 사진을 삭제할 권한이 없습니다."),
     PRIMARY_MANAGER_MUST_BE_CHILD(HttpStatus.BAD_REQUEST, "FAMILY400_3", "주 담당자는 자녀 계정만 지정할 수 있습니다."),
 
+    // Companion Error
+    COMPANION_PARENT_ONLY(HttpStatus.FORBIDDEN, "COMPANION403_1", "부모 계정만 이용할 수 있습니다."),
+    COMPANION_CONVERSATION_FORBIDDEN(HttpStatus.FORBIDDEN, "COMPANION403_2", "해당 대화에 접근할 수 없습니다."),
+    COMPANION_CONVERSATION_NOT_FOUND(HttpStatus.NOT_FOUND, "COMPANION404_1", "대화를 찾을 수 없습니다."),
+    COMPANION_CONVERSATION_ENDED(HttpStatus.CONFLICT, "COMPANION409_1", "이미 종료된 대화입니다."),
+    COMPANION_ENCRYPTION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "COMPANION500_1", "대화 내용을 안전하게 처리하지 못했습니다."),
+
     // Photo Error
     UNSUPPORTED_IMAGE_TYPE(HttpStatus.BAD_REQUEST,"IMAGE400_1", "JPG, PNG, WEBP 형식의 이미지만 업로드할 수 있습니다."),
 
