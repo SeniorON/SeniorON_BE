@@ -3,6 +3,7 @@ package com.example.senioron.domain.event.service;
 import com.example.senioron.domain.event.dto.request.InactivityRequest;
 import com.example.senioron.domain.event.dto.request.OutingReturnRequest;
 import com.example.senioron.domain.event.dto.request.RiskLinkRequest;
+import com.example.senioron.domain.event.dto.SosEventCreation;
 import com.example.senioron.domain.event.dto.request.SosEventRequest;
 import com.example.senioron.domain.event.dto.response.EventDetailResponse;
 import com.example.senioron.domain.event.dto.response.InactivityResponse;
@@ -15,6 +16,8 @@ import com.example.senioron.domain.event.entity.RiskCheckResult;
 import com.example.senioron.domain.event.repository.EventRepository;
 import com.example.senioron.domain.event.util.GeocodingClient;
 import com.example.senioron.domain.event.util.SafeBrowsingClient;
+import com.example.senioron.domain.notification.dto.NotificationDispatchResult;
+import com.example.senioron.domain.notification.dto.NotificationDispatchTarget;
 import com.example.senioron.domain.notification.service.NotificationService;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
@@ -25,6 +28,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Objects;
 @Service
 @RequiredArgsConstructor
@@ -37,14 +41,27 @@ public class EventService {
     private final ApplicationContext applicationContext;
     private final UserRepository userRepository;
 
+    /**
+     * SOS는 긴급 알림, 발송 결과를 응답에 담음.
+     * 가족에게 전달되지 못했다면 앱이 직접 연락하도록 안내할 수 있어야 하기 때문.
+     * 단, 발송 실패로 HTTP 에러를 반환하지는 않는다. 시니어가 재시도하면
+     * SOS 이벤트가 중복 생성되고 자녀에게 중복 푸시가 가기 때문이다.
+     */
     public SosEventResponse createSosEvent(User user, SosEventRequest req){
         String address = geocodingClient.reverseGeocode(req.getLatitude(), req.getLongitude());
         EventService self = applicationContext.getBean(EventService.class);
-        return self.saveSosEvent(address, user, req);
+
+        SosEventCreation creation = self.saveSosEvent(address, user, req);
+
+        // 커밋이 끝난 뒤 발송한다. 실패해도 이벤트는 이미 저장되어 있어 인앱 알림으로는 확인할 수 있다.
+        NotificationDispatchResult dispatchResult =
+                notificationService.dispatchSos(creation.dispatchTargets());
+
+        return SosEventResponse.of(creation.event(), dispatchResult);
     }
 
     @Transactional
-    public SosEventResponse saveSosEvent(String address, User user, SosEventRequest req){
+    public SosEventCreation saveSosEvent(String address, User user, SosEventRequest req){
         Event event = Event.builder()
                 .user(user)
                 .triggeredUser(user)
@@ -56,9 +73,10 @@ public class EventService {
                 .build();
 
         Event savedEvent = eventRepository.save(event);
-        notificationService.createFormEvent(savedEvent);
+        List<NotificationDispatchTarget> dispatchTargets =
+                notificationService.prepareSosNotifications(savedEvent);
 
-        return SosEventResponse.of(savedEvent);
+        return new SosEventCreation(savedEvent, dispatchTargets);
     }
 
     public InactivityResponse createInactivityEvent(User user, InactivityRequest req){
