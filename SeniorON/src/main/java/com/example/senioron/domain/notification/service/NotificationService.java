@@ -350,5 +350,13 @@ public class NotificationService {
         }
         return notification;
     }
+
+    // 생성된지 30일 지난 알림 일괄 삭제
+    @Transactional
+    public void deleteOldNotifications() {
+        LocalDateTime threshold = LocalDateTime.now().minusDays(30);
+        int deletedCount = notificationRepository.deleteAllByCreatedAtBefore(threshold);
+        log.info("[알림 정리 배치] 30일 경과 알림 {}건 삭제", deletedCount);
+    }
 }
 
