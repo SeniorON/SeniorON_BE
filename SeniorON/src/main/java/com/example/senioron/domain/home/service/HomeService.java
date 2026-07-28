@@ -45,7 +45,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.time.LocalDateTime;
@@ -67,16 +66,52 @@ public class HomeService {
     private final FamilyRepository familyRepository;
     private static final long DEVICE_OFFLINE_THRESHOLD_MINUTES = 30;
 
+    private Home createHomeButton(
+            User user,
+            HomeButtonSaveRequest.ButtonRequest buttonRequest,
+            FontSize fontSize
+    ) {
+
+        String buttonName =
+                resolveButtonName(
+                        buttonRequest.getButtonName(),
+                        null
+                );
+
+        String packageName =
+                buttonRequest.getPackageName().trim();
+
+        return Home.createButton(
+                user,
+                buttonRequest.getButtonOrder(),
+                buttonName,
+                null,
+                ActionType.APP,
+                packageName,
+                fontSize
+        );
+    }
+
     private String resolveButtonName(
             String requestedButtonName,
             String defaultButtonName
     ) {
-        if (requestedButtonName == null
-                || requestedButtonName.isBlank()) {
-            return defaultButtonName;
+
+        String resolvedName =
+                requestedButtonName == null
+                        || requestedButtonName.isBlank()
+                        ? defaultButtonName
+                        : requestedButtonName;
+
+        if (resolvedName == null
+                || resolvedName.isBlank()) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_HOME_BUTTON_REQUEST
+            );
         }
 
-        String trimmedName = requestedButtonName.trim();
+        String trimmedName =
+                resolvedName.trim();
 
         if (trimmedName.length() > 6) {
             throw new BusinessException(
@@ -347,31 +382,6 @@ public class HomeService {
 
         validateSaveButtonRequests(buttonRequests);
 
-        Set<Long> optionIds =
-                buttonRequests.stream()
-                        .map(
-                                HomeButtonSaveRequest.ButtonRequest
-                                        ::getOptionId
-                        )
-                        .collect(Collectors.toSet());
-
-        Map<Long, ButtonOption> optionMap =
-                buttonOptionRepository
-                        .findAllById(optionIds)
-                        .stream()
-                        .collect(
-                                Collectors.toMap(
-                                        ButtonOption::getOptionId,
-                                        Function.identity()
-                                )
-                        );
-
-        if (optionMap.size() != optionIds.size()) {
-            throw new BusinessException(
-                    ErrorCode.BUTTON_OPTION_NOT_FOUND
-            );
-        }
-
         List<Home> existingHomes =
                 homeRepository
                         .findAllByUserOrderByButtonOrderAsc(
@@ -387,29 +397,13 @@ public class HomeService {
 
         List<Home> newHomes =
                 buttonRequests.stream()
-                        .map(buttonRequest -> {
-
-                            ButtonOption option =
-                                    optionMap.get(
-                                            buttonRequest.getOptionId()
-                                    );
-
-                            String buttonName =
-                                    resolveButtonName(
-                                            buttonRequest.getButtonName(),
-                                            option.getButtonName()
-                                    );
-
-                            return Home.createButton(
-                                    user,
-                                    buttonRequest.getButtonOrder(),
-                                    buttonName,
-                                    option.getIcon(),
-                                    option.getActionType(),
-                                    option.getActionValue(),
-                                    fontSize
-                            );
-                        })
+                        .map(buttonRequest ->
+                                createHomeButton(
+                                        user,
+                                        buttonRequest,
+                                        fontSize
+                                )
+                        )
                         .toList();
 
         homeRepository.saveAll(newHomes);
@@ -975,30 +969,34 @@ public class HomeService {
             List<HomeButtonSaveRequest.ButtonRequest> buttonRequests
     ) {
 
-        boolean hasNullOptionId =
+        boolean hasInvalidPackageName =
                 buttonRequests.stream()
                         .anyMatch(buttonRequest ->
-                                buttonRequest.getOptionId() == null
+                                buttonRequest.getPackageName() == null
+                                        || buttonRequest
+                                        .getPackageName()
+                                        .isBlank()
                         );
 
-        if (hasNullOptionId) {
+        if (hasInvalidPackageName) {
             throw new BusinessException(
-                    ErrorCode.BUTTON_OPTION_NOT_FOUND
+                    ErrorCode.INVALID_HOME_BUTTON_REQUEST
             );
         }
 
-        long optionIdCount =
+        List<String> packageNames =
                 buttonRequests.stream()
                         .map(
                                 HomeButtonSaveRequest.ButtonRequest
-                                        ::getOptionId
+                                        ::getPackageName
                         )
-                        .distinct()
-                        .count();
+                        .map(String::trim)
+                        .toList();
 
-        if (optionIdCount != buttonRequests.size()) {
+        if (packageNames.stream().distinct().count()
+                != packageNames.size()) {
             throw new BusinessException(
-                    ErrorCode.DUPLICATE_HOME_BUTTON_ID
+                    ErrorCode.INVALID_HOME_BUTTON_REQUEST
             );
         }
 
