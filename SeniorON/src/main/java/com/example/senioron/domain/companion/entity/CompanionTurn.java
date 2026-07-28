@@ -3,7 +3,6 @@ package com.example.senioron.domain.companion.entity;
 import com.example.senioron.common.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
-import org.checkerframework.checker.guieffect.qual.SafeType;
 
 import java.util.UUID;
 
@@ -136,7 +135,7 @@ public class CompanionTurn extends BaseEntity {
         }
     }
 
-    private void markTranscribed(
+    public void markTranscribed(
             String provider,
             String model
     ) {
