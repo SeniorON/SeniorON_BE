@@ -13,8 +13,10 @@ services:
       - /etc/letsencrypt:/etc/letsencrypt
 
     depends_on:
-      app:
+      app:           # Blue-Green 적용 시 → app-blue 로 변경
         condition: service_healthy
+      # app-blue:   # Blue-Green 적용 시 주석 해제
+      #   condition: service_healthy
       grafana:
         condition: service_healthy
 
@@ -57,6 +59,72 @@ services:
 
     restart: unless-stopped
 
+# ==========================================================
+#  TODO: Blue-Green 무중단 배포
+#
+#  적용 순서:
+#  1. 아래 app-blue / app-green 주석 해제 후, 기존 app 서비스 제거
+#  2. nginx depends_on: app → app-blue 로 변경 (위 주석 참고)
+#  3. prometheus depends_on: app → app-blue 로 변경 (아래 주석 참고)
+#  4. nginx/conf.d/app.conf 에서 upstream 방식으로 전환 (파일 내 주석 참고)
+#  5. 서버에서 최초 1회 실행:
+#       cp ~/SeniorON_BE/nginx/upstream.blue.conf \
+#          ~/SeniorON_BE/nginx/conf.d/upstream.conf
+#  6. GitHub Actions deploy.yml 의 Blue-Green 스크립트 주석 해제
+# ==========================================================
+
+#  app-blue:
+#    image: jsh424/senioron:latest
+#    container_name: senioron-app-blue
+#
+#    expose:
+#      - "8080"
+#
+#    env_file:
+#      - .env
+#
+#    environment:
+#      SPRING_PROFILES_ACTIVE: prod
+#      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+#      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+#      AWS_REGION: ${AWS_REGION}
+#      S3_BUCKET: ${S3_BUCKET}
+#
+#    healthcheck:
+#      test: [ "CMD-SHELL", "bash -c '</dev/tcp/localhost/8080' 2>/dev/null && exit 0 || exit 1" ]
+#      interval: 10s
+#      timeout: 5s
+#      retries: 12
+#      start_period: 30s
+#
+#    restart: unless-stopped
+#
+#  app-green:
+#    image: jsh424/senioron:latest
+#    container_name: senioron-app-green
+#
+#    expose:
+#      - "8080"
+#
+#    env_file:
+#      - .env
+#
+#    environment:
+#      SPRING_PROFILES_ACTIVE: prod
+#      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+#      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+#      AWS_REGION: ${AWS_REGION}
+#      S3_BUCKET: ${S3_BUCKET}
+#
+#    healthcheck:
+#      test: [ "CMD-SHELL", "bash -c '</dev/tcp/localhost/8080' 2>/dev/null && exit 0 || exit 1" ]
+#      interval: 10s
+#      timeout: 5s
+#      retries: 12
+#      start_period: 30s
+#
+#    restart: unless-stopped
+
   prometheus:
     image: prom/prometheus:latest
     restart: unless-stopped
@@ -73,8 +141,10 @@ services:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
 
     depends_on:
-      app:
+      app:           # Blue-Green 적용 시 → app-blue 로 변경
         condition: service_healthy
+      # app-blue:   # Blue-Green 적용 시 주석 해제
+      #   condition: service_healthy
 
   influxdb:
     image: influxdb:1.8

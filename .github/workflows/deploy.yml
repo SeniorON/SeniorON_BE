@@ -36,6 +36,63 @@ jobs:
 
           docker compose pull
 
+#           ==========================================================
+#           TODO: Blue-Green 무중단 배포 (적용 시 아래 docker compose down/up 제거)
+#
+#           # 현재 활성 환경 확인 (첫 배포 시 blue 기본값)
+#           CURRENT=$(cat ~/SeniorON_BE/.current-color 2>/dev/null || echo "blue")
+#
+#           if [ "$CURRENT" = "blue" ]; then
+#             NEXT="green"
+#           else
+#             NEXT="blue"
+#           fi
+#
+#           echo "현재 환경: $CURRENT → 다음 환경: $NEXT"
+#
+#           # 새 환경 컨테이너 실행
+#           docker compose up -d app-$NEXT
+#
+#           # Health Check (솤로 최대 150초 대기 / 실패 시 롤백)
+#           echo "Health Check 대기 중..."
+#           for i in $(seq 1 30); do
+#             STATUS=$(docker inspect \
+#               --format='{{.State.Health.Status}}' \
+#               senioron-app-$NEXT 2>/dev/null)
+#
+#             if [ "$STATUS" = "healthy" ]; then
+#               echo "Health Check 성공"
+#               break
+#             fi
+#
+#             if [ $i -eq 30 ]; then
+#               echo "Health Check 실패 - 롤백 시작"
+#               docker compose stop app-$NEXT
+#               docker compose rm -f app-$NEXT
+#               exit 1
+#             fi
+#
+#             sleep 5
+#           done
+#
+#           # Nginx upstream 전환 (upstream.conf 교체)
+#           cp ~/SeniorON_BE/nginx/upstream.$NEXT.conf \
+#              ~/SeniorON_BE/nginx/conf.d/upstream.conf
+#
+#           # Nginx 무중단 reload
+#           docker exec senioron_be-nginx-1 nginx -s reload
+#
+#           # 활성 환경 상태 저장
+#           echo $NEXT > ~/SeniorON_BE/.current-color
+#
+#           # 기존 환경 컨테이너 종료 및 제거
+#           echo "$CURRENT 환경 종료..."
+#           docker compose stop app-$CURRENT
+#           docker compose rm -f app-$CURRENT
+#
+#           echo "배포 완료: $NEXT 환경으로 전환됨"
+#           ==========================================================
+
           docker compose down
 
           docker compose up -d
