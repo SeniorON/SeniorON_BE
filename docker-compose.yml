@@ -66,15 +66,29 @@ services:
 #  1. 아래 app-blue / app-green 주석 해제 후, 기존 app 서비스 제거
 #  2. nginx depends_on: app → app-blue 로 변경 (위 주석 참고)
 #  3. prometheus depends_on: app → app-blue 로 변경 (아래 주석 참고)
-#  4. nginx/conf.d/app.conf 에서 upstream 방식으로 전환 (파일 내 주석 참고)
-#  5. 서버에서 최초 1회 실행:
-#       cp ~/SeniorON_BE/nginx/upstream.blue.conf \
-#          ~/SeniorON_BE/nginx/conf.d/upstream.conf
-#  6. GitHub Actions deploy.yml 의 Blue-Green 스크립트 주석 해제
+#  4. nginx/conf.d/app.conf 의 proxy_pass를 http://backend 로 변경 (파일 내 주석 참고)
+#     ※ include 지시어는 추가하지 않음 - conf.d/*.conf 가 자동으로 로딩됨
+#  5. GitHub Actions deploy.yml 의 Blue-Green 스크립트 주석 해제
+#
+#  Bootstrap (최초 전환 시 - 기존 app 컨테이너에서 Blue로 이전):
+#  ┌─ 서버에서 아래 순서대로 1회 실행 ──────────────────────────┐
+#  │  IMAGE_TAG=$(git rev-parse --short HEAD)                   │
+#  │  IMAGE_TAG=$IMAGE_TAG docker compose up -d app-blue        │
+#  │  # app-blue healthy 확인 후                                │
+#  │  cp nginx/upstream.blue.conf nginx/conf.d/upstream.conf    │
+#  │  docker exec senioron_be-nginx-1 nginx -s reload           │
+#  │  docker compose stop app && docker compose rm -f app       │
+#  │  echo "blue:$IMAGE_TAG" > .current-color                   │
+#  └────────────────────────────────────────────────────────────┘
+# ==========================================================
+#
+#  상태 파일 형식: .current-color = "blue:<git-sha>" or "green:<git-sha>"
+#  예) blue:a1b2c3d  →  현재 blue 환경에 a1b2c3d 이미지가 배포됨
+#  IMAGE_TAG는 GitHub Actions가 github.sha 앞 7자리를 사용 (deploy.yml 참고)
 # ==========================================================
 
 #  app-blue:
-#    image: jsh424/senioron:latest
+#    image: jsh424/senioron:${IMAGE_TAG}   # IMAGE_TAG=<git-sha> 로 주입 (deploy.yml 참고)
 #    container_name: senioron-app-blue
 #
 #    expose:
@@ -100,7 +114,7 @@ services:
 #    restart: unless-stopped
 #
 #  app-green:
-#    image: jsh424/senioron:latest
+#    image: jsh424/senioron:${IMAGE_TAG}   # IMAGE_TAG=<git-sha> 로 주입 (deploy.yml 참고)
 #    container_name: senioron-app-green
 #
 #    expose:

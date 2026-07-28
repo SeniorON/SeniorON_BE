@@ -38,9 +38,56 @@ jobs:
 
 #           ==========================================================
 #           TODO: Blue-Green 무중단 배포 (적용 시 아래 docker compose down/up 제거)
+#           ※ docker image prune -f 도 제거할 것 - 이전 이미지 보존이 롤백의 전제 조건
 #
-#           # 현재 활성 환경 확인 (첫 배포 시 blue 기본값)
-#           CURRENT=$(cat ~/SeniorON_BE/.current-color 2>/dev/null || echo "blue")
+#           # IMAGE_TAG: docker-image.yml 이 이미 github.sha 로 태그를 푸시함
+#           IMAGE_TAG=$(echo "${{ github.event.workflow_run.head_sha }}" | cut -c1-7)
+#
+#           # ─── 최초 배포 Bootstrap (상태 파일 없을 때만 실행) ───────────────
+#           if [ ! -f ~/SeniorON_BE/.current-color ]; then
+#             echo "최초 배포: Blue 환경 bootstrap 시작 (IMAGE_TAG=$IMAGE_TAG)"
+#
+#             # Blue 환경 기동
+#             IMAGE_TAG=$IMAGE_TAG docker compose up -d app-blue
+#
+#             # Health Check (최대 150초 대기)
+#             for i in $(seq 1 30); do
+#               STATUS=$(docker inspect \
+#                 --format='{{.State.Health.Status}}' \
+#                 senioron-app-blue 2>/dev/null)
+#               if [ "$STATUS" = "healthy" ]; then
+#                 echo "Blue bootstrap Health Check 성공"
+#                 break
+#               fi
+#               if [ $i -eq 30 ]; then
+#                 echo "Blue bootstrap 실패 - 중단"
+#                 docker compose stop app-blue && docker compose rm -f app-blue
+#                 exit 1
+#               fi
+#               sleep 5
+#             done
+#
+#             # upstream.conf 초기화 (Blue)
+#             cp ~/SeniorON_BE/nginx/upstream.blue.conf \
+#                ~/SeniorON_BE/nginx/conf.d/upstream.conf
+#             docker exec senioron_be-nginx-1 nginx -s reload
+#
+#             # 기존 단일 app 컨테이너 종료 (기존 운영 중이었다면)
+#             docker compose stop app 2>/dev/null || true
+#             docker compose rm -f app 2>/dev/null || true
+#
+#             # 상태 저장: color:sha 형식
+#             echo "blue:$IMAGE_TAG" > ~/SeniorON_BE/.current-color
+#             echo "Bootstrap 완료: Blue 환경 활성화 (blue:$IMAGE_TAG)"
+#             exit 0
+#           fi
+#           # ──────────────────────────────────────────────────────────────────
+#
+#           # ─── 일반 배포: Blue ↔ Green 토글 ────────────────────────────────
+#           # 상태 파일 형식: "blue:a1b2c3d" or "green:a1b2c3d"
+#           CURRENT_STATE=$(cat ~/SeniorON_BE/.current-color)
+#           CURRENT=$(echo "$CURRENT_STATE" | cut -d: -f1)
+#           PREV_TAG=$(echo "$CURRENT_STATE" | cut -d: -f2)
 #
 #           if [ "$CURRENT" = "blue" ]; then
 #             NEXT="green"
@@ -48,12 +95,12 @@ jobs:
 #             NEXT="blue"
 #           fi
 #
-#           echo "현재 환경: $CURRENT → 다음 환경: $NEXT"
+#           echo "현재 환경: $CURRENT ($PREV_TAG) → 다음 환경: $NEXT ($IMAGE_TAG)"
 #
-#           # 새 환경 컨테이너 실행
-#           docker compose up -d app-$NEXT
+#           # 새 환경 컨테이너 실행 (immutable 태그 주입)
+#           IMAGE_TAG=$IMAGE_TAG docker compose up -d app-$NEXT
 #
-#           # Health Check (솤로 최대 150초 대기 / 실패 시 롤백)
+#           # Health Check (최대 150초 대기 / 실패 시 롤백)
 #           echo "Health Check 대기 중..."
 #           for i in $(seq 1 30); do
 #             STATUS=$(docker inspect \
@@ -66,7 +113,7 @@ jobs:
 #             fi
 #
 #             if [ $i -eq 30 ]; then
-#               echo "Health Check 실패 - 롤백 시작"
+#               echo "Health Check 실패 - 롤백: $CURRENT 환경 유지"
 #               docker compose stop app-$NEXT
 #               docker compose rm -f app-$NEXT
 #               exit 1
@@ -78,19 +125,18 @@ jobs:
 #           # Nginx upstream 전환 (upstream.conf 교체)
 #           cp ~/SeniorON_BE/nginx/upstream.$NEXT.conf \
 #              ~/SeniorON_BE/nginx/conf.d/upstream.conf
-#
-#           # Nginx 무중단 reload
 #           docker exec senioron_be-nginx-1 nginx -s reload
 #
-#           # 활성 환경 상태 저장
-#           echo $NEXT > ~/SeniorON_BE/.current-color
+#           # 상태 저장: color:sha 형식
+#           echo "$NEXT:$IMAGE_TAG" > ~/SeniorON_BE/.current-color
 #
-#           # 기존 환경 컨테이너 종료 및 제거
-#           echo "$CURRENT 환경 종료..."
+#           # 기존 환경 컨테이너 종료 및 제거 (이미지는 유지 - 수동 롤백용)
+#           echo "$CURRENT 환경 종료 (이미지 $PREV_TAG 보존)..."
 #           docker compose stop app-$CURRENT
 #           docker compose rm -f app-$CURRENT
 #
-#           echo "배포 완료: $NEXT 환경으로 전환됨"
+#           echo "배포 완료: $NEXT 환경 활성화 ($IMAGE_TAG)"
+#           # ──────────────────────────────────────────────────────────────────
 #           ==========================================================
 
           docker compose down
