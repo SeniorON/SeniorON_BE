@@ -4,6 +4,7 @@ import com.example.senioron.domain.notification.entity.Notification;
 import com.example.senioron.domain.notification.entity.NotificationType;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -54,5 +55,9 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
             @Param("type") NotificationType type,
             @Param("thirtyDaysAgo") LocalDateTime thirtyDaysAgo
     );
+
+    @Modifying
+    @Query("DELETE FROM Notification n WHERE n.createdAt < :threshold")
+    int deleteAllByCreatedAtBefore(@Param("threshold") LocalDateTime threshold);
 
 }
