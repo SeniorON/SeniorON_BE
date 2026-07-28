@@ -28,24 +28,34 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no \
               -i ~/.ssh/id_ed25519 \
-              ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
-
-          cd ~/SeniorON_BE
-
-          git pull origin develop
-
-          docker compose pull
+              ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+              'cd ~/SeniorON_BE \
+               && git pull origin develop \
+               && docker compose pull \
+               && docker compose down \
+               && docker compose up -d \
+               && docker image prune -f'
 
 #           ==========================================================
-#           TODO: Blue-Green 무중단 배포 (적용 시 아래 docker compose down/up 제거)
+#           TODO: Blue-Green 무중단 배포 (적용 시 위 ssh 커맨드를 아래로 교체)
 #           ※ docker image prune -f 도 제거할 것 - 이전 이미지 보존이 롤백의 전제 조건
 #
-#           # IMAGE_TAG: docker-image.yml 이 이미 github.sha 로 태그를 푸시함
-#           IMAGE_TAG=$(echo "${{ github.event.workflow_run.head_sha }}" | cut -c1-7)
+#           IMAGE_TAG 는 git rev-parse --short HEAD 로 EC2 서버에서 직접 추출
+#
+#           ssh 커맨드 교체 방법:
+#             run: |
+#               ssh -o StrictHostKeyChecking=no \
+#                   -i ~/.ssh/id_ed25519 \
+#                   ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+#                   'bash -s' < ./scripts/blue-green-deploy.sh
+#
+#           (배포 스크립트를 scripts/blue-green-deploy.sh 로 분리하면 관리가 편함)
 #
 #           # ─── 최초 배포 Bootstrap (상태 파일 없을 때만 실행) ───────────────
 #           if [ ! -f ~/SeniorON_BE/.current-color ]; then
 #             echo "최초 배포: Blue 환경 bootstrap 시작 (IMAGE_TAG=$IMAGE_TAG)"
+#
+#             IMAGE_TAG=$(git rev-parse --short HEAD)
 #
 #             # Blue 환경 기동
 #             IMAGE_TAG=$IMAGE_TAG docker compose up -d app-blue
@@ -85,6 +95,7 @@ jobs:
 #
 #           # ─── 일반 배포: Blue ↔ Green 토글 ────────────────────────────────
 #           # 상태 파일 형식: "blue:a1b2c3d" or "green:a1b2c3d"
+#           IMAGE_TAG=$(git rev-parse --short HEAD)
 #           CURRENT_STATE=$(cat ~/SeniorON_BE/.current-color)
 #           CURRENT=$(echo "$CURRENT_STATE" | cut -d: -f1)
 #           PREV_TAG=$(echo "$CURRENT_STATE" | cut -d: -f2)
@@ -138,11 +149,3 @@ jobs:
 #           echo "배포 완료: $NEXT 환경 활성화 ($IMAGE_TAG)"
 #           # ──────────────────────────────────────────────────────────────────
 #           ==========================================================
-
-          docker compose down
-
-          docker compose up -d
-
-          docker image prune -f
-
-          EOF
