@@ -67,6 +67,19 @@ public class HomeService {
     private final FamilyRepository familyRepository;
     private static final long DEVICE_OFFLINE_THRESHOLD_MINUTES = 30;
 
+    private String resolveButtonName(
+            String requestedButtonName,
+            String defaultButtonName
+    ) {
+
+        if (requestedButtonName == null
+                || requestedButtonName.isBlank()) {
+            return defaultButtonName;
+        }
+
+        return requestedButtonName.trim();
+    }
+
     private boolean isDeviceConnected(
             LocalDateTime lastConnectedAt
     ) {
@@ -374,10 +387,16 @@ public class HomeService {
                                             buttonRequest.getOptionId()
                                     );
 
+                            String buttonName =
+                                    resolveButtonName(
+                                            buttonRequest.getButtonName(),
+                                            option.getButtonName()
+                                    );
+
                             return Home.createButton(
                                     user,
                                     buttonRequest.getButtonOrder(),
-                                    option.getButtonName(),
+                                    buttonName,
                                     option.getIcon(),
                                     option.getActionType(),
                                     option.getActionValue(),
