@@ -116,6 +116,9 @@ public class HomeResponse {
 
     public static class SeniorProfileResponse {
 
+        @JsonProperty("senior_id")
+        private Long seniorId;
+
         private String name;
         private String relation;
         private LocalDate birth;
@@ -124,6 +127,7 @@ public class HomeResponse {
         private String phone;
 
         public SeniorProfileResponse(
+                Long seniorId,
                 String name,
                 String relation,
                 LocalDate birth,
@@ -131,6 +135,7 @@ public class HomeResponse {
                 String address,
                 String phone
         ) {
+            this.seniorId = seniorId;
             this.name = name;
             this.relation = relation;
             this.birth = birth;
@@ -146,8 +151,13 @@ public class HomeResponse {
                     null,
                     null,
                     null,
+                    null,
                     null
             );
+        }
+
+        public Long getSeniorId() {
+            return seniorId;
         }
 
         public String getName() {
