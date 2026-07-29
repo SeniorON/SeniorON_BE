@@ -1,6 +1,7 @@
 package com.example.senioron.domain.medication.service;
 
 import com.example.senioron.domain.medication.dto.response.MedicationCheckResponse;
+import com.example.senioron.domain.medication.dto.response.MedicationMonthlyScheduleResponse;
 import com.example.senioron.domain.medication.dto.response.MedicationScheduleResponse;
 import com.example.senioron.domain.medication.dto.response.MedicationScheduleStatus;
 import com.example.senioron.domain.medication.entity.Medication;
@@ -13,10 +14,12 @@ import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
+import java.time.DateTimeException;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -52,7 +55,8 @@ public class MedicationLogService {
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
-    public List<MedicationScheduleResponse> getOwnDailyMedicationSchedules(
+    public List<MedicationScheduleResponse>
+    getOwnDailyMedicationSchedules(
             Long requesterUserId,
             LocalDate date
     ) {
@@ -74,7 +78,8 @@ public class MedicationLogService {
     }
 
     @Transactional
-    public List<MedicationScheduleResponse> getParentDailyMedicationSchedules(
+    public List<MedicationScheduleResponse>
+    getParentDailyMedicationSchedules(
             Long requesterUserId,
             Long parentUserId,
             LocalDate date
@@ -100,7 +105,37 @@ public class MedicationLogService {
         );
     }
 
-    private List<MedicationScheduleResponse> getDailyMedicationSchedules(
+    public MedicationMonthlyScheduleResponse
+    getParentMonthlyMedicationSchedules(
+            Long requesterUserId,
+            Long parentUserId,
+            Integer year,
+            Integer month
+    ) {
+        User requester =
+                getUserOrThrow(
+                        requesterUserId
+                );
+
+        validateChild(
+                requester
+        );
+
+        User parentUser =
+                getSameFamilyParentOrThrow(
+                        requester,
+                        parentUserId
+                );
+
+        return getMonthlyMedicationSchedules(
+                parentUser,
+                year,
+                month
+        );
+    }
+
+    private List<MedicationScheduleResponse>
+    getDailyMedicationSchedules(
             User parentUser,
             LocalDate date
     ) {
@@ -153,6 +188,88 @@ public class MedicationLogService {
                                 .build()
                 )
                 .toList();
+    }
+
+    private MedicationMonthlyScheduleResponse
+    getMonthlyMedicationSchedules(
+            User parentUser,
+            Integer year,
+            Integer month
+    ) {
+        YearMonth yearMonth =
+                createYearMonthOrThrow(
+                        year,
+                        month
+                );
+
+        LocalDate monthStartDate =
+                yearMonth.atDay(1);
+
+        LocalDate monthEndExclusiveDate =
+                yearMonth.plusMonths(1)
+                        .atDay(1);
+
+        LocalDateTime monthStart =
+                monthStartDate.atStartOfDay();
+
+        LocalDateTime monthEndExclusive =
+                monthEndExclusiveDate.atStartOfDay();
+
+        List<Medication> medications =
+                medicationRepository
+                        .findEffectiveMedicationsForMonth(
+                                parentUser,
+                                monthStart,
+                                monthEndExclusive
+                        );
+
+        List<LocalDate> scheduledDates =
+                monthStartDate
+                        .datesUntil(
+                                monthEndExclusiveDate
+                        )
+                        .filter(date ->
+                                medications.stream()
+                                        .anyMatch(medication ->
+                                                isScheduledForDate(
+                                                        medication,
+                                                        date
+                                                )
+                                        )
+                        )
+                        .toList();
+
+        return new MedicationMonthlyScheduleResponse(
+                yearMonth.getYear(),
+                yearMonth.getMonthValue(),
+                scheduledDates
+        );
+    }
+
+    private YearMonth createYearMonthOrThrow(
+            Integer year,
+            Integer month
+    ) {
+        if (year == null
+                || month == null
+                || year < 1
+                || month < 1
+                || month > 12) {
+            throw new BusinessException(
+                    ErrorCode.BAD_REQUEST
+            );
+        }
+
+        try {
+            return YearMonth.of(
+                    year,
+                    month
+            );
+        } catch (DateTimeException exception) {
+            throw new BusinessException(
+                    ErrorCode.BAD_REQUEST
+            );
+        }
     }
 
     @Transactional
@@ -223,54 +340,6 @@ public class MedicationLogService {
 
         return markMedicationAsTaken(
                 nearestMedicationLog,
-                now
-        );
-    }
-
-    @Transactional
-    public MedicationCheckResponse checkMedication(
-            Long medicationLogId,
-            Long requesterUserId
-    ) {
-        User parentUser =
-                getUserOrThrow(
-                        requesterUserId
-                );
-
-        if (parentUser.getRole() != Role.PARENT) {
-            throw new BusinessException(
-                    ErrorCode.FORBIDDEN
-            );
-        }
-
-        MedicationLog medicationLog =
-                medicationLogRepository
-                        .findById(
-                                medicationLogId
-                        )
-                        .orElseThrow(() ->
-                                new BusinessException(
-                                        ErrorCode.MEDICATION_NOT_FOUND
-                                )
-                        );
-
-        if (!Objects.equals(
-                medicationLog.getUser()
-                        .getUsersId(),
-                parentUser.getUsersId()
-        )) {
-            throw new BusinessException(
-                    ErrorCode.MEDICATION_NOT_FOUND
-            );
-        }
-
-        LocalDateTime now =
-                LocalDateTime.now(
-                        KOREA_ZONE_ID
-                );
-
-        return markMedicationAsTaken(
-                medicationLog,
                 now
         );
     }
