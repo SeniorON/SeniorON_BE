@@ -104,6 +104,7 @@ public class MedicationEventListener {
 
         int successCount = 0;
         int failureCount = 0;
+        int skippedCount = 0;
 
         for (Device childDevice : childDevices) {
             String deviceToken =
@@ -111,7 +112,7 @@ public class MedicationEventListener {
 
             if (deviceToken == null
                     || deviceToken.isBlank()) {
-                failureCount++;
+                skippedCount++;
 
                 log.warn(
                         "자녀 기기의 FCM 토큰이 없습니다. deviceId={}",
@@ -130,15 +131,15 @@ public class MedicationEventListener {
                 successCount++;
 
                 log.info(
-                        "자녀 복약 완료 FCM 발송 요청 성공. deviceId={}, medicationLogId={}",
+                        "자녀 복약 완료 FCM 발송 요청 처리. deviceId={}, medicationLogId={}",
                         childDevice.getDeviceId(),
                         event.medicationLogId()
                 );
-            } catch (Exception e) {
+            } catch (RuntimeException e) {
                 failureCount++;
 
                 log.error(
-                        "자녀 복약 완료 FCM 발송 실패. deviceId={}, medicationLogId={}",
+                        "자녀 복약 완료 FCM 발송 요청 실패. deviceId={}, medicationLogId={}",
                         childDevice.getDeviceId(),
                         event.medicationLogId(),
                         e
@@ -147,11 +148,13 @@ public class MedicationEventListener {
         }
 
         log.info(
-                "자녀 복약 완료 푸시 처리 종료. parentUserId={}, childDeviceCount={}, successCount={}, failureCount={}",
+                "자녀 복약 완료 푸시 요청 처리 종료. parentUserId={}, childDeviceCount={}, "
+                        + "requestSuccessCount={}, requestFailureCount={}, skippedCount={}",
                 event.parentUserId(),
                 childDevices.size(),
                 successCount,
-                failureCount
+                failureCount,
+                skippedCount
         );
     }
 

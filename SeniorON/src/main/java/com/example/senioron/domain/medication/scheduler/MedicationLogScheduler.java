@@ -1,6 +1,7 @@
 package com.example.senioron.domain.medication.scheduler;
 
 import com.example.senioron.domain.medication.service.MedicationLogService;
+import java.util.concurrent.CompletableFuture;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -17,7 +18,16 @@ public class MedicationLogScheduler {
 
     @EventListener(ApplicationReadyEvent.class)
     public void createMedicationLogsOnStartup() {
-        createTodayMedicationLogs();
+        CompletableFuture.runAsync(() -> {
+            try {
+                createTodayMedicationLogs();
+            } catch (RuntimeException e) {
+                log.error(
+                        "애플리케이션 시작 시 복약 로그 생성 실패",
+                        e
+                );
+            }
+        });
     }
 
     @Scheduled(
