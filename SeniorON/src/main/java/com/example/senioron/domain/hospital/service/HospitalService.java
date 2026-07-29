@@ -5,6 +5,7 @@ import com.example.senioron.domain.hospital.dto.request.HospitalUpdateRequest;
 import com.example.senioron.domain.hospital.dto.response.HospitalCreateResponse;
 import com.example.senioron.domain.hospital.dto.response.HospitalDetailResponse;
 import com.example.senioron.domain.hospital.dto.response.HospitalListResponse;
+import com.example.senioron.domain.hospital.dto.response.HospitalUpcomingResponse;
 import com.example.senioron.domain.hospital.entity.Hospital;
 import com.example.senioron.domain.hospital.repository.HospitalRepository;
 import com.example.senioron.domain.user.entity.Role;
@@ -13,11 +14,17 @@ import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +32,12 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class HospitalService {
+
+    private static final ZoneId KOREA_ZONE_ID =
+            ZoneId.of("Asia/Seoul");
+
+    private static final int UPCOMING_DATE_LIMIT =
+            2;
 
     private final HospitalRepository hospitalRepository;
     private final EntityManager entityManager;
@@ -35,34 +48,57 @@ public class HospitalService {
             Long parentUserId,
             HospitalCreateRequest request
     ) {
-        User parentUser = getWritableParentOrThrow(
-                requesterUserId,
-                parentUserId
-        );
+        User parentUser =
+                getWritableParentOrThrow(
+                        requesterUserId,
+                        parentUserId
+                );
 
         LocalDate date;
         LocalTime time;
 
         try {
-            date = LocalDate.parse(request.getScheduleDate());
-            time = LocalTime.parse(request.getScheduleTime());
+            date =
+                    LocalDate.parse(
+                            request.getScheduleDate()
+                    );
+
+            time =
+                    LocalTime.parse(
+                            request.getScheduleTime()
+                    );
         } catch (DateTimeParseException exception) {
             throw new BusinessException(
                     ErrorCode.BAD_REQUEST
             );
         }
 
-        Hospital hospital = Hospital.builder()
-                .user(parentUser)
-                .hospitalName(request.getHospitalName())
-                .department(request.getDepartment())
-                .scheduleDate(date)
-                .scheduleTime(time)
-                .reminderType(request.getReminderType())
-                .build();
+        Hospital hospital =
+                Hospital.builder()
+                        .user(
+                                parentUser
+                        )
+                        .hospitalName(
+                                request.getHospitalName()
+                        )
+                        .department(
+                                request.getDepartment()
+                        )
+                        .scheduleDate(
+                                date
+                        )
+                        .scheduleTime(
+                                time
+                        )
+                        .reminderType(
+                                request.getReminderType()
+                        )
+                        .build();
 
         Hospital savedHospital =
-                hospitalRepository.save(hospital);
+                hospitalRepository.save(
+                        hospital
+                );
 
         return HospitalCreateResponse.builder()
                 .hospitalId(
@@ -92,13 +128,18 @@ public class HospitalService {
             int year,
             int month
     ) {
-        User parentUser = getReadableParentOrThrow(
-                requesterUserId,
-                parentUserId
-        );
+        User parentUser =
+                getReadableParentOrThrow(
+                        requesterUserId,
+                        parentUserId
+                );
 
         LocalDate startDate =
-                LocalDate.of(year, month, 1);
+                LocalDate.of(
+                        year,
+                        month,
+                        1
+                );
 
         LocalDate endDate =
                 startDate.withDayOfMonth(
@@ -133,7 +174,8 @@ public class HospitalService {
                                 )
                                 .reminderType(
                                         hospital.getReminderType() != null
-                                                ? hospital.getReminderType().name()
+                                                ? hospital.getReminderType()
+                                                .name()
                                                 : null
                                 )
                                 .build()
@@ -147,10 +189,11 @@ public class HospitalService {
             Long parentUserId,
             Long hospitalId
     ) {
-        User parentUser = getWritableParentOrThrow(
-                requesterUserId,
-                parentUserId
-        );
+        User parentUser =
+                getWritableParentOrThrow(
+                        requesterUserId,
+                        parentUserId
+                );
 
         Hospital hospital =
                 getHospitalOwnedByParentOrThrow(
@@ -158,7 +201,9 @@ public class HospitalService {
                         parentUser
                 );
 
-        hospitalRepository.delete(hospital);
+        hospitalRepository.delete(
+                hospital
+        );
     }
 
     @Transactional
@@ -168,10 +213,11 @@ public class HospitalService {
             Long hospitalId,
             HospitalUpdateRequest request
     ) {
-        User parentUser = getWritableParentOrThrow(
-                requesterUserId,
-                parentUserId
-        );
+        User parentUser =
+                getWritableParentOrThrow(
+                        requesterUserId,
+                        parentUserId
+                );
 
         Hospital hospital =
                 getHospitalOwnedByParentOrThrow(
@@ -183,12 +229,15 @@ public class HospitalService {
         LocalTime time;
 
         try {
-            date = LocalDate.parse(
-                    request.getScheduleDate()
-            );
-            time = LocalTime.parse(
-                    request.getScheduleTime()
-            );
+            date =
+                    LocalDate.parse(
+                            request.getScheduleDate()
+                    );
+
+            time =
+                    LocalTime.parse(
+                            request.getScheduleTime()
+                    );
         } catch (DateTimeParseException exception) {
             throw new BusinessException(
                     ErrorCode.BAD_REQUEST
@@ -209,10 +258,11 @@ public class HospitalService {
             Long parentUserId,
             LocalDate date
     ) {
-        User parentUser = getReadableParentOrThrow(
-                requesterUserId,
-                parentUserId
-        );
+        User parentUser =
+                getReadableParentOrThrow(
+                        requesterUserId,
+                        parentUserId
+                );
 
         List<Hospital> hospitals =
                 hospitalRepository
@@ -222,40 +272,126 @@ public class HospitalService {
                         );
 
         return hospitals.stream()
-                .map(hospital ->
-                        HospitalDetailResponse.builder()
-                                .hospitalId(
-                                        hospital.getHospital_id()
+                .map(
+                        this::toHospitalDetailResponse
+                )
+                .toList();
+    }
+
+    public List<HospitalUpcomingResponse> getUpcomingHospitals(
+            Long requesterUserId,
+            Long parentUserId
+    ) {
+        User parentUser =
+                getReadableParentOrThrow(
+                        requesterUserId,
+                        parentUserId
+                );
+
+        LocalDateTime now =
+                LocalDateTime.now(
+                        KOREA_ZONE_ID
+                );
+
+        LocalDate today =
+                now.toLocalDate();
+
+        LocalTime currentTime =
+                now.toLocalTime();
+
+        List<LocalDate> upcomingDates =
+                hospitalRepository
+                        .findUpcomingScheduleDates(
+                                parentUser,
+                                today,
+                                currentTime,
+                                PageRequest.of(
+                                        0,
+                                        UPCOMING_DATE_LIMIT
                                 )
-                                .hospitalName(
-                                        hospital.getHospitalName()
+                        );
+
+        if (upcomingDates.isEmpty()) {
+            return List.of();
+        }
+
+        List<Hospital> hospitals =
+                hospitalRepository
+                        .findUpcomingHospitalsByDates(
+                                parentUser,
+                                upcomingDates,
+                                today,
+                                currentTime
+                        );
+
+        Map<LocalDate, List<HospitalDetailResponse>>
+                hospitalsByDate =
+                hospitals.stream()
+                        .collect(
+                                Collectors.groupingBy(
+                                        Hospital::getScheduleDate,
+                                        LinkedHashMap::new,
+                                        Collectors.mapping(
+                                                this::toHospitalDetailResponse,
+                                                Collectors.toList()
+                                        )
                                 )
-                                .department(
-                                        hospital.getDepartment()
-                                )
+                        );
+
+        return upcomingDates.stream()
+                .map(date ->
+                        HospitalUpcomingResponse.builder()
                                 .scheduleDate(
-                                        hospital.getScheduleDate()
+                                        date
                                 )
-                                .scheduleTime(
-                                        hospital.getScheduleTime()
-                                )
-                                .reminderType(
-                                        hospital.getReminderType() != null
-                                                ? hospital.getReminderType().name()
-                                                : null
+                                .schedules(
+                                        hospitalsByDate.getOrDefault(
+                                                date,
+                                                List.of()
+                                        )
                                 )
                                 .build()
                 )
                 .toList();
     }
 
+    private HospitalDetailResponse
+    toHospitalDetailResponse(
+            Hospital hospital
+    ) {
+        return HospitalDetailResponse.builder()
+                .hospitalId(
+                        hospital.getHospital_id()
+                )
+                .hospitalName(
+                        hospital.getHospitalName()
+                )
+                .department(
+                        hospital.getDepartment()
+                )
+                .scheduleDate(
+                        hospital.getScheduleDate()
+                )
+                .scheduleTime(
+                        hospital.getScheduleTime()
+                )
+                .reminderType(
+                        hospital.getReminderType() != null
+                                ? hospital.getReminderType()
+                                .name()
+                                : null
+                )
+                .build();
+    }
+
     private User getReadableParentOrThrow(
             Long requesterUserId,
             Long parentUserId
     ) {
-        User requester = getUserOrThrow(
-                requesterUserId
-        );
+        User requester =
+                getUserOrThrow(
+                        requesterUserId
+                );
 
         if (requester.getRole() == Role.PARENT) {
             if (!Objects.equals(
@@ -270,7 +406,9 @@ public class HospitalService {
             return requester;
         }
 
-        validateChild(requester);
+        validateChild(
+                requester
+        );
 
         return getSameFamilyParentOrThrow(
                 requester,
@@ -282,11 +420,14 @@ public class HospitalService {
             Long requesterUserId,
             Long parentUserId
     ) {
-        User requester = getUserOrThrow(
-                requesterUserId
-        );
+        User requester =
+                getUserOrThrow(
+                        requesterUserId
+                );
 
-        validateChild(requester);
+        validateChild(
+                requester
+        );
 
         return getSameFamilyParentOrThrow(
                 requester,
@@ -294,7 +435,9 @@ public class HospitalService {
         );
     }
 
-    private void validateChild(User requester) {
+    private void validateChild(
+            User requester
+    ) {
         if (requester.getRole() != Role.CHILD) {
             throw new BusinessException(
                     ErrorCode.FORBIDDEN
@@ -312,9 +455,10 @@ public class HospitalService {
             User requester,
             Long parentUserId
     ) {
-        User parentUser = getUserOrThrow(
-                parentUserId
-        );
+        User parentUser =
+                getUserOrThrow(
+                        parentUserId
+                );
 
         if (parentUser.getRole() != Role.PARENT) {
             throw new BusinessException(
@@ -325,8 +469,10 @@ public class HospitalService {
         boolean belongsToSameFamily =
                 parentUser.getFamily() != null
                         && Objects.equals(
-                        requester.getFamily().getFamilyId(),
-                        parentUser.getFamily().getFamilyId()
+                        requester.getFamily()
+                                .getFamilyId(),
+                        parentUser.getFamily()
+                                .getFamilyId()
                 );
 
         if (!belongsToSameFamily) {
@@ -338,13 +484,15 @@ public class HospitalService {
         return parentUser;
     }
 
-    private User getUserOrThrow(Long userId) {
+    private User getUserOrThrow(
+            Long userId
+    ) {
         return entityManager.createQuery(
                         """
-                        SELECT u
-                        FROM User u
-                        LEFT JOIN FETCH u.family
-                        WHERE u.usersId = :userId
+                        SELECT user
+                        FROM User user
+                        LEFT JOIN FETCH user.family
+                        WHERE user.usersId = :userId
                         """,
                         User.class
                 )
@@ -366,7 +514,9 @@ public class HospitalService {
             User parentUser
     ) {
         Hospital hospital =
-                hospitalRepository.findById(hospitalId)
+                hospitalRepository.findById(
+                                hospitalId
+                        )
                         .orElseThrow(() ->
                                 new BusinessException(
                                         ErrorCode.HOSPITAL_SCHEDULE_NOT_FOUND
@@ -386,7 +536,8 @@ public class HospitalService {
             User parentUser
     ) {
         if (!Objects.equals(
-                hospital.getUser().getUsersId(),
+                hospital.getUser()
+                        .getUsersId(),
                 parentUser.getUsersId()
         )) {
             throw new BusinessException(
