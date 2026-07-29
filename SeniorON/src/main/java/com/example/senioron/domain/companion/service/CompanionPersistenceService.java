@@ -23,6 +23,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -45,6 +46,7 @@ public class CompanionPersistenceService {
 
     private final CompanionTextCipher textCipher;
 
+    @Transactional(propagation = Propagation.NEVER)
     public TurnCreationResult createTurn(
             Long conversationId,
             String requestId
@@ -222,7 +224,11 @@ public class CompanionPersistenceService {
     }
 
     private CompanionTurn getTurn(Long turnId) {
+        if (turnId == null) {
+            throw new BusinessException(ErrorCode.COMPANION_TURN_NOT_FOUND);
+        }
+
         return turnRepository.findById(turnId)
-                .orElseThrow(() -> new IllegalStateException("말벗 턴을 찾을 수 없습니다. turnId=" + turnId));
+                .orElseThrow(() -> new BusinessException(ErrorCode.COMPANION_TURN_NOT_FOUND));
     }
 }

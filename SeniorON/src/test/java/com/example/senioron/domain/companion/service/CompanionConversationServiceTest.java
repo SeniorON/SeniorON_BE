@@ -299,9 +299,7 @@ class CompanionConversationServiceTest {
         );
 
         given(
-                conversationRepository.findById(
-                        CONVERSATION_ID
-                )
+                conversationRepository.findByIdForUpdate(CONVERSATION_ID)
         ).willReturn(
                 Optional.of(conversation)
         );
@@ -353,9 +351,7 @@ class CompanionConversationServiceTest {
         );
 
         given(
-                conversationRepository.findById(
-                        CONVERSATION_ID
-                )
+                conversationRepository.findByIdForUpdate(CONVERSATION_ID)
         ).willReturn(
                 Optional.of(otherConversation)
         );
@@ -391,9 +387,7 @@ class CompanionConversationServiceTest {
         );
 
         given(
-                conversationRepository.findById(
-                        CONVERSATION_ID
-                )
+                conversationRepository.findByIdForUpdate(CONVERSATION_ID)
         ).willReturn(
                 Optional.empty()
         );
@@ -431,7 +425,7 @@ class CompanionConversationServiceTest {
         );
 
         verify(conversationRepository, never())
-                .findById(any());
+                .findByIdForUpdate(any());
     }
 
     @Test
@@ -457,9 +451,7 @@ class CompanionConversationServiceTest {
         );
 
         given(
-                conversationRepository.findById(
-                        CONVERSATION_ID
-                )
+                conversationRepository.findByIdForUpdate(CONVERSATION_ID)
         ).willReturn(
                 Optional.of(conversation)
         );
@@ -500,9 +492,7 @@ class CompanionConversationServiceTest {
         );
 
         given(
-                conversationRepository.findById(
-                        CONVERSATION_ID
-                )
+                conversationRepository.findById(CONVERSATION_ID)
         ).willReturn(
                 Optional.of(conversation)
         );
@@ -538,9 +528,7 @@ class CompanionConversationServiceTest {
         );
 
         given(
-                conversationRepository.findById(
-                        CONVERSATION_ID
-                )
+                conversationRepository.findById(CONVERSATION_ID)
         ).willReturn(
                 Optional.of(conversation)
         );
@@ -577,9 +565,7 @@ class CompanionConversationServiceTest {
         );
 
         given(
-                conversationRepository.findById(
-                        CONVERSATION_ID
-                )
+                conversationRepository.findById(CONVERSATION_ID)
         ).willReturn(
                 Optional.of(conversation)
         );

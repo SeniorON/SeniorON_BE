@@ -115,8 +115,7 @@ public class CompanionConversationService {
         return toStartResponse(saved, true);
     }
 
-    private CompanionConversationStartResponse
-    toStartResponse(
+    private CompanionConversationStartResponse toStartResponse(
             CompanionConversation conversation,
             boolean created
     ) {
@@ -134,8 +133,7 @@ public class CompanionConversationService {
                 .build();
     }
 
-    private CompanionConversation
-    getConversationOrThrow(
+    private CompanionConversation getConversationOrThrow(
             Long conversationId
     ) {
         if (conversationId == null) {
@@ -155,7 +153,7 @@ public class CompanionConversationService {
         User user = getCurrentParent(principal);
 
         CompanionConversation conversation =
-                getConversationOrThrow(conversationId);
+                getConversationForUpdateOrThrow(conversationId);
 
         validateOwner(conversation, user);
 
@@ -174,8 +172,7 @@ public class CompanionConversationService {
                 .build();
     }
 
-    public CompanionConversation
-    getOwnedActiveConversation(
+    public CompanionConversation getOwnedActiveConversation(
             User principal,
             Long conversationId
     ) {
@@ -209,5 +206,21 @@ public class CompanionConversationService {
         }
     }
 
+    private CompanionConversation getConversationForUpdateOrThrow(
+            Long conversationId
+    ) {
+        if (conversationId == null) {
+            throw new BusinessException(
+                    ErrorCode.COMPANION_CONVERSATION_NOT_FOUND
+            );
+        }
 
+        return conversationRepository
+                .findByIdForUpdate(conversationId)
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.COMPANION_CONVERSATION_NOT_FOUND
+                        )
+                );
+    }
 }
