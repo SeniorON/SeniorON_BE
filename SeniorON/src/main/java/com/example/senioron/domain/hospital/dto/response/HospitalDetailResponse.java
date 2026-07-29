@@ -1,13 +1,13 @@
 package com.example.senioron.domain.hospital.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.v3.oas.annotations.media.Schema;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-
-import java.time.LocalDate;
-import java.time.LocalTime;
 
 @Getter
 @Builder
@@ -27,9 +27,10 @@ public class HospitalDetailResponse {
     @Schema(description = "진료 날짜", example = "2026-06-19")
     private LocalDate scheduleDate;
 
+    @JsonFormat(pattern = "HH:mm")
     @Schema(description = "진료 시간", example = "10:30")
     private LocalTime scheduleTime;
 
-    @Schema(description = "알림 타입", example = "BEFORE_1_DAY")
+    @Schema(description = "알림 타입", example = "DAY_BEFORE")
     private String reminderType;
 }
