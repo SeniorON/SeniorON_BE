@@ -30,6 +30,9 @@ replay_pid*
 # Firebase Admin SDK Private Key
 *firebase-adminsdk*.json
 
+# FCM 테스트 토큰 발급 도구의 실제 설정값 (tools/fcm-token-tester/README.md 참고)
+tools/fcm-token-tester/firebase-config.js
+
 # IntelliJ IDEA settings
 .idea/
 
