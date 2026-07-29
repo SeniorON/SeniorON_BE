@@ -17,6 +17,9 @@ public class NotificationHomeResponse {
     private boolean enabled;
     private boolean hasAlert;
 
+    private Long notificationId;
+    private Long eventId;
+
     private LocalDateTime occurredAt;
     private String dateTimeLabel;
     private String summary;
@@ -50,6 +53,8 @@ public class NotificationHomeResponse {
                     .type(type)
                     .enabled(enabled)
                     .hasAlert(true)
+                    .notificationId(latest.getNotificationId())
+                    .eventId(event != null ? event.getEventId() : null)
                     .occurredAt(latest.getCreatedAt())
                     .dateTimeLabel(resolveDateTimeLabel(referenceTime, withSinceSuffix))
                     .summary(latest.getBody())
