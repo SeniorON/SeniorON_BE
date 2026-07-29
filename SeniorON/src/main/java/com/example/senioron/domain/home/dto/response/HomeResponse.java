@@ -203,13 +203,17 @@ public class HomeResponse {
         @JsonProperty("action_value")
         private String actionValue;
 
+        @JsonProperty("package_name")
+        private String packageName;
+
         public MusicCardResponse(
                 Boolean enabled,
                 MusicApp musicApp,
                 String appName,
                 String icon,
                 ActionType actionType,
-                String actionValue
+                String actionValue,
+                String packageName
         ) {
             this.enabled = enabled;
             this.musicApp = musicApp;
@@ -217,11 +221,13 @@ public class HomeResponse {
             this.icon = icon;
             this.actionType = actionType;
             this.actionValue = actionValue;
+            this.packageName = packageName;
         }
 
         public static MusicCardResponse empty() {
             return new MusicCardResponse(
                     false,
+                    null,
                     null,
                     null,
                     null,
@@ -253,6 +259,10 @@ public class HomeResponse {
         public String getActionValue() {
             return actionValue;
         }
+
+        public String getPackageName() {
+            return packageName;
+        }
     }
 
     public static class HomeButtonResponse {
@@ -274,13 +284,17 @@ public class HomeResponse {
         @JsonProperty("action_value")
         private String actionValue;
 
+        @JsonProperty("package_name")
+        private String packageName;
+
         public HomeButtonResponse(
                 Long buttonId,
                 Integer buttonOrder,
                 String buttonName,
                 String icon,
                 ActionType actionType,
-                String actionValue
+                String actionValue,
+                String packageName
         ) {
             this.buttonId = buttonId;
             this.buttonOrder = buttonOrder;
@@ -288,6 +302,7 @@ public class HomeResponse {
             this.icon = icon;
             this.actionType = actionType;
             this.actionValue = actionValue;
+            this.packageName = packageName;
         }
 
         public Long getButtonId() {
@@ -312,6 +327,9 @@ public class HomeResponse {
 
         public String getActionValue() {
             return actionValue;
+        }
+        public String getPackageName() {
+            return packageName;
         }
     }
 }

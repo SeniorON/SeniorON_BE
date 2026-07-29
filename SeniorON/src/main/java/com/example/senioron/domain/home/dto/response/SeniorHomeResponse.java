@@ -68,13 +68,17 @@ public class SeniorHomeResponse {
         @JsonProperty("action_value")
         private String actionValue;
 
+        @JsonProperty("package_name")
+        private String packageName;
+
         public ButtonResponse(
                 Long buttonId,
                 Integer buttonOrder,
                 String buttonName,
                 String icon,
                 ActionType actionType,
-                String actionValue
+                String actionValue,
+                String packageName
         ) {
             this.buttonId = buttonId;
             this.buttonOrder = buttonOrder;
@@ -82,6 +86,7 @@ public class SeniorHomeResponse {
             this.icon = icon;
             this.actionType = actionType;
             this.actionValue = actionValue;
+            this.packageName = packageName;
         }
 
         public Long getButtonId() {
@@ -106,6 +111,10 @@ public class SeniorHomeResponse {
 
         public String getActionValue() {
             return actionValue;
+        }
+
+        public String getPackageName() {
+            return packageName;
         }
     }
 }
