@@ -106,6 +106,10 @@ class EventServiceSosNotificationTest {
 
         entityManager.flush();
 
+        // 실행 전후 델타로 비교해야 이 컨텍스트를 공유하는 다른 테스트의 누적값에 영향받지 않는다.
+        double undeliveredBefore = counterValueOrZero("sos_dispatch_total", "result", "undelivered");
+        double notDeliveredBefore = sumNotDeliveredFcmSendCounters();
+
         SosEventResponse response = eventService.createSosEvent(senior, sosRequest());
 
         // 이벤트와 인앱 알림 레코드는 정상 저장된다 — 유실되는 건 푸시 채널뿐이다.
@@ -116,12 +120,18 @@ class EventServiceSosNotificationTest {
         assertThat(response.getReceiverCount()).isEqualTo(1);
         assertThat(response.getNotifiedCount()).isEqualTo(0);
 
-        assertThat(counterValue("sos_dispatch_total", "result", "undelivered")).isEqualTo(1.0);
-        // 로컬에 Firebase 자격증명이 있으면 실제 서버가 거부(failed)하고, 없으면 초기화 단계에서 스킵(skipped)된다.
-        // 둘 다 "발송 안 됨"을 뜻하므로 어느 쪽이든 하나는 반드시 기록되어야 한다.
-        double failedOrSkipped = counterValueOrZero("fcm_send_total", "result", "failed")
-                + counterValueOrZero("fcm_send_total", "result", "skipped");
-        assertThat(failedOrSkipped).isGreaterThanOrEqualTo(1.0);
+        double undeliveredAfter = counterValueOrZero("sos_dispatch_total", "result", "undelivered");
+        assertThat(undeliveredAfter - undeliveredBefore).isEqualTo(1.0);
+
+        // failed/skipped/token_invalid 중 무엇이 늘어나든 "발송 안 됨"이라는 결론은 같다.
+        double notDeliveredAfter = sumNotDeliveredFcmSendCounters();
+        assertThat(notDeliveredAfter - notDeliveredBefore).isGreaterThanOrEqualTo(1.0);
+    }
+
+    private double sumNotDeliveredFcmSendCounters() {
+        return counterValueOrZero("fcm_send_total", "result", "failed")
+                + counterValueOrZero("fcm_send_total", "result", "skipped")
+                + counterValueOrZero("fcm_send_total", "result", "token_invalid");
     }
 
     private SosEventRequest sosRequest() {

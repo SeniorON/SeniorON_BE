@@ -23,8 +23,11 @@ FCM 푸시 발송을 실제로 테스트하려면 유효한 기기(브라우저)
 ## 실행
 
 Service Worker는 `file://`로 직접 열면 등록되지 않으므로 로컬 서버로 띄워야 합니다.
+반드시 이 폴더(`tools/fcm-token-tester`)에서 서버를 띄우세요 — 저장소 루트 등 다른
+위치에서 띄우면 `index.html`이 없어 엉뚱한 디렉터리 목록이 뜹니다.
 
 ```
+cd tools/fcm-token-tester
 python3 -m http.server 8000
 ```
 
