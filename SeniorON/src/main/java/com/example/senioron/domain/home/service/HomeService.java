@@ -41,7 +41,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.Period;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -885,10 +884,10 @@ public class HomeService {
      * 오늘 병원 일정을 시간순으로 조회
      */
     private List<Hospital> findTodayHospitalSchedules(
-            User currentUser
+            User parent
     ) {
 
-        if (currentUser.getFamily() == null) {
+        if (parent.getFamily() == null) {
             throw new BusinessException(
                     ErrorCode.FAMILY_NOT_CONNECTED
             );
@@ -897,42 +896,12 @@ public class HomeService {
         LocalDate today =
                 LocalDate.now();
 
-        List<User> childManagers =
-                userRepository
-                        .findAllByFamily(
-                                currentUser.getFamily()
-                        )
-                        .stream()
-                        .filter(user ->
-                                user.getRole() == Role.CHILD
-                        )
-                        .filter(user ->
-                                user.getManagerType()
-                                        == ManagerType.PRIMARY
-                                        || user.getManagerType()
-                                        == ManagerType.SUB
-                        )
-                        .toList();
-
-        return childManagers.stream()
-                .flatMap(childManager ->
-                        hospitalRepository
-                                .findByUserAndScheduleDateBetweenOrderByScheduleDateAscScheduleTimeAsc(
-                                        childManager,
-                                        today,
-                                        today
-                                )
-                                .stream()
-                )
-                .sorted(
-                        Comparator.comparing(
-                                        Hospital::getScheduleDate
-                                )
-                                .thenComparing(
-                                        Hospital::getScheduleTime
-                                )
-                )
-                .toList();
+        return hospitalRepository
+                .findByUserAndScheduleDateBetweenOrderByScheduleDateAscScheduleTimeAsc(
+                        parent,
+                        today,
+                        today
+                );
     }
 
     /**
