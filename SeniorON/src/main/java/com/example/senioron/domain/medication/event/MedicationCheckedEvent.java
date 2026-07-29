@@ -1,6 +1,9 @@
 package com.example.senioron.domain.medication.event;
 
 public record MedicationCheckedEvent(
-        Long userId,
-        String parentName
-) {}
+        Long parentUserId,
+        String parentName,
+        Long medicationLogId,
+        String medicineName
+) {
+}

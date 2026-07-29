@@ -39,30 +39,33 @@ public class MedicationService {
     private static final ZoneId KOREA_ZONE_ID =
             ZoneId.of("Asia/Seoul");
 
-    private static final List<String> DAY_ORDER = List.of(
-            "SUN",
-            "MON",
-            "TUE",
-            "WED",
-            "THU",
-            "FRI",
-            "SAT"
-    );
+    private static final List<String> DAY_ORDER =
+            List.of(
+                    "SUN",
+                    "MON",
+                    "TUE",
+                    "WED",
+                    "THU",
+                    "FRI",
+                    "SAT"
+            );
 
     private static final Map<String, String>
-            DAY_DISPLAY_NAMES = Map.ofEntries(
-            Map.entry("SUN", "일"),
-            Map.entry("MON", "월"),
-            Map.entry("TUE", "화"),
-            Map.entry("WED", "수"),
-            Map.entry("THU", "목"),
-            Map.entry("FRI", "금"),
-            Map.entry("SAT", "토")
-    );
+            DAY_DISPLAY_NAMES =
+            Map.ofEntries(
+                    Map.entry("SUN", "일"),
+                    Map.entry("MON", "월"),
+                    Map.entry("TUE", "화"),
+                    Map.entry("WED", "수"),
+                    Map.entry("THU", "목"),
+                    Map.entry("FRI", "금"),
+                    Map.entry("SAT", "토")
+            );
 
     private final MedicationRepository medicationRepository;
     private final MedicationLogRepository medicationLogRepository;
     private final UserRepository userRepository;
+    private final MedicationLogService medicationLogService;
 
     @Transactional
     public MedicationCreateResponse createMedication(
@@ -70,29 +73,38 @@ public class MedicationService {
             Long parentUserId,
             MedicationCreateRequest request
     ) {
-        User parentUser = getWritableParentOrThrow(
-                requesterUserId,
-                parentUserId
-        );
+        User parentUser =
+                getWritableParentOrThrow(
+                        requesterUserId,
+                        parentUserId
+                );
 
         String medicationGroupId =
-                UUID.randomUUID().toString();
+                UUID.randomUUID()
+                        .toString();
 
         LocalDateTime effectiveFrom =
-                LocalDateTime.now(KOREA_ZONE_ID);
+                LocalDateTime.now(
+                        KOREA_ZONE_ID
+                );
 
-        String medicineDays = normalizeAndJoinDays(
-                request.getMedicineDays()
-        );
+        String medicineDays =
+                normalizeAndJoinDays(
+                        request.getMedicineDays()
+                );
 
         List<Medication> savedMedications =
                 request.getMedicineTimes()
                         .stream()
-                        .map(this::parseMedicineTime)
+                        .map(
+                                this::parseMedicineTime
+                        )
                         .map(medicineTime ->
                                 medicationRepository.save(
                                         Medication.builder()
-                                                .user(parentUser)
+                                                .user(
+                                                        parentUser
+                                                )
                                                 .medicineName(
                                                         request.getMedicineName()
                                                 )
@@ -111,21 +123,36 @@ public class MedicationService {
                                                 .effectiveFrom(
                                                         effectiveFrom
                                                 )
-                                                .effectiveTo(null)
+                                                .effectiveTo(
+                                                        null
+                                                )
                                                 .build()
                                 )
                         )
                         .toList();
 
+        medicationRepository.flush();
+
+        medicationLogService
+                .createTodayMedicationLogsForParent(
+                        parentUser.getUsersId()
+                );
+
         List<Long> medicationIds =
                 savedMedications.stream()
-                        .map(Medication::getMedication_id)
+                        .map(
+                                Medication::getMedication_id
+                        )
                         .toList();
 
         List<String> medicineTimes =
                 savedMedications.stream()
-                        .map(Medication::getMedicineTime)
-                        .map(LocalTime::toString)
+                        .map(
+                                Medication::getMedicineTime
+                        )
+                        .map(
+                                LocalTime::toString
+                        )
                         .toList();
 
         log.info(
@@ -149,10 +176,11 @@ public class MedicationService {
             Long requesterUserId,
             Long parentUserId
     ) {
-        User parentUser = getReadableParentOrThrow(
-                requesterUserId,
-                parentUserId
-        );
+        User parentUser =
+                getReadableParentOrThrow(
+                        requesterUserId,
+                        parentUserId
+                );
 
         return medicationRepository
                 .findAllByUserAndEffectiveToIsNullOrderByMedicineTimeAsc(
@@ -182,10 +210,11 @@ public class MedicationService {
             Long parentUserId,
             MedicationUpdateRequest request
     ) {
-        User parentUser = getWritableParentOrThrow(
-                requesterUserId,
-                parentUserId
-        );
+        User parentUser =
+                getWritableParentOrThrow(
+                        requesterUserId,
+                        parentUserId
+                );
 
         List<Medication> existingMedications =
                 medicationRepository
@@ -201,46 +230,75 @@ public class MedicationService {
         }
 
         LocalDateTime changedAt =
-                LocalDateTime.now(KOREA_ZONE_ID);
+                LocalDateTime.now(
+                        KOREA_ZONE_ID
+                );
 
         existingMedications.forEach(
-                medication -> medication.endMedication(changedAt)
+                medication ->
+                        medication.endMedication(
+                                changedAt
+                        )
         );
 
-        medicationLogRepository.deleteFutureUntakenLogs(
-                existingMedications,
-                changedAt.toLocalDate(),
-                changedAt.toLocalTime()
-        );
+        medicationLogRepository
+                .deleteFutureUntakenLogs(
+                        existingMedications,
+                        changedAt.toLocalDate(),
+                        changedAt.toLocalTime()
+                );
 
-        String medicineDays = normalizeAndJoinDays(
-                request.getMedicineDays()
-        );
+        String medicineDays =
+                normalizeAndJoinDays(
+                        request.getMedicineDays()
+                );
 
-        for (String timeString : request.getMedicineTimes()) {
+        for (String timeString :
+                request.getMedicineTimes()) {
             LocalTime medicineTime =
-                    parseMedicineTime(timeString);
+                    parseMedicineTime(
+                            timeString
+                    );
 
             Medication newMedication =
                     Medication.builder()
-                            .user(parentUser)
+                            .user(
+                                    parentUser
+                            )
                             .medicineName(
                                     request.getMedicineName()
                             )
                             .ingredientName(
                                     request.getIngredientName()
                             )
-                            .medicineTime(medicineTime)
-                            .medicineDays(medicineDays)
+                            .medicineTime(
+                                    medicineTime
+                            )
+                            .medicineDays(
+                                    medicineDays
+                            )
                             .medicationGroupId(
                                     request.getMedicationGroupId()
                             )
-                            .effectiveFrom(changedAt)
-                            .effectiveTo(null)
+                            .effectiveFrom(
+                                    changedAt
+                            )
+                            .effectiveTo(
+                                    null
+                            )
                             .build();
 
-            medicationRepository.save(newMedication);
+            medicationRepository.save(
+                    newMedication
+            );
         }
+
+        medicationRepository.flush();
+
+        medicationLogService
+                .createTodayMedicationLogsForParent(
+                        parentUser.getUsersId()
+                );
 
         log.info(
                 "약 수정 완료. requesterUserId: {}, parentUserId: {}, groupId: {}",
@@ -256,10 +314,11 @@ public class MedicationService {
             Long parentUserId,
             String medicationGroupId
     ) {
-        User parentUser = getWritableParentOrThrow(
-                requesterUserId,
-                parentUserId
-        );
+        User parentUser =
+                getWritableParentOrThrow(
+                        requesterUserId,
+                        parentUserId
+                );
 
         List<Medication> medications =
                 medicationRepository
@@ -275,17 +334,24 @@ public class MedicationService {
         }
 
         LocalDateTime deletedAt =
-                LocalDateTime.now(KOREA_ZONE_ID);
+                LocalDateTime.now(
+                        KOREA_ZONE_ID
+                );
 
         medications.forEach(
-                medication -> medication.endMedication(deletedAt)
+                medication ->
+                        medication.endMedication(
+                                deletedAt
+                        )
         );
 
-        medicationLogRepository.deleteFutureUntakenLogs(
-                medications,
-                deletedAt.toLocalDate(),
-                deletedAt.toLocalTime()
-        );
+        medicationLogRepository
+                .deleteFutureUntakenLogs(
+                        medications,
+                        deletedAt.toLocalDate(),
+                        deletedAt.toLocalTime()
+                );
+
         log.info(
                 "약 삭제 처리 완료. requesterUserId: {}, parentUserId: {}, groupId: {}",
                 requesterUserId,
@@ -298,9 +364,10 @@ public class MedicationService {
             Long requesterUserId,
             Long parentUserId
     ) {
-        User requester = getUserOrThrow(
-                requesterUserId
-        );
+        User requester =
+                getUserOrThrow(
+                        requesterUserId
+                );
 
         if (requester.getRole() == Role.PARENT) {
             if (!Objects.equals(
@@ -315,7 +382,9 @@ public class MedicationService {
             return requester;
         }
 
-        validateChild(requester);
+        validateChild(
+                requester
+        );
 
         return getSameFamilyParentOrThrow(
                 requester,
@@ -327,11 +396,14 @@ public class MedicationService {
             Long requesterUserId,
             Long parentUserId
     ) {
-        User requester = getUserOrThrow(
-                requesterUserId
-        );
+        User requester =
+                getUserOrThrow(
+                        requesterUserId
+                );
 
-        validateChild(requester);
+        validateChild(
+                requester
+        );
 
         return getSameFamilyParentOrThrow(
                 requester,
@@ -339,7 +411,9 @@ public class MedicationService {
         );
     }
 
-    private void validateChild(User requester) {
+    private void validateChild(
+            User requester
+    ) {
         if (requester.getRole() != Role.CHILD) {
             throw new BusinessException(
                     ErrorCode.FORBIDDEN
@@ -357,9 +431,10 @@ public class MedicationService {
             User requester,
             Long parentUserId
     ) {
-        User parentUser = getUserOrThrow(
-                parentUserId
-        );
+        User parentUser =
+                getUserOrThrow(
+                        parentUserId
+                );
 
         if (parentUser.getRole() != Role.PARENT) {
             throw new BusinessException(
@@ -370,8 +445,10 @@ public class MedicationService {
         boolean belongsToSameFamily =
                 parentUser.getFamily() != null
                         && Objects.equals(
-                        requester.getFamily().getFamilyId(),
-                        parentUser.getFamily().getFamilyId()
+                        requester.getFamily()
+                                .getFamilyId(),
+                        parentUser.getFamily()
+                                .getFamilyId()
                 );
 
         if (!belongsToSameFamily) {
@@ -383,8 +460,13 @@ public class MedicationService {
         return parentUser;
     }
 
-    private User getUserOrThrow(Long userId) {
-        return userRepository.findById(userId)
+    private User getUserOrThrow(
+            Long userId
+    ) {
+        return userRepository
+                .findById(
+                        userId
+                )
                 .orElseThrow(() ->
                         new BusinessException(
                                 ErrorCode.USER_NOT_FOUND
@@ -397,52 +479,65 @@ public class MedicationService {
     ) {
         Set<String> normalizedDays =
                 medicineDays.stream()
-                        .map(String::trim)
+                        .map(
+                                String::trim
+                        )
                         .map(value ->
                                 value.toUpperCase(
                                         Locale.ROOT
                                 )
                         )
-                        .map(this::normalizeDay)
-                        .filter(Objects::nonNull)
+                        .map(
+                                this::normalizeDay
+                        )
+                        .filter(
+                                Objects::nonNull
+                        )
                         .collect(
                                 Collectors.toCollection(
                                         LinkedHashSet::new
                                 )
                         );
 
-        if (normalizedDays.size()
-                != new LinkedHashSet<>(
-                medicineDays
-        ).size()) {
-            boolean containsInvalidDay =
-                    medicineDays.stream()
-                            .map(String::trim)
-                            .map(value ->
-                                    value.toUpperCase(
-                                            Locale.ROOT
-                                    )
-                            )
-                            .map(this::normalizeDay)
-                            .anyMatch(Objects::isNull);
+        boolean containsInvalidDay =
+                medicineDays.stream()
+                        .map(
+                                String::trim
+                        )
+                        .map(value ->
+                                value.toUpperCase(
+                                        Locale.ROOT
+                                )
+                        )
+                        .map(
+                                this::normalizeDay
+                        )
+                        .anyMatch(
+                                Objects::isNull
+                        );
 
-            if (containsInvalidDay) {
-                throw new BusinessException(
-                        ErrorCode.BAD_REQUEST
-                );
-            }
+        if (containsInvalidDay) {
+            throw new BusinessException(
+                    ErrorCode.BAD_REQUEST
+            );
         }
 
         return DAY_ORDER.stream()
-                .filter(normalizedDays::contains)
-                .collect(Collectors.joining(","));
+                .filter(
+                        normalizedDays::contains
+                )
+                .collect(
+                        Collectors.joining(",")
+                );
     }
 
     private LocalTime parseMedicineTime(
             String time
     ) {
         try {
-            return LocalTime.parse(time);
+            return LocalTime.parse(
+                    time
+            );
         } catch (DateTimeParseException exception) {
             throw new BusinessException(
                     ErrorCode.BAD_REQUEST
@@ -453,13 +548,19 @@ public class MedicationService {
     private String formatMedicineTime(
             LocalTime medicineTime
     ) {
-        int hour = medicineTime.getHour();
-        int minute = medicineTime.getMinute();
+        int hour =
+                medicineTime.getHour();
+
+        int minute =
+                medicineTime.getMinute();
 
         String period =
-                hour < 12 ? "오전" : "오후";
+                hour < 12
+                        ? "오전"
+                        : "오후";
 
-        int displayHour = hour % 12;
+        int displayHour =
+                hour % 12;
 
         if (displayHour == 0) {
             displayHour = 12;
@@ -492,14 +593,20 @@ public class MedicationService {
                 Arrays.stream(
                                 medicineDays.split(",")
                         )
-                        .map(String::trim)
+                        .map(
+                                String::trim
+                        )
                         .map(value ->
                                 value.toUpperCase(
                                         Locale.ROOT
                                 )
                         )
-                        .map(this::normalizeDay)
-                        .filter(Objects::nonNull)
+                        .map(
+                                this::normalizeDay
+                        )
+                        .filter(
+                                Objects::nonNull
+                        )
                         .collect(
                                 Collectors.toCollection(
                                         LinkedHashSet::new
@@ -511,12 +618,20 @@ public class MedicationService {
         }
 
         return DAY_ORDER.stream()
-                .filter(normalizedDays::contains)
-                .map(DAY_DISPLAY_NAMES::get)
-                .collect(Collectors.joining(", "));
+                .filter(
+                        normalizedDays::contains
+                )
+                .map(
+                        DAY_DISPLAY_NAMES::get
+                )
+                .collect(
+                        Collectors.joining(", ")
+                );
     }
 
-    private String normalizeDay(String day) {
+    private String normalizeDay(
+            String day
+    ) {
         if (day == null) {
             return null;
         }

@@ -8,13 +8,16 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface MedicationRepository extends JpaRepository<Medication, Long> {
+public interface MedicationRepository
+        extends JpaRepository<Medication, Long> {
 
-    List<Medication> findAllByUserAndEffectiveToIsNullOrderByMedicineTimeAsc(
+    List<Medication>
+    findAllByUserAndEffectiveToIsNullOrderByMedicineTimeAsc(
             User user
     );
 
-    List<Medication> findByUserAndMedicationGroupIdAndEffectiveToIsNull(
+    List<Medication>
+    findByUserAndMedicationGroupIdAndEffectiveToIsNull(
             User user,
             String medicationGroupId
     );
@@ -31,8 +34,33 @@ public interface MedicationRepository extends JpaRepository<Medication, Long> {
             ORDER BY m.medicineTime ASC
             """)
     List<Medication> findEffectiveMedicationsForDate(
-            @Param("user") User user,
-            @Param("dayStart") LocalDateTime dayStart,
-            @Param("dayEndExclusive") LocalDateTime dayEndExclusive
+            @Param("user")
+            User user,
+
+            @Param("dayStart")
+            LocalDateTime dayStart,
+
+            @Param("dayEndExclusive")
+            LocalDateTime dayEndExclusive
+    );
+
+    @Query("""
+            SELECT m
+            FROM Medication m
+            JOIN FETCH m.user u
+            WHERE m.effectiveFrom < :dayEndExclusive
+              AND (
+                    m.effectiveTo IS NULL
+                    OR m.effectiveTo > :dayStart
+              )
+            ORDER BY u.usersId ASC,
+                     m.medicineTime ASC
+            """)
+    List<Medication> findAllEffectiveMedicationsForDate(
+            @Param("dayStart")
+            LocalDateTime dayStart,
+
+            @Param("dayEndExclusive")
+            LocalDateTime dayEndExclusive
     );
 }

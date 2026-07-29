@@ -3,79 +3,166 @@ package com.example.senioron.domain.medication.event;
 import com.example.senioron.domain.device.entity.Device;
 import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.event.util.FcmSender;
-import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
+import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-import java.util.List;
-import java.util.stream.Collectors;
-
-@Slf4j
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class MedicationEventListener {
 
     private final UserRepository userRepository;
     private final DeviceRepository deviceRepository;
     private final FcmSender fcmSender;
 
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    public void handleMedicationCheckedEvent(MedicationCheckedEvent event) {
-        try {
-            User parent = userRepository.findById(event.userId()).orElse(null);
-            if (parent == null) return;
+    @TransactionalEventListener(
+            phase = TransactionPhase.AFTER_COMMIT
+    )
+    @Transactional(
+            propagation = Propagation.REQUIRES_NEW,
+            readOnly = true
+    )
+    public void handleMedicationChecked(
+            MedicationCheckedEvent event
+    ) {
+        User parentUser = userRepository
+                .findById(event.parentUserId())
+                .orElse(null);
 
-            Family family = parent.getFamily();
-
-            if (family != null) {
-                List<User> children = userRepository.findAllByFamily(family).stream()
-                        .filter(user -> user.getRole() == Role.CHILD)
-                        .collect(Collectors.toList());
-
-                if (!children.isEmpty()) {
-                    List<Device> devices = deviceRepository.findAllByUserIn(children);
-
-                    for (Device device : devices) {
-                        String token = device.getDeviceToken();
-                        if (token != null && !token.isBlank()) {
-
-                            log.info(" [FCM 전송 시도] 수신자 ID: {}, 디바이스 토큰: {}", parent.getUsersId(), maskToken(token));
-
-                            try {
-                                fcmSender.send(
-                                        token,
-                                        "복약 알림",
-                                        parent.getName() + "님이 약을 복용하셨습니다."
-                                );
-                                log.info(" [FCM 전송 완료] fcmSender.send() 성공적으로 호출됨!");
-                            } catch (Exception sendException) {
-                                log.error(" [개별 FCM 발송 실패] deviceToken: {}, error: {}", maskToken(token), sendException.getMessage(), sendException);
-                                log.error(" [개별 FCM 발송 실패] deviceToken: {}, error: {}", maskToken(token), sendException.getMessage(), sendException);
-                            }
-
-                        } else {
-                            log.warn(" [FCM 전송 불가] 해당 유저의 디바이스 토큰이 비어있습니다.");
-                        }
-                    }
-                } else {
-                    log.info(" [FCM 미발송] 알림을 받을 자식 계정(Role.CHILD)이 존재하지 않습니다.");
-                }
-            } else {
-                log.info(" [FCM 미발송] 속한 패밀리(Family)가 없습니다.");
-            }
-        } catch (Exception e) {
-            log.error(" [FCM 이벤트 처리 중 에러 발생] userId: {}, error: {}", event.userId(), e.getMessage(), e);
+        if (parentUser == null
+                || parentUser.getFamily() == null) {
+            log.warn(
+                    "복약 완료 푸시 대상 가족을 찾을 수 없습니다. parentUserId={}",
+                    event.parentUserId()
+            );
+            return;
         }
+
+        List<User> childUsers =
+                userRepository.findByFamilyAndUsersIdNotAndRole(
+                        parentUser.getFamily(),
+                        parentUser.getUsersId(),
+                        Role.CHILD
+                );
+
+        if (childUsers.isEmpty()) {
+            log.warn(
+                    "복약 완료 푸시를 받을 자녀 사용자가 없습니다. parentUserId={}",
+                    event.parentUserId()
+            );
+            return;
+        }
+
+        List<Device> childDevices =
+                deviceRepository.findAllByUserIn(
+                        childUsers
+                );
+
+        if (childDevices.isEmpty()) {
+            log.warn(
+                    "복약 완료 푸시를 받을 자녀 기기가 없습니다. parentUserId={}",
+                    event.parentUserId()
+            );
+            return;
+        }
+
+        String parentName = getSafeValue(
+                event.parentName(),
+                "부모님"
+        );
+
+        String medicineName = getSafeValue(
+                event.medicineName(),
+                "약"
+        );
+
+        String title = "복약 완료";
+
+        String body = parentName
+                + "님이 "
+                + medicineName
+                + "을(를) 복용했어요.";
+
+        Map<String, String> data = Map.of(
+                "type", "MEDICATION_CHECKED",
+                "title", title,
+                "body", body,
+                "parentUserId", String.valueOf(event.parentUserId()),
+                "medicationLogId", String.valueOf(event.medicationLogId()),
+                "medicineName", medicineName
+        );
+
+        int successCount = 0;
+        int failureCount = 0;
+
+        for (Device childDevice : childDevices) {
+            String deviceToken =
+                    childDevice.getDeviceToken();
+
+            if (deviceToken == null
+                    || deviceToken.isBlank()) {
+                failureCount++;
+
+                log.warn(
+                        "자녀 기기의 FCM 토큰이 없습니다. deviceId={}",
+                        childDevice.getDeviceId()
+                );
+
+                continue;
+            }
+
+            try {
+                fcmSender.sendData(
+                        deviceToken,
+                        data
+                );
+
+                successCount++;
+
+                log.info(
+                        "자녀 복약 완료 FCM 발송 요청 성공. deviceId={}, medicationLogId={}",
+                        childDevice.getDeviceId(),
+                        event.medicationLogId()
+                );
+            } catch (Exception e) {
+                failureCount++;
+
+                log.error(
+                        "자녀 복약 완료 FCM 발송 실패. deviceId={}, medicationLogId={}",
+                        childDevice.getDeviceId(),
+                        event.medicationLogId(),
+                        e
+                );
+            }
+        }
+
+        log.info(
+                "자녀 복약 완료 푸시 처리 종료. parentUserId={}, childDeviceCount={}, successCount={}, failureCount={}",
+                event.parentUserId(),
+                childDevices.size(),
+                successCount,
+                failureCount
+        );
     }
 
-    private String maskToken(String token) {
-        if (token == null || token.length() < 8) return "****";
-        return token.substring(0, 8) + "...(masked)";
+    private String getSafeValue(
+            String value,
+            String fallback
+    ) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+
+        return value;
     }
 }
