@@ -53,6 +53,7 @@ public class HomeService {
 
     private static final int MAX_BUTTON_COUNT_WITH_MUSIC_CARD = 11;
     private static final int MAX_BUTTON_COUNT_WITHOUT_MUSIC_CARD = 12;
+    private static final int MIN_BUTTON_COUNT = 7;
 
     private final HomeRepository homeRepository;
     private final ButtonOptionRepository buttonOptionRepository;
@@ -374,6 +375,11 @@ public class HomeService {
         if (buttonRequests.size() > maxButtonCount) {
             throw new BusinessException(
                     ErrorCode.HOME_BUTTON_LIMIT_EXCEEDED
+            );
+        }
+        if (buttonRequests.size() < MIN_BUTTON_COUNT) {
+            throw new BusinessException(
+                    ErrorCode.HOME_BUTTON_MINIMUM_NOT_MET
             );
         }
 
