@@ -70,22 +70,24 @@ public class HomeService {
             User user,
             HomeButtonSaveRequest.ButtonRequest buttonRequest
     ) {
-
-        String buttonName =
-                resolveButtonName(
-                        buttonRequest.getButtonName(),
-                        null
-                );
+        String buttonName = resolveButtonName(
+                buttonRequest.getButtonName(),
+                null
+        );
 
         String packageName =
-                buttonRequest.getPackageName().trim();
+                buttonRequest.getPackageName() == null
+                        || buttonRequest.getPackageName().isBlank()
+                        ? null
+                        : buttonRequest.getPackageName().trim();
 
         return Home.createButton(
                 user,
                 buttonRequest.getButtonOrder(),
                 buttonName,
                 null,
-                ActionType.APP,
+                buttonRequest.getActionType(),
+                buttonRequest.getActionValue().trim(),
                 packageName
         );
     }
@@ -206,7 +208,8 @@ public class HomeService {
                                         home.getButtonName(),
                                         home.getIcon(),
                                         home.getActionType(),
-                                        home.getActionValue()
+                                        home.getActionValue(),
+                                        home.getPackageName()
                                 )
                         )
                         .toList();
@@ -541,7 +544,10 @@ public class HomeService {
             home.updateButton(
                     buttonRequest.getButtonOrder(),
                     buttonRequest.getButtonName(),
-                    buttonRequest.getIcon()
+                    buttonRequest.getIcon(),
+                    home.getActionType(),
+                    home.getActionValue(),
+                    home.getPackageName()
             );
         }
     }
@@ -641,7 +647,8 @@ public class HomeService {
                         buttonOption.getButtonName(),
                         buttonOption.getIcon(),
                         buttonOption.getActionType(),
-                        buttonOption.getActionValue()
+                        buttonOption.getActionValue(),
+                        null
                 );
 
         Home savedButton =
@@ -727,7 +734,8 @@ public class HomeService {
                                         home.getButtonName(),
                                         home.getIcon(),
                                         home.getActionType(),
-                                        home.getActionValue()
+                                        home.getActionValue(),
+                                        home.getPackageName()
                                 )
                         )
                         .toList();
@@ -925,16 +933,15 @@ public class HomeService {
             List<HomeButtonSaveRequest.ButtonRequest> buttonRequests
     ) {
 
-        boolean hasInvalidPackageName =
+        boolean hasMissingActionInformation =
                 buttonRequests.stream()
                         .anyMatch(buttonRequest ->
-                                buttonRequest.getPackageName() == null
-                                        || buttonRequest
-                                        .getPackageName()
-                                        .isBlank()
+                                buttonRequest.getActionType() == null
+                                        || buttonRequest.getActionValue() == null
+                                        || buttonRequest.getActionValue().isBlank()
                         );
 
-        if (hasInvalidPackageName) {
+        if (hasMissingActionInformation) {
             throw new BusinessException(
                     ErrorCode.INVALID_HOME_BUTTON_REQUEST
             );
@@ -946,11 +953,16 @@ public class HomeService {
                                 HomeButtonSaveRequest.ButtonRequest
                                         ::getPackageName
                         )
+                        .filter(packageName ->
+                                packageName != null
+                                        && !packageName.isBlank()
+                        )
                         .map(String::trim)
                         .toList();
 
         if (packageNames.stream().distinct().count()
                 != packageNames.size()) {
+
             throw new BusinessException(
                     ErrorCode.INVALID_HOME_BUTTON_REQUEST
             );
@@ -1051,7 +1063,8 @@ public class HomeService {
                             "멜론",
                             "melon",
                             ActionType.APP,
-                            "melon"
+                            "melon",
+                            MusicApp.MELON.getPackageName()
                     );
 
             case SPOTIFY ->
@@ -1061,7 +1074,8 @@ public class HomeService {
                             "스포티파이",
                             "spotify",
                             ActionType.APP,
-                            "spotify"
+                            "spotify",
+                            MusicApp.SPOTIFY.getPackageName()
                     );
         };
     }

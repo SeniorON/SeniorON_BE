@@ -36,10 +36,22 @@ public class Home extends BaseEntity {
 
     private String actionValue;
 
-    public void updateButton(Integer buttonOrder, String buttonName, String icon) {
+    private String packageName;
+
+    public void updateButton(
+            Integer buttonOrder,
+            String buttonName,
+            String icon,
+            ActionType actionType,
+            String actionValue,
+            String packageName
+    ) {
         this.buttonOrder = buttonOrder;
         this.buttonName = buttonName;
         this.icon = icon;
+        this.actionType = actionType;
+        this.actionValue = actionValue;
+        this.packageName = packageName;
     }
 
     public static Home createButton(
@@ -48,7 +60,8 @@ public class Home extends BaseEntity {
             String buttonName,
             String icon,
             ActionType actionType,
-            String actionValue
+            String actionValue,
+            String packageName
     ) {
         return Home.builder()
                 .user(user)
@@ -57,6 +70,7 @@ public class Home extends BaseEntity {
                 .icon(icon)
                 .actionType(actionType)
                 .actionValue(actionValue)
+                .packageName(packageName)
                 .build();
     }
 
