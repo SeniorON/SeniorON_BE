@@ -7,6 +7,8 @@ import com.example.senioron.domain.event.entity.Event;
 import com.example.senioron.domain.event.entity.EventType;
 import com.example.senioron.domain.event.entity.OutingPhase;
 import com.example.senioron.domain.event.util.FcmSender;
+import com.example.senioron.domain.notification.dto.NotificationDispatchResult;
+import com.example.senioron.domain.notification.dto.NotificationDispatchTarget;
 import com.example.senioron.domain.notification.dto.response.NotificationHomeListResponse;
 import com.example.senioron.domain.notification.dto.response.NotificationHomeResponse;
 import com.example.senioron.domain.notification.dto.response.NotificationListResponse;
@@ -23,6 +25,7 @@ import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -45,19 +48,90 @@ import java.util.stream.Collectors;
 @Slf4j
 public class NotificationService {
 
+    // SOS는 미발송 자체가 사고이므로 별도로 관리
+    private static final String SOS_DISPATCH_METRIC = "sos_dispatch_total";
+    private static final String TAG_RESULT = "result";
+
     private final NotificationRepository notificationRepository;
     private final NotificationSettingRepository notificationSettingRepository;
     private final UserRepository userRepository;
     private final DeviceRepository deviceRepository;
     private final FcmSender fcmSender;
+    private final MeterRegistry meterRegistry;
 
+    /**
+     * 일반 알림. 알림을 저장하고 커밋 이후 비동기로 발송한다.
+     * 발송 실패는 API 응답에 로그로만 남김.
+     */
     @Transactional
     public void createFormEvent(Event event) {
+        List<NotificationDispatchTarget> targets = prepareNotifications(event);
+        if (targets.isEmpty()) return;
+
+        // 커밋 성공 이후에만 FCM 발송이 실행되도록 등록
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        dispatch(targets);
+                    }
+                }
+        );
+    }
+
+    /**
+     * SOS 전용. 알림 저장까지만 하고 발송 대상을 돌려준다
+     * 발송은 호출부가 커밋 이후 {@link #dispatchSos}로 수행해, 그 결과를 응답에 담을 수 있게 한다.
+     */
+    @Transactional
+    public List<NotificationDispatchTarget> prepareSosNotifications(Event event) {
+        return prepareNotifications(event);
+    }
+
+    /**
+     * SOS 알림을 동기 발송한다.
+     */
+    public NotificationDispatchResult dispatchSos(List<NotificationDispatchTarget> targets) {
+        if (targets.isEmpty()) {
+            // 가족이나 자녀가 등록되지 않아 SOS를 알릴 대상 자체가 없는 경우.
+            countSosDispatch("no_receiver");
+            log.error("SOS 수신 대상이 없어 알림을 발송하지 못했습니다.");
+            return NotificationDispatchResult.noReceiver();
+        }
+
+        NotificationDispatchResult result = dispatch(targets);
+
+        if (result.notifiedCount() == 0) {
+            countSosDispatch("undelivered");
+            log.error("SOS 알림을 아무에게도 발송하지 못했습니다. receiverCount={}", result.receiverCount());
+        } else if (!result.isFullyDelivered()) {
+            countSosDispatch("partial");
+            log.warn("SOS 알림 일부만 발송되었습니다. notified={}/{}",
+                    result.notifiedCount(), result.receiverCount());
+        } else {
+            countSosDispatch("delivered");
+        }
+
+        return result;
+    }
+
+    /**
+     * 알림을 저장하고, 커밋 이후 발송에 필요한 정보를 추출한다.
+     */
+    private List<NotificationDispatchTarget> prepareNotifications(Event event) {
         User sender = event.getTriggeredUser();
-        if(sender.getFamily() == null) return;
+        if(sender.getFamily() == null) {
+            log.warn("가족이 등록되지 않아 알림 대상이 없습니다. eventType={}, senderId={}",
+                    event.getEventType(), sender.getUsersId());
+            return List.of();
+        }
 
         List<User> receivers = userRepository.findByFamilyAndUsersIdNotAndRole(sender.getFamily(), sender.getUsersId(), Role.CHILD);
-        if (receivers.isEmpty()) return;
+        if (receivers.isEmpty()) {
+            log.warn("수신 가능한 자녀가 없어 알림 대상이 없습니다. eventType={}, senderId={}",
+                    event.getEventType(), sender.getUsersId());
+            return List.of();
+        }
 
         NotificationType type = resolveType(event.getEventType());
         String title = resolveTitle(event.getEventType());
@@ -79,7 +153,7 @@ public class NotificationService {
                     .build();
             notifications.add(notification); // 임시 저장
         }
-        if (notifications.isEmpty()) {return;}
+        if (notifications.isEmpty()) {return List.of();}
         notificationRepository.saveAll(notifications); // 레포 저장
 
         //수신자들의 기기 토큰을 미리 한 번에 조회
@@ -90,25 +164,45 @@ public class NotificationService {
                         Collectors.mapping(Device::getDeviceToken, Collectors.toList())
                 ));
 
-        // 커밋 성공 이후에만 FCM 발송이 실행되도록 등록
-        TransactionSynchronizationManager.registerSynchronization(
-                new TransactionSynchronization() {
-                    @Override
-                    public void afterCommit() {
-                        for (Notification notification : notifications) {
-                            User receiver = notification.getReceiverUser();
-                            List<String> tokens = deviceTokensByUserId.getOrDefault(receiver.getUsersId(), List.of());
-                            for (String deviceToken : tokens) {
-                                try {
-                                    fcmSender.send(deviceToken, notification.getTitle(), notification.getBody());
-                                } catch (Exception e) {
-                                    log.warn("FCM 발송 처리 중 예외 발생, receiverId={}", receiver.getUsersId(), e);
-                                }
-                            }
-                        }
-                    }
+        return notifications.stream()
+                .map(notification -> {
+                    Long receiverId = notification.getReceiverUser().getUsersId();
+                    return new NotificationDispatchTarget(
+                            receiverId,
+                            notification.getTitle(),
+                            notification.getBody(),
+                            deviceTokensByUserId.getOrDefault(receiverId, List.of())
+                    );
+                })
+                .toList();
+    }
+
+    /**
+     * 수신자별로 등록된 모든 기기에 발송한다. 한 대라도 성공하면 그 수신자는 발송 성공으로 센다.
+     */
+    private NotificationDispatchResult dispatch(List<NotificationDispatchTarget> targets) {
+        int notifiedCount = 0;
+
+        for (NotificationDispatchTarget target : targets) {
+            boolean delivered = false;
+            for (String deviceToken : target.deviceTokens()) {
+                try {
+                    boolean sent = fcmSender.send(deviceToken, target.title(), target.body());
+                    delivered = delivered || sent;
+                } catch (Exception e) {
+                    log.warn("FCM 발송 처리 중 예외 발생, receiverId={}", target.receiverId(), e);
                 }
-        );
+            }
+            if (delivered) {
+                notifiedCount++;
+            }
+        }
+
+        return new NotificationDispatchResult(targets.size(), notifiedCount);
+    }
+
+    private void countSosDispatch(String result) {
+        meterRegistry.counter(SOS_DISPATCH_METRIC, TAG_RESULT, result).increment();
     }
 
     @Transactional(readOnly = true)

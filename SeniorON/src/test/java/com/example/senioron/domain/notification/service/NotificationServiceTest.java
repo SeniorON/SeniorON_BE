@@ -22,6 +22,8 @@ import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,6 +40,7 @@ class NotificationServiceTest {
     private final UserRepository userRepository = org.mockito.Mockito.mock(UserRepository.class);
     private final DeviceRepository deviceRepository = org.mockito.Mockito.mock(DeviceRepository.class);
     private final FcmSender fcmSender = org.mockito.Mockito.mock(FcmSender.class);
+    private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     private NotificationService notificationService;
     private Family family;
@@ -49,7 +52,8 @@ class NotificationServiceTest {
     @BeforeEach
     void setUp() {
         notificationService = new NotificationService(
-                notificationRepository, notificationSettingRepository, userRepository, deviceRepository, fcmSender);
+                notificationRepository, notificationSettingRepository, userRepository, deviceRepository, fcmSender,
+                meterRegistry);
 
         family = Family.builder().familyId(10L).build();
         child = User.builder().usersId(CHILD_ID).family(family).role(Role.CHILD).build();

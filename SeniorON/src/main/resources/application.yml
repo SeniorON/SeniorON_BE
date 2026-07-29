@@ -59,3 +59,7 @@ cloud:
       bucket: ${S3_BUCKET}
 firebase:
   service-account-path: ${FIREBASE_SERVICE_ACCOUNT_PATH:}
+
+companion:
+  encryption:
+    key: ${COMPANION_ENCRYPTION_KEY:}
