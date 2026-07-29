@@ -1207,6 +1207,7 @@ public class HomeService {
                 ).getYears();
 
         return new HomeResponse.SeniorProfileResponse(
+                senior.getSeniorId(),
                 senior.getName(),
                 resolveRelation(userSenior),
                 birth,
