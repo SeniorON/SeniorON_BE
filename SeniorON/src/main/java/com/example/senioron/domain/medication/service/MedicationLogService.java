@@ -2,6 +2,7 @@ package com.example.senioron.domain.medication.service;
 
 import com.example.senioron.domain.medication.dto.response.MedicationCheckResponse;
 import com.example.senioron.domain.medication.dto.response.MedicationScheduleResponse;
+import com.example.senioron.domain.medication.dto.response.MedicationScheduleStatus;
 import com.example.senioron.domain.medication.entity.Medication;
 import com.example.senioron.domain.medication.entity.MedicationLog;
 import com.example.senioron.domain.medication.event.MedicationCheckedEvent;
@@ -12,13 +13,18 @@ import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -37,34 +43,67 @@ public class MedicationLogService {
     private static final ZoneId KOREA_ZONE_ID =
             ZoneId.of("Asia/Seoul");
 
+    private static final long MISSED_DELAY_MINUTES =
+            30L;
+
     private final MedicationLogRepository medicationLogRepository;
     private final MedicationRepository medicationRepository;
     private final UserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
-    public List<MedicationScheduleResponse> getDailyMedicationSchedules(
-            Long userId,
+    public List<MedicationScheduleResponse> getOwnDailyMedicationSchedules(
+            Long requesterUserId,
             LocalDate date
     ) {
+        User parentUser =
+                getUserOrThrow(
+                        requesterUserId
+                );
+
+        if (parentUser.getRole() != Role.PARENT) {
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN
+            );
+        }
+
         return getDailyMedicationSchedules(
-                userId,
-                userId,
+                parentUser,
                 date
         );
     }
 
     @Transactional
-    public List<MedicationScheduleResponse> getDailyMedicationSchedules(
+    public List<MedicationScheduleResponse> getParentDailyMedicationSchedules(
             Long requesterUserId,
             Long parentUserId,
             LocalDate date
     ) {
-        User parentUser = getReadableParentOrThrow(
-                requesterUserId,
-                parentUserId
+        User requester =
+                getUserOrThrow(
+                        requesterUserId
+                );
+
+        validateChild(
+                requester
         );
 
+        User parentUser =
+                getSameFamilyParentOrThrow(
+                        requester,
+                        parentUserId
+                );
+
+        return getDailyMedicationSchedules(
+                parentUser,
+                date
+        );
+    }
+
+    private List<MedicationScheduleResponse> getDailyMedicationSchedules(
+            User parentUser,
+            LocalDate date
+    ) {
         createMissingMedicationLogs(
                 parentUser,
                 date
@@ -77,80 +116,299 @@ public class MedicationLogService {
                                 date
                         );
 
+        LocalDateTime now =
+                LocalDateTime.now(
+                        KOREA_ZONE_ID
+                );
+
         return schedules.stream()
-                .map(log ->
+                .map(medicationLog ->
                         MedicationScheduleResponse.builder()
                                 .medicationLogId(
-                                        log.getMedicationLogId()
+                                        medicationLog.getMedicationLogId()
                                 )
                                 .medicineName(
-                                        log.getMedication()
+                                        medicationLog.getMedication()
                                                 .getMedicineName()
                                 )
+                                .ingredientName(
+                                        medicationLog.getMedication()
+                                                .getIngredientName()
+                                )
+                                .plannedDate(
+                                        medicationLog.getPlannedDate()
+                                )
                                 .plannedTime(
-                                        log.getPlannedTime()
+                                        medicationLog.getPlannedTime()
                                 )
                                 .isTaken(
-                                        log.getIsTaken()
+                                        medicationLog.getIsTaken()
+                                )
+                                .status(
+                                        determineMedicationStatus(
+                                                medicationLog,
+                                                now
+                                        )
                                 )
                                 .build()
                 )
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Transactional
-    public MedicationCheckResponse checkMedication(
-            Long medicationLogId,
-            User user
+    public MedicationCheckResponse checkNearestMedication(
+            Long requesterUserId
     ) {
-        MedicationLog logEntity =
+        User parentUser =
+                getUserOrThrow(
+                        requesterUserId
+                );
+
+        if (parentUser.getRole() != Role.PARENT) {
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN
+            );
+        }
+
+        LocalDateTime now =
+                LocalDateTime.now(
+                        KOREA_ZONE_ID
+                );
+
+        LocalDate today =
+                now.toLocalDate();
+
+        LocalTime currentTime =
+                now.toLocalTime();
+
+        createMissingMedicationLogs(
+                parentUser,
+                today
+        );
+
+        MedicationLog nearestMedicationLog =
                 medicationLogRepository
-                        .findById(medicationLogId)
+                        .findByUserUsersIdAndPlannedDateAndIsTakenFalseOrderByPlannedTimeAsc(
+                                parentUser.getUsersId(),
+                                today
+                        )
+                        .stream()
+                        .min(
+                                Comparator
+                                        .comparingLong(
+                                                (MedicationLog medicationLog) ->
+                                                        Math.abs(
+                                                                Duration.between(
+                                                                        currentTime,
+                                                                        medicationLog.getPlannedTime()
+                                                                ).toSeconds()
+                                                        )
+                                        )
+                                        .thenComparing(
+                                                medicationLog ->
+                                                        medicationLog.getPlannedTime()
+                                                                .isAfter(
+                                                                        currentTime
+                                                                )
+                                        )
+                                        .thenComparing(
+                                                MedicationLog::getMedicationLogId
+                                        )
+                        )
                         .orElseThrow(() ->
                                 new BusinessException(
                                         ErrorCode.MEDICATION_NOT_FOUND
                                 )
                         );
 
-        getReadableParentOrThrow(
-                user.getUsersId(),
-                logEntity.getUser().getUsersId()
+        return markMedicationAsTaken(
+                nearestMedicationLog,
+                now
         );
+    }
 
-        if (Boolean.TRUE.equals(
-                logEntity.getIsTaken()
+    @Transactional
+    public MedicationCheckResponse checkMedication(
+            Long medicationLogId,
+            Long requesterUserId
+    ) {
+        User parentUser =
+                getUserOrThrow(
+                        requesterUserId
+                );
+
+        if (parentUser.getRole() != Role.PARENT) {
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN
+            );
+        }
+
+        MedicationLog medicationLog =
+                medicationLogRepository
+                        .findById(
+                                medicationLogId
+                        )
+                        .orElseThrow(() ->
+                                new BusinessException(
+                                        ErrorCode.MEDICATION_NOT_FOUND
+                                )
+                        );
+
+        if (!Objects.equals(
+                medicationLog.getUser()
+                        .getUsersId(),
+                parentUser.getUsersId()
         )) {
-            return MedicationCheckResponse.from(
-                    logEntity
+            throw new BusinessException(
+                    ErrorCode.MEDICATION_NOT_FOUND
             );
         }
 
         LocalDateTime now =
-                LocalDateTime.now(KOREA_ZONE_ID);
+                LocalDateTime.now(
+                        KOREA_ZONE_ID
+                );
+
+        return markMedicationAsTaken(
+                medicationLog,
+                now
+        );
+    }
+
+    private MedicationCheckResponse markMedicationAsTaken(
+            MedicationLog medicationLog,
+            LocalDateTime takenAt
+    ) {
+        if (Boolean.TRUE.equals(
+                medicationLog.getIsTaken()
+        )) {
+            return MedicationCheckResponse.from(
+                    medicationLog
+            );
+        }
+
+        Long userId =
+                medicationLog.getUser()
+                        .getUsersId();
+
+        String userName =
+                medicationLog.getUser()
+                        .getName();
+
+        Long medicationLogId =
+                medicationLog.getMedicationLogId();
+
+        String medicineName =
+                medicationLog.getMedication()
+                        .getMedicineName();
 
         int updatedRows =
                 medicationLogRepository
                         .markAsTakenIfUntaken(
                                 medicationLogId,
-                                now
+                                takenAt
                         );
 
         if (updatedRows > 0) {
             eventPublisher.publishEvent(
                     new MedicationCheckedEvent(
-                            logEntity.getUser().getUsersId(),
-                            logEntity.getUser().getName()
+                            userId,
+                            userName,
+                            medicationLogId,
+                            medicineName
                     )
             );
         }
 
-        MedicationLog updatedLog =
+        MedicationLog updatedMedicationLog =
                 medicationLogRepository
-                        .findById(medicationLogId)
-                        .orElse(logEntity);
+                        .findById(
+                                medicationLogId
+                        )
+                        .orElseThrow(() ->
+                                new BusinessException(
+                                        ErrorCode.MEDICATION_NOT_FOUND
+                                )
+                        );
 
         return MedicationCheckResponse.from(
-                updatedLog
+                updatedMedicationLog
+        );
+    }
+
+    @Transactional
+    public void createTodayMedicationLogsForParent(
+            Long parentUserId
+    ) {
+        User parentUser =
+                getUserOrThrow(
+                        parentUserId
+                );
+
+        if (parentUser.getRole() != Role.PARENT) {
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN
+            );
+        }
+
+        createMissingMedicationLogs(
+                parentUser,
+                LocalDate.now(
+                        KOREA_ZONE_ID
+                )
+        );
+    }
+
+    @Transactional
+    public void createTodayMedicationLogsForAllMedicationOwners() {
+        LocalDate today =
+                LocalDate.now(
+                        KOREA_ZONE_ID
+                );
+
+        LocalDateTime dayStart =
+                today.atStartOfDay();
+
+        LocalDateTime dayEndExclusive =
+                today.plusDays(1)
+                        .atStartOfDay();
+
+        List<Medication> medications =
+                medicationRepository
+                        .findAllEffectiveMedicationsForDate(
+                                dayStart,
+                                dayEndExclusive
+                        );
+
+        Map<Long, User> parentsById =
+                medications.stream()
+                        .map(
+                                Medication::getUser
+                        )
+                        .filter(user ->
+                                user.getRole() == Role.PARENT
+                        )
+                        .collect(
+                                Collectors.toMap(
+                                        User::getUsersId,
+                                        user -> user,
+                                        (existing, duplicate) ->
+                                                existing,
+                                        LinkedHashMap::new
+                                )
+                        );
+
+        for (User parentUser : parentsById.values()) {
+            createMissingMedicationLogs(
+                    parentUser,
+                    today
+            );
+        }
+
+        log.info(
+                "당일 복약 로그 자동 생성 완료. date: {}, parentCount: {}",
+                today,
+                parentsById.size()
         );
     }
 
@@ -162,7 +420,8 @@ public class MedicationLogService {
                 date.atStartOfDay();
 
         LocalDateTime dayEndExclusive =
-                date.plusDays(1).atStartOfDay();
+                date.plusDays(1)
+                        .atStartOfDay();
 
         List<Medication> medications =
                 medicationRepository
@@ -172,7 +431,7 @@ public class MedicationLogService {
                                 dayEndExclusive
                         );
 
-        List<MedicationLog> existingLogs =
+        List<MedicationLog> existingMedicationLogs =
                 medicationLogRepository
                         .findByUserUsersIdAndPlannedDateOrderByPlannedTimeAsc(
                                 parentUser.getUsersId(),
@@ -182,14 +441,15 @@ public class MedicationLogService {
         Set<Long> loggedMedicationIds =
                 new HashSet<>();
 
-        existingLogs.forEach(log ->
-                loggedMedicationIds.add(
-                        log.getMedication()
-                                .getMedication_id()
-                )
+        existingMedicationLogs.forEach(
+                medicationLog ->
+                        loggedMedicationIds.add(
+                                medicationLog.getMedication()
+                                        .getMedication_id()
+                        )
         );
 
-        List<MedicationLog> newLogs =
+        List<MedicationLog> newMedicationLogs =
                 medications.stream()
                         .filter(medication ->
                                 isScheduledForDate(
@@ -204,22 +464,65 @@ public class MedicationLogService {
                         )
                         .map(medication ->
                                 MedicationLog.builder()
-                                        .user(parentUser)
-                                        .medication(medication)
-                                        .plannedDate(date)
+                                        .user(
+                                                parentUser
+                                        )
+                                        .medication(
+                                                medication
+                                        )
+                                        .plannedDate(
+                                                date
+                                        )
                                         .plannedTime(
                                                 medication.getMedicineTime()
                                         )
-                                        .isTaken(false)
+                                        .isTaken(
+                                                false
+                                        )
                                         .build()
                         )
                         .toList();
 
-        if (!newLogs.isEmpty()) {
+        if (!newMedicationLogs.isEmpty()) {
             medicationLogRepository.saveAll(
-                    newLogs
+                    newMedicationLogs
+            );
+
+            log.info(
+                    "복약 로그 생성 완료. parentUserId: {}, date: {}, count: {}",
+                    parentUser.getUsersId(),
+                    date,
+                    newMedicationLogs.size()
             );
         }
+    }
+
+    private MedicationScheduleStatus determineMedicationStatus(
+            MedicationLog medicationLog,
+            LocalDateTime now
+    ) {
+        if (Boolean.TRUE.equals(
+                medicationLog.getIsTaken()
+        )) {
+            return MedicationScheduleStatus.TAKEN;
+        }
+
+        LocalDateTime missedAt =
+                LocalDateTime.of(
+                                medicationLog.getPlannedDate(),
+                                medicationLog.getPlannedTime()
+                        )
+                        .plusMinutes(
+                                MISSED_DELAY_MINUTES
+                        );
+
+        if (!now.isBefore(
+                missedAt
+        )) {
+            return MedicationScheduleStatus.MISSED;
+        }
+
+        return MedicationScheduleStatus.SCHEDULED;
     }
 
     private boolean isScheduledForDate(
@@ -246,24 +549,32 @@ public class MedicationLogService {
         }
 
         if (medication.getMedicineDays() == null
-                || medication.getMedicineDays().isBlank()) {
+                || medication.getMedicineDays()
+                .isBlank()) {
             return false;
         }
 
         String targetDay =
                 normalizeDay(
-                        date.getDayOfWeek().name()
+                        date.getDayOfWeek()
+                                .name()
                 );
 
         return Arrays.stream(
                         medication.getMedicineDays()
                                 .split(",")
                 )
-                .map(String::trim)
-                .map(day ->
-                        day.toUpperCase(Locale.ROOT)
+                .map(
+                        String::trim
                 )
-                .map(this::normalizeDay)
+                .map(day ->
+                        day.toUpperCase(
+                                Locale.ROOT
+                        )
+                )
+                .map(
+                        this::normalizeDay
+                )
                 .anyMatch(day ->
                         Objects.equals(
                                 day,
@@ -272,28 +583,9 @@ public class MedicationLogService {
                 );
     }
 
-    private User getReadableParentOrThrow(
-            Long requesterUserId,
-            Long parentUserId
+    private void validateChild(
+            User requester
     ) {
-        User requester =
-                getUserOrThrow(
-                        requesterUserId
-                );
-
-        if (requester.getRole() == Role.PARENT) {
-            if (!Objects.equals(
-                    requester.getUsersId(),
-                    parentUserId
-            )) {
-                throw new BusinessException(
-                        ErrorCode.FORBIDDEN
-                );
-            }
-
-            return requester;
-        }
-
         if (requester.getRole() != Role.CHILD) {
             throw new BusinessException(
                     ErrorCode.FORBIDDEN
@@ -305,7 +597,12 @@ public class MedicationLogService {
                     ErrorCode.FAMILY_NOT_FOUND
             );
         }
+    }
 
+    private User getSameFamilyParentOrThrow(
+            User requester,
+            Long parentUserId
+    ) {
         User parentUser =
                 getUserOrThrow(
                         parentUserId
@@ -320,8 +617,10 @@ public class MedicationLogService {
         boolean belongsToSameFamily =
                 parentUser.getFamily() != null
                         && Objects.equals(
-                        requester.getFamily().getFamilyId(),
-                        parentUser.getFamily().getFamilyId()
+                        requester.getFamily()
+                                .getFamilyId(),
+                        parentUser.getFamily()
+                                .getFamilyId()
                 );
 
         if (!belongsToSameFamily) {
@@ -336,7 +635,9 @@ public class MedicationLogService {
     private User getUserOrThrow(
             Long userId
     ) {
-        return userRepository.findById(userId)
+        return userRepository.findById(
+                        userId
+                )
                 .orElseThrow(() ->
                         new BusinessException(
                                 ErrorCode.USER_NOT_FOUND

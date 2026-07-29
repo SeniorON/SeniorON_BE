@@ -47,7 +47,7 @@ public class MedicationLogController {
     @GetMapping("/medications/schedules")
     @Operation(
             summary = "본인 일일 복약 일정 조회 API",
-            description = "부모 사용자가 본인의 특정 날짜 복약 일정을 예정 시간 오름차순으로 조회합니다."
+            description = "부모 사용자가 본인의 특정 날짜 복약 일정과 복용 상태를 조회합니다."
     )
     @ApiResponses(value = {
             @ApiResponse(
@@ -62,11 +62,22 @@ public class MedicationLogController {
                                     implementation = Response.class
                             )
                     )
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "부모 사용자가 아니어서 조회 권한이 없음",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = Response.class
+                            )
+                    )
             )
     })
-    public Response<List<MedicationScheduleResponse>> getDailyMedicationSchedules(
+    public Response<List<MedicationScheduleResponse>>
+    getDailyMedicationSchedules(
             @Parameter(hidden = true)
-            @AuthenticationPrincipal User user,
+            @AuthenticationPrincipal
+            User user,
 
             @Parameter(
                     description = "조회할 날짜",
@@ -74,7 +85,7 @@ public class MedicationLogController {
                     schema = @Schema(
                             type = "string",
                             format = "date",
-                            example = "2026-07-25"
+                            example = "2026-07-28"
                     )
             )
             @RequestParam("date")
@@ -83,19 +94,24 @@ public class MedicationLogController {
             LocalDate date
     ) {
         List<MedicationScheduleResponse> responses =
-                medicationLogService.getDailyMedicationSchedules(
-                        user.getUsersId(),
-                        user.getUsersId(),
-                        date
-                );
+                medicationLogService
+                        .getOwnDailyMedicationSchedules(
+                                user.getUsersId(),
+                                date
+                        );
 
-        return Response.ok(responses);
+        return Response.ok(
+                ResultCode.OK,
+                responses
+        );
     }
 
-    @GetMapping("/medications/parents/{parentUserId}/schedules")
+    @GetMapping(
+            "/medications/parents/{parentUserId}/schedules"
+    )
     @Operation(
             summary = "부모 일일 복약 일정 조회 API",
-            description = "자녀 사용자가 같은 가족에 속한 부모님의 특정 날짜 복약 일정을 예정 시간 오름차순으로 조회합니다."
+            description = "자녀 사용자가 같은 가족에 속한 부모님의 복약 상태를 조회합니다."
     )
     @ApiResponses(value = {
             @ApiResponse(
@@ -113,7 +129,16 @@ public class MedicationLogController {
             ),
             @ApiResponse(
                     responseCode = "403",
-                    description = "해당 부모의 복약 일정을 조회할 권한이 없음",
+                    description = "자녀 사용자가 아니어서 조회 권한이 없음",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = Response.class
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "부모 또는 가족 구성원을 찾을 수 없음",
                     content = @Content(
                             schema = @Schema(
                                     implementation = Response.class
@@ -121,9 +146,11 @@ public class MedicationLogController {
                     )
             )
     })
-    public Response<List<MedicationScheduleResponse>> getParentDailyMedicationSchedules(
+    public Response<List<MedicationScheduleResponse>>
+    getParentDailyMedicationSchedules(
             @Parameter(hidden = true)
-            @AuthenticationPrincipal User user,
+            @AuthenticationPrincipal
+            User user,
 
             @Parameter(
                     description = "조회 대상 부모 사용자 ID",
@@ -139,7 +166,7 @@ public class MedicationLogController {
                     schema = @Schema(
                             type = "string",
                             format = "date",
-                            example = "2026-07-25"
+                            example = "2026-07-28"
                     )
             )
             @RequestParam("date")
@@ -148,23 +175,102 @@ public class MedicationLogController {
             LocalDate date
     ) {
         List<MedicationScheduleResponse> responses =
-                medicationLogService.getDailyMedicationSchedules(
-                        user.getUsersId(),
-                        parentUserId,
-                        date
-                );
+                medicationLogService
+                        .getParentDailyMedicationSchedules(
+                                user.getUsersId(),
+                                parentUserId,
+                                date
+                        );
 
-        return Response.ok(responses);
+        return Response.ok(
+                ResultCode.OK,
+                responses
+        );
     }
 
-    @PatchMapping("/medication-logs/{medicationLogId}/check")
+    @PatchMapping("/medication-logs/check")
     @Operation(
-            summary = "복약 체크",
-            description = "복약 완료 상태로 변경하고 관련 알림을 처리합니다."
+            summary = "가장 가까운 복약 일정 체크 API",
+            description = "부모 사용자의 오늘 미복용 일정 중 현재 시각과 가장 가까운 복약 일정을 완료 처리합니다."
     )
-    public Response<MedicationCheckResponse> checkMedication(
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "복약 체크 성공"
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "부모 사용자가 아니어서 복약 체크 권한이 없음",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = Response.class
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "처리할 미복용 일정을 찾을 수 없음",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = Response.class
+                            )
+                    )
+            )
+    })
+    public Response<MedicationCheckResponse>
+    checkNearestMedication(
             @Parameter(hidden = true)
-            @AuthenticationPrincipal User user,
+            @AuthenticationPrincipal
+            User user
+    ) {
+        MedicationCheckResponse response =
+                medicationLogService
+                        .checkNearestMedication(
+                                user.getUsersId()
+                        );
+
+        return Response.ok(
+                ResultCode.OK,
+                response
+        );
+    }
+
+    @PatchMapping(
+            "/medication-logs/{medicationLogId}/check"
+    )
+    @Operation(
+            summary = "특정 복약 일정 체크 API",
+            description = "부모 사용자가 본인의 특정 복약 일정을 완료 상태로 변경합니다."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "복약 체크 성공"
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "부모 사용자가 아니어서 복약 체크 권한이 없음",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = Response.class
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "복약 로그를 찾을 수 없거나 본인의 로그가 아님",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = Response.class
+                            )
+                    )
+            )
+    })
+    public Response<MedicationCheckResponse>
+    checkMedication(
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal
+            User user,
 
             @Parameter(
                     description = "복약 로그 ID",
@@ -175,10 +281,11 @@ public class MedicationLogController {
             Long medicationLogId
     ) {
         MedicationCheckResponse response =
-                medicationLogService.checkMedication(
-                        medicationLogId,
-                        user
-                );
+                medicationLogService
+                        .checkMedication(
+                                medicationLogId,
+                                user.getUsersId()
+                        );
 
         return Response.ok(
                 ResultCode.OK,
@@ -186,12 +293,17 @@ public class MedicationLogController {
         );
     }
 
-    @ExceptionHandler(MissingServletRequestParameterException.class)
-    public ResponseEntity<Object> handleMissingServletRequestParameter(
+    @ExceptionHandler(
+            MissingServletRequestParameterException.class
+    )
+    public ResponseEntity<Object>
+    handleMissingServletRequestParameter(
             MissingServletRequestParameterException exception
     ) {
         return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
+                .status(
+                        HttpStatus.BAD_REQUEST
+                )
                 .body(
                         Response.fail(
                                 ErrorCode.BAD_REQUEST
