@@ -31,9 +31,6 @@ jobs:
               ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
               'cd ~/SeniorON_BE \
                && git pull origin develop \
-               && mkdir -p secrets \
-               && echo "${{ secrets.FIREBASE_ADMIN_SDK_JSON_BASE64 }}" | base64 -d > secrets/firebase-adminsdk.json \
-               && chmod 600 secrets/firebase-adminsdk.json \
                && docker compose pull \
                && docker compose down \
                && docker compose up -d \
