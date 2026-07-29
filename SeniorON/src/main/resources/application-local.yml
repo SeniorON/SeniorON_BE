@@ -33,3 +33,6 @@ cloud:
     region: ap-northeast-2
     s3:
       bucket: senioron-local-dummy-bucket
+
+firebase:
+  service-account-path: senioron-8c2e1-firebase-adminsdk-fbsvc-ba018605fb.json

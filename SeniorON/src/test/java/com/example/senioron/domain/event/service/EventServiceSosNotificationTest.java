@@ -26,8 +26,12 @@ import org.springframework.transaction.annotation.Transactional;
  * SOS 알림 발송 결과가 실제 Spring 컨텍스트(DB 트랜잭션 커밋, MeterRegistry, FcmSender 빈)를
  * 통해 응답과 지표에 반영되는지 확인한다.
  * <p>
- * 로컬 환경에는 Firebase 서비스 계정이 없어 FcmSender.send()는 항상 "초기화 안 됨"으로
- * 스킵된다. 따라서 여기서는 FCM 발송 성공 경로가 아니라, 두 가지 미전달 시나리오
+ * Firebase 서비스 계정 파일(gitignore 처리됨)이 로컬에 있으면 실제 Firebase Admin SDK가
+ * 초기화되고, 없으면 초기화가 스킵된다({@code FirebaseConfig} 참고). 이 테스트가 쓰는
+ * 기기 토큰은 어느 쪽이든 실제 발송에 성공할 수 없는 값(형식 자체가 유효하지 않음)이라,
+ * 환경에 따라 "초기화 안 됨(skipped)" 또는 "Firebase가 거부함(failed)" 중 하나로 갈리지만
+ * 결과적으로 미전달(undelivered)이라는 결론은 두 환경 모두 동일하다.
+ * 따라서 FCM 발송 성공 경로가 아니라, 두 가지 미전달 시나리오
  * (수신 대상 없음 / 발송 실패)가 응답과 지표에 정확히 반영되는지를 검증한다.
  */
 @SpringBootTest(properties = {
@@ -108,12 +112,16 @@ class EventServiceSosNotificationTest {
         assertThat(response.getId()).isNotNull();
         assertThat(notificationRepository.findAll()).hasSize(1);
 
-        // 로컬에는 Firebase 자격증명이 없어 발송은 항상 실패(스킵)한다.
+        // "dummy-fcm-token"은 형식 자체가 유효하지 않아, Firebase가 초기화됐든 안 됐든 발송은 항상 실패한다.
         assertThat(response.getReceiverCount()).isEqualTo(1);
         assertThat(response.getNotifiedCount()).isEqualTo(0);
 
         assertThat(counterValue("sos_dispatch_total", "result", "undelivered")).isEqualTo(1.0);
-        assertThat(counterValue("fcm_send_total", "result", "skipped")).isGreaterThanOrEqualTo(1.0);
+        // 로컬에 Firebase 자격증명이 있으면 실제 서버가 거부(failed)하고, 없으면 초기화 단계에서 스킵(skipped)된다.
+        // 둘 다 "발송 안 됨"을 뜻하므로 어느 쪽이든 하나는 반드시 기록되어야 한다.
+        double failedOrSkipped = counterValueOrZero("fcm_send_total", "result", "failed")
+                + counterValueOrZero("fcm_send_total", "result", "skipped");
+        assertThat(failedOrSkipped).isGreaterThanOrEqualTo(1.0);
     }
 
     private SosEventRequest sosRequest() {
@@ -128,5 +136,10 @@ class EventServiceSosNotificationTest {
         var counter = meterRegistry.find(name).tag(tagKey, tagValue).counter();
         assertThat(counter).as("metric %s{%s=%s} not found", name, tagKey, tagValue).isNotNull();
         return counter.count();
+    }
+
+    private double counterValueOrZero(String name, String tagKey, String tagValue) {
+        var counter = meterRegistry.find(name).tag(tagKey, tagValue).counter();
+        return counter != null ? counter.count() : 0.0;
     }
 }
