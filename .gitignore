@@ -30,6 +30,9 @@ replay_pid*
 # Firebase Admin SDK Private Key
 *firebase-adminsdk*.json
 
+# 배포 서버에서 deploy.yml이 복원하는 서비스 계정 키 (docker-compose.yml이 볼륨으로 마운트)
+secrets/
+
 # FCM 테스트 토큰 발급 도구의 실제 설정값 (tools/fcm-token-tester/README.md 참고)
 tools/fcm-token-tester/firebase-config.js
 
