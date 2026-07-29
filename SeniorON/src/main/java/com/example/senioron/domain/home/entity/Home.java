@@ -36,17 +36,10 @@ public class Home extends BaseEntity {
 
     private String actionValue;
 
-    @Enumerated(EnumType.STRING)
-    private FontSize fontSize;
-
     public void updateButton(Integer buttonOrder, String buttonName, String icon) {
         this.buttonOrder = buttonOrder;
         this.buttonName = buttonName;
         this.icon = icon;
-    }
-
-    public void updateFontSize(FontSize fontSize) {
-        this.fontSize = fontSize;
     }
 
     public static Home createButton(
@@ -55,8 +48,7 @@ public class Home extends BaseEntity {
             String buttonName,
             String icon,
             ActionType actionType,
-            String actionValue,
-            FontSize fontSize
+            String actionValue
     ) {
         return Home.builder()
                 .user(user)
@@ -65,7 +57,6 @@ public class Home extends BaseEntity {
                 .icon(icon)
                 .actionType(actionType)
                 .actionValue(actionValue)
-                .fontSize(fontSize)
                 .build();
     }
 
