@@ -51,9 +51,8 @@ import java.time.LocalDateTime;
 @Service
 public class HomeService {
 
-    private static final int MAX_BUTTON_COUNT_WITH_MUSIC_CARD = 11;
-    private static final int MAX_BUTTON_COUNT_WITHOUT_MUSIC_CARD = 12;
-    private static final int MIN_BUTTON_COUNT = 7;
+    private static final int MIN_BUTTON_COUNT = 8;
+    private static final int MAX_BUTTON_COUNT = 18;
 
     private final HomeRepository homeRepository;
     private final ButtonOptionRepository buttonOptionRepository;
@@ -370,25 +369,25 @@ public class HomeService {
             );
         }
 
-        int maxButtonCount =
-                request.getMusicApp() == null
-                        ? MAX_BUTTON_COUNT_WITHOUT_MUSIC_CARD
-                        : MAX_BUTTON_COUNT_WITH_MUSIC_CARD;
-
-        if (buttonRequests.size() > maxButtonCount) {
-            throw new BusinessException(
-                    ErrorCode.HOME_BUTTON_LIMIT_EXCEEDED
-            );
-        }
         if (buttonRequests.size() < MIN_BUTTON_COUNT) {
             throw new BusinessException(
                     ErrorCode.HOME_BUTTON_MINIMUM_NOT_MET
             );
         }
 
-        validateSaveButtonRequests(buttonRequests);
+        if (buttonRequests.size() > MAX_BUTTON_COUNT) {
+            throw new BusinessException(
+                    ErrorCode.HOME_BUTTON_LIMIT_EXCEEDED
+            );
+        }
 
-        homeRepository.deleteAllByUser(user);
+        validateSaveButtonRequests(
+                buttonRequests
+        );
+
+        homeRepository.deleteAllByUser(
+                user
+        );
 
         List<Home> newHomes =
                 buttonRequests.stream()
@@ -400,7 +399,9 @@ public class HomeService {
                         )
                         .toList();
 
-        homeRepository.saveAll(newHomes);
+        homeRepository.saveAll(
+                newHomes
+        );
 
         HomeSetting homeSetting =
                 homeSettingRepository
@@ -416,7 +417,9 @@ public class HomeService {
                 request.getMusicApp()
         );
 
-        homeSettingRepository.save(homeSetting);
+        homeSettingRepository.save(
+                homeSetting
+        );
     }
 
     /**
@@ -616,18 +619,7 @@ public class HomeService {
                                 user
                         );
 
-        MusicApp musicApp =
-                homeSettingRepository
-                        .findByUser(user)
-                        .map(HomeSetting::getMusicApp)
-                        .orElse(null);
-
-        int maxButtonCount =
-                musicApp == null
-                        ? MAX_BUTTON_COUNT_WITHOUT_MUSIC_CARD
-                        : MAX_BUTTON_COUNT_WITH_MUSIC_CARD;
-
-        if (homes.size() >= maxButtonCount) {
+        if (homes.size() >= MAX_BUTTON_COUNT) {
             throw new BusinessException(
                     ErrorCode.HOME_BUTTON_LIMIT_EXCEEDED
             );
@@ -1054,30 +1046,15 @@ public class HomeService {
                     .empty();
         }
 
-        return switch (musicApp) {
-
-            case MELON ->
-                    new HomeResponse.MusicCardResponse(
-                            true,
-                            MusicApp.MELON,
-                            "멜론",
-                            "melon",
-                            ActionType.APP,
-                            "melon",
-                            MusicApp.MELON.getPackageName()
-                    );
-
-            case SPOTIFY ->
-                    new HomeResponse.MusicCardResponse(
-                            true,
-                            MusicApp.SPOTIFY,
-                            "스포티파이",
-                            "spotify",
-                            ActionType.APP,
-                            "spotify",
-                            MusicApp.SPOTIFY.getPackageName()
-                    );
-        };
+        return new HomeResponse.MusicCardResponse(
+                true,
+                musicApp,
+                musicApp.getDisplayName(),
+                musicApp.getIcon(),
+                ActionType.APP,
+                musicApp.name().toLowerCase(),
+                musicApp.getPackageName()
+        );
     }
 
     private User resolvePrimaryChild(
