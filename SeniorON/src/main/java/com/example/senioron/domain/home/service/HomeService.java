@@ -44,6 +44,7 @@ import java.time.Period;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.time.LocalDateTime;
@@ -53,6 +54,12 @@ public class HomeService {
 
     private static final int MIN_BUTTON_COUNT = 8;
     private static final int MAX_BUTTON_COUNT = 18;
+    private static final Set<String> REQUIRED_DEFAULT_BUTTONS = Set.of(
+            "MEDICATION",
+            "COMPANION",
+            "PHOTO",
+            "EMERGENCY"
+    );
 
     private final HomeRepository homeRepository;
     private final ButtonOptionRepository buttonOptionRepository;
@@ -90,6 +97,129 @@ public class HomeService {
                 packageName
         );
     }
+
+    private List<Home> createInitialHomeButtons(
+            User user
+    ) {
+
+        return List.of(
+                Home.createButton(
+                        user,
+                        1,
+                        "전화",
+                        null,
+                        ActionType.DEFAULT,
+                        "PHONE",
+                        null
+                ),
+                Home.createButton(
+                        user,
+                        2,
+                        "메시지",
+                        null,
+                        ActionType.DEFAULT,
+                        "MESSAGE",
+                        null
+                ),
+                Home.createButton(
+                        user,
+                        3,
+                        "카메라",
+                        null,
+                        ActionType.DEFAULT,
+                        "CAMERA",
+                        null
+                ),
+                Home.createButton(
+                        user,
+                        4,
+                        "사진",
+                        null,
+                        ActionType.DEFAULT,
+                        "PHOTO",
+                        null
+                ),
+                Home.createButton(
+                        user,
+                        5,
+                        "유튜브",
+                        null,
+                        ActionType.APP,
+                        "YOUTUBE",
+                        "com.google.android.youtube"
+                ),
+                Home.createButton(
+                        user,
+                        6,
+                        "말벗",
+                        null,
+                        ActionType.DEFAULT,
+                        "COMPANION",
+                        null
+                ),
+                Home.createButton(
+                        user,
+                        7,
+                        "복약",
+                        null,
+                        ActionType.DEFAULT,
+                        "MEDICATION",
+                        null
+                ),
+                Home.createButton(
+                        user,
+                        8,
+                        "긴급알림",
+                        null,
+                        ActionType.DEFAULT,
+                        "EMERGENCY",
+                        null
+                ),
+                Home.createButton(
+                        user,
+                        9,
+                        "카카오톡",
+                        null,
+                        ActionType.APP,
+                        "KAKAO_TALK",
+                        "com.kakao.talk"
+                ),
+                Home.createButton(
+                        user,
+                        10,
+                        "네이버",
+                        null,
+                        ActionType.APP,
+                        "NAVER",
+                        "com.nhn.android.search"
+                )
+        );
+    }
+
+    private List<Home> getOrCreateInitialHomeButtons(
+            User user
+    ) {
+
+        List<Home> homes =
+                homeRepository
+                        .findAllByUserOrderByButtonOrderAsc(
+                                user
+                        );
+
+        if (!homes.isEmpty()) {
+            return homes;
+        }
+
+        List<Home> initialButtons =
+                createInitialHomeButtons(
+                        user
+                );
+
+        return homeRepository.saveAll(
+                initialButtons
+        );
+    }
+
 
     private String resolveButtonName(
             String requestedButtonName,
@@ -165,7 +295,7 @@ public class HomeService {
     /**
      * 자녀 홈 화면 조회
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public HomeResponse getHome() {
 
         User currentUser = getCurrentUser();
@@ -193,10 +323,9 @@ public class HomeService {
                 createConnectionResponse(seniorUser);
 
         List<Home> homes =
-                homeRepository
-                        .findAllByUserOrderByButtonOrderAsc(
-                                homeOwner
-                        );
+                getOrCreateInitialHomeButtons(
+                        homeOwner
+                );
 
         List<HomeResponse.HomeButtonResponse> buttons =
                 homes.stream()
@@ -697,7 +826,7 @@ public class HomeService {
     /**
      * 시니어 홈 화면 조회
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public SeniorHomeResponse getSeniorHome() {
 
         User parent = getCurrentUser();
@@ -712,10 +841,9 @@ public class HomeService {
                 findPrimaryChild(parent);
 
         List<Home> homes =
-                homeRepository
-                        .findAllByUserOrderByButtonOrderAsc(
-                                primaryChild
-                        );
+                getOrCreateInitialHomeButtons(
+                        primaryChild
+                );
 
         List<SeniorHomeResponse.ButtonResponse> buttons =
                 homes.stream()
@@ -925,15 +1053,39 @@ public class HomeService {
             List<HomeButtonSaveRequest.ButtonRequest> buttonRequests
     ) {
 
-        boolean hasMissingActionInformation =
+        boolean hasInvalidActionInformation =
                 buttonRequests.stream()
-                        .anyMatch(buttonRequest ->
-                                buttonRequest.getActionType() == null
-                                        || buttonRequest.getActionValue() == null
-                                        || buttonRequest.getActionValue().isBlank()
-                        );
+                        .anyMatch(buttonRequest -> {
 
-        if (hasMissingActionInformation) {
+                            ActionType actionType =
+                                    buttonRequest.getActionType();
+
+                            String actionValue =
+                                    buttonRequest.getActionValue();
+
+                            String packageName =
+                                    buttonRequest.getPackageName();
+
+                            if (actionType == null
+                                    || actionValue == null
+                                    || actionValue.isBlank()) {
+                                return true;
+                            }
+
+                            if (actionType == ActionType.DEFAULT) {
+                                return packageName != null
+                                        && !packageName.isBlank();
+                            }
+
+                            if (actionType == ActionType.APP) {
+                                return packageName == null
+                                        || packageName.isBlank();
+                            }
+
+                            return true;
+                        });
+
+        if (hasInvalidActionInformation) {
             throw new BusinessException(
                     ErrorCode.INVALID_HOME_BUTTON_REQUEST
             );
@@ -997,6 +1149,22 @@ public class HomeService {
                         .toList();
 
         validateSequentialOrders(sortedOrders);
+
+        Set<String> defaultButtons =
+                buttonRequests.stream()
+                        .filter(buttonRequest ->
+                                buttonRequest.getActionType() == ActionType.DEFAULT
+                        )
+                        .map(buttonRequest ->
+                                buttonRequest.getActionValue().trim()
+                        )
+                        .collect(Collectors.toSet());
+
+        if (!defaultButtons.containsAll(REQUIRED_DEFAULT_BUTTONS)) {
+            throw new BusinessException(
+                    ErrorCode.REQUIRED_HOME_BUTTON_MISSING
+            );
+        }
     }
 
     private void validateSequentialOrders(
