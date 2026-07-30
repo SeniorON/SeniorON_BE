@@ -10,6 +10,8 @@ import com.google.firebase.messaging.MessagingErrorCode;
 import com.google.firebase.messaging.Notification;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationContext;
@@ -52,15 +54,17 @@ public class FcmSender {
                         .build())
                 .build();
 
-        long start = System.currentTimeMillis();
+        long start = System.nanoTime();
 
         try {
             FirebaseMessaging.getInstance().send(message);
-            log.info("FCM 발송 소요시간={}ms", System.currentTimeMillis() - start);
+            long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+            log.info("FCM 발송 소요시간={}ms", elapsedMillis);
             countSend("success", "NONE");
             return true;
         } catch (FirebaseMessagingException e) {
-            log.info("FCM 발송 실패까지 소요시간={}ms", System.currentTimeMillis() - start);
+            long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+            log.info("FCM 발송 실패까지 소요시간={}ms", elapsedMillis);
             MessagingErrorCode errorCode = e.getMessagingErrorCode();
             String errorCodeName = errorCode != null
                     ? errorCode.name()
