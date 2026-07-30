@@ -39,3 +39,6 @@ out/
 
 # Local build logs
 build_log.txt
+
+build/
+node_modules/
