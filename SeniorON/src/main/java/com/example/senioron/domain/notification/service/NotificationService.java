@@ -214,9 +214,11 @@ public class NotificationService {
 
     //병렬발송
     private NotificationDispatchResult dispatchSosInParallel(List<NotificationDispatchTarget> targets) {
+        long timeoutSeconds = 5L;
         List<CompletableFuture<Boolean>> futures = targets.stream()
                 .map(target -> CompletableFuture.supplyAsync(
-                        () -> sendToAnyDevice(target), sosDispatchExecutor))
+                        () -> sendToAnyDevice(target), sosDispatchExecutor)
+                        .completeOnTimeout(false, timeoutSeconds, TimeUnit.SECONDS))
                 .toList();
 
         long notifiedCount = futures.stream()
