@@ -52,11 +52,15 @@ public class FcmSender {
                         .build())
                 .build();
 
+        long start = System.currentTimeMillis();
+
         try {
             FirebaseMessaging.getInstance().send(message);
+            log.info("FCM 발송 소요시간={}ms", System.currentTimeMillis() - start);
             countSend("success", "NONE");
             return true;
         } catch (FirebaseMessagingException e) {
+            log.info("FCM 발송 실패까지 소요시간={}ms", System.currentTimeMillis() - start);
             MessagingErrorCode errorCode = e.getMessagingErrorCode();
             String errorCodeName = errorCode != null
                     ? errorCode.name()
