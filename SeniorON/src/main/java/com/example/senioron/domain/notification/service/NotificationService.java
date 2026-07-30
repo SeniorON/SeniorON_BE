@@ -26,6 +26,7 @@ import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -41,6 +42,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Service
@@ -51,6 +56,7 @@ public class NotificationService {
     // SOS는 미발송 자체가 사고이므로 별도로 관리
     private static final String SOS_DISPATCH_METRIC = "sos_dispatch_total";
     private static final String TAG_RESULT = "result";
+    private static final int SOS_DISPATCH_POOL_SIZE = 8;
 
     private final NotificationRepository notificationRepository;
     private final NotificationSettingRepository notificationSettingRepository;
@@ -58,6 +64,20 @@ public class NotificationService {
     private final DeviceRepository deviceRepository;
     private final FcmSender fcmSender;
     private final MeterRegistry meterRegistry;
+    private final ExecutorService sosDispatchExecutor = Executors.newFixedThreadPool(SOS_DISPATCH_POOL_SIZE);
+
+    @PreDestroy
+    void shutdownSosDispatchExecutor() {
+        sosDispatchExecutor.shutdown();
+        try {
+            if (!sosDispatchExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                sosDispatchExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            sosDispatchExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
 
     /**
      * 일반 알림. 알림을 저장하고 커밋 이후 비동기로 발송한다.
@@ -99,7 +119,7 @@ public class NotificationService {
             return NotificationDispatchResult.noReceiver();
         }
 
-        NotificationDispatchResult result = dispatch(targets);
+        NotificationDispatchResult result = dispatchSosInParallel(targets);
 
         if (result.notifiedCount() == 0) {
             countSosDispatch("undelivered");
@@ -178,27 +198,48 @@ public class NotificationService {
     }
 
     /**
-     * 수신자별로 등록된 모든 기기에 발송한다. 한 대라도 성공하면 그 수신자는 발송 성공으로 센다.
+     * 수신자별로 등록된 모든 기기에 순차 발송한다. 한 대라도 성공하면 그 수신자는 발송 성공으로 센다.
      */
     private NotificationDispatchResult dispatch(List<NotificationDispatchTarget> targets) {
         int notifiedCount = 0;
 
         for (NotificationDispatchTarget target : targets) {
-            boolean delivered = false;
-            for (String deviceToken : target.deviceTokens()) {
-                try {
-                    boolean sent = fcmSender.send(deviceToken, target.title(), target.body());
-                    delivered = delivered || sent;
-                } catch (Exception e) {
-                    log.warn("FCM 발송 처리 중 예외 발생, receiverId={}", target.receiverId(), e);
-                }
-            }
-            if (delivered) {
+            if (sendToAnyDevice(target)) {
                 notifiedCount++;
             }
         }
 
         return new NotificationDispatchResult(targets.size(), notifiedCount);
+    }
+
+    //병렬발송
+    private NotificationDispatchResult dispatchSosInParallel(List<NotificationDispatchTarget> targets) {
+        long timeoutSeconds = 5L;
+        List<CompletableFuture<Boolean>> futures = targets.stream()
+                .map(target -> CompletableFuture.supplyAsync(
+                        () -> sendToAnyDevice(target), sosDispatchExecutor)
+                        .completeOnTimeout(false, timeoutSeconds, TimeUnit.SECONDS))
+                .toList();
+
+        long notifiedCount = futures.stream()
+                .map(CompletableFuture::join)
+                .filter(Boolean::booleanValue)
+                .count();
+
+        return new NotificationDispatchResult(targets.size(), (int) notifiedCount);
+    }
+
+    private boolean sendToAnyDevice(NotificationDispatchTarget target) {
+        boolean delivered = false;
+        for (String deviceToken : target.deviceTokens()) {
+            try {
+                boolean sent = fcmSender.send(deviceToken, target.title(), target.body());
+                delivered = delivered || sent;
+            } catch (Exception e) {
+                log.warn("FCM 발송 처리 중 예외 발생, receiverId={}", target.receiverId(), e);
+            }
+        }
+        return delivered;
     }
 
     private void countSosDispatch(String result) {
@@ -287,7 +328,10 @@ public class NotificationService {
             NotificationSetting setting = NotificationSetting.builder()
                     .user(user)
                     .build();
-            return notificationSettingRepository.save(setting);
+            // save()는 INSERT를 즉시 실행하지 않고 다음 쿼리의 자동 flush 시점까지 미룰 수 있다.
+            // 그러면 DB 제약조건 위반(예: 스키마 드리프트로 남은 컬럼의 NOT NULL)이 이 메서드 밖,
+            // 즉 이 catch가 못 잡는 시점에 터진다. saveAndFlush로 즉시 실행시켜 여기서 확실히 잡는다.
+            return notificationSettingRepository.saveAndFlush(setting);
         } catch(DataIntegrityViolationException e){
             return notificationSettingRepository.findById(user.getUsersId())
                     .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND));
