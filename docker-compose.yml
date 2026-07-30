@@ -44,6 +44,7 @@ services:
       - .env
 
     environment:
+      JAVA_TOOL_OPTIONS: "-Djava.net.preferIPv4Stack=true"
       SPRING_PROFILES_ACTIVE: prod
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
