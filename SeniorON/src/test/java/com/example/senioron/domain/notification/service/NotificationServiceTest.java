@@ -10,6 +10,8 @@ import com.example.senioron.domain.device.entity.DeviceStatus;
 import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.event.util.FcmSender;
 import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.notification.dto.NotificationDispatchResult;
+import com.example.senioron.domain.notification.dto.NotificationDispatchTarget;
 import com.example.senioron.domain.notification.dto.response.NotificationHomeListResponse;
 import com.example.senioron.domain.notification.dto.response.ParentDeviceStatusResponse;
 import com.example.senioron.domain.notification.entity.NotificationSetting;
@@ -233,5 +235,32 @@ class NotificationServiceTest {
         java.time.LocalDateTime captured = thresholdCaptor.getValue();
         java.time.LocalDateTime expected = java.time.LocalDateTime.now().minusDays(30);
         assertThat(java.time.Duration.between(captured, expected).abs()).isLessThan(java.time.Duration.ofSeconds(5));
+    }
+
+    // "가장 느린 발송 1건" 수준에 그쳐야 한다 — 발송 1건에 300ms가 걸리는 상황을 흉내
+    @Test
+    void dispatchSosSendsToMultipleReceiversInParallel() throws Exception {
+        long perCallDelayMillis = 300;
+        given(fcmSender.send(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString()))
+                .willAnswer(invocation -> {
+                    Thread.sleep(perCallDelayMillis);
+                    return true;
+                });
+
+        List<NotificationDispatchTarget> targets = List.of(
+                new NotificationDispatchTarget(1L, "SOS", "도움이 필요해요", List.of("token-1")),
+                new NotificationDispatchTarget(2L, "SOS", "도움이 필요해요", List.of("token-2")),
+                new NotificationDispatchTarget(3L, "SOS", "도움이 필요해요", List.of("token-3")),
+                new NotificationDispatchTarget(4L, "SOS", "도움이 필요해요", List.of("token-4"))
+        );
+
+        long startedAt = System.nanoTime();
+        NotificationDispatchResult result = notificationService.dispatchSos(targets);
+        long elapsedMillis = (System.nanoTime() - startedAt) / 1_000_000;
+
+        assertThat(result.receiverCount()).isEqualTo(4);
+        assertThat(result.notifiedCount()).isEqualTo(4);
+        assertThat(elapsedMillis).isLessThan(perCallDelayMillis * 3);
     }
 }
