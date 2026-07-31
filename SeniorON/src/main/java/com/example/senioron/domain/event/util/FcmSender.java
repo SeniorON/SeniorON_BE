@@ -92,74 +92,145 @@ public class FcmSender {
         }
     }
 
-    public void sendData(
+    public boolean sendData(
             String fcmToken,
             Map<String, String> data
     ) {
-        if (fcmToken == null || fcmToken.isBlank()) {
-            countSend("skipped", "NO_TOKEN");
-            log.warn("FCM 토큰이 비어있어 발송을 건너뜁니다.");
-            return;
+        if (fcmToken == null
+                || fcmToken.isBlank()) {
+            countSend(
+                    "skipped",
+                    "NO_TOKEN"
+            );
+
+            log.warn(
+                    "FCM 토큰이 비어있어 발송을 건너뜁니다."
+            );
+
+            return false;
         }
 
         if (!firebaseConfig.isInitialized()) {
-            countSend("skipped", "NOT_INITIALIZED");
-            log.warn("Firebase가 초기화되지 않아 FCM 발송을 건너뜁니다.");
-            return;
+            countSend(
+                    "skipped",
+                    "NOT_INITIALIZED"
+            );
+
+            log.warn(
+                    "Firebase가 초기화되지 않아 FCM 발송을 건너뜁니다."
+            );
+
+            return false;
         }
 
-        if (data == null || data.isEmpty()) {
-            countSend("skipped", "NO_DATA");
-            log.warn("FCM data가 비어있어 발송을 건너뜁니다.");
-            return;
+        if (data == null
+                || data.isEmpty()) {
+            countSend(
+                    "skipped",
+                    "NO_DATA"
+            );
+
+            log.warn(
+                    "FCM data가 비어있어 발송을 건너뜁니다."
+            );
+
+            return false;
         }
 
-        Message message = Message.builder()
-                .setToken(fcmToken)
-                .putAllData(data)
-                .setAndroidConfig(
-                        AndroidConfig.builder()
-                                .setPriority(AndroidConfig.Priority.HIGH)
-                                .build()
-                )
-                .build();
+        Message message =
+                Message.builder()
+                        .setToken(
+                                fcmToken
+                        )
+                        .putAllData(
+                                data
+                        )
+                        .setAndroidConfig(
+                                AndroidConfig.builder()
+                                        .setPriority(
+                                                AndroidConfig.Priority.HIGH
+                                        )
+                                        .build()
+                        )
+                        .build();
 
         try {
-            String messageId = FirebaseMessaging.getInstance().send(message);
+            String messageId =
+                    FirebaseMessaging
+                            .getInstance()
+                            .send(
+                                    message
+                            );
 
-            countSend("success", "NONE");
-            log.info(
-                    "복약 FCM data 발송 성공, messageId={}, token={}",
-                    messageId,
-                    maskToken(fcmToken)
+            countSend(
+                    "success",
+                    "NONE"
             );
-        } catch (FirebaseMessagingException e) {
-            MessagingErrorCode errorCode = e.getMessagingErrorCode();
-            String errorCodeName = errorCode != null
-                    ? errorCode.name()
-                    : "UNKNOWN";
 
-            if (errorCode == MessagingErrorCode.UNREGISTERED) {
-                countSend("token_invalid", errorCodeName);
-                log.warn("유효하지 않은 FCM 토큰, 삭제 처리");
+            log.info(
+                    "FCM data 발송 성공. messageId={}, token={}",
+                    messageId,
+                    maskToken(
+                            fcmToken
+                    )
+            );
 
-                FcmSender self = applicationContext.getBean(FcmSender.class);
-                self.clearInvalidToken(fcmToken);
-                return;
+            return true;
+        } catch (FirebaseMessagingException exception) {
+            MessagingErrorCode errorCode =
+                    exception.getMessagingErrorCode();
+
+            String errorCodeName =
+                    errorCode != null
+                            ? errorCode.name()
+                            : "UNKNOWN";
+
+            if (errorCode
+                    == MessagingErrorCode.UNREGISTERED) {
+                countSend(
+                        "token_invalid",
+                        errorCodeName
+                );
+
+                log.warn(
+                        "유효하지 않은 FCM 토큰을 삭제합니다."
+                );
+
+                FcmSender self =
+                        applicationContext.getBean(
+                                FcmSender.class
+                        );
+
+                self.clearInvalidToken(
+                        fcmToken
+                );
+
+                return false;
             }
 
-            countSend("failed", errorCodeName);
-            log.warn(
-                    "FCM 발송 실패, token={}, errorCode={}",
-                    maskToken(fcmToken),
+            countSend(
+                    "failed",
                     errorCodeName
             );
-        } catch (RuntimeException e) {
-            countSend("failed", "UNEXPECTED");
-            throw e;
+
+            log.warn(
+                    "FCM 발송 실패. token={}, errorCode={}",
+                    maskToken(
+                            fcmToken
+                    ),
+                    errorCodeName
+            );
+
+            return false;
+        } catch (RuntimeException exception) {
+            countSend(
+                    "failed",
+                    "UNEXPECTED"
+            );
+
+            throw exception;
         }
     }
-
     private void countSend(String result, String errorCode) {
         meterRegistry.counter(
                 SEND_METRIC,
