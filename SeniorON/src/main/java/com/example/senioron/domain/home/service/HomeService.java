@@ -1371,7 +1371,8 @@ public class HomeService {
                 resolveRelation(userSenior),
                 birth,
                 age,
-                createFullAddress(senior),
+                senior.getAddress(),
+                senior.getDetailAddress(),
                 senior.getPhoneNumber()
         );
     }
@@ -1412,33 +1413,6 @@ public class HomeService {
         }
 
         return customRelation.trim();
-    }
-
-    private String createFullAddress(
-            Senior senior
-    ) {
-
-        String address =
-                senior.getAddress();
-
-        String detailAddress =
-                senior.getDetailAddress();
-
-        if (address == null
-                || address.isBlank()) {
-
-            return detailAddress;
-        }
-
-        if (detailAddress == null
-                || detailAddress.isBlank()) {
-
-            return address;
-        }
-
-        return address
-                + " "
-                + detailAddress;
     }
 
     private String normalizePhoneNumber(

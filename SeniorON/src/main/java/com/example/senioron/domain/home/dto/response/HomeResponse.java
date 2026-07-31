@@ -124,6 +124,10 @@ public class HomeResponse {
         private LocalDate birth;
         private Integer age;
         private String address;
+
+        @JsonProperty("detail_address")
+        private String detailAddress;
+
         private String phone;
 
         public SeniorProfileResponse(
@@ -133,6 +137,7 @@ public class HomeResponse {
                 LocalDate birth,
                 Integer age,
                 String address,
+                String detailAddress,
                 String phone
         ) {
             this.seniorId = seniorId;
@@ -141,11 +146,13 @@ public class HomeResponse {
             this.birth = birth;
             this.age = age;
             this.address = address;
+            this.detailAddress = detailAddress;
             this.phone = phone;
         }
 
         public static SeniorProfileResponse empty() {
             return new SeniorProfileResponse(
+                    null,
                     null,
                     null,
                     null,
@@ -178,6 +185,10 @@ public class HomeResponse {
 
         public String getAddress() {
             return address;
+        }
+
+        public String getDetailAddress() {
+            return detailAddress;
         }
 
         public String getPhone() {
