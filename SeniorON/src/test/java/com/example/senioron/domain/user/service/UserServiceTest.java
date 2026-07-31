@@ -13,18 +13,24 @@ import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.inactivity.service.InactivitySettingService;
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeSendRequest;
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeVerifyRequest;
+import com.example.senioron.domain.user.dto.request.UserSignUpRequest;
 import com.example.senioron.domain.user.dto.response.SignupEmailVerificationCodeVerifyResponse;
+import com.example.senioron.domain.user.dto.response.UserSignUpResponse;
+import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.SignupEmailVerificationCode;
+import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.event.SignupEmailVerificationCodeSendEvent;
 import com.example.senioron.domain.user.repository.SignupEmailVerificationCodeRepository;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.jwt.JwtUtil;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -58,6 +64,27 @@ class UserServiceTest {
                 mock(DeviceService.class),
                 eventPublisher
         );
+    }
+
+    @Test
+    void signUpSavesRequestedRole() {
+        UserSignUpRequest request = createSignUpRequest(Role.CHILD);
+        given(userRepository.existsByLoginId("testId")).willReturn(false);
+        given(userRepository.existsByEmail(EMAIL)).willReturn(false);
+        given(userRepository.save(any(User.class))).willAnswer(invocation -> {
+            User user = invocation.getArgument(0);
+            ReflectionTestUtils.setField(user, "usersId", 1L);
+            return user;
+        });
+
+        UserSignUpResponse response = userService.signUp(request);
+
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(userCaptor.capture());
+        User savedUser = userCaptor.getValue();
+
+        assertThat(savedUser.getRole()).isEqualTo(Role.CHILD);
+        assertThat(response.getRole()).isEqualTo(Role.CHILD);
     }
 
     @Test
@@ -251,6 +278,22 @@ class UserServiceTest {
     private SignupEmailVerificationCodeSendRequest createSendRequest(String email) {
         SignupEmailVerificationCodeSendRequest request = new SignupEmailVerificationCodeSendRequest();
         ReflectionTestUtils.setField(request, "email", email);
+        return request;
+    }
+
+    private UserSignUpRequest createSignUpRequest(Role role) {
+        UserSignUpRequest request = new UserSignUpRequest();
+        ReflectionTestUtils.setField(request, "loginId", "testId");
+        ReflectionTestUtils.setField(request, "email", EMAIL);
+        ReflectionTestUtils.setField(request, "password", "password123!");
+        ReflectionTestUtils.setField(request, "passwordCheck", "password123!");
+        ReflectionTestUtils.setField(request, "name", "test");
+        ReflectionTestUtils.setField(request, "birth", LocalDate.of(1990, 1, 1));
+        ReflectionTestUtils.setField(request, "role", role);
+        ReflectionTestUtils.setField(request, "agreeServiceTerms", true);
+        ReflectionTestUtils.setField(request, "agreePrivacyPolicy", true);
+        ReflectionTestUtils.setField(request, "agreeAgeOver14", true);
+        ReflectionTestUtils.setField(request, "agreeMarketing", false);
         return request;
     }
 }

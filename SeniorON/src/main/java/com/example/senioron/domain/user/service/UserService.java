@@ -74,6 +74,7 @@ public class UserService {
                 .password(passwordEncoder.encode(request.getPassword()))
                 .name(request.getName())
                 .birth(request.getBirth())
+                .role(request.getRole())
                 .status(UserStatus.ACTIVE)
                 .build();
 
@@ -84,6 +85,7 @@ public class UserService {
                 .usersId(savedUser.getUsersId())
                 .name(savedUser.getName())
                 .loginId(savedUser.getLoginId())
+                .role(savedUser.getRole())
                 .build();
     }
 
