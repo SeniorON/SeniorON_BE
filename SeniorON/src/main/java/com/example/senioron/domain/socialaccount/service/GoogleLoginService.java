@@ -1,0 +1,74 @@
+package com.example.senioron.domain.socialaccount.service;
+
+import com.example.senioron.domain.socialaccount.dto.google.request.GoogleLoginRequest;
+import com.example.senioron.domain.socialaccount.dto.google.response.GoogleLoginResponse;
+import com.example.senioron.domain.socialaccount.entity.SocialAccount;
+import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.global.apiPayload.code.ErrorCode;
+import com.example.senioron.global.apiPayload.exception.BusinessException;
+import com.example.senioron.global.jwt.JwtUtil;
+import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@RequiredArgsConstructor
+@Transactional(readOnly = true)
+public class GoogleLoginService {
+
+    private final FirebaseIdTokenVerifier firebaseIdTokenVerifier;
+    private final GoogleSocialAccountIssuer googleSocialAccountIssuer;
+    private final JwtUtil jwtUtil;
+
+    public GoogleLoginResponse googleLogin(GoogleLoginRequest request) {
+        VerifiedFirebaseUser firebaseUser =
+                firebaseIdTokenVerifier.verify(request.getFirebaseIdToken());
+
+        validateRequiredInfo(firebaseUser);
+
+        GoogleSocialAccountIssuer.Result result =
+                findOrCreateSocialAccount(
+                        firebaseUser.uid(),
+                        firebaseUser.email(),
+                        firebaseUser.name()
+                );
+
+        SocialAccount socialAccount = result.socialAccount();
+        User user = socialAccount.getUser();
+        String accessToken = jwtUtil.createAccessToken(user);
+
+        return GoogleLoginResponse.builder()
+                .accessToken(accessToken)
+                .usersId(user.getUsersId())
+                .name(user.getName())
+                .role(user.getRole())
+                .newUser(result.newUser())
+                .build();
+    }
+
+    private GoogleSocialAccountIssuer.Result findOrCreateSocialAccount(
+            String providerId,
+            String email,
+            String name
+    ) {
+        try {
+            return googleSocialAccountIssuer.findOrCreate(providerId, email, name);
+        } catch (DataIntegrityViolationException e) {
+            return googleSocialAccountIssuer.findExisting(providerId);
+        }
+    }
+
+    private void validateRequiredInfo(VerifiedFirebaseUser firebaseUser) {
+        if (firebaseUser == null
+                || isBlank(firebaseUser.uid())
+                || isBlank(firebaseUser.email())
+                || isBlank(firebaseUser.name())) {
+            throw new BusinessException(ErrorCode.INVALID_FIREBASE_ID_TOKEN);
+        }
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+}

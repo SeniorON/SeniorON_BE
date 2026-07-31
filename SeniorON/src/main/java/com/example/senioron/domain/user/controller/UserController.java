@@ -1,7 +1,5 @@
 package com.example.senioron.domain.user.controller;
 
-import com.example.senioron.domain.socialaccount.dto.kakao.request.KakaoLoginRequest;
-import com.example.senioron.domain.socialaccount.dto.kakao.response.KakaoLoginResponse;
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeSendRequest;
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeVerifyRequest;
 import com.example.senioron.domain.user.dto.request.UserLoginRequest;
@@ -9,7 +7,6 @@ import com.example.senioron.domain.user.dto.request.UserRoleUpdateRequest;
 import com.example.senioron.domain.user.dto.request.UserSignUpRequest;
 import com.example.senioron.domain.user.dto.response.*;
 import com.example.senioron.domain.user.entity.User;
-import com.example.senioron.domain.socialaccount.service.KakaoLoginService;
 import com.example.senioron.domain.user.service.UserService;
 import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
@@ -61,7 +58,6 @@ public class UserController {
     public Response<UserLoginResponse> login(@Valid @RequestBody UserLoginRequest request) {
         return Response.ok(userService.login(request));
     }
-
 
     @Operation(summary = "역할 선택/변경", description = "현재 로그인한 사용자의 역할을 선택하거나 변경합니다.")
     @PatchMapping("/me/role")

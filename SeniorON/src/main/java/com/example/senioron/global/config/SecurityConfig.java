@@ -56,6 +56,7 @@ public class SecurityConfig {
                                 "/api/users/account-recovery/password/verification-code/verify",
                                 "/api/users/account-recovery/password",
                                 "/api/social-accounts/login/kakao",
+                                "/api/social-accounts/login/google",
                                 "/api/social-accounts/login/kakao/callback",
                                 "/h2-console/**",
                                 "/actuator/**"
