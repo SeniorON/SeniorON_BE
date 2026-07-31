@@ -88,10 +88,21 @@ public class MedicationEventListener {
 
         String title = "복약 완료";
 
-        String body = parentName
-                + "님이 "
-                + medicineName
-                + "을(를) 복용했어요.";
+        String body;
+
+        if (event.parentName() == null
+                || event.parentName().isBlank()) {
+            body =
+                    "부모님이 "
+                            + medicineName
+                            + "을(를) 복용했어요.";
+        } else {
+            body =
+                    event.parentName()
+                            + "님이 "
+                            + medicineName
+                            + "을(를) 복용했어요.";
+        }
 
         Map<String, String> data = Map.of(
                 "type", "MEDICATION_CHECKED",
@@ -123,12 +134,18 @@ public class MedicationEventListener {
             }
 
             try {
-                fcmSender.sendData(
-                        deviceToken,
-                        data
-                );
+                boolean sent =
+                        fcmSender.sendData(
+                                deviceToken,
+                                data
+                        );
 
-                successCount++;
+                if (sent) {
+                    successCount++;
+                } else {
+                    failureCount++;
+                }
+
 
                 log.info(
                         "자녀 복약 완료 FCM 발송 요청 처리. deviceId={}, medicationLogId={}",

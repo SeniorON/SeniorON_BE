@@ -15,7 +15,6 @@ import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import java.time.DateTimeException;
-import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -310,23 +309,17 @@ public class MedicationLogService {
                                 today
                         )
                         .stream()
-                        .min(
-                                Comparator
-                                        .comparingLong(
-                                                (MedicationLog medicationLog) ->
-                                                        Math.abs(
-                                                                Duration.between(
-                                                                        currentTime,
-                                                                        medicationLog.getPlannedTime()
-                                                                ).toSeconds()
-                                                        )
+                        .filter(medicationLog ->
+                                !medicationLog
+                                        .getPlannedTime()
+                                        .isAfter(
+                                                currentTime
                                         )
-                                        .thenComparing(
-                                                medicationLog ->
-                                                        medicationLog.getPlannedTime()
-                                                                .isAfter(
-                                                                        currentTime
-                                                                )
+                        )
+                        .max(
+                                Comparator
+                                        .comparing(
+                                                MedicationLog::getPlannedTime
                                         )
                                         .thenComparing(
                                                 MedicationLog::getMedicationLogId
@@ -340,6 +333,68 @@ public class MedicationLogService {
 
         return markMedicationAsTaken(
                 nearestMedicationLog,
+                now
+        );
+    }
+
+    @Transactional
+    public MedicationCheckResponse checkMedication(
+            Long medicationLogId,
+            Long requesterUserId
+    ) {
+        User parentUser =
+                getUserOrThrow(
+                        requesterUserId
+                );
+
+        if (parentUser.getRole() != Role.PARENT) {
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN
+            );
+        }
+
+        MedicationLog medicationLog =
+                medicationLogRepository
+                        .findById(
+                                medicationLogId
+                        )
+                        .orElseThrow(() ->
+                                new BusinessException(
+                                        ErrorCode.MEDICATION_NOT_FOUND
+                                )
+                        );
+
+        if (!Objects.equals(
+                medicationLog.getUser()
+                        .getUsersId(),
+                parentUser.getUsersId()
+        )) {
+            throw new BusinessException(
+                    ErrorCode.MEDICATION_NOT_FOUND
+            );
+        }
+
+        LocalDateTime now =
+                LocalDateTime.now(
+                        KOREA_ZONE_ID
+                );
+
+        LocalDateTime plannedAt =
+                LocalDateTime.of(
+                        medicationLog.getPlannedDate(),
+                        medicationLog.getPlannedTime()
+                );
+
+        if (plannedAt.isAfter(
+                now
+        )) {
+            throw new BusinessException(
+                    ErrorCode.BAD_REQUEST
+            );
+        }
+
+        return markMedicationAsTaken(
+                medicationLog,
                 now
         );
     }
@@ -467,7 +522,8 @@ public class MedicationLogService {
                                 )
                         );
 
-        for (User parentUser : parentsById.values()) {
+        for (User parentUser :
+                parentsById.values()) {
             createMissingMedicationLogs(
                     parentUser,
                     today
@@ -704,7 +760,8 @@ public class MedicationLogService {
     private User getUserOrThrow(
             Long userId
     ) {
-        return userRepository.findById(
+        return userRepository
+                .findById(
                         userId
                 )
                 .orElseThrow(() ->
