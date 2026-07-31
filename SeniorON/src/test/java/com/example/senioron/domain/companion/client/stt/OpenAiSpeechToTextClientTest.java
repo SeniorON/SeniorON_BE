@@ -142,6 +142,34 @@ class OpenAiSpeechToTextClientTest {
     }
 
     @Test
+    void 잘못된_MIME_타입이면_400을_반환하고_OpenAI를_호출하지_않는다() {
+        VoiceAudio invalidAudio = new VoiceAudio(
+                "voice.m4a",
+                "invalid-content-type",
+                new byte[]{1, 2, 3}
+        );
+
+        assertError(
+                () -> client.transcribe(invalidAudio),
+                ErrorCode.COMPANION_AUDIO_FORMAT_UNSUPPORTED
+        );
+
+        server.verify();
+    }
+
+    @Test
+    void 모델명이_없으면_호출하지_않고_503을_반환한다() {
+        properties.setModel(" ");
+
+        assertError(
+                () -> client.transcribe(audio),
+                ErrorCode.COMPANION_STT_NOT_CONFIGURED
+        );
+
+        server.verify();
+    }
+
+    @Test
     void API_KEY가_없으면_호출하지_않고_503을_반환한다() {
         properties.setApiKey("");
 

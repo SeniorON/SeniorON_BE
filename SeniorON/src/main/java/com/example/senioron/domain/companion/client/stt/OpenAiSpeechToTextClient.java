@@ -10,6 +10,7 @@ import com.example.senioron.global.apiPayload.exception.BusinessException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.InvalidMediaTypeException;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.stereotype.Component;
@@ -66,29 +67,29 @@ public class OpenAiSpeechToTextClient
     private OpenAiTranscriptionResponse requestTranscription(
             VoiceAudio audio
     ) {
-        MultipartBodyBuilder body =
-                new MultipartBodyBuilder();
-
-        ByteArrayResource fileResource =
-                new ByteArrayResource(audio.bytes()) {
-                    @Override
-                    public String getFilename() {
-                        return audio.filename();
-                    }
-                };
-
-        body.part("file", fileResource)
-                .contentType(
-                        MediaType.parseMediaType(
-                                audio.contentType()
-                        )
-                );
-
-        body.part("model", properties.getModel());
-        body.part("language", properties.getLanguage());
-        body.part("response_format", "json");
-
         try {
+            MultipartBodyBuilder body =
+                    new MultipartBodyBuilder();
+
+            ByteArrayResource fileResource =
+                    new ByteArrayResource(audio.bytes()) {
+                        @Override
+                        public String getFilename() {
+                            return audio.filename();
+                        }
+                    };
+
+            body.part("file", fileResource)
+                    .contentType(
+                            MediaType.parseMediaType(
+                                    audio.contentType()
+                            )
+                    );
+
+            body.part("model", properties.getModel());
+            body.part("language", properties.getLanguage());
+            body.part("response_format", "json");
+
             return restClient.post()
                     .uri("/v1/audio/transcriptions")
                     .headers(headers ->
@@ -96,36 +97,29 @@ public class OpenAiSpeechToTextClient
                                     properties.getApiKey()
                             )
                     )
-                    .contentType(
-                            MediaType.MULTIPART_FORM_DATA
-                    )
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
                     .accept(MediaType.APPLICATION_JSON)
                     .body(body.build())
                     .retrieve()
-                    .body(
-                            OpenAiTranscriptionResponse.class
-                    );
+                    .body(OpenAiTranscriptionResponse.class);
+
+        } catch (InvalidMediaTypeException exception) {
+            throw new BusinessException(ErrorCode.COMPANION_AUDIO_FORMAT_UNSUPPORTED);
         } catch (RestClientResponseException exception) {
             logProviderFailure(exception);
-            throw new BusinessException(
-                    ErrorCode.COMPANION_STT_UNAVAILABLE
-            );
+            throw new BusinessException(ErrorCode.COMPANION_STT_UNAVAILABLE);
         } catch (ResourceAccessException exception) {
             if (hasTimeoutCause(exception)) {
-                throw new BusinessException(
-                        ErrorCode.COMPANION_STT_TIMEOUT
-                );
+                throw new BusinessException(ErrorCode.COMPANION_STT_TIMEOUT);
             }
 
-            throw new BusinessException(
-                    ErrorCode.COMPANION_STT_UNAVAILABLE
-            );
+            throw new BusinessException(ErrorCode.COMPANION_STT_UNAVAILABLE);
         } catch (RestClientException exception) {
-            throw new BusinessException(
-                    ErrorCode.COMPANION_STT_UNAVAILABLE
-            );
+            throw new BusinessException(ErrorCode.COMPANION_STT_UNAVAILABLE);
         }
     }
+
+
 
     private String extractText(
             OpenAiTranscriptionResponse response
