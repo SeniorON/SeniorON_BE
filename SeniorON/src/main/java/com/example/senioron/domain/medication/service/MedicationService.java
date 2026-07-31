@@ -99,6 +99,7 @@ public class MedicationService {
                         .map(
                                 this::parseMedicineTime
                         )
+                        .distinct()
                         .map(medicineTime ->
                                 medicationRepository.save(
                                         Medication.builder()
@@ -134,7 +135,7 @@ public class MedicationService {
         medicationRepository.flush();
 
         medicationLogService
-                .createTodayMedicationLogsForParent(
+                .createMedicationLogsForNextThirtyDays(
                         parentUser.getUsersId()
                 );
 
@@ -253,50 +254,50 @@ public class MedicationService {
                         request.getMedicineDays()
                 );
 
-        for (String timeString :
-                request.getMedicineTimes()) {
-            LocalTime medicineTime =
-                    parseMedicineTime(
-                            timeString
+        request.getMedicineTimes()
+                .stream()
+                .map(
+                        this::parseMedicineTime
+                )
+                .distinct()
+                .forEach(medicineTime -> {
+                    Medication newMedication =
+                            Medication.builder()
+                                    .user(
+                                            parentUser
+                                    )
+                                    .medicineName(
+                                            request.getMedicineName()
+                                    )
+                                    .ingredientName(
+                                            request.getIngredientName()
+                                    )
+                                    .medicineTime(
+                                            medicineTime
+                                    )
+                                    .medicineDays(
+                                            medicineDays
+                                    )
+                                    .medicationGroupId(
+                                            request.getMedicationGroupId()
+                                    )
+                                    .effectiveFrom(
+                                            changedAt
+                                    )
+                                    .effectiveTo(
+                                            null
+                                    )
+                                    .build();
+
+                    medicationRepository.save(
+                            newMedication
                     );
-
-            Medication newMedication =
-                    Medication.builder()
-                            .user(
-                                    parentUser
-                            )
-                            .medicineName(
-                                    request.getMedicineName()
-                            )
-                            .ingredientName(
-                                    request.getIngredientName()
-                            )
-                            .medicineTime(
-                                    medicineTime
-                            )
-                            .medicineDays(
-                                    medicineDays
-                            )
-                            .medicationGroupId(
-                                    request.getMedicationGroupId()
-                            )
-                            .effectiveFrom(
-                                    changedAt
-                            )
-                            .effectiveTo(
-                                    null
-                            )
-                            .build();
-
-            medicationRepository.save(
-                    newMedication
-            );
-        }
+                });
 
         medicationRepository.flush();
 
         medicationLogService
-                .createTodayMedicationLogsForParent(
+                .createMedicationLogsForNextThirtyDays(
                         parentUser.getUsersId()
                 );
 
