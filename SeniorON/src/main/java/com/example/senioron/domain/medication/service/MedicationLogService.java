@@ -48,12 +48,14 @@ public class MedicationLogService {
     private static final long MISSED_DELAY_MINUTES =
             30L;
 
+    private static final int MEDICATION_LOG_CREATION_DAYS =
+            30;
+
     private final MedicationLogRepository medicationLogRepository;
     private final MedicationRepository medicationRepository;
     private final UserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
 
-    @Transactional
     public List<MedicationScheduleResponse>
     getOwnDailyMedicationSchedules(
             Long requesterUserId,
@@ -76,7 +78,6 @@ public class MedicationLogService {
         );
     }
 
-    @Transactional
     public List<MedicationScheduleResponse>
     getParentDailyMedicationSchedules(
             Long requesterUserId,
@@ -138,11 +139,6 @@ public class MedicationLogService {
             User parentUser,
             LocalDate date
     ) {
-        createMissingMedicationLogs(
-                parentUser,
-                date
-        );
-
         List<MedicationLog> schedules =
                 medicationLogRepository
                         .findByUserUsersIdAndPlannedDateOrderByPlannedTimeAsc(
@@ -150,12 +146,17 @@ public class MedicationLogService {
                                 date
                         );
 
+        List<MedicationLog> uniqueSchedules =
+                deduplicateMedicationLogs(
+                        schedules
+                );
+
         LocalDateTime now =
                 LocalDateTime.now(
                         KOREA_ZONE_ID
                 );
 
-        return schedules.stream()
+        return uniqueSchedules.stream()
                 .map(medicationLog ->
                         MedicationScheduleResponse.builder()
                                 .medicationLogId(
@@ -302,20 +303,63 @@ public class MedicationLogService {
                 today
         );
 
-        MedicationLog nearestMedicationLog =
+        List<MedicationLog> dailyMedicationLogs =
                 medicationLogRepository
-                        .findByUserUsersIdAndPlannedDateAndIsTakenFalseOrderByPlannedTimeAsc(
+                        .findByUserUsersIdAndPlannedDateOrderByPlannedTimeAsc(
                                 parentUser.getUsersId(),
                                 today
-                        )
+                        );
+
+        Map<String, MedicationLog> untakenMedicationLogs =
+                new LinkedHashMap<>();
+
+        Set<String> takenScheduleKeys =
+                new HashSet<>();
+
+        for (MedicationLog medicationLog :
+                dailyMedicationLogs) {
+            String scheduleKey =
+                    createScheduleKey(
+                            medicationLog.getMedication(),
+                            medicationLog.getPlannedDate()
+                    );
+
+            if (Boolean.TRUE.equals(
+                    medicationLog.getIsTaken()
+            )) {
+                takenScheduleKeys.add(
+                        scheduleKey
+                );
+
+                untakenMedicationLogs.remove(
+                        scheduleKey
+                );
+
+                continue;
+            }
+
+            if (takenScheduleKeys.contains(
+                    scheduleKey
+            )) {
+                continue;
+            }
+
+            if (medicationLog.getPlannedTime()
+                    .isAfter(
+                            currentTime
+                    )) {
+                continue;
+            }
+
+            untakenMedicationLogs.putIfAbsent(
+                    scheduleKey,
+                    medicationLog
+            );
+        }
+
+        MedicationLog nearestMedicationLog =
+                untakenMedicationLogs.values()
                         .stream()
-                        .filter(medicationLog ->
-                                !medicationLog
-                                        .getPlannedTime()
-                                        .isAfter(
-                                                currentTime
-                                        )
-                        )
                         .max(
                                 Comparator
                                         .comparing(
@@ -461,6 +505,48 @@ public class MedicationLogService {
     }
 
     @Transactional
+    public void createMedicationLogsForNextThirtyDays(
+            Long parentUserId
+    ) {
+        User parentUser =
+                getUserOrThrow(
+                        parentUserId
+                );
+
+        if (parentUser.getRole() != Role.PARENT) {
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN
+            );
+        }
+
+        LocalDate startDate =
+                LocalDate.now(
+                        KOREA_ZONE_ID
+                );
+
+        for (int dayOffset = 0;
+             dayOffset < MEDICATION_LOG_CREATION_DAYS;
+             dayOffset++) {
+            LocalDate targetDate =
+                    startDate.plusDays(
+                            dayOffset
+                    );
+
+            createMissingMedicationLogs(
+                    parentUser,
+                    targetDate
+            );
+        }
+
+        log.info(
+                "30일 복약 로그 생성 완료. parentUserId: {}, startDate: {}, days: {}",
+                parentUserId,
+                startDate,
+                MEDICATION_LOG_CREATION_DAYS
+        );
+    }
+
+    @Transactional
     public void createTodayMedicationLogsForParent(
             Long parentUserId
     ) {
@@ -563,16 +649,19 @@ public class MedicationLogService {
                                 date
                         );
 
-        Set<Long> loggedMedicationIds =
-                new HashSet<>();
-
-        existingMedicationLogs.forEach(
-                medicationLog ->
-                        loggedMedicationIds.add(
-                                medicationLog.getMedication()
-                                        .getMedication_id()
+        Set<String> loggedScheduleKeys =
+                existingMedicationLogs.stream()
+                        .map(medicationLog ->
+                                createScheduleKey(
+                                        medicationLog.getMedication(),
+                                        medicationLog.getPlannedDate()
+                                )
                         )
-        );
+                        .collect(
+                                Collectors.toCollection(
+                                        HashSet::new
+                                )
+                        );
 
         List<MedicationLog> newMedicationLogs =
                 medications.stream()
@@ -583,8 +672,11 @@ public class MedicationLogService {
                                 )
                         )
                         .filter(medication ->
-                                !loggedMedicationIds.contains(
-                                        medication.getMedication_id()
+                                loggedScheduleKeys.add(
+                                        createScheduleKey(
+                                                medication,
+                                                date
+                                        )
                                 )
                         )
                         .map(medication ->
@@ -620,6 +712,107 @@ public class MedicationLogService {
                     newMedicationLogs.size()
             );
         }
+    }
+
+    private List<MedicationLog> deduplicateMedicationLogs(
+            List<MedicationLog> medicationLogs
+    ) {
+        Map<String, MedicationLog> uniqueMedicationLogs =
+                new LinkedHashMap<>();
+
+        for (MedicationLog medicationLog :
+                medicationLogs) {
+            String scheduleKey =
+                    createScheduleKey(
+                            medicationLog.getMedication(),
+                            medicationLog.getPlannedDate()
+                    );
+
+            uniqueMedicationLogs.merge(
+                    scheduleKey,
+                    medicationLog,
+                    this::selectPreferredMedicationLog
+            );
+        }
+
+        return uniqueMedicationLogs.values()
+                .stream()
+                .sorted(
+                        Comparator
+                                .comparing(
+                                        MedicationLog::getPlannedTime
+                                )
+                                .thenComparing(
+                                        MedicationLog::getMedicationLogId
+                                )
+                )
+                .toList();
+    }
+
+    private MedicationLog selectPreferredMedicationLog(
+            MedicationLog existingMedicationLog,
+            MedicationLog candidateMedicationLog
+    ) {
+        boolean existingTaken =
+                Boolean.TRUE.equals(
+                        existingMedicationLog.getIsTaken()
+                );
+
+        boolean candidateTaken =
+                Boolean.TRUE.equals(
+                        candidateMedicationLog.getIsTaken()
+                );
+
+        if (candidateTaken && !existingTaken) {
+            return candidateMedicationLog;
+        }
+
+        if (existingTaken && !candidateTaken) {
+            return existingMedicationLog;
+        }
+
+        Long existingId =
+                existingMedicationLog.getMedicationLogId();
+
+        Long candidateId =
+                candidateMedicationLog.getMedicationLogId();
+
+        if (existingId == null) {
+            return candidateMedicationLog;
+        }
+
+        if (candidateId == null) {
+            return existingMedicationLog;
+        }
+
+        return candidateId < existingId
+                ? candidateMedicationLog
+                : existingMedicationLog;
+    }
+
+    private String createScheduleKey(
+            Medication medication,
+            LocalDate plannedDate
+    ) {
+        String medicationIdentifier;
+
+        if (medication.getMedicationGroupId() != null
+                && !medication.getMedicationGroupId()
+                .isBlank()) {
+            medicationIdentifier =
+                    medication.getMedicationGroupId();
+        } else {
+            medicationIdentifier =
+                    String.valueOf(
+                            medication.getMedication_id()
+                    );
+        }
+
+        return medicationIdentifier
+                + "|"
+                + plannedDate
+                + "|"
+                + medication.getMedicineTime();
     }
 
     private MedicationScheduleStatus determineMedicationStatus(
