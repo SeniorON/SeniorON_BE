@@ -8,7 +8,12 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(uniqueConstraints = @UniqueConstraint(columnNames = {"users_id", "device_identifier"}))
+@Table(
+        uniqueConstraints = @UniqueConstraint(columnNames = {"users_id", "device_identifier"}),
+        indexes = {
+                @Index(name = "idx_device_users_id", columnList = "users_id")
+        }
+)
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor

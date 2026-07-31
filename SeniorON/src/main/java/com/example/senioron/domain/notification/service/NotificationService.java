@@ -377,9 +377,27 @@ public class NotificationService {
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        validateParentDeviceOnline(user);
-        User senior = resolveSeniorOwner(user)
-                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND));
+
+        User senior;
+        if (user.getRole() == Role.PARENT) {
+            senior = user;
+        } else {
+            if (user.getFamily() == null) {
+                throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
+            }
+            List<User> parents = userRepository.findByFamilyAndUsersIdNotAndRole(
+                    user.getFamily(), user.getUsersId(), Role.PARENT);
+            if (parents.isEmpty()) {
+                throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
+            }
+            boolean anyOffline = findParentDeviceStatuses(parents).stream()
+                    .anyMatch(status -> status == DeviceStatus.OFFLINE);
+            if (anyOffline) {
+                throw new BusinessException(ErrorCode.PARENT_DEVICE_OFFLINE);
+            }
+            senior = parents.get(0);
+        }
+
         NotificationSetting setting = notificationSettingRepository.findById(senior.getUsersId())
                 .orElseGet(() -> createDefaultSettingInternal(senior));
 
@@ -422,7 +440,11 @@ public class NotificationService {
         }
         List<User> parents = userRepository.findByFamilyAndUsersIdNotAndRole(
                 child.getFamily(), child.getUsersId(), Role.PARENT);
-        if (parents.isEmpty()) {
+        return findParentDeviceStatuses(parents);
+    }
+
+    private List<DeviceStatus> findParentDeviceStatuses(List<User> parents) {
+        if (parents == null || parents.isEmpty()) {
             return List.of();
         }
         return deviceRepository.findAllByUserIn(parents).stream()

@@ -23,6 +23,7 @@ import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
@@ -34,12 +35,16 @@ import java.util.Objects;
 @RequiredArgsConstructor
 public class EventService {
 
+    private static final String SOS_EVENT_METRIC = "sos_event_total";
+    private static final String TAG_RESULT = "result";
+
     private final EventRepository eventRepository;
     private final NotificationService notificationService;
     private final GeocodingClient geocodingClient;
     private final SafeBrowsingClient safeBrowsingClient;
     private final ApplicationContext applicationContext;
     private final UserRepository userRepository;
+    private final MeterRegistry meterRegistry;
 
     /**
      * SOS는 긴급 알림, 발송 결과를 응답에 담음.
@@ -52,6 +57,7 @@ public class EventService {
         EventService self = applicationContext.getBean(EventService.class);
 
         SosEventCreation creation = self.saveSosEvent(address, user, req);
+        countSosEvent("success");
 
         // 커밋이 끝난 뒤 발송한다. 실패해도 이벤트는 이미 저장되어 있어 인앱 알림으로는 확인할 수 있다.
         NotificationDispatchResult dispatchResult =
@@ -175,5 +181,9 @@ public class EventService {
                 || !Objects.equals(currentUser.getFamily().getFamilyId(), eventOwner.getFamily().getFamilyId())) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
+    }
+
+    private void countSosEvent(String result) {
+        meterRegistry.counter(SOS_EVENT_METRIC, TAG_RESULT, result).increment();
     }
 }
