@@ -46,7 +46,7 @@ ALTER TABLE users
 같은 PR에 migration 파일도 추가한다:
 
 ```sql
-CREATE INDEX IF NOT EXISTS idx_users_status
+CREATE INDEX idx_users_status
     ON users (status);
 ```
 
