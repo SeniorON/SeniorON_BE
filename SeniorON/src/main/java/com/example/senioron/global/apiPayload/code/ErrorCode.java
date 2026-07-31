@@ -89,6 +89,13 @@ public enum ErrorCode implements BaseCode {
     COMPANION_CONVERSATION_ENDED(HttpStatus.CONFLICT, "COMPANION409_1", "이미 종료된 대화입니다."),
     COMPANION_ENCRYPTION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "COMPANION500_1", "대화 내용을 안전하게 처리하지 못했습니다."),
     COMPANION_TURN_NOT_FOUND(HttpStatus.NOT_FOUND, "COMPANION404_2", "대화 턴을 찾을 수 없습니다."),
+    COMPANION_AUDIO_REQUIRED(HttpStatus.BAD_REQUEST, "COMPANION400_1", "음성 파일을 첨부해 주세요."),
+    COMPANION_AUDIO_FORMAT_UNSUPPORTED(HttpStatus.BAD_REQUEST, "COMPANION400_2", "지원하지 않는 음성 파일 형식입니다."),
+    COMPANION_AUDIO_SIZE_EXCEEDED(HttpStatus.PAYLOAD_TOO_LARGE, "COMPANION413_1", "음성 파일 크기는 10MB를 초과할 수 없습니다."),
+    COMPANION_SPEECH_NOT_RECOGNIZED(HttpStatus.UNPROCESSABLE_ENTITY, "COMPANION422_1", "음성을 인식하지 못했습니다. 다시 말씀해 주세요."),
+    COMPANION_STT_UNAVAILABLE(HttpStatus.BAD_GATEWAY, "COMPANION502_1", "음성 인식 서비스를 이용할 수 없습니다."),
+    COMPANION_STT_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "COMPANION503_1", "음성 인식 서비스가 설정되지 않았습니다."),
+    COMPANION_STT_TIMEOUT(HttpStatus.GATEWAY_TIMEOUT, "COMPANION504_1", "음성 인식 요청 시간이 초과되었습니다."),
 
     // Photo Error
     UNSUPPORTED_IMAGE_TYPE(HttpStatus.BAD_REQUEST,"IMAGE400_1", "JPG, PNG, WEBP 형식의 이미지만 업로드할 수 있습니다."),
