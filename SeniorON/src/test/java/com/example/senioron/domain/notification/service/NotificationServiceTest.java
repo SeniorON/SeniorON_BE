@@ -114,12 +114,15 @@ class NotificationServiceTest {
     }
 
     @Test
-    void allowsSettingChangeWhenParentHasNoDeviceRecord() {
+    void blocksSettingChangeWhenParentHasNoDeviceRecord() {
         given(userRepository.findByFamilyAndUsersIdNotAndRole(family, CHILD_ID, Role.PARENT))
                 .willReturn(List.of(parentA));
         given(deviceRepository.findAllByUserIn(List.of(parentA))).willReturn(List.of());
 
-        assertThat(notificationService.updateSetting(CHILD_ID, NotificationSettingType.INACTIVITY, true)).isNotNull();
+        assertThatThrownBy(() -> notificationService.updateSetting(CHILD_ID, NotificationSettingType.INACTIVITY, true))
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.PARENT_DEVICE_OFFLINE);
     }
 
     // 가족이 없으면 설정을 공유할 시니어를 특정할 수 없으므로 변경이 거부되어야 한다.
@@ -151,7 +154,9 @@ class NotificationServiceTest {
     void childUpdateWritesToSeniorsSetting() {
         given(userRepository.findByFamilyAndUsersIdNotAndRole(family, CHILD_ID, Role.PARENT))
                 .willReturn(List.of(parentA));
-        given(deviceRepository.findAllByUserIn(List.of(parentA))).willReturn(List.of());
+        given(deviceRepository.findAllByUserIn(List.of(parentA))).willReturn(List.of(
+                Device.builder().connectionStatus(DeviceStatus.ONLINE).build()
+        ));
 
         notificationService.updateSetting(CHILD_ID, NotificationSettingType.RISK_LINK, false);
 

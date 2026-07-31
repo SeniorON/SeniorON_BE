@@ -70,12 +70,17 @@ class EventServiceSosNotificationTest {
                 .role(Role.PARENT)
                 .build());
 
+        double eventSuccessBefore = counterValueOrZero("sos_event_total", "result", "success");
+        double noReceiverBefore = counterValueOrZero("sos_dispatch_total", "result", "no_receiver");
+
         SosEventResponse response = eventService.createSosEvent(senior, sosRequest());
 
         assertThat(response.getReceiverCount()).isEqualTo(0);
         assertThat(response.getNotifiedCount()).isEqualTo(0);
-        assertThat(counterValue("sos_event_total", "result", "success")).isEqualTo(1.0);
-        assertThat(counterValue("sos_dispatch_total", "result", "no_receiver")).isEqualTo(1.0);
+        assertThat(counterValueOrZero("sos_event_total", "result", "success") - eventSuccessBefore)
+                .isEqualTo(1.0);
+        assertThat(counterValueOrZero("sos_dispatch_total", "result", "no_receiver") - noReceiverBefore)
+                .isEqualTo(1.0);
     }
 
     @Test
@@ -145,12 +150,6 @@ class EventServiceSosNotificationTest {
         ReflectionTestUtils.setField(req, "longitude", new BigDecimal("126.9780"));
         ReflectionTestUtils.setField(req, "deviceBattery", 80);
         return req;
-    }
-
-    private double counterValue(String name, String tagKey, String tagValue) {
-        var counter = meterRegistry.find(name).tag(tagKey, tagValue).counter();
-        assertThat(counter).as("metric %s{%s=%s} not found", name, tagKey, tagValue).isNotNull();
-        return counter.count();
     }
 
     private double counterValueOrZero(String name, String tagKey, String tagValue) {
