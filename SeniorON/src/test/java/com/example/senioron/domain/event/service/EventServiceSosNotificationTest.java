@@ -70,11 +70,17 @@ class EventServiceSosNotificationTest {
                 .role(Role.PARENT)
                 .build());
 
+        double eventSuccessBefore = counterValueOrZero("sos_event_total", "result", "success");
+        double noReceiverBefore = counterValueOrZero("sos_dispatch_total", "result", "no_receiver");
+
         SosEventResponse response = eventService.createSosEvent(senior, sosRequest());
 
         assertThat(response.getReceiverCount()).isEqualTo(0);
         assertThat(response.getNotifiedCount()).isEqualTo(0);
-        assertThat(counterValue("sos_dispatch_total", "result", "no_receiver")).isEqualTo(1.0);
+        assertThat(counterValueOrZero("sos_event_total", "result", "success") - eventSuccessBefore)
+                .isEqualTo(1.0);
+        assertThat(counterValueOrZero("sos_dispatch_total", "result", "no_receiver") - noReceiverBefore)
+                .isEqualTo(1.0);
     }
 
     @Test
@@ -108,6 +114,7 @@ class EventServiceSosNotificationTest {
 
         // 실행 전후 델타로 비교해야 이 컨텍스트를 공유하는 다른 테스트의 누적값에 영향받지 않는다.
         double undeliveredBefore = counterValueOrZero("sos_dispatch_total", "result", "undelivered");
+        double eventSuccessBefore = counterValueOrZero("sos_event_total", "result", "success");
         double notDeliveredBefore = sumNotDeliveredFcmSendCounters();
 
         SosEventResponse response = eventService.createSosEvent(senior, sosRequest());
@@ -122,6 +129,9 @@ class EventServiceSosNotificationTest {
 
         double undeliveredAfter = counterValueOrZero("sos_dispatch_total", "result", "undelivered");
         assertThat(undeliveredAfter - undeliveredBefore).isEqualTo(1.0);
+
+        double eventSuccessAfter = counterValueOrZero("sos_event_total", "result", "success");
+        assertThat(eventSuccessAfter - eventSuccessBefore).isEqualTo(1.0);
 
         // failed/skipped/token_invalid 중 무엇이 늘어나든 "발송 안 됨"이라는 결론은 같다.
         double notDeliveredAfter = sumNotDeliveredFcmSendCounters();
@@ -140,12 +150,6 @@ class EventServiceSosNotificationTest {
         ReflectionTestUtils.setField(req, "longitude", new BigDecimal("126.9780"));
         ReflectionTestUtils.setField(req, "deviceBattery", 80);
         return req;
-    }
-
-    private double counterValue(String name, String tagKey, String tagValue) {
-        var counter = meterRegistry.find(name).tag(tagKey, tagValue).counter();
-        assertThat(counter).as("metric %s{%s=%s} not found", name, tagKey, tagValue).isNotNull();
-        return counter.count();
     }
 
     private double counterValueOrZero(String name, String tagKey, String tagValue) {

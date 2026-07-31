@@ -21,7 +21,13 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import jakarta.persistence.Table;
+import jakarta.persistence.Index;
+
 @Entity
+@Table(name = "hospital", indexes = {
+        @Index(name = "idx_hospital_user_schedule", columnList = "users_id, scheduleDate")
+})
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor

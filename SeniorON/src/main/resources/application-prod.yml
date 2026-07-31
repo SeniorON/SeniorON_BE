@@ -1,18 +1,30 @@
 spring:
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
   datasource:
     url: jdbc:mariadb://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslMode=trust
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: org.mariadb.jdbc.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 10
+      connection-timeout: 3000
+      idle-timeout: 600000
+      max-lifetime: 1800000
 
   jpa:
+    open-in-view: false
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
 
     properties:
       hibernate:
         format_sql: true
         show_sql: false
+        default_batch_fetch_size: 100
 
 logging:
   level:

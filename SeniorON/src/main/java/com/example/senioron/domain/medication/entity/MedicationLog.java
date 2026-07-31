@@ -9,6 +9,10 @@ import java.time.LocalTime;
 import lombok.*;
 
 @Entity
+@Table(name = "medication_log", indexes = {
+        @Index(name = "idx_med_log_user_date", columnList = "users_id, planned_date"),
+        @Index(name = "idx_med_log_date_time_taken", columnList = "planned_date, planned_time, is_taken")
+})
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor

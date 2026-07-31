@@ -377,9 +377,25 @@ public class NotificationService {
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        validateParentDeviceOnline(user);
-        User senior = resolveSeniorOwner(user)
-                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND));
+
+        User senior;
+        if (user.getRole() == Role.PARENT) {
+            senior = user;
+        } else {
+            if (user.getFamily() == null) {
+                throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
+            }
+            List<User> parents = userRepository.findByFamilyAndUsersIdNotAndRole(
+                    user.getFamily(), user.getUsersId(), Role.PARENT);
+            if (parents.isEmpty()) {
+                throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
+            }
+            if (!areAllDevicesOnline(findParentDeviceStatuses(parents))) {
+                throw new BusinessException(ErrorCode.PARENT_DEVICE_OFFLINE);
+            }
+            senior = parents.get(0);
+        }
+
         NotificationSetting setting = notificationSettingRepository.findById(senior.getUsersId())
                 .orElseGet(() -> createDefaultSettingInternal(senior));
 
@@ -394,9 +410,7 @@ public class NotificationService {
 
     // 자녀가 알림 설정을 변경하기 전, 같은 가족의 부모님 기기가 하나라도 오프라인이면 변경을 차단 (fail-safe)
     private void validateParentDeviceOnline(User child) {
-        boolean anyOffline = findParentDeviceStatuses(child).stream()
-                .anyMatch(status -> status == DeviceStatus.OFFLINE);
-        if (anyOffline) {
+        if (!areAllDevicesOnline(findParentDeviceStatuses(child))) {
             throw new BusinessException(ErrorCode.PARENT_DEVICE_OFFLINE);
         }
     }
@@ -422,12 +436,21 @@ public class NotificationService {
         }
         List<User> parents = userRepository.findByFamilyAndUsersIdNotAndRole(
                 child.getFamily(), child.getUsersId(), Role.PARENT);
-        if (parents.isEmpty()) {
+        return findParentDeviceStatuses(parents);
+    }
+
+    private List<DeviceStatus> findParentDeviceStatuses(List<User> parents) {
+        if (parents == null || parents.isEmpty()) {
             return List.of();
         }
         return deviceRepository.findAllByUserIn(parents).stream()
                 .map(Device::getConnectionStatus)
                 .toList();
+    }
+
+    private boolean areAllDevicesOnline(List<DeviceStatus> statuses) {
+        return !statuses.isEmpty()
+                && statuses.stream().allMatch(status -> status == DeviceStatus.ONLINE);
     }
 
     @Transactional(readOnly = true)
@@ -497,4 +520,3 @@ public class NotificationService {
         log.info("[알림 정리 배치] 30일 경과 알림 {}건 삭제", deletedCount);
     }
 }
-

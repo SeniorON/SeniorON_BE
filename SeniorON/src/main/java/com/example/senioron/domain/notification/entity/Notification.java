@@ -7,6 +7,9 @@ import lombok.*;
 import com.example.senioron.common.entity.BaseEntity;
 
 @Entity
+@Table(name = "notification", indexes = {
+        @Index(name = "idx_notification_receiver_type_read_created", columnList = "receiver_users_id, notification_type, is_read, created_at")
+})
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor

@@ -8,7 +8,10 @@ import lombok.*;
 import com.example.senioron.common.entity.BaseEntity;
 
 @Entity
-@Table(name = "family_photo")
+@Table(name = "family_photo", indexes = {
+        @Index(name = "idx_family_photo_family_created", columnList = "family_id, created_at, family_photo_id"),
+        @Index(name = "idx_family_photo_family_user", columnList = "family_id, users_id")
+})
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor

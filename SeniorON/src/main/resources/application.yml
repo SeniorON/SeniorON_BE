@@ -9,6 +9,12 @@ spring:
       max-request-size: 11MB
   config:
     import: optional:classpath:application-secret.yml
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        default_batch_fetch_size: 100
+
   mail:
     host: ${MAIL_HOST:localhost}
     port: ${MAIL_PORT:1025}

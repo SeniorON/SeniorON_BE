@@ -8,6 +8,9 @@ import com.example.senioron.common.entity.BaseEntity;
 import java.time.LocalDateTime;
 
 @Entity
+@Table(name = "event", indexes = {
+        @Index(name = "idx_event_triggered_user_type", columnList = "triggered_users_id, eventType")
+})
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
