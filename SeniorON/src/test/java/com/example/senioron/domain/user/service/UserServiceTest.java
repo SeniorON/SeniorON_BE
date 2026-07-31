@@ -13,8 +13,10 @@ import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.inactivity.service.InactivitySettingService;
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeSendRequest;
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeVerifyRequest;
+import com.example.senioron.domain.user.dto.request.UserLoginRequest;
 import com.example.senioron.domain.user.dto.request.UserSignUpRequest;
 import com.example.senioron.domain.user.dto.response.SignupEmailVerificationCodeVerifyResponse;
+import com.example.senioron.domain.user.dto.response.UserLoginResponse;
 import com.example.senioron.domain.user.dto.response.UserSignUpResponse;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.SignupEmailVerificationCode;
@@ -85,6 +87,24 @@ class UserServiceTest {
 
         assertThat(savedUser.getRole()).isEqualTo(Role.CHILD);
         assertThat(response.getRole()).isEqualTo(Role.CHILD);
+    }
+
+    @Test
+    void loginReturnsUserRole() {
+        User user = User.builder()
+                .usersId(1L)
+                .loginId("testId")
+                .email(EMAIL)
+                .password(passwordEncoder.encode("password123!"))
+                .name("test")
+                .role(Role.PARENT)
+                .build();
+        given(userRepository.findByLoginId("testId")).willReturn(Optional.of(user));
+
+        UserLoginResponse response = userService.login(createLoginRequest());
+
+        assertThat(response.getRole()).isEqualTo(Role.PARENT);
+        assertThat(response.getAccessToken()).isNotBlank();
     }
 
     @Test
@@ -294,6 +314,13 @@ class UserServiceTest {
         ReflectionTestUtils.setField(request, "agreePrivacyPolicy", true);
         ReflectionTestUtils.setField(request, "agreeAgeOver14", true);
         ReflectionTestUtils.setField(request, "agreeMarketing", false);
+        return request;
+    }
+
+    private UserLoginRequest createLoginRequest() {
+        UserLoginRequest request = new UserLoginRequest();
+        ReflectionTestUtils.setField(request, "loginId", "testId");
+        ReflectionTestUtils.setField(request, "password", "password123!");
         return request;
     }
 }
