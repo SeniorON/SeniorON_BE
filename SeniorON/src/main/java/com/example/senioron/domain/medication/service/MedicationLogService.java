@@ -48,7 +48,7 @@ public class MedicationLogService {
     private static final long MISSED_DELAY_MINUTES =
             30L;
 
-    private static final int MEDICATION_LOG_CREATION_DAYS =
+    private static final int ROLLING_WINDOW_DAYS =
             30;
 
     private final MedicationLogRepository medicationLogRepository;
@@ -105,6 +105,7 @@ public class MedicationLogService {
         );
     }
 
+    @Transactional
     public MedicationMonthlyScheduleResponse
     getParentMonthlyMedicationSchedules(
             Long requesterUserId,
@@ -239,6 +240,13 @@ public class MedicationLogService {
                         )
                         .toList();
 
+        scheduledDates.forEach(date ->
+                createMissingMedicationLogs(
+                        parentUser,
+                        date
+                )
+        );
+
         return new MedicationMonthlyScheduleResponse(
                 yearMonth.getYear(),
                 yearMonth.getMonthValue(),
@@ -303,63 +311,30 @@ public class MedicationLogService {
                 today
         );
 
-        List<MedicationLog> dailyMedicationLogs =
+        List<MedicationLog> medicationLogs =
                 medicationLogRepository
                         .findByUserUsersIdAndPlannedDateOrderByPlannedTimeAsc(
                                 parentUser.getUsersId(),
                                 today
                         );
 
-        Map<String, MedicationLog> untakenMedicationLogs =
-                new LinkedHashMap<>();
-
-        Set<String> takenScheduleKeys =
-                new HashSet<>();
-
-        for (MedicationLog medicationLog :
-                dailyMedicationLogs) {
-            String scheduleKey =
-                    createScheduleKey(
-                            medicationLog.getMedication(),
-                            medicationLog.getPlannedDate()
-                    );
-
-            if (Boolean.TRUE.equals(
-                    medicationLog.getIsTaken()
-            )) {
-                takenScheduleKeys.add(
-                        scheduleKey
-                );
-
-                untakenMedicationLogs.remove(
-                        scheduleKey
-                );
-
-                continue;
-            }
-
-            if (takenScheduleKeys.contains(
-                    scheduleKey
-            )) {
-                continue;
-            }
-
-            if (medicationLog.getPlannedTime()
-                    .isAfter(
-                            currentTime
-                    )) {
-                continue;
-            }
-
-            untakenMedicationLogs.putIfAbsent(
-                    scheduleKey,
-                    medicationLog
-            );
-        }
-
         MedicationLog nearestMedicationLog =
-                untakenMedicationLogs.values()
+                deduplicateMedicationLogs(
+                        medicationLogs
+                )
                         .stream()
+                        .filter(medicationLog ->
+                                !Boolean.TRUE.equals(
+                                        medicationLog.getIsTaken()
+                                )
+                        )
+                        .filter(medicationLog ->
+                                !medicationLog
+                                        .getPlannedTime()
+                                        .isAfter(
+                                                currentTime
+                                        )
+                        )
                         .max(
                                 Comparator
                                         .comparing(
@@ -524,25 +499,46 @@ public class MedicationLogService {
                         KOREA_ZONE_ID
                 );
 
-        for (int dayOffset = 0;
-             dayOffset < MEDICATION_LOG_CREATION_DAYS;
-             dayOffset++) {
-            LocalDate targetDate =
-                    startDate.plusDays(
-                            dayOffset
-                    );
+        LocalDate endExclusiveDate =
+                startDate.plusDays(
+                        ROLLING_WINDOW_DAYS
+                );
 
-            createMissingMedicationLogs(
-                    parentUser,
-                    targetDate
-            );
-        }
+        createMedicationLogsForRange(
+                parentUser,
+                startDate,
+                endExclusiveDate
+        );
 
         log.info(
-                "30일 복약 로그 생성 완료. parentUserId: {}, startDate: {}, days: {}",
+                "복약 로그 rolling window 생성 완료. parentUserId: {}, startDate: {}, endExclusiveDate: {}",
                 parentUserId,
                 startDate,
-                MEDICATION_LOG_CREATION_DAYS
+                endExclusiveDate
+        );
+    }
+
+    @Transactional
+    public void createMedicationLogsForNextThirtyDaysForAllMedicationOwners() {
+        LocalDate startDate =
+                LocalDate.now(
+                        KOREA_ZONE_ID
+                );
+
+        LocalDate endExclusiveDate =
+                startDate.plusDays(
+                        ROLLING_WINDOW_DAYS
+                );
+
+        createMedicationLogsForAllMedicationOwnersInRange(
+                startDate,
+                endExclusiveDate
+        );
+
+        log.info(
+                "전체 복약 로그 rolling window 생성 완료. startDate: {}, endExclusiveDate: {}",
+                startDate,
+                endExclusiveDate
         );
     }
 
@@ -561,11 +557,15 @@ public class MedicationLogService {
             );
         }
 
-        createMissingMedicationLogs(
-                parentUser,
+        LocalDate today =
                 LocalDate.now(
                         KOREA_ZONE_ID
-                )
+                );
+
+        createMedicationLogsForRange(
+                parentUser,
+                today,
+                today.plusDays(1)
         );
     }
 
@@ -576,18 +576,26 @@ public class MedicationLogService {
                         KOREA_ZONE_ID
                 );
 
-        LocalDateTime dayStart =
-                today.atStartOfDay();
-
-        LocalDateTime dayEndExclusive =
+        createMedicationLogsForAllMedicationOwnersInRange(
+                today,
                 today.plusDays(1)
-                        .atStartOfDay();
+        );
 
+        log.info(
+                "당일 복약 로그 자동 생성 완료. date: {}",
+                today
+        );
+    }
+
+    private void createMedicationLogsForAllMedicationOwnersInRange(
+            LocalDate startDate,
+            LocalDate endExclusiveDate
+    ) {
         List<Medication> medications =
                 medicationRepository
                         .findAllEffectiveMedicationsForDate(
-                                dayStart,
-                                dayEndExclusive
+                                startDate.atStartOfDay(),
+                                endExclusiveDate.atStartOfDay()
                         );
 
         Map<Long, User> parentsById =
@@ -610,17 +618,29 @@ public class MedicationLogService {
 
         for (User parentUser :
                 parentsById.values()) {
-            createMissingMedicationLogs(
+            createMedicationLogsForRange(
                     parentUser,
-                    today
+                    startDate,
+                    endExclusiveDate
             );
         }
+    }
 
-        log.info(
-                "당일 복약 로그 자동 생성 완료. date: {}, parentCount: {}",
-                today,
-                parentsById.size()
-        );
+    private void createMedicationLogsForRange(
+            User parentUser,
+            LocalDate startDate,
+            LocalDate endExclusiveDate
+    ) {
+        startDate
+                .datesUntil(
+                        endExclusiveDate
+                )
+                .forEach(date ->
+                        createMissingMedicationLogs(
+                                parentUser,
+                                date
+                        )
+                );
     }
 
     private void createMissingMedicationLogs(
