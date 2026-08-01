@@ -313,7 +313,10 @@ public class FamilyService {
     }
 
     @Transactional(readOnly = true)
-    public FamilyCodeResponse getFamilyCode(User user) {
+    public FamilyCodeResponse getFamilyCode(User principal) {
+        User user = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
         Family family = user.getFamily();
 
         if (family == null) {
