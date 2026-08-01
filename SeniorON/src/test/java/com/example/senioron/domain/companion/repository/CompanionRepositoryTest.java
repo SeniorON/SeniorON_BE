@@ -23,6 +23,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import java.util.List;
+import org.springframework.data.domain.PageRequest;
 
 @DataJpaTest
 class CompanionRepositoryTest {
@@ -210,5 +212,168 @@ class CompanionRepositoryTest {
         );
 
         return new CompanionTextCipher(properties);
+    }
+
+    @Test
+    void findsRecentMessagesAcrossConversationsByUser() {
+        String unique =
+                UUID.randomUUID().toString();
+
+        User parent =
+                userRepository.saveAndFlush(
+                        User.builder()
+                                .loginId(
+                                        "memory-parent-"
+                                                + unique
+                                )
+                                .email(
+                                        "memory-"
+                                                + unique
+                                                + "@test.com"
+                                )
+                                .password(
+                                        "encoded-password"
+                                )
+                                .name(
+                                        "기억 테스트 부모"
+                                )
+                                .role(Role.PARENT)
+                                .status(
+                                        UserStatus.ACTIVE
+                                )
+                                .build()
+                );
+
+        CompanionConversation oldConversation =
+                conversationRepository
+                        .saveAndFlush(
+                                CompanionConversation
+                                        .start(parent)
+                        );
+
+        CompanionTurn oldTurn =
+                turnRepository.saveAndFlush(
+                        CompanionTurn.receive(
+                                oldConversation,
+                                UUID.randomUUID()
+                                        .toString()
+                        )
+                );
+
+        CompanionMessage oldMessage =
+                messageRepository.saveAndFlush(
+                        CompanionMessage.create(
+                                oldTurn,
+                                MessageRole.USER,
+                                "encrypted-old"
+                        )
+                );
+
+        oldConversation.end();
+
+        conversationRepository.saveAndFlush(
+                oldConversation
+        );
+
+        CompanionConversation newConversation =
+                conversationRepository
+                        .saveAndFlush(
+                                CompanionConversation
+                                        .start(parent)
+                        );
+
+        CompanionTurn newTurn =
+                turnRepository.saveAndFlush(
+                        CompanionTurn.receive(
+                                newConversation,
+                                UUID.randomUUID()
+                                        .toString()
+                        )
+                );
+
+        CompanionMessage newMessage =
+                messageRepository.saveAndFlush(
+                        CompanionMessage.create(
+                                newTurn,
+                                MessageRole.USER,
+                                "encrypted-new"
+                        )
+                );
+
+        User otherParent =
+                userRepository.saveAndFlush(
+                        User.builder()
+                                .loginId(
+                                        "other-parent-"
+                                                + unique
+                                )
+                                .email(
+                                        "other-"
+                                                + unique
+                                                + "@test.com"
+                                )
+                                .password(
+                                        "encoded-password"
+                                )
+                                .name("다른 부모")
+                                .role(Role.PARENT)
+                                .status(
+                                        UserStatus.ACTIVE
+                                )
+                                .build()
+                );
+
+        CompanionConversation otherConversation =
+                conversationRepository
+                        .saveAndFlush(
+                                CompanionConversation
+                                        .start(otherParent)
+                        );
+
+        CompanionTurn otherTurn =
+                turnRepository.saveAndFlush(
+                        CompanionTurn.receive(
+                                otherConversation,
+                                UUID.randomUUID()
+                                        .toString()
+                        )
+                );
+
+        messageRepository.saveAndFlush(
+                CompanionMessage.create(
+                        otherTurn,
+                        MessageRole.USER,
+                        "encrypted-other"
+                )
+        );
+
+        List<CompanionMessage> result =
+                messageRepository
+                        .findByConversationUserUsersIdOrderByMessageIdDesc(
+                                parent.getUsersId(),
+                                PageRequest.of(
+                                        0,
+                                        20
+                                )
+                        );
+
+        assertThat(result)
+                .extracting(
+                        CompanionMessage::getMessageId
+                )
+                .containsExactly(
+                        newMessage.getMessageId(),
+                        oldMessage.getMessageId()
+                );
+
+        assertThat(result)
+                .allMatch(message ->
+                        message.getConversation()
+                                .getUser()
+                                .getUsersId()
+                                .equals(
+                                        parent.getUsersId()
+                                )
+                );
     }
 }
