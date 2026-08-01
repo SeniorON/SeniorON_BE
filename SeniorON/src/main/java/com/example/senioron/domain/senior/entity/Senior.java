@@ -32,6 +32,10 @@ public class Senior {
 
     private String detailAddress;
 
+    private Double latitude;
+
+    private Double longitude;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "family_id", nullable = false, unique = true)
     private Family family;
