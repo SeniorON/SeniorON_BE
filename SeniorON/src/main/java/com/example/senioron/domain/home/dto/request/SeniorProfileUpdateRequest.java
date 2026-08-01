@@ -1,6 +1,8 @@
 package com.example.senioron.domain.home.dto.request;
 
 import com.example.senioron.domain.senior.entity.SeniorRelation;
+import com.example.senioron.global.validation.CoordinatePairRequest;
+import com.example.senioron.global.validation.ValidCoordinatePair;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
@@ -10,6 +12,7 @@ import jakarta.validation.constraints.Pattern;
 
 import java.time.LocalDate;
 
+@ValidCoordinatePair
 public record SeniorProfileUpdateRequest(
 
         @NotBlank(message = "이름을 입력해 주세요.")
@@ -42,5 +45,5 @@ public record SeniorProfileUpdateRequest(
         @DecimalMin(value = "-180.0", message = "경도는 -180 이상이어야 합니다.")
         @DecimalMax(value = "180.0", message = "경도는 180 이하여야 합니다.")
         Double longitude
-) {
+) implements CoordinatePairRequest {
 }
