@@ -1,6 +1,7 @@
 package com.example.senioron.domain.user.dto.request;
 
 
+import com.example.senioron.domain.user.entity.Role;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -32,6 +33,9 @@ public class UserSignUpRequest {
 
     @NotNull
     private LocalDate birth;
+
+    @NotNull
+    private Role role;
 
     @AssertTrue
     private Boolean agreeServiceTerms;

@@ -64,6 +64,8 @@ class SeniorServiceTest {
 
         assertThat(response.seniorId()).isEqualTo(10L);
         assertThat(response.relation()).isEqualTo(SeniorRelation.MOTHER);
+        assertThat(response.latitude()).isEqualTo(37.5665);
+        assertThat(response.longitude()).isEqualTo(126.9780);
         verify(seniorRepository).saveAndFlush(any(Senior.class));
         verify(userSeniorRepository).save(any(UserSenior.class));
     }
@@ -228,7 +230,9 @@ class SeniorServiceTest {
                 LocalDate.of(1950, 1, 1),
                 "010-1234-5678",
                 "서울시",
-                "101호"
+                "101호",
+                37.5665,
+                126.9780
         );
     }
 
@@ -240,6 +244,8 @@ class SeniorServiceTest {
                 .phoneNumber("01012345678")
                 .address("서울시")
                 .detailAddress("101호")
+                .latitude(37.5665)
+                .longitude(126.9780)
                 .family(family)
                 .registeredBy(registeredBy)
                 .build();

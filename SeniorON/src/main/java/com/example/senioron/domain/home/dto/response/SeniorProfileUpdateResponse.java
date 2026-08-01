@@ -14,7 +14,9 @@ public record SeniorProfileUpdateResponse(
         LocalDate birth,
         String phoneNumber,
         String address,
-        String detailAddress
+        String detailAddress,
+        Double latitude,
+        Double longitude
 ) {
 
     public static SeniorProfileUpdateResponse from(
@@ -29,7 +31,9 @@ public record SeniorProfileUpdateResponse(
                 senior.getBirth(),
                 senior.getPhoneNumber(),
                 senior.getAddress(),
-                senior.getDetailAddress()
+                senior.getDetailAddress(),
+                senior.getLatitude(),
+                senior.getLongitude()
         );
     }
 }

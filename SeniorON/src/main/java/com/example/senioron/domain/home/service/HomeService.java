@@ -441,6 +441,8 @@ public class HomeService {
                     .phoneNumber(normalizedPhoneNumber)
                     .address(request.address())
                     .detailAddress(request.detailAddress())
+                    .latitude(request.latitude())
+                    .longitude(request.longitude())
                     .family(lockedFamily)
                     .registeredBy(currentUser)
                     .build();
@@ -460,7 +462,9 @@ public class HomeService {
                     request.birth(),
                     normalizedPhoneNumber,
                     request.address(),
-                    request.detailAddress()
+                    request.detailAddress(),
+                    request.latitude(),
+                    request.longitude()
             );
         }
 
