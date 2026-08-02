@@ -14,6 +14,7 @@ import com.example.senioron.domain.socialaccount.entity.LoginProvider;
 import com.example.senioron.domain.socialaccount.entity.SocialAccount;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.service.RefreshTokenService;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.jwt.JwtUtil;
@@ -29,10 +30,12 @@ class GoogleLoginServiceTest {
     private static final String EMAIL = "google@example.com";
     private static final String NAME = "구글사용자";
     private static final String ACCESS_TOKEN = "senioron-jwt";
+    private static final String REFRESH_TOKEN = "senioron-refresh-jwt";
 
     private final FirebaseIdTokenVerifier firebaseIdTokenVerifier = mock(FirebaseIdTokenVerifier.class);
     private final GoogleSocialAccountIssuer googleSocialAccountIssuer = mock(GoogleSocialAccountIssuer.class);
     private final JwtUtil jwtUtil = mock(JwtUtil.class);
+    private final RefreshTokenService refreshTokenService = mock(RefreshTokenService.class);
 
     private GoogleLoginService googleLoginService;
 
@@ -41,7 +44,8 @@ class GoogleLoginServiceTest {
         googleLoginService = new GoogleLoginService(
                 firebaseIdTokenVerifier,
                 googleSocialAccountIssuer,
-                jwtUtil
+                jwtUtil,
+                refreshTokenService
         );
     }
 
@@ -54,14 +58,17 @@ class GoogleLoginServiceTest {
         given(googleSocialAccountIssuer.findOrCreate(PROVIDER_ID, EMAIL, NAME))
                 .willReturn(new GoogleSocialAccountIssuer.Result(socialAccount, false));
         given(jwtUtil.createAccessToken(user)).willReturn(ACCESS_TOKEN);
+        given(jwtUtil.createRefreshToken(user)).willReturn(REFRESH_TOKEN);
 
         GoogleLoginResponse response = googleLoginService.googleLogin(createRequest());
 
         assertThat(response.getAccessToken()).isEqualTo(ACCESS_TOKEN);
+        assertThat(response.getRefreshToken()).isEqualTo(REFRESH_TOKEN);
         assertThat(response.getUsersId()).isEqualTo(1L);
         assertThat(response.getName()).isEqualTo(NAME);
         assertThat(response.getRole()).isEqualTo(Role.CHILD);
         assertThat(response.isNewUser()).isFalse();
+        verify(refreshTokenService).saveOrRotate(user, null, REFRESH_TOKEN);
     }
 
     @Test
@@ -73,10 +80,12 @@ class GoogleLoginServiceTest {
         given(googleSocialAccountIssuer.findOrCreate(PROVIDER_ID, EMAIL, NAME))
                 .willReturn(new GoogleSocialAccountIssuer.Result(socialAccount, true));
         given(jwtUtil.createAccessToken(user)).willReturn(ACCESS_TOKEN);
+        given(jwtUtil.createRefreshToken(user)).willReturn(REFRESH_TOKEN);
 
         GoogleLoginResponse response = googleLoginService.googleLogin(createRequest());
 
         assertThat(response.getAccessToken()).isEqualTo(ACCESS_TOKEN);
+        assertThat(response.getRefreshToken()).isEqualTo(REFRESH_TOKEN);
         assertThat(response.isNewUser()).isTrue();
     }
 
@@ -91,6 +100,7 @@ class GoogleLoginServiceTest {
         given(googleSocialAccountIssuer.findExisting(PROVIDER_ID))
                 .willReturn(new GoogleSocialAccountIssuer.Result(socialAccount, false));
         given(jwtUtil.createAccessToken(user)).willReturn(ACCESS_TOKEN);
+        given(jwtUtil.createRefreshToken(user)).willReturn(REFRESH_TOKEN);
 
         GoogleLoginResponse response = googleLoginService.googleLogin(createRequest());
 

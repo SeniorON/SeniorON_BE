@@ -56,6 +56,8 @@ class UserServiceTest {
             mock(SignupEmailVerificationCodeIssuer.class);
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
+    private final JwtUtil jwtUtil = new JwtUtil("12345678901234567890123456789012", 3600000L, 1209600000L);
+    private final RefreshTokenService refreshTokenService = new RefreshTokenService(refreshTokenRepository, jwtUtil);
 
     private UserService userService;
 
@@ -66,8 +68,9 @@ class UserServiceTest {
                 refreshTokenRepository,
                 signupEmailVerificationCodeRepository,
                 signupEmailVerificationCodeIssuer,
+                refreshTokenService,
                 passwordEncoder,
-                new JwtUtil("12345678901234567890123456789012", 3600000L, 1209600000L),
+                jwtUtil,
                 mock(InactivitySettingService.class),
                 mock(DeviceService.class),
                 eventPublisher

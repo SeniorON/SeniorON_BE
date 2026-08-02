@@ -70,14 +70,16 @@ class UserSettingsServiceTest {
         com.example.senioron.domain.user.repository.RefreshTokenRepository refreshTokenRepository =
                 org.mockito.Mockito.mock(com.example.senioron.domain.user.repository.RefreshTokenRepository.class);
         given(refreshTokenRepository.findByUserAndDeviceIdentifier(user, null)).willReturn(Optional.empty());
+        JwtUtil jwtUtil = new JwtUtil("12345678901234567890123456789012", 3600000L, 1209600000L);
 
         UserService userService = new UserService(
                 userRepository,
                 refreshTokenRepository,
                 org.mockito.Mockito.mock(com.example.senioron.domain.user.repository.SignupEmailVerificationCodeRepository.class),
                 org.mockito.Mockito.mock(SignupEmailVerificationCodeIssuer.class),
+                new RefreshTokenService(refreshTokenRepository, jwtUtil),
                 passwordEncoder,
-                new JwtUtil("12345678901234567890123456789012", 3600000L, 1209600000L),
+                jwtUtil,
                 org.mockito.Mockito.mock(InactivitySettingService.class),
                 org.mockito.Mockito.mock(com.example.senioron.domain.device.service.DeviceService.class),
                 org.mockito.Mockito.mock(org.springframework.context.ApplicationEventPublisher.class)

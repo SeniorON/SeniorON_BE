@@ -9,6 +9,7 @@ import lombok.Getter;
 public class GoogleLoginResponse {
 
     private String accessToken;
+    private String refreshToken;
     private Long usersId;
     private String name;
     private Role role;

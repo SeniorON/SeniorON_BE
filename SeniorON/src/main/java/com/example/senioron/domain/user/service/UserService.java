@@ -22,12 +22,8 @@ import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.jwt.JwtUtil;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
-import java.util.Base64;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -49,6 +45,7 @@ public class UserService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final SignupEmailVerificationCodeRepository signupEmailVerificationCodeRepository;
     private final SignupEmailVerificationCodeIssuer signupEmailVerificationCodeIssuer;
+    private final RefreshTokenService refreshTokenService;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final InactivitySettingService inactivitySettingService;
@@ -199,7 +196,7 @@ public class UserService {
 
         String accessToken = jwtUtil.createAccessToken(user);
         String refreshToken = jwtUtil.createRefreshToken(user);
-        saveOrRotateRefreshToken(user, request.getDeviceIdentifier(), refreshToken);
+        refreshTokenService.saveOrRotate(user, request.getDeviceIdentifier(), refreshToken);
 
         return UserLoginResponse.builder()
                 .usersId(user.getUsersId())
@@ -215,7 +212,7 @@ public class UserService {
         String refreshToken = request.getRefreshToken();
 
         Long usersId = getRefreshTokenUsersId(refreshToken);
-        String tokenHash = hashToken(refreshToken);
+        String tokenHash = refreshTokenService.hashToken(refreshToken);
 
         RefreshToken savedRefreshToken = refreshTokenRepository.findByTokenHash(tokenHash)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN));
@@ -239,7 +236,7 @@ public class UserService {
         User user = savedRefreshToken.getUser();
         String newAccessToken = jwtUtil.createAccessToken(user);
         String newRefreshToken = jwtUtil.createRefreshToken(user);
-        savedRefreshToken.rotate(hashToken(newRefreshToken), calculateRefreshTokenExpiresAt());
+        savedRefreshToken.rotate(refreshTokenService.hashToken(newRefreshToken), jwtUtil.getRefreshTokenExpiresAt());
 
         return TokenRefreshResponse.builder()
                 .accessToken(newAccessToken)
@@ -278,20 +275,6 @@ public class UserService {
         return String.format("%06d", SECURE_RANDOM.nextInt(VERIFICATION_CODE_BOUND));
     }
 
-    private void saveOrRotateRefreshToken(User user, String deviceIdentifier, String refreshToken) {
-        String tokenHash = hashToken(refreshToken);
-        LocalDateTime expiresAt = calculateRefreshTokenExpiresAt();
-
-        RefreshToken savedRefreshToken = refreshTokenRepository.findByUserAndDeviceIdentifier(user, deviceIdentifier)
-                .orElseGet(() -> RefreshToken.builder()
-                        .user(user)
-                        .deviceIdentifier(deviceIdentifier)
-                        .build());
-
-        savedRefreshToken.rotate(tokenHash, expiresAt);
-        refreshTokenRepository.save(savedRefreshToken);
-    }
-
     private Long getRefreshTokenUsersId(String refreshToken) {
         try {
             if (!jwtUtil.isRefreshToken(refreshToken)) {
@@ -306,17 +289,4 @@ public class UserService {
         }
     }
 
-    private LocalDateTime calculateRefreshTokenExpiresAt() {
-        return jwtUtil.getRefreshTokenExpiresAt();
-    }
-
-    private String hashToken(String token) {
-        try {
-            MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
-            byte[] digest = messageDigest.digest(token.getBytes(StandardCharsets.UTF_8));
-            return Base64.getEncoder().encodeToString(digest);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 algorithm is not available.", e);
-        }
-    }
 }
