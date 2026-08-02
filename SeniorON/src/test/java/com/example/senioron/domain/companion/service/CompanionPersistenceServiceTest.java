@@ -1,6 +1,7 @@
 package com.example.senioron.domain.companion.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -17,21 +18,28 @@ import com.example.senioron.domain.companion.entity.TurnStatus;
 import com.example.senioron.domain.companion.repository.CompanionConversationRepository;
 import com.example.senioron.domain.companion.repository.CompanionMessageRepository;
 import com.example.senioron.domain.companion.repository.CompanionTurnRepository;
+import com.example.senioron.domain.companion.service.model.CompanionContextMessage;
 import com.example.senioron.domain.companion.service.model.CompanionMessageContent;
 import com.example.senioron.domain.companion.service.model.TurnCreationResult;
 import com.example.senioron.domain.companion.service.model.TurnCreationStatus;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.entity.UserStatus;
+
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+
+import com.example.senioron.global.apiPayload.code.ErrorCode;
+import com.example.senioron.global.apiPayload.exception.BusinessException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Pageable;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class CompanionPersistenceServiceTest {
 
@@ -389,5 +397,202 @@ class CompanionPersistenceServiceTest {
                 .role(role)
                 .encryptedContent(encryptedContent)
                 .build();
+    }
+
+    @Test
+    void loadsRecentMessagesAcrossUserConversations() {
+        Long userId = 1L;
+
+        CompanionConversation conversation =
+                createConversation();
+
+        CompanionTurn turn =
+                createTurn(
+                        UUID.randomUUID().toString()
+                );
+
+        CompanionMessage newest =
+                createMessage(
+                        3L,
+                        conversation,
+                        turn,
+                        MessageRole.USER,
+                        "encrypted-3"
+                );
+
+        CompanionMessage middle =
+                createMessage(
+                        2L,
+                        conversation,
+                        turn,
+                        MessageRole.ASSISTANT,
+                        "encrypted-2"
+                );
+
+        CompanionMessage oldest =
+                createMessage(
+                        1L,
+                        conversation,
+                        turn,
+                        MessageRole.USER,
+                        "encrypted-1"
+                );
+
+        LocalDateTime oldestTime =
+                LocalDateTime.of(
+                        2026,
+                        7,
+                        31,
+                        18,
+                        30
+                );
+
+        LocalDateTime middleTime =
+                LocalDateTime.of(
+                        2026,
+                        7,
+                        31,
+                        18,
+                        31
+                );
+
+        LocalDateTime newestTime =
+                LocalDateTime.of(
+                        2026,
+                        8,
+                        1,
+                        9,
+                        10
+                );
+
+        ReflectionTestUtils.setField(
+                oldest,
+                "createdAt",
+                oldestTime
+        );
+
+        ReflectionTestUtils.setField(
+                middle,
+                "createdAt",
+                middleTime
+        );
+
+        ReflectionTestUtils.setField(
+                newest,
+                "createdAt",
+                newestTime
+        );
+
+        given(
+                messageRepository
+                        .findByConversationUserUsersIdOrderByMessageIdDesc(
+                                eq(userId),
+                                any(Pageable.class)
+                        )
+        ).willReturn(
+                List.of(
+                        newest,
+                        middle,
+                        oldest
+                )
+        );
+
+        given(
+                textCipher.decrypt(
+                        "encrypted-1"
+                )
+        ).willReturn(
+                "어제 공원에 갔어요."
+        );
+
+        given(
+                textCipher.decrypt(
+                        "encrypted-2"
+                )
+        ).willReturn(
+                "공원에 다녀오셨군요."
+        );
+
+        given(
+                textCipher.decrypt(
+                        "encrypted-3"
+                )
+        ).willReturn(
+                "오늘도 가볼까요?"
+        );
+
+        List<CompanionContextMessage> result =
+                service.loadRecentMessagesByUser(
+                        userId,
+                        100
+                );
+
+        assertThat(result)
+                .extracting(
+                        CompanionContextMessage::content
+                )
+                .containsExactly(
+                        "어제 공원에 갔어요.",
+                        "공원에 다녀오셨군요.",
+                        "오늘도 가볼까요?"
+                );
+
+        assertThat(result)
+                .extracting(
+                        CompanionContextMessage::occurredAt
+                )
+                .containsExactly(
+                        oldestTime,
+                        middleTime,
+                        newestTime
+                );
+
+        ArgumentCaptor<Pageable>
+                pageableCaptor =
+                ArgumentCaptor.forClass(
+                        Pageable.class
+                );
+
+        verify(messageRepository)
+                .findByConversationUserUsersIdOrderByMessageIdDesc(
+                        eq(userId),
+                        pageableCaptor.capture()
+                );
+
+        assertThat(
+                pageableCaptor.getValue()
+                        .getPageSize()
+        ).isEqualTo(20);
+    }
+
+    @Test
+    void rejectsInvalidUserMessageQuery() {
+        BusinessException nullUserException =
+                assertThrows(
+                        BusinessException.class,
+                        () -> service
+                                .loadRecentMessagesByUser(
+                                        null,
+                                        20
+                                )
+                );
+
+        assertThat(
+                nullUserException.getCode()
+        ).isEqualTo(ErrorCode.BAD_REQUEST);
+
+        BusinessException invalidLimitException =
+                assertThrows(
+                        BusinessException.class,
+                        () -> service
+                                .loadRecentMessagesByUser(
+                                        1L,
+                                        0
+                                )
+                );
+
+        assertThat(
+                invalidLimitException.getCode()
+        ).isEqualTo(ErrorCode.BAD_REQUEST);
     }
 }

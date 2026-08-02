@@ -9,6 +9,7 @@ import com.example.senioron.domain.companion.entity.SafetyType;
 import com.example.senioron.domain.companion.repository.CompanionConversationRepository;
 import com.example.senioron.domain.companion.repository.CompanionMessageRepository;
 import com.example.senioron.domain.companion.repository.CompanionTurnRepository;
+import com.example.senioron.domain.companion.service.model.CompanionContextMessage;
 import com.example.senioron.domain.companion.service.model.CompanionMessageContent;
 import com.example.senioron.domain.companion.service.model.TurnCreationResult;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
@@ -230,5 +231,48 @@ public class CompanionPersistenceService {
 
         return turnRepository.findById(turnId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.COMPANION_TURN_NOT_FOUND));
+    }
+
+    @Transactional(readOnly = true)
+    public List<CompanionContextMessage>
+    loadRecentMessagesByUser(
+            Long userId,
+            int limit
+    ) {
+        if (userId == null || limit <= 0) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+
+        int actualLimit = Math.min(
+                limit,
+                MAX_RECENT_MESSAGE_LIMIT
+        );
+
+        List<CompanionMessage> latestFirst =
+                messageRepository
+                        .findByConversationUserUsersIdOrderByMessageIdDesc(
+                                userId,
+                                PageRequest.of(
+                                        0,
+                                        actualLimit
+                                )
+                        );
+
+        List<CompanionMessage> oldestFirst = new ArrayList<>(latestFirst);
+
+        Collections.reverse(oldestFirst);
+
+        return oldestFirst.stream()
+                .map(message ->
+                        new CompanionContextMessage(
+                                message.getRole(),
+                                textCipher.decrypt(
+                                        message
+                                                .getEncryptedContent()
+                                ),
+                                message.getCreatedAt()
+                        )
+                )
+                .toList();
     }
 }

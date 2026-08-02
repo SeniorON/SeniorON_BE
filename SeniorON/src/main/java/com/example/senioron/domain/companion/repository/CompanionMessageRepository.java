@@ -13,4 +13,10 @@ public interface CompanionMessageRepository extends JpaRepository<CompanionMessa
             Long conversationId,
             Pageable pageable
     );
+
+    List<CompanionMessage>
+    findByConversationUserUsersIdOrderByMessageIdDesc(
+            Long userId,
+            Pageable pageable
+    );
 }

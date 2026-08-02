@@ -70,6 +70,11 @@ companion:
   encryption:
     key: ${COMPANION_ENCRYPTION_KEY:}
 
+  prompt:
+    resource: classpath:prompts/companion-system-prompt.txt
+    version: v1
+    recent-message-limit: 20
+
 ai:
   stt:
     openai:
@@ -77,5 +82,15 @@ ai:
       api-key: ${OPENAI_API_KEY:}
       model: ${OPENAI_STT_MODEL:gpt-4o-mini-transcribe}
       language: ${OPENAI_STT_LANGUAGE:ko}
+      connect-timeout: 3s
+      read-timeout: 30s
+
+  llm:
+    anthropic:
+      base-url: ${ANTHROPIC_BASE_URL:https://api.anthropic.com}
+      api-key: ${ANTHROPIC_API_KEY:}
+      version: ${ANTHROPIC_VERSION:2023-06-01}
+      model: ${ANTHROPIC_MODEL:claude-haiku-4-5-20251001}
+      max-tokens: ${ANTHROPIC_MAX_TOKENS:512}
       connect-timeout: 3s
       read-timeout: 30s
