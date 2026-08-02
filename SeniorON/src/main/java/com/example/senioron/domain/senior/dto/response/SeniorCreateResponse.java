@@ -14,7 +14,9 @@ public record SeniorCreateResponse(
         LocalDate birth,
         String phoneNumber,
         String address,
-        String detailAddress
+        String detailAddress,
+        Double latitude,
+        Double longitude
 ) {
 
     public static SeniorCreateResponse from(Senior senior, UserSenior userSenior) {
@@ -26,7 +28,9 @@ public record SeniorCreateResponse(
                 senior.getBirth(),
                 senior.getPhoneNumber(),
                 senior.getAddress(),
-                senior.getDetailAddress()
+                senior.getDetailAddress(),
+                senior.getLatitude(),
+                senior.getLongitude()
         );
     }
 }

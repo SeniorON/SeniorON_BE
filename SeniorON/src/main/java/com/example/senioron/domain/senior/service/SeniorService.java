@@ -57,6 +57,8 @@ public class SeniorService {
                 .phoneNumber(normalizePhoneNumber(request.phoneNumber()))
                 .address(request.address())
                 .detailAddress(request.detailAddress())
+                .latitude(request.latitude())
+                .longitude(request.longitude())
                 .family(lockedFamily)
                 .registeredBy(user)
                 .build();

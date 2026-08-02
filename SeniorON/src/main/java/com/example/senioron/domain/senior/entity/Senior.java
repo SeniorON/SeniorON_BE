@@ -32,6 +32,10 @@ public class Senior {
 
     private String detailAddress;
 
+    private Double latitude;
+
+    private Double longitude;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "family_id", nullable = false, unique = true)
     private Family family;
@@ -48,13 +52,17 @@ public class Senior {
             LocalDate birth,
             String phoneNumber,
             String address,
-            String detailAddress
+            String detailAddress,
+            Double latitude,
+            Double longitude
     ) {
         this.name = name;
         this.birth = birth;
         this.phoneNumber = phoneNumber;
         this.address = address;
         this.detailAddress = detailAddress;
+        this.latitude = latitude;
+        this.longitude = longitude;
     }
 
 }

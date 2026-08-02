@@ -89,6 +89,8 @@ class HomeServiceSeniorProfileTest {
 
         assertThat(response.name()).isEqualTo("김영희");
         assertThat(response.relation()).isEqualTo(SeniorRelation.MOTHER);
+        assertThat(response.latitude()).isEqualTo(37.5665);
+        assertThat(response.longitude()).isEqualTo(126.9780);
     }
 
     @Test
@@ -114,6 +116,10 @@ class HomeServiceSeniorProfileTest {
         assertThat(subRelation.getCustomRelation()).isEqualTo("외할머니");
         assertThat(primaryRelation.getRelation()).isEqualTo(SeniorRelation.MOTHER);
         assertThat(senior.getName()).isEqualTo("김영자");
+        assertThat(senior.getLatitude()).isEqualTo(37.5665);
+        assertThat(senior.getLongitude()).isEqualTo(126.9780);
+        assertThat(response.latitude()).isEqualTo(37.5665);
+        assertThat(response.longitude()).isEqualTo(126.9780);
     }
 
     @Test
@@ -190,7 +196,9 @@ class HomeServiceSeniorProfileTest {
                 LocalDate.of(1950, 1, 1),
                 "010-1234-5678",
                 "서울시",
-                "101호"
+                "101호",
+                37.5665,
+                126.9780
         );
     }
 
@@ -202,6 +210,8 @@ class HomeServiceSeniorProfileTest {
                 .phoneNumber("01012345678")
                 .address("서울시")
                 .detailAddress("101호")
+                .latitude(35.1796)
+                .longitude(129.0756)
                 .family(family)
                 .registeredBy(registeredBy)
                 .build();
