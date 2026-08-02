@@ -16,15 +16,48 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Set;
 import java.util.Collections;
 
 @Component
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
+    private static final Set<String> PUBLIC_PATHS = Set.of(
+            "/swagger-ui.html",
+            "/api/users/signup",
+            "/api/users/signup/email/verification-code",
+            "/api/users/signup/email/verification-code/verify",
+            "/api/users/login",
+            "/api/users/token/refresh",
+            "/api/users/check-login-id",
+            "/api/users/account-recovery/login-id",
+            "/api/users/account-recovery/password/verification-code",
+            "/api/users/account-recovery/password/verification-code/verify",
+            "/api/users/account-recovery/password",
+            "/api/social-accounts/login/kakao",
+            "/api/social-accounts/login/google",
+            "/api/social-accounts/login/kakao/callback"
+    );
+
+    private static final Set<String> PUBLIC_PATH_PREFIXES = Set.of(
+            "/swagger-ui/",
+            "/v3/api-docs/",
+            "/h2-console/",
+            "/actuator/"
+    );
+
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
     private final SecurityErrorResponseWriter securityErrorResponseWriter;
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getServletPath();
+
+        return PUBLIC_PATHS.contains(path)
+                || PUBLIC_PATH_PREFIXES.stream().anyMatch(path::startsWith);
+    }
 
     @Override
     protected void doFilterInternal(
