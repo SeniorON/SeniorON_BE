@@ -53,4 +53,14 @@ public class RefreshToken extends BaseEntity {
     @Column(nullable = false)
     @Builder.Default
     private boolean revoked = false;
+
+    public void rotate(String tokenHash, LocalDateTime expiresAt) {
+        this.tokenHash = tokenHash;
+        this.expiresAt = expiresAt;
+        this.revoked = false;
+    }
+
+    public boolean isExpired(LocalDateTime now) {
+        return expiresAt.isBefore(now) || expiresAt.isEqual(now);
+    }
 }

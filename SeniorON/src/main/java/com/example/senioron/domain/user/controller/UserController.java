@@ -2,6 +2,7 @@ package com.example.senioron.domain.user.controller;
 
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeSendRequest;
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeVerifyRequest;
+import com.example.senioron.domain.user.dto.request.TokenRefreshRequest;
 import com.example.senioron.domain.user.dto.request.UserLoginRequest;
 import com.example.senioron.domain.user.dto.request.UserRoleUpdateRequest;
 import com.example.senioron.domain.user.dto.request.UserSignUpRequest;
@@ -57,6 +58,12 @@ public class UserController {
     @PostMapping("/login")
     public Response<UserLoginResponse> login(@Valid @RequestBody UserLoginRequest request) {
         return Response.ok(userService.login(request));
+    }
+
+    @Operation(summary = "Access Token 재발급", description = "Refresh Token으로 새 Access Token과 Refresh Token을 발급합니다.")
+    @PostMapping("/token/refresh")
+    public Response<TokenRefreshResponse> refreshToken(@Valid @RequestBody TokenRefreshRequest request) {
+        return Response.ok(userService.refreshToken(request));
     }
 
     @Operation(summary = "역할 선택/변경", description = "현재 로그인한 사용자의 역할을 선택하거나 변경합니다.")

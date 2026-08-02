@@ -40,6 +40,9 @@ public enum ErrorCode implements BaseCode {
     INVALID_FIREBASE_ID_TOKEN(HttpStatus.UNAUTHORIZED, "USER401_1", "Firebase ID 토큰이 유효하지 않습니다."),
     FIREBASE_AUTH_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "USER503_1", "Firebase 인증을 사용할 수 없습니다."),
     GOOGLE_LOGIN_CONFLICT(HttpStatus.CONFLICT, "USER409_3", "구글 로그인 처리 중 계정 충돌이 발생했습니다."),
+    INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "USER401_2", "Refresh Token이 유효하지 않습니다."),
+    EXPIRED_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "USER401_3", "Refresh Token이 만료되었습니다."),
+    REFRESH_TOKEN_DEVICE_MISMATCH(HttpStatus.UNAUTHORIZED, "USER401_4", "Refresh Token의 기기 정보가 일치하지 않습니다."),
 
     // Email Error
     EMAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "EMAIL500", "이메일 발송에 실패했습니다."),

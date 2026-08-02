@@ -37,6 +37,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         if (token != null) {
             try {
+                if (!jwtUtil.isAccessToken(token)) {
+                    throw new JwtException("Only access token can authenticate requests.");
+                }
+
                 Long usersId = jwtUtil.getUsersId(token);
 
                 User user = userRepository.findById(usersId)
