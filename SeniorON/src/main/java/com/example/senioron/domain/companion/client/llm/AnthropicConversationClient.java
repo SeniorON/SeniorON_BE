@@ -3,6 +3,7 @@ package com.example.senioron.domain.companion.client.llm;
 import com.example.senioron.domain.companion.client.llm.dto.AnthropicMessageRequest;
 import com.example.senioron.domain.companion.client.llm.dto.AnthropicMessageResponse;
 import com.example.senioron.domain.companion.config.AnthropicProperties;
+import com.example.senioron.domain.companion.entity.MessageRole;
 import com.example.senioron.domain.companion.service.model.CompanionContextMessage;
 import com.example.senioron.domain.companion.service.model.CompanionReplyResult;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
@@ -105,14 +106,18 @@ public class AnthropicConversationClient {
         }
     }
 
-    private AnthropicMessageRequest
-    createRequest(
+    private AnthropicMessageRequest createRequest(
             String systemPrompt,
             List<CompanionContextMessage> messages
     ) {
+        List<CompanionContextMessage> normalizedMessages =
+                removeLeadingAssistantMessages(
+                        messages
+                );
+
         List<AnthropicMessageRequest.Message>
                 requestMessages =
-                messages.stream()
+                normalizedMessages.stream()
                         .map(this::toRequestMessage)
                         .toList();
 
@@ -122,6 +127,27 @@ public class AnthropicConversationClient {
                 systemPrompt,
                 requestMessages
         );
+    }
+
+    private List<CompanionContextMessage>
+    removeLeadingAssistantMessages(
+            List<CompanionContextMessage> messages
+    ) {
+        List<CompanionContextMessage> normalized =
+                messages.stream()
+                        .dropWhile(message ->
+                                message.role()
+                                        == MessageRole.ASSISTANT
+                        )
+                        .toList();
+
+        if (normalized.isEmpty()) {
+            throw new BusinessException(
+                    ErrorCode.BAD_REQUEST
+            );
+        }
+
+        return normalized;
     }
 
     private AnthropicMessageRequest.Message
@@ -183,21 +209,44 @@ public class AnthropicConversationClient {
         ) {
             logProviderFailure(exception);
 
-            throw new BusinessException(ErrorCode.COMPANION_LLM_UNAVAILABLE);
+            throw new BusinessException(
+                    ErrorCode.COMPANION_LLM_UNAVAILABLE
+            );
 
         } catch (
                 ResourceAccessException exception
         ) {
             if (hasTimeoutCause(exception)) {
-                throw new BusinessException(ErrorCode.COMPANION_LLM_TIMEOUT);
+                log.warn(
+                        "Anthropic LLM request timed out",
+                        exception
+                );
+
+                throw new BusinessException(
+                        ErrorCode.COMPANION_LLM_TIMEOUT
+                );
             }
 
-            throw new BusinessException(ErrorCode.COMPANION_LLM_UNAVAILABLE);
+            log.warn(
+                    "Anthropic LLM resource access failed",
+                    exception
+            );
+
+            throw new BusinessException(
+                    ErrorCode.COMPANION_LLM_UNAVAILABLE
+            );
 
         } catch (
                 RestClientException exception
         ) {
-            throw new BusinessException(ErrorCode.COMPANION_LLM_UNAVAILABLE);
+            log.warn(
+                    "Anthropic LLM request failed",
+                    exception
+            );
+
+            throw new BusinessException(
+                    ErrorCode.COMPANION_LLM_UNAVAILABLE
+            );
         }
     }
 

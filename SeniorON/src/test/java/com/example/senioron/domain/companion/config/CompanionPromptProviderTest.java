@@ -124,4 +124,27 @@ class CompanionPromptProviderTest {
                                 .COMPANION_PROMPT_NOT_FOUND
                 );
     }
+
+    @Test
+    void 기본_프롬프트_리소스를_로딩한다() {
+        CompanionPromptProperties properties =
+                new CompanionPromptProperties();
+
+        CompanionPromptProvider provider =
+                new CompanionPromptProvider(
+                        properties
+                );
+
+        provider.load();
+
+        assertThat(
+                provider.getSystemPrompt()
+        ).isNotBlank();
+
+        assertThat(
+                provider.getSystemPrompt()
+        ).contains(
+                "현재 날짜(한국 기준)"
+        );
+    }
 }

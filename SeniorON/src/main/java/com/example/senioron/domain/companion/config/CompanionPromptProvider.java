@@ -4,6 +4,7 @@ import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
 
@@ -15,6 +16,7 @@ import java.time.ZoneId;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class CompanionPromptProvider {
 
     private static final ZoneId SEOUL_ZONE = ZoneId.of("Asia/Seoul");
@@ -44,6 +46,12 @@ public class CompanionPromptProvider {
 
             basePrompt = loaded;
         } catch (IOException exception) {
+            log.error(
+                    "말벗 프롬프트 리소스를 읽지 못했습니다: {}",
+                    resource,
+                    exception
+            );
+
             throw promptException();
         }
     }

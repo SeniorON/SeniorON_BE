@@ -475,7 +475,7 @@ class CompanionConversationServiceTest {
     }
 
     @Test
-    void returnsOwnedActiveConversation() {
+    void returnsOwnedActiveUserId() {
         User parent =
                 createParent(PARENT_ID);
 
@@ -492,20 +492,22 @@ class CompanionConversationServiceTest {
         );
 
         given(
-                conversationRepository.findById(CONVERSATION_ID)
+                conversationRepository.findById(
+                        CONVERSATION_ID
+                )
         ).willReturn(
                 Optional.of(conversation)
         );
 
-        CompanionConversation result =
+        Long result =
                 conversationService
-                        .getOwnedActiveConversation(
+                        .getOwnedActiveUserId(
                                 parent,
                                 CONVERSATION_ID
                         );
 
         assertThat(result)
-                .isSameAs(conversation);
+                .isEqualTo(PARENT_ID);
     }
 
     @Test
@@ -536,7 +538,7 @@ class CompanionConversationServiceTest {
         assertBusinessException(
                 () ->
                         conversationService
-                                .getOwnedActiveConversation(
+                                .getOwnedActiveUserId(
                                         parent,
                                         CONVERSATION_ID
                                 ),
@@ -573,7 +575,7 @@ class CompanionConversationServiceTest {
         assertBusinessException(
                 () ->
                         conversationService
-                                .getOwnedActiveConversation(
+                                .getOwnedActiveUserId(
                                         currentParent,
                                         CONVERSATION_ID
                                 ),

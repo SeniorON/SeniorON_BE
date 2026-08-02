@@ -21,7 +21,7 @@ public class AnthropicProperties {
 
     private String model = "claude-haiku-4-5-20251001";
 
-    private int maxTokens = 256;
+    private int maxTokens = 512;
 
     private Duration connectTimeout = Duration.ofSeconds(3);
 

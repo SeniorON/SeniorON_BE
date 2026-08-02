@@ -2,8 +2,6 @@ package com.example.senioron.domain.companion.service;
 
 import com.example.senioron.domain.companion.client.llm.AnthropicConversationClient;
 import com.example.senioron.domain.companion.config.CompanionPromptProvider;
-import com.example.senioron.domain.companion.entity.CompanionConversation;
-import com.example.senioron.domain.companion.entity.ConversationStatus;
 import com.example.senioron.domain.companion.entity.MessageRole;
 import com.example.senioron.domain.companion.service.model.CompanionContextMessage;
 import com.example.senioron.domain.companion.service.model.CompanionReplyResult;
@@ -59,7 +57,6 @@ class CompanionReplyServiceTest {
 
     private User principal;
 
-    private CompanionConversation conversation;
 
     @BeforeEach
     void setUp() {
@@ -79,16 +76,6 @@ class CompanionReplyServiceTest {
                         .status(UserStatus.ACTIVE)
                         .build();
 
-        conversation =
-                CompanionConversation.builder()
-                        .conversationId(
-                                CONVERSATION_ID
-                        )
-                        .user(principal)
-                        .status(
-                                ConversationStatus.ACTIVE
-                        )
-                        .build();
     }
 
     @Test
@@ -142,11 +129,11 @@ class CompanionReplyServiceTest {
 
         given(
                 conversationService
-                        .getOwnedActiveConversation(
+                        .getOwnedActiveUserId(
                                 principal,
                                 CONVERSATION_ID
                         )
-        ).willReturn(conversation);
+        ).willReturn(USER_ID);
 
         given(
                 promptProvider
@@ -189,7 +176,7 @@ class CompanionReplyServiceTest {
                 .isSameAs(expected);
 
         verify(conversationService)
-                .getOwnedActiveConversation(
+                .getOwnedActiveUserId(
                         principal,
                         CONVERSATION_ID
                 );
@@ -212,14 +199,13 @@ class CompanionReplyServiceTest {
     void 대화_소유권_검증에_실패하면_메시지와_Anthropic을_호출하지_않는다() {
         given(
                 conversationService
-                        .getOwnedActiveConversation(
+                        .getOwnedActiveUserId(
                                 principal,
                                 CONVERSATION_ID
                         )
         ).willThrow(
                 new BusinessException(
-                        ErrorCode
-                                .COMPANION_CONVERSATION_FORBIDDEN
+                        ErrorCode.COMPANION_CONVERSATION_FORBIDDEN
                 )
         );
 

@@ -172,25 +172,6 @@ public class CompanionConversationService {
                 .build();
     }
 
-    public CompanionConversation getOwnedActiveConversation(
-            User principal,
-            Long conversationId
-    ) {
-        User user = getCurrentParent(principal);
-
-        CompanionConversation conversation =
-                getConversationOrThrow(conversationId);
-
-        validateOwner(conversation, user);
-
-        if (!conversation.isActive()) {
-            throw new BusinessException(
-                    ErrorCode.COMPANION_CONVERSATION_ENDED
-            );
-        }
-
-        return conversation;
-    }
 
     private void validateOwner(
             CompanionConversation conversation,
@@ -222,5 +203,25 @@ public class CompanionConversationService {
                                 ErrorCode.COMPANION_CONVERSATION_NOT_FOUND
                         )
                 );
+    }
+
+    public Long getOwnedActiveUserId(
+            User principal,
+            Long conversationId
+    ) {
+        User user = getCurrentParent(principal);
+
+        CompanionConversation conversation = getConversationOrThrow(conversationId);
+
+        validateOwner(
+                conversation,
+                user
+        );
+
+        if (!conversation.isActive()) {
+            throw new BusinessException(ErrorCode.COMPANION_CONVERSATION_ENDED);
+        }
+
+        return user.getUsersId();
     }
 }

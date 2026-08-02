@@ -523,4 +523,92 @@ class AnthropicConversationClientTest {
         assertThat(exception.getCode())
                 .isEqualTo(expected);
     }
+
+    @Test
+    void 선행_ASSISTANT_메시지를_제외하고_요청한다() {
+        messages =
+                List.of(
+                        new CompanionContextMessage(
+                                MessageRole.ASSISTANT,
+                                "이전 답변",
+                                LocalDateTime.of(
+                                        2026,
+                                        7,
+                                        31,
+                                        18,
+                                        30
+                                )
+                        ),
+                        new CompanionContextMessage(
+                                MessageRole.USER,
+                                "오늘도 산책할까요?",
+                                LocalDateTime.of(
+                                        2026,
+                                        8,
+                                        1,
+                                        9,
+                                        10
+                                )
+                        )
+                );
+
+        server.expect(
+                        requestTo(
+                                BASE_URL
+                                        + "/v1/messages"
+                        )
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.messages.length()"
+                        ).value(1)
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.messages[0].role"
+                        ).value("user")
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.messages[0].content"
+                        ).value(
+                                "[발화 시각: 2026-08-01 09:10] 오늘도 산책할까요?"
+                        )
+                )
+                .andRespond(
+                        withSuccess(
+                                """
+                                {
+                                  "model": "claude-haiku-4-5-20251001",
+                                  "content": [
+                                    {
+                                      "type": "text",
+                                      "text": "날씨가 좋으면 가볍게 다녀오세요."
+                                    }
+                                  ],
+                                  "stop_reason": "end_turn",
+                                  "usage": {
+                                    "input_tokens": 50,
+                                    "output_tokens": 12
+                                  }
+                                }
+                                """,
+                                MediaType.APPLICATION_JSON
+                        )
+                );
+
+        CompanionReplyResult result =
+                client.generateReply(
+                        "테스트 시스템 프롬프트",
+                        "v1",
+                        messages
+                );
+
+        assertThat(result.text())
+                .isEqualTo(
+                        "날씨가 좋으면 가볍게 다녀오세요."
+                );
+
+        server.verify();
+    }
 }

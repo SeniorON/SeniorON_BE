@@ -2,7 +2,6 @@ package com.example.senioron.domain.companion.service;
 
 import com.example.senioron.domain.companion.client.llm.AnthropicConversationClient;
 import com.example.senioron.domain.companion.config.CompanionPromptProvider;
-import com.example.senioron.domain.companion.entity.CompanionConversation;
 import com.example.senioron.domain.companion.service.model.CompanionContextMessage;
 import com.example.senioron.domain.companion.service.model.CompanionReplyResult;
 import com.example.senioron.domain.user.entity.User;
@@ -27,20 +26,16 @@ public class CompanionReplyService {
             User principal,
             Long conversationId
     ) {
-        CompanionConversation conversation = conversationService
-                .getOwnedActiveConversation(
-                        principal,
-                        conversationId
-                );
+        Long userId = conversationService.getOwnedActiveUserId(
+                principal,
+                conversationId
+        );
 
-        Long userId = conversation.getUser().getUsersId();
-
-        List<CompanionContextMessage> messages = persistenceService
-                .loadRecentMessagesByUser(
-                        userId,
-                        promptProvider
-                                .getRecentMessageLimit()
-                );
+        List<CompanionContextMessage> messages = persistenceService.loadRecentMessagesByUser(
+                userId,
+                promptProvider
+                        .getRecentMessageLimit()
+        );
 
         return anthropicClient.generateReply(
                 promptProvider.getSystemPrompt(),
