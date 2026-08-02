@@ -42,10 +42,10 @@ public class FamilyService {
         User user = userRepository.findById(principal.getUsersId())
                 .orElseThrow(() ->
                         new BusinessException(ErrorCode.USER_NOT_FOUND)
-                );
+        );
 
         if (user.getRole() != Role.CHILD) {
-            throw new BusinessException(ErrorCode.FORBIDDEN);
+            throw new BusinessException(ErrorCode.FAMILY_CODE_CREATE_PARENT_FORBIDDEN);
         }
 
         String familyCode = generateUniqueFamilyCode();
