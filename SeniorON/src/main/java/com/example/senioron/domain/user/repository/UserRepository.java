@@ -4,6 +4,7 @@ import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -37,4 +38,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
             @Param("family")Family family,
             @Param("excludeUserId")Long excludeUserId,
             @Param("role")Role role);
+
+
+    @EntityGraph(attributePaths = {"family"})
+    @Query("SELECT u FROM User u WHERE u.usersId = :usersId")
+    Optional<User> findByIdWithFamily(@Param("usersId") Long usersId);
 }

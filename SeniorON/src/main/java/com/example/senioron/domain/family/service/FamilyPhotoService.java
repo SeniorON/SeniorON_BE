@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.springframework.dao.DataIntegrityViolationException;
 
 @Slf4j
 @Service
@@ -40,52 +41,112 @@ public class FamilyPhotoService {
     private final UserRepository userRepository;
     private final S3Service s3Service;
     private final FamilyPhotoPermissionService familyPhotoPermissionService;
+    private final FamilyPhotoPersistenceService photoPersistenceService;
 
     private static final int NEW_PHOTO_WINDOW_HOURS = 24;
 
-    @Transactional
     public FamilyPhotoItemResponse createPhoto(
             User principal,
+            String idempotencyKey,
             FamilyPhotoCreateRequest request
     ) {
-        User user = userRepository.findById(principal.getUsersId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        User user = userRepository.findByIdWithFamily(principal.getUsersId())
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.USER_NOT_FOUND)
+                );
 
         if (user.getRole() != Role.CHILD) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
+
         Family family = user.getFamily();
 
         if (family == null) {
             throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
         }
 
-        String directory = "family-photos/" + family.getFamilyId();
+        LocalDateTime newPhotoCutoff =
+                LocalDateTime.now().minusHours(NEW_PHOTO_WINDOW_HOURS);
+
+        return photoPersistenceService
+                .findExisting(user.getUsersId(), idempotencyKey)
+                .map(photo ->
+                        toItemResponse(photo, user, newPhotoCutoff)
+                )
+                .orElseGet(() ->
+                        uploadAndCreatePhoto(
+                                user,
+                                family,
+                                idempotencyKey,
+                                request,
+                                newPhotoCutoff
+                        )
+                );
+    }
+
+    private FamilyPhotoItemResponse uploadAndCreatePhoto(
+            User user,
+            Family family,
+            String idempotencyKey,
+            FamilyPhotoCreateRequest request,
+            LocalDateTime newPhotoCutoff
+    ) {
+        String directory =
+                "family-photos/" + family.getFamilyId();
 
         String imageKey = s3Service.upload(
                 request.getImage(),
                 directory
         );
 
+        FamilyPhoto savedPhoto;
+
         try {
-            FamilyPhoto familyPhoto = FamilyPhoto.builder()
-                    .family(family)
-                    .user(user)
-                    .imageKey(imageKey)
-                    .description(request.getDescription())
-                    .build();
-
-            FamilyPhoto savedPhoto = familyPhotoRepository.saveAndFlush(familyPhoto);
-
-            return toItemResponse(
-                    savedPhoto,
-                    user,
-                    LocalDateTime.now().minusHours(NEW_PHOTO_WINDOW_HOURS)
+            savedPhoto = photoPersistenceService.create(
+                    user.getUsersId(),
+                    imageKey,
+                    idempotencyKey,
+                    request.getDescription()
             );
 
-        } catch(RuntimeException e) {
+        } catch (DataIntegrityViolationException exception) {
+            deleteUploadedObjectSafely(imageKey);
+
+            FamilyPhoto existingPhoto =
+                    photoPersistenceService
+                            .findExisting(
+                                    user.getUsersId(),
+                                    idempotencyKey
+                            )
+                            .orElseThrow(() -> exception);
+
+            return toItemResponse(
+                    existingPhoto,
+                    user,
+                    newPhotoCutoff
+            );
+
+        } catch (RuntimeException exception) {
+            deleteUploadedObjectSafely(imageKey);
+            throw exception;
+        }
+
+        return toItemResponse(
+                savedPhoto,
+                user,
+                newPhotoCutoff
+        );
+    }
+
+    private void deleteUploadedObjectSafely(String imageKey) {
+        try {
             s3Service.delete(imageKey);
-            throw e;
+        } catch (RuntimeException exception) {
+            log.error(
+                    "가족사진 멱등 처리 중 S3 객체 삭제 실패, imageKey={}",
+                    imageKey,
+                    exception
+            );
         }
     }
 

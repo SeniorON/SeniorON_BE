@@ -164,4 +164,10 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
             Family family,
             User uploader
     );
+
+    @EntityGraph(attributePaths = {"family", "user", "user.family"})
+    Optional<FamilyPhoto> findByUserUsersIdAndIdempotencyKey(
+            Long usersId,
+            String idempotencyKey
+    );
 }

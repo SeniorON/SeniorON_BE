@@ -8,10 +8,12 @@ import lombok.*;
 import com.example.senioron.common.entity.BaseEntity;
 
 @Entity
-@Table(name = "family_photo", indexes = {
-        @Index(name = "idx_family_photo_family_created", columnList = "family_id, created_at, family_photo_id"),
-        @Index(name = "idx_family_photo_family_user", columnList = "family_id, users_id")
-})
+@Table(name = "family_photo", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_family_photo_user_idempotency", columnNames = {"users_id", "idempotency_key"})},
+        indexes = {
+                @Index(name = "idx_family_photo_family_created", columnList = "family_id, created_at, family_photo_id"),
+                @Index(name = "idx_family_photo_family_user", columnList = "family_id, users_id")
+        })
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
@@ -44,4 +46,7 @@ public class FamilyPhoto extends BaseEntity {
     public void markAsViewedByParent() {
         this.viewedByParent = true;
     }
+
+    @Column(name = "idempotency_key", length = 36)
+    private String idempotencyKey;
 }
