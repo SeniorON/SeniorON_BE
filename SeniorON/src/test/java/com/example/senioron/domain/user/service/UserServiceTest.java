@@ -13,15 +13,19 @@ import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.inactivity.service.InactivitySettingService;
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeSendRequest;
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeVerifyRequest;
+import com.example.senioron.domain.user.dto.request.TokenRefreshRequest;
 import com.example.senioron.domain.user.dto.request.UserLoginRequest;
 import com.example.senioron.domain.user.dto.request.UserSignUpRequest;
 import com.example.senioron.domain.user.dto.response.SignupEmailVerificationCodeVerifyResponse;
+import com.example.senioron.domain.user.dto.response.TokenRefreshResponse;
 import com.example.senioron.domain.user.dto.response.UserLoginResponse;
 import com.example.senioron.domain.user.dto.response.UserSignUpResponse;
+import com.example.senioron.domain.user.entity.RefreshToken;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.SignupEmailVerificationCode;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.event.SignupEmailVerificationCodeSendEvent;
+import com.example.senioron.domain.user.repository.RefreshTokenRepository;
 import com.example.senioron.domain.user.repository.SignupEmailVerificationCodeRepository;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
@@ -45,12 +49,15 @@ class UserServiceTest {
     private static final String VERIFICATION_CODE = "123456";
 
     private final UserRepository userRepository = mock(UserRepository.class);
+    private final RefreshTokenRepository refreshTokenRepository = mock(RefreshTokenRepository.class);
     private final SignupEmailVerificationCodeRepository signupEmailVerificationCodeRepository =
             mock(SignupEmailVerificationCodeRepository.class);
     private final SignupEmailVerificationCodeIssuer signupEmailVerificationCodeIssuer =
             mock(SignupEmailVerificationCodeIssuer.class);
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
+    private final JwtUtil jwtUtil = new JwtUtil("12345678901234567890123456789012", 3600000L, 1209600000L);
+    private final RefreshTokenService refreshTokenService = new RefreshTokenService(refreshTokenRepository, jwtUtil);
 
     private UserService userService;
 
@@ -58,10 +65,12 @@ class UserServiceTest {
     void setUp() {
         userService = new UserService(
                 userRepository,
+                refreshTokenRepository,
                 signupEmailVerificationCodeRepository,
                 signupEmailVerificationCodeIssuer,
+                refreshTokenService,
                 passwordEncoder,
-                new JwtUtil("12345678901234567890123456789012", 3600000L),
+                jwtUtil,
                 mock(InactivitySettingService.class),
                 mock(DeviceService.class),
                 eventPublisher
@@ -100,11 +109,42 @@ class UserServiceTest {
                 .role(Role.PARENT)
                 .build();
         given(userRepository.findByLoginId("testId")).willReturn(Optional.of(user));
+        given(refreshTokenRepository.findByUserAndDeviceIdentifier(user, null)).willReturn(Optional.empty());
 
         UserLoginResponse response = userService.login(createLoginRequest());
 
         assertThat(response.getRole()).isEqualTo(Role.PARENT);
         assertThat(response.getAccessToken()).isNotBlank();
+        assertThat(response.getRefreshToken()).isNotBlank();
+        verify(refreshTokenRepository).saveAndFlush(any(RefreshToken.class));
+    }
+
+    @Test
+    void refreshTokenRotatesRefreshTokenAndReturnsNewTokens() {
+        User user = User.builder()
+                .usersId(1L)
+                .loginId("testId")
+                .email(EMAIL)
+                .password(passwordEncoder.encode("password123!"))
+                .name("test")
+                .role(Role.PARENT)
+                .build();
+        given(userRepository.findByLoginId("testId")).willReturn(Optional.of(user));
+        given(refreshTokenRepository.findByUserAndDeviceIdentifier(user, null)).willReturn(Optional.empty());
+
+        UserLoginResponse loginResponse = userService.login(createLoginRequest());
+        RefreshToken savedRefreshToken = captureSavedRefreshToken();
+        String previousTokenHash = savedRefreshToken.getTokenHash();
+        given(refreshTokenRepository.findByTokenHash(previousTokenHash)).willReturn(Optional.of(savedRefreshToken));
+
+        TokenRefreshResponse response = userService.refreshToken(
+                createTokenRefreshRequest(loginResponse.getRefreshToken())
+        );
+
+        assertThat(response.getAccessToken()).isNotBlank();
+        assertThat(response.getRefreshToken()).isNotBlank();
+        assertThat(response.getRefreshToken()).isNotEqualTo(loginResponse.getRefreshToken());
+        assertThat(savedRefreshToken.getTokenHash()).isNotEqualTo(previousTokenHash);
     }
 
     @Test
@@ -322,5 +362,17 @@ class UserServiceTest {
         ReflectionTestUtils.setField(request, "loginId", "testId");
         ReflectionTestUtils.setField(request, "password", "password123!");
         return request;
+    }
+
+    private TokenRefreshRequest createTokenRefreshRequest(String refreshToken) {
+        TokenRefreshRequest request = new TokenRefreshRequest();
+        ReflectionTestUtils.setField(request, "refreshToken", refreshToken);
+        return request;
+    }
+
+    private RefreshToken captureSavedRefreshToken() {
+        ArgumentCaptor<RefreshToken> refreshTokenCaptor = ArgumentCaptor.forClass(RefreshToken.class);
+        verify(refreshTokenRepository).saveAndFlush(refreshTokenCaptor.capture());
+        return refreshTokenCaptor.getValue();
     }
 }

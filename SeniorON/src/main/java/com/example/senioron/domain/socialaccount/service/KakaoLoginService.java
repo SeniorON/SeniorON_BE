@@ -9,6 +9,7 @@ import com.example.senioron.domain.socialaccount.repository.SocialAccountReposit
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.domain.user.service.RefreshTokenService;
 import com.example.senioron.global.jwt.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -26,6 +27,7 @@ public class KakaoLoginService {
 
     private final SocialAccountRepository socialAccountRepository;
     private final JwtUtil jwtUtil;
+    private final RefreshTokenService refreshTokenService;
 
     /**
      * 카카오 Access Token으로 사용자 정보를 조회합니다.
@@ -69,9 +71,12 @@ public class KakaoLoginService {
             User user = existingSocialAccount.get().getUser();
 
             String accessToken = jwtUtil.createAccessToken(user);
+            String refreshToken = jwtUtil.createRefreshToken(user);
+            refreshTokenService.saveOrRotate(user, request.getDeviceIdentifier(), refreshToken);
 
             return KakaoLoginResponse.builder()
                     .accessToken(accessToken)
+                    .refreshToken(refreshToken)
                     .usersId(user.getUsersId())
                     .name(user.getName())
                     .role(user.getRole())

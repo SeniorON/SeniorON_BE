@@ -40,6 +40,9 @@ public enum ErrorCode implements BaseCode {
     INVALID_FIREBASE_ID_TOKEN(HttpStatus.UNAUTHORIZED, "USER401_1", "Firebase ID 토큰이 유효하지 않습니다."),
     FIREBASE_AUTH_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "USER503_1", "Firebase 인증을 사용할 수 없습니다."),
     GOOGLE_LOGIN_CONFLICT(HttpStatus.CONFLICT, "USER409_3", "구글 로그인 처리 중 계정 충돌이 발생했습니다."),
+    INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "USER401_2", "Refresh Token이 유효하지 않습니다."),
+    EXPIRED_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "USER401_3", "Refresh Token이 만료되었습니다."),
+    REFRESH_TOKEN_DEVICE_MISMATCH(HttpStatus.UNAUTHORIZED, "USER401_4", "Refresh Token의 기기 정보가 일치하지 않습니다."),
 
     // Email Error
     EMAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "EMAIL500", "이메일 발송에 실패했습니다."),
@@ -78,6 +81,7 @@ public enum ErrorCode implements BaseCode {
     FAMILY_NOT_FOUND(HttpStatus.NOT_FOUND, "FAMILY404", "가족 정보를 찾을 수 없습니다."),
     INVALID_FAMILY_CODE(HttpStatus.BAD_REQUEST, "FAMILY400", "유효하지 않은 가족 코드입니다."),
     FAMILY_MEMBER_REMOVE_FORBIDDEN(HttpStatus.FORBIDDEN, "FAMILY403", "가족 구성원을 제외할 권한이 없습니다."),
+    FAMILY_CODE_CREATE_PARENT_FORBIDDEN(HttpStatus.FORBIDDEN, "FAMILY403_1", "부모 계정은 가족 공유코드를 생성할 수 없습니다."),
     FAMILY_MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "FAMILY404_1", "해당 가족 구성원을 찾을 수 없습니다."),
     CANNOT_REMOVE_SELF(HttpStatus.BAD_REQUEST, "FAMILY400_1", "주 담당자는 자기 자신을 가족에서 제외할 수 없습니다."),
     CANNOT_CHANGE_PRIMARY_TO_SELF(HttpStatus.BAD_REQUEST, "FAMILY400_2", "본인은 주 담당자 변경 대상으로 선택할 수 없습니다."),

@@ -33,6 +33,7 @@ spring:
 jwt:
   secret: this-is-a-temporary-secret-key-for-senioron-jwt-please-change-later
   access-token-expiration: 3600000
+  refresh-token-expiration: 1209600000
 
 management:
   endpoints:

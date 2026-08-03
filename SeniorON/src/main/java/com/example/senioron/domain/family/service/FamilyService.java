@@ -45,7 +45,7 @@ public class FamilyService {
                 );
 
         if (user.getRole() != Role.CHILD) {
-            throw new BusinessException(ErrorCode.FORBIDDEN);
+            throw new BusinessException(ErrorCode.FAMILY_CODE_CREATE_PARENT_FORBIDDEN);
         }
 
         String familyCode = generateUniqueFamilyCode();

@@ -2,23 +2,29 @@ package com.example.senioron.domain.user.service;
 
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeSendRequest;
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeVerifyRequest;
+import com.example.senioron.domain.user.dto.request.TokenRefreshRequest;
 import com.example.senioron.domain.user.dto.request.UserLoginRequest;
 import com.example.senioron.domain.user.dto.request.UserRoleUpdateRequest;
 import com.example.senioron.domain.user.dto.request.UserSignUpRequest;
 import com.example.senioron.domain.user.dto.response.*;
+import com.example.senioron.domain.user.entity.RefreshToken;
 import com.example.senioron.domain.user.entity.SignupEmailVerificationCode;
 import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.inactivity.service.InactivitySettingService;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.entity.UserStatus;
 import com.example.senioron.domain.user.event.SignupEmailVerificationCodeSendEvent;
+import com.example.senioron.domain.user.repository.RefreshTokenRepository;
 import com.example.senioron.domain.user.repository.SignupEmailVerificationCodeRepository;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.jwt.JwtUtil;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.JwtException;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -36,8 +42,10 @@ public class UserService {
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final UserRepository userRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
     private final SignupEmailVerificationCodeRepository signupEmailVerificationCodeRepository;
     private final SignupEmailVerificationCodeIssuer signupEmailVerificationCodeIssuer;
+    private final RefreshTokenService refreshTokenService;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final InactivitySettingService inactivitySettingService;
@@ -187,6 +195,8 @@ public class UserService {
         }
 
         String accessToken = jwtUtil.createAccessToken(user);
+        String refreshToken = jwtUtil.createRefreshToken(user);
+        refreshTokenService.saveOrRotate(user, request.getDeviceIdentifier(), refreshToken);
 
         return UserLoginResponse.builder()
                 .usersId(user.getUsersId())
@@ -194,6 +204,43 @@ public class UserService {
                 .loginId(user.getLoginId())
                 .role(user.getRole())
                 .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .build();
+    }
+
+    public TokenRefreshResponse refreshToken(TokenRefreshRequest request) {
+        String refreshToken = request.getRefreshToken();
+
+        Long usersId = getRefreshTokenUsersId(refreshToken);
+        String tokenHash = refreshTokenService.hashToken(refreshToken);
+
+        RefreshToken savedRefreshToken = refreshTokenRepository.findByTokenHash(tokenHash)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN));
+
+        if (!Objects.equals(savedRefreshToken.getUser().getUsersId(), usersId)) {
+            throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
+        }
+
+        if (savedRefreshToken.isRevoked()) {
+            throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
+        }
+
+        if (savedRefreshToken.isExpired(LocalDateTime.now())) {
+            throw new BusinessException(ErrorCode.EXPIRED_REFRESH_TOKEN);
+        }
+
+        if (!Objects.equals(savedRefreshToken.getDeviceIdentifier(), request.getDeviceIdentifier())) {
+            throw new BusinessException(ErrorCode.REFRESH_TOKEN_DEVICE_MISMATCH);
+        }
+
+        User user = savedRefreshToken.getUser();
+        String newAccessToken = jwtUtil.createAccessToken(user);
+        String newRefreshToken = jwtUtil.createRefreshToken(user);
+        savedRefreshToken.rotate(refreshTokenService.hashToken(newRefreshToken), jwtUtil.getRefreshTokenExpiresAt());
+
+        return TokenRefreshResponse.builder()
+                .accessToken(newAccessToken)
+                .refreshToken(newRefreshToken)
                 .build();
     }
 
@@ -227,4 +274,19 @@ public class UserService {
     private String generateVerificationCode() {
         return String.format("%06d", SECURE_RANDOM.nextInt(VERIFICATION_CODE_BOUND));
     }
+
+    private Long getRefreshTokenUsersId(String refreshToken) {
+        try {
+            if (!jwtUtil.isRefreshToken(refreshToken)) {
+                throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
+            }
+
+            return jwtUtil.getUsersId(refreshToken);
+        } catch (ExpiredJwtException e) {
+            throw new BusinessException(ErrorCode.EXPIRED_REFRESH_TOKEN);
+        } catch (JwtException | IllegalArgumentException e) {
+            throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
+        }
+    }
+
 }

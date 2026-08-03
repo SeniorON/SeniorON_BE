@@ -12,4 +12,5 @@ public class UserLoginResponse {
     private String loginId;
     private Role role;
     private String accessToken;
+    private String refreshToken;
 }

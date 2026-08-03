@@ -4,6 +4,7 @@ import com.example.senioron.domain.socialaccount.dto.google.request.GoogleLoginR
 import com.example.senioron.domain.socialaccount.dto.google.response.GoogleLoginResponse;
 import com.example.senioron.domain.socialaccount.entity.SocialAccount;
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.service.RefreshTokenService;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.jwt.JwtUtil;
@@ -14,12 +15,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
+@Transactional
 public class GoogleLoginService {
 
     private final FirebaseIdTokenVerifier firebaseIdTokenVerifier;
     private final GoogleSocialAccountIssuer googleSocialAccountIssuer;
     private final JwtUtil jwtUtil;
+    private final RefreshTokenService refreshTokenService;
 
     public GoogleLoginResponse googleLogin(GoogleLoginRequest request) {
         VerifiedFirebaseUser firebaseUser =
@@ -37,9 +39,12 @@ public class GoogleLoginService {
         SocialAccount socialAccount = result.socialAccount();
         User user = socialAccount.getUser();
         String accessToken = jwtUtil.createAccessToken(user);
+        String refreshToken = jwtUtil.createRefreshToken(user);
+        refreshTokenService.saveOrRotate(user, request.getDeviceIdentifier(), refreshToken);
 
         return GoogleLoginResponse.builder()
                 .accessToken(accessToken)
+                .refreshToken(refreshToken)
                 .usersId(user.getUsersId())
                 .name(user.getName())
                 .role(user.getRole())
