@@ -10,6 +10,7 @@ import com.example.senioron.global.apiPayload.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 import java.util.Optional;
 
@@ -20,7 +21,7 @@ public class FamilyPhotoPersistenceService {
     private final FamilyPhotoRepository familyPhotoRepository;
     private final UserRepository userRepository;
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public FamilyPhoto create(
             Long userId,
             String imageKey,

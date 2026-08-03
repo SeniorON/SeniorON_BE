@@ -99,42 +99,43 @@ public class FamilyPhotoService {
                 directory
         );
 
-        try {
-            FamilyPhoto savedPhoto =
-                    photoPersistenceService.create(
-                            user.getUsersId(),
-                            imageKey,
-                            idempotencyKey,
-                            request.getDescription()
-                    );
+        FamilyPhoto savedPhoto;
 
-            return toItemResponse(
-                    savedPhoto,
-                    user,
-                    newPhotoCutoff
+        try {
+            savedPhoto = photoPersistenceService.create(
+                    user.getUsersId(),
+                    imageKey,
+                    idempotencyKey,
+                    request.getDescription()
             );
 
         } catch (DataIntegrityViolationException exception) {
             deleteUploadedObjectSafely(imageKey);
 
-            return photoPersistenceService
-                    .findExisting(
-                            user.getUsersId(),
-                            idempotencyKey
-                    )
-                    .map(photo ->
-                            toItemResponse(
-                                    photo,
-                                    user,
-                                    newPhotoCutoff
+            FamilyPhoto existingPhoto =
+                    photoPersistenceService
+                            .findExisting(
+                                    user.getUsersId(),
+                                    idempotencyKey
                             )
-                    )
-                    .orElseThrow(() -> exception);
+                            .orElseThrow(() -> exception);
+
+            return toItemResponse(
+                    existingPhoto,
+                    user,
+                    newPhotoCutoff
+            );
 
         } catch (RuntimeException exception) {
             deleteUploadedObjectSafely(imageKey);
             throw exception;
         }
+
+        return toItemResponse(
+                savedPhoto,
+                user,
+                newPhotoCutoff
+        );
     }
 
     private void deleteUploadedObjectSafely(String imageKey) {
