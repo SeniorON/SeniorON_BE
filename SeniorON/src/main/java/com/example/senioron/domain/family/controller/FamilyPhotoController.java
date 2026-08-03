@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @Tag(name = "가족 사진", description = "가족 사진 관련 API")
 @RestController
@@ -32,9 +33,10 @@ public class FamilyPhotoController {
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Response<FamilyPhotoItemResponse> createPhoto(
             @AuthenticationPrincipal User user,
+            @RequestHeader("Idempotency-Key") UUID idempotencyKey,
             @Valid @ModelAttribute FamilyPhotoCreateRequest request
     ) {
-        return Response.ok(familyPhotoService.createPhoto(user, request));
+        return Response.ok(familyPhotoService.createPhoto(user, idempotencyKey.toString(), request));
     }
 
     @Operation(summary = "가족 사진 목록 조회", description = "현재 사용자가 속한 가족의 사진을 최신순으로 조회합니다. " + "uploaderUserId를 전달하면 해당 자녀의 사진만 조회합니다.")
