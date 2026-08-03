@@ -1,6 +1,7 @@
 package com.example.senioron.domain.hospital.repository;
 
 import com.example.senioron.domain.hospital.entity.Hospital;
+import com.example.senioron.domain.hospital.entity.HospitalReminderType;
 import com.example.senioron.domain.user.entity.User;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -79,5 +80,42 @@ public interface HospitalRepository
 
             @Param("currentTime")
             LocalTime currentTime
+    );
+
+    @Query("""
+            SELECT DISTINCT hospital
+            FROM Hospital hospital
+            JOIN FETCH hospital.user parentUser
+            LEFT JOIN FETCH parentUser.family
+            WHERE hospital.scheduleTime = :scheduleTime
+              AND (
+                    (
+                        hospital.reminderType = :sameDayType
+                        AND hospital.scheduleDate = :sameDayScheduleDate
+                    )
+                    OR
+                    (
+                        hospital.reminderType = :dayBeforeType
+                        AND hospital.scheduleDate = :dayBeforeScheduleDate
+                    )
+              )
+            ORDER BY hospital.scheduleDate ASC,
+                     hospital.scheduleTime ASC
+            """)
+    List<Hospital> findHospitalReminderTargets(
+            @Param("sameDayScheduleDate")
+            LocalDate sameDayScheduleDate,
+
+            @Param("dayBeforeScheduleDate")
+            LocalDate dayBeforeScheduleDate,
+
+            @Param("scheduleTime")
+            LocalTime scheduleTime,
+
+            @Param("sameDayType")
+            HospitalReminderType sameDayType,
+
+            @Param("dayBeforeType")
+            HospitalReminderType dayBeforeType
     );
 }
