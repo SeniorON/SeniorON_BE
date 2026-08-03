@@ -11,9 +11,12 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -21,13 +24,16 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-import jakarta.persistence.Table;
-import jakarta.persistence.Index;
-
 @Entity
-@Table(name = "hospital", indexes = {
-        @Index(name = "idx_hospital_user_schedule", columnList = "users_id, scheduleDate")
-})
+@Table(
+        name = "hospital",
+        indexes = {
+                @Index(
+                        name = "idx_hospital_user_schedule",
+                        columnList = "users_id, schedule_date"
+                )
+        }
+)
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
@@ -62,11 +68,21 @@ public class Hospital extends BaseEntity {
     @Column(nullable = false)
     private HospitalReminderType reminderType;
 
-    public void updateHospital(String hospitalName, String department, LocalDate scheduleDate, LocalTime scheduleTime, HospitalReminderType reminderType) {
+    @Column(name = "reminder_sent_at")
+    private LocalDateTime reminderSentAt;
+
+    public void updateHospital(
+            String hospitalName,
+            String department,
+            LocalDate scheduleDate,
+            LocalTime scheduleTime,
+            HospitalReminderType reminderType
+    ) {
         this.hospitalName = hospitalName;
         this.department = department;
         this.scheduleDate = scheduleDate;
         this.scheduleTime = scheduleTime;
         this.reminderType = reminderType;
+        this.reminderSentAt = null;
     }
 }
