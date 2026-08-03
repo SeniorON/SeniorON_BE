@@ -12,12 +12,12 @@ import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -57,9 +57,36 @@ public class HospitalNotificationScheduler {
                         .withSecond(0)
                         .withNano(0);
 
+        executeTransaction(() ->
+                processHospitalNotificationsWithLock(
+                        currentMinute
+                )
+        );
+    }
+
+    private void processHospitalNotificationsWithLock(
+            LocalDateTime currentMinute
+    ) {
+        checkpointRepository.insertIfAbsent(
+                CHECKPOINT_JOB_NAME,
+                currentMinute.minusMinutes(1)
+        );
+
+        HospitalNotificationCheckpoint checkpoint =
+                checkpointRepository
+                        .findByJobNameForUpdate(
+                                CHECKPOINT_JOB_NAME
+                        )
+                        .orElseThrow(() ->
+                                new IllegalStateException(
+                                        "병원 알림 체크포인트를 찾을 수 없습니다."
+                                )
+                        );
+
         NotificationBatch notificationBatch =
                 loadNotificationBatch(
-                        currentMinute
+                        currentMinute,
+                        checkpoint.getLastProcessedAt()
                 );
 
         boolean allSucceeded =
@@ -69,138 +96,143 @@ public class HospitalNotificationScheduler {
                 );
 
         if (allSucceeded) {
-            updateCheckpoint(
+            checkpoint.updateLastProcessedAt(
                     currentMinute
+            );
+
+            checkpointRepository.save(
+                    checkpoint
             );
         }
     }
 
     private NotificationBatch loadNotificationBatch(
-            LocalDateTime currentMinute
+            LocalDateTime currentMinute,
+            LocalDateTime savedCheckpoint
     ) {
-        return executeReadOnlyTransaction(() -> {
-            LocalDateTime savedCheckpoint =
-                    checkpointRepository
-                            .findById(
-                                    CHECKPOINT_JOB_NAME
+        LocalDateTime fromInclusive =
+                savedCheckpoint.isAfter(
+                        currentMinute
+                )
+                        ? currentMinute.minusMinutes(1)
+                        : savedCheckpoint;
+
+        LocalDate startScheduleDate =
+                fromInclusive.toLocalDate();
+
+        LocalDate endScheduleDate =
+                currentMinute
+                        .plusDays(1)
+                        .toLocalDate();
+
+        List<Hospital> hospitals =
+                hospitalRepository
+                        .findPendingReminderCandidates(
+                                HospitalReminderType.NONE,
+                                startScheduleDate,
+                                endScheduleDate
+                        )
+                        .stream()
+                        .filter(hospital ->
+                                isReminderDueBetween(
+                                        hospital,
+                                        fromInclusive,
+                                        currentMinute
+                                )
+                        )
+                        .toList();
+
+        if (hospitals.isEmpty()) {
+            return new NotificationBatch(
+                    fromInclusive,
+                    List.of()
+            );
+        }
+
+        Map<Long, User> parentUsersById =
+                new LinkedHashMap<>();
+
+        for (Hospital hospital : hospitals) {
+            User parentUser =
+                    hospital.getUser();
+
+            parentUsersById.putIfAbsent(
+                    parentUser.getUsersId(),
+                    parentUser
+            );
+        }
+
+        List<Device> parentDevices =
+                deviceRepository.findAllByUserIn(
+                        new ArrayList<>(
+                                parentUsersById.values()
+                        )
+                );
+
+        Map<Long, List<DeviceTarget>>
+                parentDevicesByUserId =
+                groupDevicesByUserId(
+                        parentDevices
+                );
+
+        Map<Long, List<DeviceTarget>>
+                childDevicesByFamilyId =
+                new LinkedHashMap<>();
+
+        for (User parentUser
+                : parentUsersById.values()) {
+            if (parentUser.getFamily() == null) {
+                continue;
+            }
+
+            Long familyId =
+                    parentUser.getFamily()
+                            .getFamilyId();
+
+            childDevicesByFamilyId.computeIfAbsent(
+                    familyId,
+                    ignored ->
+                            toDeviceTargets(
+                                    deviceRepository
+                                            .findAllByUser_FamilyAndUser_Role(
+                                                    parentUser.getFamily(),
+                                                    Role.CHILD
+                                            )
                             )
-                            .map(
-                                    HospitalNotificationCheckpoint
-                                            ::getLastProcessedAt
-                            )
-                            .orElse(
-                                    currentMinute.minusMinutes(1)
-                            );
+            );
+        }
 
-            LocalDateTime fromInclusive =
-                    savedCheckpoint.isAfter(
-                            currentMinute
-                    )
-                            ? currentMinute.minusMinutes(1)
-                            : savedCheckpoint;
+        List<HospitalReminderNotification>
+                notifications =
+                new ArrayList<>();
 
-            LocalDate startScheduleDate =
-                    fromInclusive.toLocalDate();
+        for (Hospital hospital : hospitals) {
+            User parentUser =
+                    hospital.getUser();
 
-            LocalDate endScheduleDate =
-                    currentMinute
-                            .plusDays(1)
-                            .toLocalDate();
+            Map<Long, DeviceTarget>
+                    devicesByDeviceId =
+                    new LinkedHashMap<>();
 
-            List<Hospital> hospitals =
-                    hospitalRepository
-                            .findPendingReminderCandidates(
-                                    HospitalReminderType.NONE,
-                                    startScheduleDate,
-                                    endScheduleDate
-                            )
-                            .stream()
-                            .filter(hospital ->
-                                    isReminderDueBetween(
-                                            hospital,
-                                            fromInclusive,
-                                            currentMinute
-                                    )
-                            )
-                            .toList();
-
-            if (hospitals.isEmpty()) {
-                return new NotificationBatch(
-                        fromInclusive,
-                        List.of()
+            for (DeviceTarget device :
+                    parentDevicesByUserId.getOrDefault(
+                            parentUser.getUsersId(),
+                            List.of()
+                    )) {
+                devicesByDeviceId.putIfAbsent(
+                        device.deviceId(),
+                        device
                 );
             }
 
-            Map<Long, User> parentUsersById =
-                    new LinkedHashMap<>();
-
-            for (Hospital hospital : hospitals) {
-                User parentUser =
-                        hospital.getUser();
-
-                parentUsersById.putIfAbsent(
-                        parentUser.getUsersId(),
-                        parentUser
-                );
-            }
-
-            List<Device> parentDevices =
-                    deviceRepository.findAllByUserIn(
-                            new ArrayList<>(
-                                    parentUsersById.values()
-                            )
-                    );
-
-            Map<Long, List<DeviceTarget>>
-                    parentDevicesByUserId =
-                    groupDevicesByUserId(
-                            parentDevices
-                    );
-
-            Map<Long, List<DeviceTarget>>
-                    childDevicesByFamilyId =
-                    new LinkedHashMap<>();
-
-            for (User parentUser
-                    : parentUsersById.values()) {
-                if (parentUser.getFamily() == null) {
-                    continue;
-                }
-
+            if (parentUser.getFamily() != null) {
                 Long familyId =
                         parentUser.getFamily()
                                 .getFamilyId();
 
-                childDevicesByFamilyId
-                        .computeIfAbsent(
-                                familyId,
-                                ignored ->
-                                        toDeviceTargets(
-                                                deviceRepository
-                                                        .findAllByUser_FamilyAndUser_Role(
-                                                                parentUser
-                                                                        .getFamily(),
-                                                                Role.CHILD
-                                                        )
-                                        )
-                        );
-            }
-
-            List<HospitalReminderNotification>
-                    notifications =
-                    new ArrayList<>();
-
-            for (Hospital hospital : hospitals) {
-                User parentUser =
-                        hospital.getUser();
-
-                Map<Long, DeviceTarget>
-                        devicesByDeviceId =
-                        new LinkedHashMap<>();
-
                 for (DeviceTarget device :
-                        parentDevicesByUserId.getOrDefault(
-                                parentUser.getUsersId(),
+                        childDevicesByFamilyId.getOrDefault(
+                                familyId,
                                 List.of()
                         )) {
                     devicesByDeviceId.putIfAbsent(
@@ -208,41 +240,24 @@ public class HospitalNotificationScheduler {
                             device
                     );
                 }
-
-                if (parentUser.getFamily() != null) {
-                    Long familyId =
-                            parentUser.getFamily()
-                                    .getFamilyId();
-
-                    for (DeviceTarget device :
-                            childDevicesByFamilyId.getOrDefault(
-                                    familyId,
-                                    List.of()
-                            )) {
-                        devicesByDeviceId.putIfAbsent(
-                                device.deviceId(),
-                                device
-                        );
-                    }
-                }
-
-                notifications.add(
-                        createNotification(
-                                hospital,
-                                new ArrayList<>(
-                                        devicesByDeviceId.values()
-                                )
-                        )
-                );
             }
 
-            return new NotificationBatch(
-                    fromInclusive,
-                    List.copyOf(
-                            notifications
+            notifications.add(
+                    createNotification(
+                            hospital,
+                            new ArrayList<>(
+                                    devicesByDeviceId.values()
+                            )
                     )
             );
-        });
+        }
+
+        return new NotificationBatch(
+                fromInclusive,
+                List.copyOf(
+                        notifications
+                )
+        );
     }
 
     private HospitalReminderNotification createNotification(
@@ -316,6 +331,9 @@ public class HospitalNotificationScheduler {
                 hospital.getHospital_id(),
                 hospital.getUser()
                         .getUsersId(),
+                hospital.getScheduleDate(),
+                hospital.getScheduleTime(),
+                hospital.getReminderType(),
                 List.copyOf(
                         devices
                 ),
@@ -370,7 +388,7 @@ public class HospitalNotificationScheduler {
             if (failureCount == 0) {
                 try {
                     markReminderSent(
-                            notification.hospitalId(),
+                            notification,
                             processedAt
                     );
                 } catch (RuntimeException exception) {
@@ -405,46 +423,25 @@ public class HospitalNotificationScheduler {
     }
 
     private void markReminderSent(
-            Long hospitalId,
+            HospitalReminderNotification notification,
             LocalDateTime sentAt
     ) {
-        executeTransaction(() ->
+        int updatedCount =
                 hospitalRepository.markReminderSentAt(
-                        hospitalId,
+                        notification.hospitalId(),
+                        notification.scheduleDate(),
+                        notification.scheduleTime(),
+                        notification.reminderType(),
                         sentAt
-                )
-        );
-    }
+                );
 
-    private void updateCheckpoint(
-            LocalDateTime currentMinute
-    ) {
-        executeTransaction(() -> {
-            HospitalNotificationCheckpoint checkpoint =
-                    checkpointRepository
-                            .findById(
-                                    CHECKPOINT_JOB_NAME
-                            )
-                            .orElseGet(() ->
-                                    HospitalNotificationCheckpoint
-                                            .builder()
-                                            .jobName(
-                                                    CHECKPOINT_JOB_NAME
-                                            )
-                                            .lastProcessedAt(
-                                                    currentMinute
-                                            )
-                                            .build()
-                            );
-
-            checkpoint.updateLastProcessedAt(
-                    currentMinute
+        if (updatedCount != 1) {
+            throw new IllegalStateException(
+                    "병원 일정이 변경되었거나 이미 알림 처리되었습니다. "
+                            + "hospitalId="
+                            + notification.hospitalId()
             );
-
-            checkpointRepository.save(
-                    checkpoint
-            );
-        });
+        }
     }
 
     private boolean isReminderDueBetween(
@@ -538,32 +535,6 @@ public class HospitalNotificationScheduler {
                 .toList();
     }
 
-    private <T> T executeReadOnlyTransaction(
-            Supplier<T> action
-    ) {
-        TransactionTemplate transactionTemplate =
-                new TransactionTemplate(
-                        transactionManager
-                );
-
-        transactionTemplate.setReadOnly(
-                true
-        );
-
-        T result =
-                transactionTemplate.execute(
-                        status -> action.get()
-                );
-
-        if (result == null) {
-            throw new IllegalStateException(
-                    "읽기 전용 트랜잭션 결과가 없습니다."
-            );
-        }
-
-        return result;
-    }
-
     private void executeTransaction(
             Runnable action
     ) {
@@ -598,6 +569,9 @@ public class HospitalNotificationScheduler {
     private record HospitalReminderNotification(
             Long hospitalId,
             Long parentUserId,
+            LocalDate scheduleDate,
+            LocalTime scheduleTime,
+            HospitalReminderType reminderType,
             List<DeviceTarget> devices,
             Map<String, String> data
     ) {

@@ -30,7 +30,7 @@ import lombok.NoArgsConstructor;
         indexes = {
                 @Index(
                         name = "idx_hospital_user_schedule",
-                        columnList = "users_id, scheduleDate"
+                        columnList = "users_id, schedule_date"
                 )
         }
 )

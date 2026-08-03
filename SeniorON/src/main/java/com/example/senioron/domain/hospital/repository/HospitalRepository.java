@@ -123,10 +123,22 @@ public interface HospitalRepository
             SET h.reminderSentAt = :sentAt
             WHERE h.hospital_id = :hospitalId
               AND h.reminderSentAt IS NULL
+              AND h.scheduleDate = :scheduleDate
+              AND h.scheduleTime = :scheduleTime
+              AND h.reminderType = :reminderType
             """)
     int markReminderSentAt(
             @Param("hospitalId")
             Long hospitalId,
+
+            @Param("scheduleDate")
+            LocalDate scheduleDate,
+
+            @Param("scheduleTime")
+            LocalTime scheduleTime,
+
+            @Param("reminderType")
+            HospitalReminderType reminderType,
 
             @Param("sentAt")
             LocalDateTime sentAt
