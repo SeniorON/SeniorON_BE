@@ -10,6 +10,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -23,14 +24,40 @@ public class RefreshTokenService {
         String tokenHash = hashToken(refreshToken);
         LocalDateTime expiresAt = jwtUtil.getRefreshTokenExpiresAt();
 
-        RefreshToken savedRefreshToken = refreshTokenRepository.findByUserAndDeviceIdentifier(user, deviceIdentifier)
-                .orElseGet(() -> RefreshToken.builder()
-                        .user(user)
-                        .deviceIdentifier(deviceIdentifier)
-                        .build());
+        refreshTokenRepository.findByUserAndDeviceIdentifier(user, deviceIdentifier)
+                .ifPresentOrElse(
+                        savedRefreshToken -> rotateAndSave(savedRefreshToken, tokenHash, expiresAt),
+                        () -> saveNewOrRetry(user, deviceIdentifier, tokenHash, expiresAt)
+                );
+    }
 
-        savedRefreshToken.rotate(tokenHash, expiresAt);
-        refreshTokenRepository.save(savedRefreshToken);
+    private void saveNewOrRetry(
+            User user,
+            String deviceIdentifier,
+            String tokenHash,
+            LocalDateTime expiresAt
+    ) {
+        RefreshToken newRefreshToken = RefreshToken.builder()
+                .user(user)
+                .deviceIdentifier(deviceIdentifier)
+                .build();
+
+        try {
+            rotateAndSave(newRefreshToken, tokenHash, expiresAt);
+        } catch (DataIntegrityViolationException e) {
+            if (deviceIdentifier == null) {
+                throw e;
+            }
+
+            RefreshToken savedRefreshToken = refreshTokenRepository.findByUserAndDeviceIdentifier(user, deviceIdentifier)
+                    .orElseThrow(() -> e);
+            rotateAndSave(savedRefreshToken, tokenHash, expiresAt);
+        }
+    }
+
+    private void rotateAndSave(RefreshToken refreshToken, String tokenHash, LocalDateTime expiresAt) {
+        refreshToken.rotate(tokenHash, expiresAt);
+        refreshTokenRepository.saveAndFlush(refreshToken);
     }
 
     public String hashToken(String token) {

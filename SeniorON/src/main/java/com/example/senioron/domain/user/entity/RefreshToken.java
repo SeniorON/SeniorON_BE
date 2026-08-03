@@ -11,6 +11,7 @@ import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -21,8 +22,13 @@ import lombok.NoArgsConstructor;
 @Entity
 @Table(
         name = "refresh_tokens",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_refresh_tokens_user_device",
+                        columnNames = {"users_id", "device_identifier"}
+                )
+        },
         indexes = {
-                @Index(name = "idx_refresh_tokens_user_device", columnList = "users_id, device_identifier"),
                 @Index(name = "idx_refresh_tokens_expires_at", columnList = "expires_at")
         }
 )

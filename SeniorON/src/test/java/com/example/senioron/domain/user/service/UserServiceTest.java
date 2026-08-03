@@ -116,7 +116,7 @@ class UserServiceTest {
         assertThat(response.getRole()).isEqualTo(Role.PARENT);
         assertThat(response.getAccessToken()).isNotBlank();
         assertThat(response.getRefreshToken()).isNotBlank();
-        verify(refreshTokenRepository).save(any(RefreshToken.class));
+        verify(refreshTokenRepository).saveAndFlush(any(RefreshToken.class));
     }
 
     @Test
@@ -372,7 +372,7 @@ class UserServiceTest {
 
     private RefreshToken captureSavedRefreshToken() {
         ArgumentCaptor<RefreshToken> refreshTokenCaptor = ArgumentCaptor.forClass(RefreshToken.class);
-        verify(refreshTokenRepository).save(refreshTokenCaptor.capture());
+        verify(refreshTokenRepository).saveAndFlush(refreshTokenCaptor.capture());
         return refreshTokenCaptor.getValue();
     }
 }
