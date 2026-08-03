@@ -4,12 +4,14 @@ import com.example.senioron.domain.device.entity.Device;
 import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.event.util.FcmSender;
 import com.example.senioron.domain.hospital.entity.Hospital;
+import com.example.senioron.domain.hospital.entity.HospitalNotificationCheckpoint;
 import com.example.senioron.domain.hospital.entity.HospitalReminderType;
+import com.example.senioron.domain.hospital.repository.HospitalNotificationCheckpointRepository;
 import com.example.senioron.domain.hospital.repository.HospitalRepository;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -31,9 +33,18 @@ public class HospitalNotificationScheduler {
     private static final ZoneId KOREA_ZONE_ID =
             ZoneId.of("Asia/Seoul");
 
+    private static final String CHECKPOINT_JOB_NAME =
+            "HOSPITAL_NOTIFICATION";
+
     private final HospitalRepository hospitalRepository;
+
+    private final HospitalNotificationCheckpointRepository
+            checkpointRepository;
+
     private final DeviceRepository deviceRepository;
+
     private final FcmSender fcmSender;
+
     private final PlatformTransactionManager transactionManager;
 
     @Scheduled(
@@ -42,40 +53,137 @@ public class HospitalNotificationScheduler {
     )
     public void processHospitalNotifications() {
         LocalDateTime currentMinute =
-                LocalDateTime.now(
-                                KOREA_ZONE_ID
-                        )
+                LocalDateTime.now(KOREA_ZONE_ID)
                         .withSecond(0)
                         .withNano(0);
 
-        List<HospitalReminderNotification> notifications =
-                loadHospitalReminderNotifications(
+        NotificationBatch notificationBatch =
+                loadNotificationBatch(
                         currentMinute
                 );
 
-        sendHospitalReminderNotifications(
-                notifications
-        );
+        boolean allSucceeded =
+                sendNotifications(
+                        notificationBatch.notifications(),
+                        currentMinute
+                );
+
+        if (allSucceeded) {
+            updateCheckpoint(
+                    currentMinute
+            );
+        }
     }
 
-    private List<HospitalReminderNotification>
-    loadHospitalReminderNotifications(
+    private NotificationBatch loadNotificationBatch(
             LocalDateTime currentMinute
     ) {
         return executeReadOnlyTransaction(() -> {
-            List<Hospital> hospitals =
-                    hospitalRepository
-                            .findHospitalReminderTargets(
-                                    currentMinute.toLocalDate(),
-                                    currentMinute.toLocalDate()
-                                            .plusDays(1),
-                                    currentMinute.toLocalTime(),
-                                    HospitalReminderType.SAME_DAY,
-                                    HospitalReminderType.DAY_BEFORE
+            LocalDateTime savedCheckpoint =
+                    checkpointRepository
+                            .findById(
+                                    CHECKPOINT_JOB_NAME
+                            )
+                            .map(
+                                    HospitalNotificationCheckpoint
+                                            ::getLastProcessedAt
+                            )
+                            .orElse(
+                                    currentMinute.minusMinutes(1)
                             );
 
+            LocalDateTime fromInclusive =
+                    savedCheckpoint.isAfter(
+                            currentMinute
+                    )
+                            ? currentMinute.minusMinutes(1)
+                            : savedCheckpoint;
+
+            LocalDate startScheduleDate =
+                    fromInclusive.toLocalDate();
+
+            LocalDate endScheduleDate =
+                    currentMinute
+                            .plusDays(1)
+                            .toLocalDate();
+
+            List<Hospital> hospitals =
+                    hospitalRepository
+                            .findPendingReminderCandidates(
+                                    HospitalReminderType.NONE,
+                                    startScheduleDate,
+                                    endScheduleDate
+                            )
+                            .stream()
+                            .filter(hospital ->
+                                    isReminderDueBetween(
+                                            hospital,
+                                            fromInclusive,
+                                            currentMinute
+                                    )
+                            )
+                            .toList();
+
             if (hospitals.isEmpty()) {
-                return List.of();
+                return new NotificationBatch(
+                        fromInclusive,
+                        List.of()
+                );
+            }
+
+            Map<Long, User> parentUsersById =
+                    new LinkedHashMap<>();
+
+            for (Hospital hospital : hospitals) {
+                User parentUser =
+                        hospital.getUser();
+
+                parentUsersById.putIfAbsent(
+                        parentUser.getUsersId(),
+                        parentUser
+                );
+            }
+
+            List<Device> parentDevices =
+                    deviceRepository.findAllByUserIn(
+                            new ArrayList<>(
+                                    parentUsersById.values()
+                            )
+                    );
+
+            Map<Long, List<DeviceTarget>>
+                    parentDevicesByUserId =
+                    groupDevicesByUserId(
+                            parentDevices
+                    );
+
+            Map<Long, List<DeviceTarget>>
+                    childDevicesByFamilyId =
+                    new LinkedHashMap<>();
+
+            for (User parentUser
+                    : parentUsersById.values()) {
+                if (parentUser.getFamily() == null) {
+                    continue;
+                }
+
+                Long familyId =
+                        parentUser.getFamily()
+                                .getFamilyId();
+
+                childDevicesByFamilyId
+                        .computeIfAbsent(
+                                familyId,
+                                ignored ->
+                                        toDeviceTargets(
+                                                deviceRepository
+                                                        .findAllByUser_FamilyAndUser_Role(
+                                                                parentUser
+                                                                        .getFamily(),
+                                                                Role.CHILD
+                                                        )
+                                        )
+                        );
             }
 
             List<HospitalReminderNotification>
@@ -86,204 +194,171 @@ public class HospitalNotificationScheduler {
                 User parentUser =
                         hospital.getUser();
 
-                List<DeviceTarget> targetDevices =
-                        collectTargetDevices(
-                                parentUser
-                        );
+                Map<Long, DeviceTarget>
+                        devicesByDeviceId =
+                        new LinkedHashMap<>();
 
-                String hospitalName =
-                        getSafeValue(
-                                hospital.getHospitalName(),
-                                "병원"
-                        );
+                for (DeviceTarget device :
+                        parentDevicesByUserId.getOrDefault(
+                                parentUser.getUsersId(),
+                                List.of()
+                        )) {
+                    devicesByDeviceId.putIfAbsent(
+                            device.deviceId(),
+                            device
+                    );
+                }
 
-                String department =
-                        getSafeValue(
-                                hospital.getDepartment(),
-                                "진료"
-                        );
+                if (parentUser.getFamily() != null) {
+                    Long familyId =
+                            parentUser.getFamily()
+                                    .getFamilyId();
 
-                String formattedTime =
-                        formatTime(
-                                hospital.getScheduleTime()
+                    for (DeviceTarget device :
+                            childDevicesByFamilyId.getOrDefault(
+                                    familyId,
+                                    List.of()
+                            )) {
+                        devicesByDeviceId.putIfAbsent(
+                                device.deviceId(),
+                                device
                         );
-
-                String title =
-                        createNotificationTitle(
-                                hospital.getReminderType()
-                        );
-
-                String body =
-                        createNotificationBody(
-                                hospital.getReminderType(),
-                                formattedTime,
-                                hospitalName,
-                                department
-                        );
-
-                Map<String, String> data =
-                        Map.ofEntries(
-                                Map.entry(
-                                        "type",
-                                        "HOSPITAL_REMINDER"
-                                ),
-                                Map.entry(
-                                        "title",
-                                        title
-                                ),
-                                Map.entry(
-                                        "body",
-                                        body
-                                ),
-                                Map.entry(
-                                        "hospitalId",
-                                        String.valueOf(
-                                                hospital.getHospital_id()
-                                        )
-                                ),
-                                Map.entry(
-                                        "parentUserId",
-                                        String.valueOf(
-                                                parentUser.getUsersId()
-                                        )
-                                ),
-                                Map.entry(
-                                        "hospitalName",
-                                        hospitalName
-                                ),
-                                Map.entry(
-                                        "department",
-                                        department
-                                ),
-                                Map.entry(
-                                        "scheduleDate",
-                                        hospital.getScheduleDate()
-                                                .toString()
-                                ),
-                                Map.entry(
-                                        "scheduleTime",
-                                        hospital.getScheduleTime()
-                                                .toString()
-                                ),
-                                Map.entry(
-                                        "reminderType",
-                                        hospital.getReminderType()
-                                                .name()
-                                )
-                        );
+                    }
+                }
 
                 notifications.add(
-                        new HospitalReminderNotification(
-                                hospital.getHospital_id(),
-                                parentUser.getUsersId(),
-                                hospital.getReminderType(),
-                                List.copyOf(
-                                        targetDevices
-                                ),
-                                data
+                        createNotification(
+                                hospital,
+                                new ArrayList<>(
+                                        devicesByDeviceId.values()
+                                )
                         )
                 );
             }
 
-            return notifications;
+            return new NotificationBatch(
+                    fromInclusive,
+                    List.copyOf(
+                            notifications
+                    )
+            );
         });
     }
 
-    private List<DeviceTarget> collectTargetDevices(
-            User parentUser
+    private HospitalReminderNotification createNotification(
+            Hospital hospital,
+            List<DeviceTarget> devices
     ) {
-        Map<Long, DeviceTarget> uniqueDevices =
-                new LinkedHashMap<>();
-
-        List<Device> parentDevices =
-                deviceRepository.findAllByUser(
-                        parentUser
+        String hospitalName =
+                getSafeValue(
+                        hospital.getHospitalName(),
+                        "병원"
                 );
 
-        addDeviceTargets(
-                uniqueDevices,
-                parentDevices
-        );
+        String department =
+                getSafeValue(
+                        hospital.getDepartment(),
+                        "진료"
+                );
 
-        if (parentUser.getFamily() != null) {
-            List<Device> childDevices =
-                    deviceRepository
-                            .findAllByUser_FamilyAndUser_Role(
-                                    parentUser.getFamily(),
-                                    Role.CHILD
-                            );
+        String dayText =
+                hospital.getReminderType()
+                        == HospitalReminderType.DAY_BEFORE
+                        ? "내일"
+                        : "오늘";
 
-            addDeviceTargets(
-                    uniqueDevices,
-                    childDevices
-            );
-        }
+        String title =
+                "병원 진료 일정 알림";
 
-        return new ArrayList<>(
-                uniqueDevices.values()
+        String body =
+                dayText
+                        + " "
+                        + hospitalName
+                        + " "
+                        + department
+                        + " 일정이 있어요.";
+
+        Map<String, String> data =
+                Map.of(
+                        "type",
+                        "HOSPITAL_REMINDER",
+
+                        "title",
+                        title,
+
+                        "body",
+                        body,
+
+                        "hospitalId",
+                        hospital.getHospital_id()
+                                .toString(),
+
+                        "hospitalName",
+                        hospitalName,
+
+                        "department",
+                        department,
+
+                        "scheduleDate",
+                        hospital.getScheduleDate()
+                                .toString(),
+
+                        "scheduleTime",
+                        hospital.getScheduleTime()
+                                .toString(),
+
+                        "reminderType",
+                        hospital.getReminderType()
+                                .name()
+                );
+
+        return new HospitalReminderNotification(
+                hospital.getHospital_id(),
+                hospital.getUser()
+                        .getUsersId(),
+                List.copyOf(
+                        devices
+                ),
+                data
         );
     }
 
-    private void addDeviceTargets(
-            Map<Long, DeviceTarget> uniqueDevices,
-            List<Device> devices
+    private boolean sendNotifications(
+            List<HospitalReminderNotification> notifications,
+            LocalDateTime processedAt
     ) {
-        for (Device device : devices) {
-            uniqueDevices.putIfAbsent(
-                    device.getDeviceId(),
-                    new DeviceTarget(
-                            device.getDeviceId(),
-                            device.getDeviceToken()
-                    )
-            );
-        }
-    }
+        boolean allSucceeded =
+                true;
 
-    private void sendHospitalReminderNotifications(
-            List<HospitalReminderNotification> notifications
-    ) {
         for (HospitalReminderNotification notification
                 : notifications) {
             int successCount = 0;
             int failureCount = 0;
             int skippedCount = 0;
 
-            for (DeviceTarget device :
-                    notification.devices()) {
+            for (DeviceTarget device
+                    : notification.devices()) {
                 String deviceToken =
                         device.deviceToken();
 
                 if (deviceToken == null
                         || deviceToken.isBlank()) {
                     skippedCount++;
-
-                    log.warn(
-                            "진료 알림 대상 기기의 FCM 토큰이 없습니다. "
-                                    + "deviceId={}, hospitalId={}",
-                            device.deviceId(),
-                            notification.hospitalId()
-                    );
-
                     continue;
                 }
 
                 try {
-                    boolean sent =
-                            fcmSender.sendData(
-                                    deviceToken,
-                                    notification.data()
-                            );
+                    fcmSender.sendData(
+                            deviceToken,
+                            notification.data()
+                    );
 
-                    if (sent) {
-                        successCount++;
-                    } else {
-                        failureCount++;
-                    }
+                    successCount++;
                 } catch (RuntimeException exception) {
                     failureCount++;
 
                     log.error(
-                            "진료 일정 FCM 발송 요청 실패. "
+                            "병원 일정 FCM 발송 요청 실패. "
                                     + "deviceId={}, hospitalId={}",
                             device.deviceId(),
                             notification.hospitalId(),
@@ -292,95 +367,175 @@ public class HospitalNotificationScheduler {
                 }
             }
 
+            if (failureCount == 0) {
+                try {
+                    markReminderSent(
+                            notification.hospitalId(),
+                            processedAt
+                    );
+                } catch (RuntimeException exception) {
+                    allSucceeded = false;
+
+                    log.error(
+                            "병원 일정 알림 발송 완료 처리 실패. "
+                                    + "hospitalId={}",
+                            notification.hospitalId(),
+                            exception
+                    );
+                }
+            } else {
+                allSucceeded = false;
+            }
+
             log.info(
-                    "진료 일정 푸시 요청 처리 종료. "
-                            + "parentUserId={}, hospitalId={}, reminderType={}, "
+                    "병원 일정 푸시 요청 처리 종료. "
+                            + "parentUserId={}, hospitalId={}, "
                             + "deviceCount={}, requestSuccessCount={}, "
                             + "requestFailureCount={}, skippedCount={}",
                     notification.parentUserId(),
                     notification.hospitalId(),
-                    notification.reminderType(),
                     notification.devices().size(),
                     successCount,
                     failureCount,
                     skippedCount
             );
         }
+
+        return allSucceeded;
     }
 
-    private String createNotificationTitle(
-            HospitalReminderType reminderType
+    private void markReminderSent(
+            Long hospitalId,
+            LocalDateTime sentAt
     ) {
-        return switch (reminderType) {
-            case DAY_BEFORE ->
-                    "내일 진료 일정이 있어요";
-            case SAME_DAY ->
-                    "진료 시간이에요";
-            case NONE ->
-                    "진료 일정 알림";
-        };
-    }
-
-    private String createNotificationBody(
-            HospitalReminderType reminderType,
-            String formattedTime,
-            String hospitalName,
-            String department
-    ) {
-        String dayText =
-                switch (reminderType) {
-                    case DAY_BEFORE ->
-                            "내일";
-                    case SAME_DAY ->
-                            "오늘";
-                    case NONE ->
-                            "";
-                };
-
-        return dayText
-                + " "
-                + formattedTime
-                + "에 "
-                + hospitalName
-                + " "
-                + department
-                + " 진료가 예정되어 있어요.";
-    }
-
-    private String formatTime(
-            LocalTime time
-    ) {
-        int hour =
-                time.getHour();
-
-        int minute =
-                time.getMinute();
-
-        String period =
-                hour < 12
-                        ? "오전"
-                        : "오후";
-
-        int displayHour =
-                hour % 12;
-
-        if (displayHour == 0) {
-            displayHour = 12;
-        }
-
-        if (minute == 0) {
-            return period
-                    + " "
-                    + displayHour
-                    + "시";
-        }
-
-        return String.format(
-                "%s %d시 %02d분",
-                period,
-                displayHour,
-                minute
+        executeTransaction(() ->
+                hospitalRepository.markReminderSentAt(
+                        hospitalId,
+                        sentAt
+                )
         );
+    }
+
+    private void updateCheckpoint(
+            LocalDateTime currentMinute
+    ) {
+        executeTransaction(() -> {
+            HospitalNotificationCheckpoint checkpoint =
+                    checkpointRepository
+                            .findById(
+                                    CHECKPOINT_JOB_NAME
+                            )
+                            .orElseGet(() ->
+                                    HospitalNotificationCheckpoint
+                                            .builder()
+                                            .jobName(
+                                                    CHECKPOINT_JOB_NAME
+                                            )
+                                            .lastProcessedAt(
+                                                    currentMinute
+                                            )
+                                            .build()
+                            );
+
+            checkpoint.updateLastProcessedAt(
+                    currentMinute
+            );
+
+            checkpointRepository.save(
+                    checkpoint
+            );
+        });
+    }
+
+    private boolean isReminderDueBetween(
+            Hospital hospital,
+            LocalDateTime fromInclusive,
+            LocalDateTime toInclusive
+    ) {
+        LocalDateTime reminderAt =
+                calculateReminderAt(
+                        hospital
+                );
+
+        if (reminderAt == null) {
+            return false;
+        }
+
+        return !reminderAt.isBefore(
+                fromInclusive
+        ) && !reminderAt.isAfter(
+                toInclusive
+        );
+    }
+
+    private LocalDateTime calculateReminderAt(
+            Hospital hospital
+    ) {
+        if (hospital.getReminderType() == null
+                || hospital.getReminderType()
+                == HospitalReminderType.NONE) {
+            return null;
+        }
+
+        LocalDate reminderDate;
+
+        if (hospital.getReminderType()
+                == HospitalReminderType.DAY_BEFORE) {
+            reminderDate =
+                    hospital.getScheduleDate()
+                            .minusDays(1);
+        } else {
+            reminderDate =
+                    hospital.getScheduleDate();
+        }
+
+        return LocalDateTime.of(
+                reminderDate,
+                hospital.getScheduleTime()
+        );
+    }
+
+    private Map<Long, List<DeviceTarget>>
+    groupDevicesByUserId(
+            List<Device> devices
+    ) {
+        Map<Long, List<DeviceTarget>>
+                devicesByUserId =
+                new LinkedHashMap<>();
+
+        for (Device device : devices) {
+            Long userId =
+                    device.getUser()
+                            .getUsersId();
+
+            devicesByUserId
+                    .computeIfAbsent(
+                            userId,
+                            ignored ->
+                                    new ArrayList<>()
+                    )
+                    .add(
+                            new DeviceTarget(
+                                    device.getDeviceId(),
+                                    device.getDeviceToken()
+                            )
+                    );
+        }
+
+        return devicesByUserId;
+    }
+
+    private List<DeviceTarget> toDeviceTargets(
+            List<Device> devices
+    ) {
+        return devices.stream()
+                .map(device ->
+                        new DeviceTarget(
+                                device.getDeviceId(),
+                                device.getDeviceToken()
+                        )
+                )
+                .toList();
     }
 
     private <T> T executeReadOnlyTransaction(
@@ -409,6 +564,19 @@ public class HospitalNotificationScheduler {
         return result;
     }
 
+    private void executeTransaction(
+            Runnable action
+    ) {
+        TransactionTemplate transactionTemplate =
+                new TransactionTemplate(
+                        transactionManager
+                );
+
+        transactionTemplate.executeWithoutResult(
+                status -> action.run()
+        );
+    }
+
     private String getSafeValue(
             String value,
             String fallback
@@ -421,18 +589,23 @@ public class HospitalNotificationScheduler {
         return value;
     }
 
-    private record DeviceTarget(
-            Long deviceId,
-            String deviceToken
+    private record NotificationBatch(
+            LocalDateTime fromInclusive,
+            List<HospitalReminderNotification> notifications
     ) {
     }
 
     private record HospitalReminderNotification(
             Long hospitalId,
             Long parentUserId,
-            HospitalReminderType reminderType,
             List<DeviceTarget> devices,
             Map<String, String> data
+    ) {
+    }
+
+    private record DeviceTarget(
+            Long deviceId,
+            String deviceToken
     ) {
     }
 }
