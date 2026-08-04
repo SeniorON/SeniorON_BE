@@ -15,6 +15,7 @@ import com.example.senioron.domain.user.entity.ManagerType;
 import java.util.List;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -60,6 +61,21 @@ public class DeviceService {
             );
         }
 
+        Optional<Device> latestDevice =
+                deviceRepository
+                        .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
+                                user
+                        );
+
+        if (latestDevice.isPresent()
+                && latestDevice.get().getConnectionStatus()
+                == DeviceStatus.DISCONNECTED) {
+
+            throw new BusinessException(
+                    ErrorCode.DEVICE_NOT_CONNECTED
+            );
+        }
+
         Device device = deviceRepository
                 .findByUserAndDeviceIdentifier(
                         user,
@@ -73,14 +89,6 @@ public class DeviceService {
                                 )
                                 .build()
                 );
-
-        if (device.getConnectionStatus()
-                == DeviceStatus.DISCONNECTED) {
-
-            throw new BusinessException(
-                    ErrorCode.DEVICE_NOT_CONNECTED
-            );
-        }
 
         device.updateDeviceInfo(
                 request.deviceName(),
