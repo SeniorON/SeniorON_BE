@@ -15,6 +15,7 @@ import com.example.senioron.domain.user.entity.ManagerType;
 import java.util.List;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -34,7 +35,11 @@ public class DeviceService {
                         .build());
 
         device.updateDeviceToken(deviceToken);
-        device.updateDeviceStatus(DeviceStatus.ONLINE, device.getBatteryLevel(), LocalDateTime.now());
+        device.updateDeviceStatus(
+                DeviceStatus.ONLINE,
+                device.getBatteryLevel(),
+                LocalDateTime.now()
+        );
 
         deviceRepository.save(device);
     }
@@ -53,6 +58,21 @@ public class DeviceService {
         if (user.getFamily() == null) {
             throw new BusinessException(
                     ErrorCode.FAMILY_NOT_CONNECTED
+            );
+        }
+
+        Optional<Device> latestDevice =
+                deviceRepository
+                        .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
+                                user
+                        );
+
+        if (latestDevice.isPresent()
+                && latestDevice.get().getConnectionStatus()
+                == DeviceStatus.DISCONNECTED) {
+
+            throw new BusinessException(
+                    ErrorCode.DEVICE_NOT_CONNECTED
             );
         }
 
@@ -81,12 +101,15 @@ public class DeviceService {
     }
 
     @Transactional
-    public void disconnectDevice(User currentUser) {
-
+    public void disconnectDevice(
+            User currentUser
+    ) {
         validateDeviceDisconnectAuthority(currentUser);
 
         if (currentUser.getFamily() == null) {
-            throw new BusinessException(ErrorCode.FAMILY_NOT_CONNECTED);
+            throw new BusinessException(
+                    ErrorCode.FAMILY_NOT_CONNECTED
+            );
         }
 
         List<Device> devices =
@@ -96,10 +119,25 @@ public class DeviceService {
                 );
 
         if (devices.isEmpty()) {
-            throw new BusinessException(ErrorCode.DEVICE_NOT_CONNECTED);
+            throw new BusinessException(
+                    ErrorCode.DEVICE_NOT_CONNECTED
+            );
         }
 
-        deviceRepository.deleteAll(devices);
+        boolean alreadyDisconnected =
+                devices.stream()
+                        .allMatch(device ->
+                                device.getConnectionStatus()
+                                        == DeviceStatus.DISCONNECTED
+                        );
+
+        if (alreadyDisconnected) {
+            throw new BusinessException(
+                    ErrorCode.DEVICE_NOT_CONNECTED
+            );
+        }
+
+        devices.forEach(Device::disconnect);
     }
 
     private void validateDeviceDisconnectAuthority(
