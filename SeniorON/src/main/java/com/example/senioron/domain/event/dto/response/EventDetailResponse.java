@@ -50,8 +50,15 @@ public class EventDetailResponse {
         return switch (eventType) {
             case SOS -> "도움이 필요해요";
             case INACTIVITY -> "무활동 감지됨";
-            case RISK_LINK -> Boolean.TRUE.equals(isDangerous) ? "위험한 링크가 감지됐어요" : "안전한 링크로 확인됐어요";
+            case RISK_LINK -> resolveRiskLinkMessage(isDangerous);
             case OUTING_RETURN -> phase == OutingPhase.OUTING ? "외출하셨어요" : "귀가하셨어요";
         };
+    }
+
+    private static String resolveRiskLinkMessage(Boolean isDangerous) {
+        if (isDangerous == null) {
+            return "링크 위험 여부를 확인하지 못했어요";
+        }
+        return isDangerous ? "위험한 링크가 감지됐어요" : "안전한 링크로 확인됐어요";
     }
 }

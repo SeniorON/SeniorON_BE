@@ -25,6 +25,9 @@ public class RiskLinkResponse {
     }
 
     private static String resolveRiskLevel(Boolean isDangerous) {
-        return Boolean.TRUE.equals(isDangerous) ? "높음" : "낮음";
+        if (isDangerous == null) {
+            return "확인불가";
+        }
+        return isDangerous ? "높음" : "낮음";
     }
 }
