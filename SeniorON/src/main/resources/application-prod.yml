@@ -25,16 +25,15 @@ spring:
         format_sql: true
         show_sql: false
         default_batch_fetch_size: 100
+        generate_statistics: true   # 추가
 
 logging:
   level:
     root: INFO
 
-    # SQL만 출력
-    org.hibernate.SQL: DEBUG
+    org.hibernate.SQL: OFF
+    org.hibernate.orm.jdbc.bind: OFF
+    org.hibernate.stat: OFF       # 추가
 
-    # Spring MVC 요청 로그
-    org.springframework.web: INFO
-
-    # 프로젝트 로그
     com.example.senioron: DEBUG
+    org.springframework.web: INFO

@@ -29,12 +29,21 @@ public class WeatherService {
             double longitude
     ) {
 
+        long totalStart = System.currentTimeMillis();
+
+        long start = System.currentTimeMillis();
+
         validateCoordinates(
                 latitude,
                 longitude
         );
 
+        System.out.println("validateCoordinates : "
+                + (System.currentTimeMillis() - start) + "ms");
+
         OpenMeteoResponse response;
+
+        start = System.currentTimeMillis();
 
         try {
             response = weatherRestClient
@@ -69,7 +78,14 @@ public class WeatherService {
             );
         }
 
-        validateWeatherResponse(response);
+        System.out.println("OpenMeteo API : "
+                + (System.currentTimeMillis() - start) + "ms");
+
+        start = System.currentTimeMillis();
+
+        validateWeatherResponse(
+                response
+        );
 
         WeatherStatus weatherStatus =
                 WeatherStatus.fromCode(
@@ -80,6 +96,12 @@ public class WeatherService {
                 parseObservedAt(
                         response.current().time()
                 );
+
+        System.out.println("Response Parsing : "
+                + (System.currentTimeMillis() - start) + "ms");
+
+        System.out.println("getCurrentWeather TOTAL : "
+                + (System.currentTimeMillis() - totalStart) + "ms");
 
         return new WeatherResponse(
                 (int) Math.round(

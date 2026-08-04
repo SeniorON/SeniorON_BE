@@ -490,6 +490,8 @@ public class HomeService {
             HomeButtonSaveRequest request
     ) {
 
+        long totalStart = System.currentTimeMillis();
+
         User user = getCurrentUser();
         validatePrimaryManager(user);
 
@@ -514,13 +516,25 @@ public class HomeService {
             );
         }
 
+        long start = System.currentTimeMillis();
+
         validateSaveButtonRequests(
                 buttonRequests
         );
 
+        System.out.println("validateSaveButtonRequests : "
+                + (System.currentTimeMillis() - start) + "ms");
+
+        start = System.currentTimeMillis();
+
         homeRepository.deleteAllByUser(
                 user
         );
+
+        System.out.println("deleteAllByUser : "
+                + (System.currentTimeMillis() - start) + "ms");
+
+        start = System.currentTimeMillis();
 
         List<Home> newHomes =
                 buttonRequests.stream()
@@ -532,9 +546,19 @@ public class HomeService {
                         )
                         .toList();
 
+        System.out.println("createHomeButton : "
+                + (System.currentTimeMillis() - start) + "ms");
+
+        start = System.currentTimeMillis();
+
         homeRepository.saveAll(
                 newHomes
         );
+
+        System.out.println("saveAll : "
+                + (System.currentTimeMillis() - start) + "ms");
+
+        start = System.currentTimeMillis();
 
         HomeSetting homeSetting =
                 homeSettingRepository
@@ -553,6 +577,12 @@ public class HomeService {
         homeSettingRepository.save(
                 homeSetting
         );
+
+        System.out.println("homeSetting.save : "
+                + (System.currentTimeMillis() - start) + "ms");
+
+        System.out.println("saveButtons TOTAL : "
+                + (System.currentTimeMillis() - totalStart) + "ms");
     }
 
     /**
@@ -943,6 +973,8 @@ public class HomeService {
     @Transactional(readOnly = true)
     public List<TodayHospitalListResponse> getTodayHospitalSchedules() {
 
+        long totalStart = System.currentTimeMillis();
+
         User currentUser = getCurrentUser();
 
         if (currentUser.getRole() != Role.PARENT) {
@@ -951,14 +983,30 @@ public class HomeService {
             );
         }
 
+        long start = System.currentTimeMillis();
+
         List<Hospital> hospitals =
                 findTodayHospitalSchedules(
                         currentUser
                 );
 
-        return hospitals.stream()
-                .map(TodayHospitalListResponse::from)
-                .toList();
+        System.out.println("findTodayHospitalSchedules : "
+                + (System.currentTimeMillis() - start) + "ms");
+
+        start = System.currentTimeMillis();
+
+        List<TodayHospitalListResponse> result =
+                hospitals.stream()
+                        .map(TodayHospitalListResponse::from)
+                        .toList();
+
+        System.out.println("mapping Response : "
+                + (System.currentTimeMillis() - start) + "ms");
+
+        System.out.println("getTodayHospitalSchedules TOTAL : "
+                + (System.currentTimeMillis() - totalStart) + "ms");
+
+        return result;
     }
 
     /**
@@ -1031,8 +1079,12 @@ public class HomeService {
             HomeFontSizeUpdateRequest request
     ) {
 
+        long totalStart = System.currentTimeMillis();
+
         User user = getCurrentUser();
         validatePrimaryManager(user);
+
+        long start = System.currentTimeMillis();
 
         HomeSetting homeSetting =
                 homeSettingRepository
@@ -1044,6 +1096,11 @@ public class HomeService {
                                         .build()
                         );
 
+        System.out.println("findHomeSetting : "
+                + (System.currentTimeMillis() - start) + "ms");
+
+        start = System.currentTimeMillis();
+
         homeSetting.updateFontSize(
                 request.getFontSize()
         );
@@ -1051,6 +1108,12 @@ public class HomeService {
         homeSettingRepository.save(
                 homeSetting
         );
+
+        System.out.println("saveHomeSetting : "
+                + (System.currentTimeMillis() - start) + "ms");
+
+        System.out.println("updateFontSize TOTAL : "
+                + (System.currentTimeMillis() - totalStart) + "ms");
     }
 
     private void validateSaveButtonRequests(
