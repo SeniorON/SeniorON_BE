@@ -87,4 +87,17 @@ public class FamilyPhotoController {
         );
         return Response.ok();
     }
+
+
+    @Operation(summary = "가족사진 단건 조회", description = "현재 로그인한 사용자가 속한 가족의 사진을 ID로 조회합니다.")
+    @GetMapping("/{familyPhotoId}")
+    public Response<FamilyPhotoItemResponse> getPhoto(
+            @AuthenticationPrincipal User user,
+            @PathVariable("familyPhotoId") Long familyPhotoId
+    ) {
+        return Response.ok(familyPhotoService.getPhoto(
+                user,
+                familyPhotoId
+        ));
+    }
 }

@@ -498,4 +498,35 @@ public class FamilyPhotoService {
 
         photo.markAsViewedByParent();
     }
+
+    @Transactional(readOnly = true)
+    public FamilyPhotoItemResponse getPhoto(
+            User principal,
+            Long familyPhotoId
+    ) {
+        User currentUser = userRepository
+                .findByIdWithFamily(principal.getUsersId())
+                .orElseThrow(()-> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        Family family = currentUser.getFamily();
+
+        if(family == null) {
+            throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
+        }
+
+        FamilyPhoto photo = familyPhotoRepository
+                .findByFamilyPhotoIdAndFamily(
+                        familyPhotoId,
+                        family
+                )
+                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_PHOTO_NOT_FOUND));
+
+        LocalDateTime newPhotoCutoff = LocalDateTime.now().minusHours(NEW_PHOTO_WINDOW_HOURS);
+
+        return toItemResponse(
+                photo,
+                currentUser,
+                newPhotoCutoff
+        );
+    }
 }
