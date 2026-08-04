@@ -34,7 +34,11 @@ public class DeviceService {
                         .build());
 
         device.updateDeviceToken(deviceToken);
-        device.updateDeviceStatus(DeviceStatus.ONLINE, device.getBatteryLevel(), LocalDateTime.now());
+        device.updateDeviceStatus(
+                DeviceStatus.ONLINE,
+                device.getBatteryLevel(),
+                LocalDateTime.now()
+        );
 
         deviceRepository.save(device);
     }
@@ -70,6 +74,14 @@ public class DeviceService {
                                 .build()
                 );
 
+        if (device.getConnectionStatus()
+                == DeviceStatus.DISCONNECTED) {
+
+            throw new BusinessException(
+                    ErrorCode.DEVICE_NOT_CONNECTED
+            );
+        }
+
         device.updateDeviceInfo(
                 request.deviceName(),
                 DeviceStatus.ONLINE,
@@ -81,12 +93,15 @@ public class DeviceService {
     }
 
     @Transactional
-    public void disconnectDevice(User currentUser) {
-
+    public void disconnectDevice(
+            User currentUser
+    ) {
         validateDeviceDisconnectAuthority(currentUser);
 
         if (currentUser.getFamily() == null) {
-            throw new BusinessException(ErrorCode.FAMILY_NOT_CONNECTED);
+            throw new BusinessException(
+                    ErrorCode.FAMILY_NOT_CONNECTED
+            );
         }
 
         List<Device> devices =
@@ -96,10 +111,25 @@ public class DeviceService {
                 );
 
         if (devices.isEmpty()) {
-            throw new BusinessException(ErrorCode.DEVICE_NOT_CONNECTED);
+            throw new BusinessException(
+                    ErrorCode.DEVICE_NOT_CONNECTED
+            );
         }
 
-        deviceRepository.deleteAll(devices);
+        boolean alreadyDisconnected =
+                devices.stream()
+                        .allMatch(device ->
+                                device.getConnectionStatus()
+                                        == DeviceStatus.DISCONNECTED
+                        );
+
+        if (alreadyDisconnected) {
+            throw new BusinessException(
+                    ErrorCode.DEVICE_NOT_CONNECTED
+            );
+        }
+
+        devices.forEach(Device::disconnect);
     }
 
     private void validateDeviceDisconnectAuthority(

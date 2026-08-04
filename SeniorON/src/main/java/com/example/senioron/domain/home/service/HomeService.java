@@ -2,6 +2,7 @@ package com.example.senioron.domain.home.service;
 
 import com.example.senioron.domain.device.entity.DeviceStatus;
 import com.example.senioron.domain.device.repository.DeviceRepository;
+import com.example.senioron.domain.device.entity.Device;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.home.dto.request.HomeButtonCreateRequest;
@@ -220,6 +221,18 @@ public class HomeService {
         );
     }
 
+    private List<Home> getDisconnectedPreviewButtons(
+            User homeOwner
+    ) {
+        /*
+         * 연결 해제 상태에서는 기존 DB 버튼을 수정하거나 삭제하지 않고
+         * 응답에만 초기 기본 런처를 표시
+         *
+         * TODO 재연결 시 기존 설정 복구 여부가 확정되면 정책 재검토
+         */
+        return createInitialHomeButtons(homeOwner);
+    }
+
 
     private String resolveButtonName(
             String requestedButtonName,
@@ -267,6 +280,28 @@ public class HomeService {
         return lastConnectedAt.isAfter(
                 offlineThreshold
         );
+    }
+
+    private boolean isDeviceDisconnected(
+            Optional<User> seniorUser
+    ) {
+        if (seniorUser.isEmpty()) {
+            return true;
+        }
+
+        return deviceRepository
+                .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
+                        seniorUser.get()
+                )
+                .map(this::isExplicitlyDisconnected)
+                .orElse(true);
+    }
+
+    private boolean isExplicitlyDisconnected(
+            Device device
+    ) {
+        return device.getConnectionStatus()
+                == DeviceStatus.DISCONNECTED;
     }
 
 
@@ -319,13 +354,18 @@ public class HomeService {
                         .map(UserSenior::getSenior)
                         .or(() -> findFamilySenior(currentUser));
 
+        boolean deviceDisconnected =
+                isDeviceDisconnected(seniorUser);
+
         HomeResponse.ConnectionResponse connection =
-                createConnectionResponse(seniorUser);
+                deviceDisconnected
+                        ? HomeResponse.ConnectionResponse.disconnected()
+                        : createConnectionResponse(seniorUser);
 
         List<Home> homes =
-                getOrCreateInitialHomeButtons(
-                        homeOwner
-                );
+                deviceDisconnected
+                        ? getDisconnectedPreviewButtons(homeOwner)
+                        : getOrCreateInitialHomeButtons(homeOwner);
 
         List<HomeResponse.HomeButtonResponse> buttons =
                 homes.stream()
@@ -343,7 +383,9 @@ public class HomeService {
                         .toList();
 
         HomeResponse.SeniorProfileResponse seniorProfileResponse =
-                seniorProfile
+                deviceDisconnected
+                        ? HomeResponse.SeniorProfileResponse.empty()
+                        : seniorProfile
                         .map(senior ->
                                 createSeniorProfileResponse(
                                         senior,
@@ -351,7 +393,9 @@ public class HomeService {
                                                 .filter(userSenior ->
                                                         userSenior.getSenior()
                                                                 .getSeniorId()
-                                                                .equals(senior.getSeniorId())
+                                                                .equals(
+                                                                        senior.getSeniorId()
+                                                                )
                                                 )
                                                 .orElse(null)
                                 )
@@ -361,15 +405,19 @@ public class HomeService {
                         );
 
         FontSize fontSize =
-                getFontSize(
-                        homeOwner
-                );
+                deviceDisconnected
+                        ? FontSize.MEDIUM
+                        : getFontSize(homeOwner);
 
         HomeResponse.MusicCardResponse musicCard =
-                getMusicCardResponse(homeOwner);
+                deviceDisconnected
+                        ? HomeResponse.MusicCardResponse.empty()
+                        : getMusicCardResponse(homeOwner);
 
         TodayScheduleResponse todaySchedule =
-                seniorUser
+                deviceDisconnected
+                        ? null
+                        : seniorUser
                         .map(this::getTodayHospitalSchedule)
                         .orElse(null);
 
@@ -492,6 +540,7 @@ public class HomeService {
 
         User user = getCurrentUser();
         validatePrimaryManager(user);
+        validateDeviceConnected(user);
 
         List<HomeButtonSaveRequest.ButtonRequest> buttonRequests =
                 request.getButtons();
@@ -565,6 +614,7 @@ public class HomeService {
 
         User user = getCurrentUser();
         validatePrimaryManager(user);
+        validateDeviceConnected(user);
 
         List<Home> homes =
                 homeRepository
@@ -696,6 +746,7 @@ public class HomeService {
 
         User user = getCurrentUser();
         validatePrimaryManager(user);
+        validateDeviceConnected(user);
 
         return buttonOptionRepository
                 .findAll()
@@ -722,6 +773,7 @@ public class HomeService {
 
         User user = getCurrentUser();
         validatePrimaryManager(user);
+        validateDeviceConnected(user);
 
         ButtonOption buttonOption =
                 buttonOptionRepository
@@ -796,6 +848,7 @@ public class HomeService {
 
         User user = getCurrentUser();
         validatePrimaryManager(user);
+        validateDeviceConnected(user);
 
         Home home =
                 homeRepository
@@ -844,10 +897,27 @@ public class HomeService {
         User primaryChild =
                 findPrimaryChild(parent);
 
+        boolean deviceDisconnected =
+                deviceRepository
+                        .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
+                                parent
+                        )
+                        .map(device ->
+                                device.getConnectionStatus()
+                                        == DeviceStatus.DISCONNECTED
+                        )
+                        .orElse(true);
+
+        /*
+         * 연결 해제 상태에서는 기존 자녀 설정을 시니어에게 내려주지 않고
+         * 초기 기본 런처를 응답한다.
+         *
+         * TODO 재연결 시 기존 설정 복구 여부가 확정되면 정책 재검토
+         */
         List<Home> homes =
-                getOrCreateInitialHomeButtons(
-                        primaryChild
-                );
+                deviceDisconnected
+                        ? createInitialHomeButtons(primaryChild)
+                        : getOrCreateInitialHomeButtons(primaryChild);
 
         List<SeniorHomeResponse.ButtonResponse> buttons =
                 homes.stream()
@@ -865,17 +935,19 @@ public class HomeService {
                         .toList();
 
         FontSize fontSize =
-                getFontSize(
-                        primaryChild
-                );
+                deviceDisconnected
+                        ? FontSize.MEDIUM
+                        : getFontSize(primaryChild);
 
         TodayScheduleResponse todaySchedule =
-                getTodayHospitalSchedule(
-                        parent
-                );
+                deviceDisconnected
+                        ? TodayScheduleResponse.empty()
+                        : getTodayHospitalSchedule(parent);
 
         HomeResponse.MusicCardResponse musicCard =
-                getMusicCardResponse(primaryChild);
+                deviceDisconnected
+                        ? HomeResponse.MusicCardResponse.empty()
+                        : getMusicCardResponse(primaryChild);
 
         return new SeniorHomeResponse(
                 fontSize,
@@ -911,6 +983,12 @@ public class HomeService {
                         seniorUser.get()
                 )
                 .map(device -> {
+
+                    if (device.getConnectionStatus()
+                            == DeviceStatus.DISCONNECTED) {
+
+                        return DeviceDetailResponse.disconnected();
+                    }
 
                     boolean connected =
                             isDeviceConnected(
@@ -1033,6 +1111,7 @@ public class HomeService {
 
         User user = getCurrentUser();
         validatePrimaryManager(user);
+        validateDeviceConnected(user);
 
         HomeSetting homeSetting =
                 homeSettingRepository
@@ -1336,15 +1415,24 @@ public class HomeService {
                 .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
                         seniorUser.get()
                 )
-                .map(device ->
-                        new HomeResponse.ConnectionResponse(
-                                device.getDeviceName(),
-                                isDeviceConnected(
-                                        device.getLastConnectedAt()
-                                ),
-                                device.getBatteryLevel()
-                        )
-                )
+                .map(device -> {
+
+                    if (device.getConnectionStatus()
+                            == DeviceStatus.DISCONNECTED) {
+
+                        return HomeResponse
+                                .ConnectionResponse
+                                .disconnected();
+                    }
+
+                    return new HomeResponse.ConnectionResponse(
+                            device.getDeviceName(),
+                            isDeviceConnected(
+                                    device.getLastConnectedAt()
+                            ),
+                            device.getBatteryLevel()
+                    );
+                })
                 .orElseGet(
                         HomeResponse
                                 .ConnectionResponse
@@ -1488,6 +1576,25 @@ public class HomeService {
 
             throw new BusinessException(
                     ErrorCode.FORBIDDEN
+            );
+        }
+    }
+
+    private void validateDeviceConnected(
+            User child
+    ) {
+        if (child.getFamily() == null) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_NOT_CONNECTED
+            );
+        }
+
+        Optional<User> seniorUser =
+                findSeniorUser(child);
+
+        if (isDeviceDisconnected(seniorUser)) {
+            throw new BusinessException(
+                    ErrorCode.DEVICE_NOT_CONNECTED
             );
         }
     }

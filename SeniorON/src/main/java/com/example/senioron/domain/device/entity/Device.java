@@ -67,4 +67,8 @@ public class Device extends BaseEntity {
         this.batteryLevel = batteryLevel;
         this.lastConnectedAt = lastConnectedAt;
     }
+
+    public void disconnect() {
+        this.connectionStatus = DeviceStatus.DISCONNECTED;
+    }
 }

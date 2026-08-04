@@ -1,0 +1,3 @@
+ALTER TABLE device
+    MODIFY COLUMN connection_status
+    ENUM('ONLINE', 'OFFLINE', 'DISCONNECTED');
