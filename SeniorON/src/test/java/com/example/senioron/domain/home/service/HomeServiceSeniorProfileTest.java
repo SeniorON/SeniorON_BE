@@ -9,6 +9,10 @@ import static org.mockito.BDDMockito.given;
 import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.repository.FamilyRepository;
+import com.example.senioron.domain.device.entity.Device;
+import com.example.senioron.domain.device.entity.DeviceStatus;
+
+import java.time.LocalDateTime;
 import com.example.senioron.domain.home.dto.request.SeniorProfileUpdateRequest;
 import com.example.senioron.domain.home.dto.response.HomeResponse;
 import com.example.senioron.domain.home.dto.response.SeniorProfileUpdateResponse;
@@ -48,6 +52,7 @@ class HomeServiceSeniorProfileTest {
     private final UserSeniorRepository userSeniorRepository = org.mockito.Mockito.mock(UserSeniorRepository.class);
     private final HomeSettingRepository homeSettingRepository = org.mockito.Mockito.mock(HomeSettingRepository.class);
     private final FamilyRepository familyRepository = org.mockito.Mockito.mock(FamilyRepository.class);
+
 
     private HomeService homeService;
 
@@ -171,10 +176,28 @@ class HomeServiceSeniorProfileTest {
         setCurrentUser(subChild);
         given(userRepository.findByFamilyAndUsersIdNotAndRole(family, 2L, Role.CHILD))
                 .willReturn(List.of(primaryChild));
+        User parent = User.builder()
+                .usersId(3L)
+                .name("시니어")
+                .role(Role.PARENT)
+                .family(family)
+                .build();
+
         given(userRepository.findByFamilyAndUsersIdNotAndRole(family, 2L, Role.PARENT))
-                .willReturn(List.of());
+                .willReturn(List.of(parent));
         given(userSeniorRepository.findFirstByUserAndSenior_Family(subChild, family))
                 .willReturn(Optional.of(subRelation));
+        Device device = Device.builder()
+                .user(parent)
+                .deviceIdentifier("device-1")
+                .deviceName("Galaxy S24")
+                .connectionStatus(DeviceStatus.ONLINE)
+                .batteryLevel(72)
+                .lastConnectedAt(LocalDateTime.now())
+                .build();
+
+        given(deviceRepository.findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(parent))
+                .willReturn(Optional.of(device));
         given(homeRepository.findAllByUserOrderByButtonOrderAsc(primaryChild)).willReturn(List.of());
         given(homeSettingRepository.findByUser(primaryChild)).willReturn(Optional.empty());
 
