@@ -38,6 +38,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.concurrent.TimeUnit;
 
 import java.time.LocalDate;
 import java.time.Period;
@@ -490,7 +491,7 @@ public class HomeService {
             HomeButtonSaveRequest request
     ) {
 
-        long totalStart = System.currentTimeMillis();
+        long totalStart = System.nanoTime();
 
         User user = getCurrentUser();
         validatePrimaryManager(user);
@@ -516,25 +517,29 @@ public class HomeService {
             );
         }
 
-        long start = System.currentTimeMillis();
+        long start = System.nanoTime();
 
         validateSaveButtonRequests(
                 buttonRequests
         );
 
         System.out.println("validateSaveButtonRequests : "
-                + (System.currentTimeMillis() - start) + "ms");
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - start
+        ) + "ms");
 
-        start = System.currentTimeMillis();
+        start = System.nanoTime();
 
         homeRepository.deleteAllByUser(
                 user
         );
 
         System.out.println("deleteAllByUser : "
-                + (System.currentTimeMillis() - start) + "ms");
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - start
+        ) + "ms");
 
-        start = System.currentTimeMillis();
+        start = System.nanoTime();
 
         List<Home> newHomes =
                 buttonRequests.stream()
@@ -547,18 +552,22 @@ public class HomeService {
                         .toList();
 
         System.out.println("createHomeButton : "
-                + (System.currentTimeMillis() - start) + "ms");
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - start
+        ) + "ms");
 
-        start = System.currentTimeMillis();
+        start = System.nanoTime();
 
         homeRepository.saveAll(
                 newHomes
         );
 
         System.out.println("saveAll : "
-                + (System.currentTimeMillis() - start) + "ms");
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - start
+        ) + "ms");
 
-        start = System.currentTimeMillis();
+        start = System.nanoTime();
 
         HomeSetting homeSetting =
                 homeSettingRepository
@@ -579,10 +588,14 @@ public class HomeService {
         );
 
         System.out.println("homeSetting.save : "
-                + (System.currentTimeMillis() - start) + "ms");
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - start
+        ) + "ms");
 
         System.out.println("saveButtons TOTAL : "
-                + (System.currentTimeMillis() - totalStart) + "ms");
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - totalStart
+        ) + "ms");
     }
 
     /**
@@ -973,7 +986,7 @@ public class HomeService {
     @Transactional(readOnly = true)
     public List<TodayHospitalListResponse> getTodayHospitalSchedules() {
 
-        long totalStart = System.currentTimeMillis();
+        long totalStart = System.nanoTime();
 
         User currentUser = getCurrentUser();
 
@@ -983,7 +996,7 @@ public class HomeService {
             );
         }
 
-        long start = System.currentTimeMillis();
+        long start = System.nanoTime();
 
         List<Hospital> hospitals =
                 findTodayHospitalSchedules(
@@ -991,9 +1004,11 @@ public class HomeService {
                 );
 
         System.out.println("findTodayHospitalSchedules : "
-                + (System.currentTimeMillis() - start) + "ms");
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - start
+        ) + "ms");
 
-        start = System.currentTimeMillis();
+        start = System.nanoTime();
 
         List<TodayHospitalListResponse> result =
                 hospitals.stream()
@@ -1001,10 +1016,14 @@ public class HomeService {
                         .toList();
 
         System.out.println("mapping Response : "
-                + (System.currentTimeMillis() - start) + "ms");
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - start
+        ) + "ms");
 
         System.out.println("getTodayHospitalSchedules TOTAL : "
-                + (System.currentTimeMillis() - totalStart) + "ms");
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - totalStart
+        ) + "ms");
 
         return result;
     }
@@ -1079,12 +1098,12 @@ public class HomeService {
             HomeFontSizeUpdateRequest request
     ) {
 
-        long totalStart = System.currentTimeMillis();
+        long totalStart = System.nanoTime();
 
         User user = getCurrentUser();
         validatePrimaryManager(user);
 
-        long start = System.currentTimeMillis();
+        long start = System.nanoTime();
 
         HomeSetting homeSetting =
                 homeSettingRepository
@@ -1097,9 +1116,11 @@ public class HomeService {
                         );
 
         System.out.println("findHomeSetting : "
-                + (System.currentTimeMillis() - start) + "ms");
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - start
+        ) + "ms");
 
-        start = System.currentTimeMillis();
+        start = System.nanoTime();
 
         homeSetting.updateFontSize(
                 request.getFontSize()
@@ -1110,10 +1131,14 @@ public class HomeService {
         );
 
         System.out.println("saveHomeSetting : "
-                + (System.currentTimeMillis() - start) + "ms");
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - start
+        ) + "ms");
 
         System.out.println("updateFontSize TOTAL : "
-                + (System.currentTimeMillis() - totalStart) + "ms");
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - totalStart
+        ) + "ms");
     }
 
     private void validateSaveButtonRequests(

@@ -11,6 +11,7 @@ import org.springframework.web.client.RestClient;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class WeatherService {
@@ -29,9 +30,9 @@ public class WeatherService {
             double longitude
     ) {
 
-        long totalStart = System.currentTimeMillis();
+        long totalStart = System.nanoTime();
 
-        long start = System.currentTimeMillis();
+        long start = System.nanoTime();
 
         validateCoordinates(
                 latitude,
@@ -39,11 +40,13 @@ public class WeatherService {
         );
 
         System.out.println("validateCoordinates : "
-                + (System.currentTimeMillis() - start) + "ms");
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - start
+        ) + "ms");
 
         OpenMeteoResponse response;
 
-        start = System.currentTimeMillis();
+        start = System.nanoTime();
 
         try {
             response = weatherRestClient
@@ -79,9 +82,11 @@ public class WeatherService {
         }
 
         System.out.println("OpenMeteo API : "
-                + (System.currentTimeMillis() - start) + "ms");
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - start
+        ) + "ms");
 
-        start = System.currentTimeMillis();
+        start = System.nanoTime();
 
         validateWeatherResponse(
                 response
@@ -98,10 +103,14 @@ public class WeatherService {
                 );
 
         System.out.println("Response Parsing : "
-                + (System.currentTimeMillis() - start) + "ms");
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - start
+        ) + "ms");
 
         System.out.println("getCurrentWeather TOTAL : "
-                + (System.currentTimeMillis() - totalStart) + "ms");
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - totalStart
+        ) + "ms");
 
         return new WeatherResponse(
                 (int) Math.round(
