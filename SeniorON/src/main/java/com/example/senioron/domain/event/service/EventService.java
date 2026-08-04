@@ -135,16 +135,20 @@ public class EventService {
         return OutingReturnResponse.of(savedEvent);
     }
 
+    /**
+     * 세이프 브라우징 검사가 실패(UNAVAILABLE)해도 이벤트는 항상 저장한다.
+     * SOS와 동일한 원칙: 외부 API 장애로 알람 기록 자체가 유실되면 안 되기 때문이다.
+     * 이 경우 isDangerous는 null("모름")로 남고, 위험이 확인된 경우에만 알림을 보낸다.
+     */
     @Transactional
     public RiskLinkResponse saveRiskLinkEvent(User user, RiskLinkRequest req) {
 
         RiskCheckResult result = safeBrowsingClient.checkUrl(req.getLinkUrl());
-
-        if (result == RiskCheckResult.UNAVAILABLE) {
-            throw new BusinessException(ErrorCode.RISK_LINK_CHECK_UNAVAILABLE);
-        }
-
-        boolean isDangerous = result == RiskCheckResult.DANGEROUS;
+        Boolean isDangerous = switch (result) {
+            case DANGEROUS -> true;
+            case SAFE -> false;
+            case UNAVAILABLE -> null;
+        };
 
         Event event = Event.builder()
                 .user(user)
@@ -156,7 +160,7 @@ public class EventService {
                 .build();
 
         Event savedEvent = eventRepository.save(event);
-        if (isDangerous) {
+        if (Boolean.TRUE.equals(isDangerous)) {
             notificationService.createFormEvent(savedEvent);
         }
 
