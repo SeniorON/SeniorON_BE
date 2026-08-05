@@ -55,7 +55,8 @@ public class NotificationService {
     // SOS는 미발송 자체가 사고이므로 별도로 관리
     private static final String SOS_DISPATCH_METRIC = "sos_dispatch_total";
     private static final String TAG_RESULT = "result";
-    private static final int DISPATCH_POOL_SIZE = 8;
+    private static final int SOS_DISPATCH_POOL_SIZE = 4;
+    private static final int GENERAL_DISPATCH_POOL_SIZE = 8;
 
     private final NotificationRepository notificationRepository;
     private final NotificationSettingRepository notificationSettingRepository;
@@ -63,18 +64,24 @@ public class NotificationService {
     private final DeviceRepository deviceRepository;
     private final FcmSender fcmSender;
     private final MeterRegistry meterRegistry;
-    // 일반 알림과 SOS 알림 발송 모두 이 풀에서 처리해 요청/커밋 스레드를 블로킹하지 않는다.
-    private final ExecutorService dispatchExecutor = Executors.newFixedThreadPool(DISPATCH_POOL_SIZE);
+    // SOS는 일반 알림 발송 적체(backlog)에 영향받지 않도록 별도 풀에서 처리한다.
+    private final ExecutorService sosDispatchExecutor = Executors.newFixedThreadPool(SOS_DISPATCH_POOL_SIZE);
+    private final ExecutorService generalDispatchExecutor = Executors.newFixedThreadPool(GENERAL_DISPATCH_POOL_SIZE);
 
     @PreDestroy
-    void shutdownDispatchExecutor() {
-        dispatchExecutor.shutdown();
+    void shutdownDispatchExecutors() {
+        shutdownExecutor(sosDispatchExecutor);
+        shutdownExecutor(generalDispatchExecutor);
+    }
+
+    private void shutdownExecutor(ExecutorService executor) {
+        executor.shutdown();
         try {
-            if (!dispatchExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
-                dispatchExecutor.shutdownNow();
+            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
             }
         } catch (InterruptedException e) {
-            dispatchExecutor.shutdownNow();
+            executor.shutdownNow();
             Thread.currentThread().interrupt();
         }
     }
@@ -200,20 +207,20 @@ public class NotificationService {
 
     /**
      * 수신자별로 등록된 모든 기기에 발송한다. afterCommit 콜백에서 호출되므로 요청 스레드를
-     * 블로킹하지 않도록 각 발송을 dispatchExecutor에 위임하고 결과를 기다리지 않는다.
+     * 블로킹하지 않도록 각 발송을 generalDispatchExecutor에 위임하고 결과를 기다리지 않는다.
      */
     private void dispatch(List<NotificationDispatchTarget> targets) {
         for (NotificationDispatchTarget target : targets) {
-            dispatchExecutor.execute(() -> sendToAnyDevice(target));
+            generalDispatchExecutor.execute(() -> sendToAnyDevice(target));
         }
     }
 
-    //병렬발송
+    //병렬발송 (일반 알림 적체와 무관하게 처리되도록 전용 풀 사용)
     private NotificationDispatchResult dispatchSosInParallel(List<NotificationDispatchTarget> targets) {
         long timeoutSeconds = 5L;
         List<CompletableFuture<Boolean>> futures = targets.stream()
                 .map(target -> CompletableFuture.supplyAsync(
-                        () -> sendToAnyDevice(target), dispatchExecutor)
+                        () -> sendToAnyDevice(target), sosDispatchExecutor)
                         .completeOnTimeout(false, timeoutSeconds, TimeUnit.SECONDS))
                 .toList();
 
