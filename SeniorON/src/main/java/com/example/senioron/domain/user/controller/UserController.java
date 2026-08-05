@@ -75,6 +75,10 @@ public class UserController {
             @Valid @RequestBody UserWithdrawalRequest request
     ) {
         userService.withdraw(user, request);
+        return Response.ok();
+    }
+
+
     @Operation(summary = "로그아웃", description = "로그아웃하는 기기의 FCM 토큰을 비활성화합니다. 같은 기기에서 다른 계정으로 로그인해도 이전 계정에게 알림이 가지 않도록 합니다.")
     @PostMapping("/logout")
     public Response<Void> logout(
