@@ -46,6 +46,10 @@ public enum ErrorCode implements BaseCode {
     PRIMARY_USER_CANNOT_WITHDRAW(HttpStatus.FORBIDDEN, "USER403_1", "주 자녀는 탈퇴할 수 없습니다. 다른 사람에게 권한을 양도한 후 탈퇴해주세요."),
     INVALID_WITHDRAWAL_CONFIRMATION(HttpStatus.BAD_REQUEST, "USER400_13", "회원 탈퇴 확인 문구가 일치하지 않습니다."),
     WITHDRAWN_USER(HttpStatus.UNAUTHORIZED, "USER401_5", "탈퇴한 회원입니다."),
+    SOCIAL_ACCOUNT_ALREADY_EXISTS(HttpStatus.CONFLICT, "USER409_4", "이미 가입된 소셜 계정입니다."),
+    REQUIRED_TERMS_NOT_AGREED(HttpStatus.BAD_REQUEST, "USER400_14", "필수 약관에 동의해야 합니다."),
+    UNDER_AGE_14(HttpStatus.BAD_REQUEST, "USER400_15", "만 14세 이상만 가입할 수 있습니다."),
+    INVALID_BIRTH_DATE(HttpStatus.BAD_REQUEST, "USER400_16", "생년월일이 올바르지 않습니다."),
 
     // Email Error
     EMAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "EMAIL500", "이메일 발송에 실패했습니다."),

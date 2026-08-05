@@ -58,6 +58,18 @@ public class User extends BaseEntity {
     @Column(name = "withdrawn_at")
     private LocalDateTime withdrawnAt;
 
+    @Column(name = "service_terms_agreed")
+    private Boolean serviceTermsAgreed;
+
+    @Column(name = "privacy_policy_agreed")
+    private Boolean privacyPolicyAgreed;
+
+    @Column(name = "age_over_14_agreed")
+    private Boolean ageOver14Agreed;
+
+    @Column(name = "marketing_agreed")
+    private Boolean marketingAgreed;
+
     public void updateRole(Role role) {
         this.role = role;
     }
