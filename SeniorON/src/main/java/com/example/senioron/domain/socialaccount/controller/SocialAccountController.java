@@ -54,7 +54,13 @@ public class SocialAccountController {
 
     @Operation(
             summary = "소셜 회원가입 완료",
-            description = "신규 소셜 사용자의 추가 정보를 받아 회원가입을 완료하고 JWT를 발급합니다. fcmToken과 deviceIdentifier를 함께 보내면 기기를 등록하고 refresh token을 해당 기기에 연결합니다."
+            description = """
+                신규 소셜 사용자의 추가 정보를 받아 회원가입을 완료하고 JWT를 발급합니다.
+                socialToken에는 provider가 KAKAO인 경우 카카오 Access Token을,
+                GOOGLE인 경우 Firebase ID Token을 전달해야 합니다.
+                fcmToken과 deviceIdentifier를 함께 보내면 기기를 등록하고
+                Refresh Token을 해당 기기에 연결합니다.
+                """
     )
     @PostMapping("/signup")
     public Response<SocialSignupResponse> socialSignup(
