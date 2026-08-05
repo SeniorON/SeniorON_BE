@@ -53,7 +53,17 @@ public class ApiLoggingFilter extends OncePerRequestFilter {
                     clientIp
             );
 
+            // ApiLoggingFilter 전처리 시간 (Security Filter 진입 전까지)
+            long preChainMs = System.currentTimeMillis() - start;
+            log.debug("[TIMING] pre-chain (Security 진입 전): {}ms | {} {}",
+                    preChainMs, request.getMethod(), requestUri);
+
+            long chainStart = System.currentTimeMillis();
             filterChain.doFilter(request, response);
+            long chainMs = System.currentTimeMillis() - chainStart;
+
+            log.debug("[TIMING] chain (Security+Service+Tx): {}ms | {} {}",
+                    chainMs, request.getMethod(), requestUri);
 
         } catch (Exception e) {
 
@@ -76,7 +86,7 @@ public class ApiLoggingFilter extends OncePerRequestFilter {
 
             if (status >= 500) {
                 log.error(
-                        "[RESPONSE] {} {} | {} | {}ms",
+                        "[RESPONSE] {} {} | {} | total={}ms",
                         request.getMethod(),
                         requestUri,
                         status,
@@ -84,7 +94,7 @@ public class ApiLoggingFilter extends OncePerRequestFilter {
                 );
             } else {
                 log.info(
-                        "[RESPONSE] {} {} | {} | {}ms",
+                        "[RESPONSE] {} {} | {} | total={}ms",
                         request.getMethod(),
                         requestUri,
                         status,

@@ -68,18 +68,27 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             FilterChain filterChain
     ) throws ServletException, IOException {
 
+        long filterStart = System.currentTimeMillis();
+        String path = request.getRequestURI();
+
         String token = resolveToken(request);
 
         if (token != null) {
             try {
+                long jwtStart = System.currentTimeMillis();
                 if (!jwtUtil.isAccessToken(token)) {
                     throw new JwtException("Only access token can authenticate requests.");
                 }
 
                 Long usersId = jwtUtil.getUsersId(token);
+                log.debug("[TIMING] JWT 파싱: {}ms | {}",
+                        System.currentTimeMillis() - jwtStart, path);
 
+                long dbStart = System.currentTimeMillis();
                 User user = userRepository.findById(usersId)
                         .orElse(null);
+                log.debug("[TIMING] JWT Filter DB조회 (findById): {}ms | {}",
+                        System.currentTimeMillis() - dbStart, path);
 
                 if (user != null && user.getStatus() == UserStatus.ACTIVE) {
                     UsernamePasswordAuthenticationToken authentication =
@@ -97,6 +106,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 return;
             }
         }
+
+        log.debug("[TIMING] JWT Filter 전체: {}ms | {}",
+                System.currentTimeMillis() - filterStart, path);
 
         filterChain.doFilter(request, response);
     }
