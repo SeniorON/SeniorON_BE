@@ -11,11 +11,15 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
+import lombok.extern.slf4j.Slf4j;
+
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 @Tag(name = "홈", description = "홈 화면 관련 API")
 @RestController
 @RequestMapping("/api/home")
+@Slf4j
 public class HomeController {
 
     private final HomeService homeService;
@@ -35,7 +39,10 @@ public class HomeController {
     )
     @GetMapping
     public Response<HomeResponse> getHome() {
-        return Response.ok(homeService.getHome());
+        long start = System.nanoTime();
+        Response<HomeResponse> response = Response.ok(homeService.getHome());
+        log.debug("[TIMING] HomeController.getHome : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
+        return response;
     }
 
     @Operation(
@@ -46,7 +53,9 @@ public class HomeController {
     public Response<Void> updateButtons(
             @Valid @RequestBody HomeButtonUpdateRequest request
     ) {
+        long start = System.nanoTime();
         homeService.updateButtons(request);
+        log.debug("[TIMING] HomeController.updateButtons : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
         return Response.ok();
     }
 
@@ -58,7 +67,10 @@ public class HomeController {
     public Response<HomeButtonCreateResponse> createButton(
             @Valid @RequestBody HomeButtonCreateRequest request
     ) {
-        return Response.ok(homeService.createButton(request));
+        long start = System.nanoTime();
+        Response<HomeButtonCreateResponse> response = Response.ok(homeService.createButton(request));
+        log.debug("[TIMING] HomeController.createButton : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
+        return response;
     }
 
     @Operation(
@@ -67,7 +79,10 @@ public class HomeController {
     )
     @GetMapping("/button-options")
     public Response<List<ButtonOptionResponse>> getButtonOptions() {
-        return Response.ok(homeService.getButtonOptions());
+        long start = System.nanoTime();
+        Response<List<ButtonOptionResponse>> response = Response.ok(homeService.getButtonOptions());
+        log.debug("[TIMING] HomeController.getButtonOptions : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
+        return response;
     }
 
     @Operation(
@@ -78,7 +93,9 @@ public class HomeController {
     public Response<Void> deleteButton(
             @PathVariable Long buttonId
     ) {
+        long start = System.nanoTime();
         homeService.deleteButton(buttonId);
+        log.debug("[TIMING] HomeController.deleteButton : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
         return Response.ok();
     }
 
@@ -88,7 +105,10 @@ public class HomeController {
     )
     @GetMapping("/senior")
     public Response<SeniorHomeResponse> getSeniorHome() {
-        return Response.ok(homeService.getSeniorHome());
+        long start = System.nanoTime();
+        Response<SeniorHomeResponse> response = Response.ok(homeService.getSeniorHome());
+        log.debug("[TIMING] HomeController.getSeniorHome : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
+        return response;
     }
     @Operation(
             summary = "홈 글자 크기 수정",
@@ -98,7 +118,9 @@ public class HomeController {
     public Response<Void> updateFontSize(
             @Valid @RequestBody HomeFontSizeUpdateRequest request
     ) {
+        long start = System.nanoTime();
         homeService.updateFontSize(request);
+        log.debug("[TIMING] HomeController.updateFontSize : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
         return Response.ok();
     }
 
@@ -110,9 +132,10 @@ public class HomeController {
     public Response<SeniorProfileUpdateResponse> updateSeniorProfile(
             @Valid @RequestBody SeniorProfileUpdateRequest request
     ) {
-        return Response.ok(
-                homeService.updateSeniorProfile(request)
-        );
+        long start = System.nanoTime();
+        Response<SeniorProfileUpdateResponse> response = Response.ok(homeService.updateSeniorProfile(request));
+        log.debug("[TIMING] HomeController.updateSeniorProfile : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
+        return response;
     }
     @Operation(
             summary = "홈 버튼 설정 전체 저장",
@@ -122,7 +145,9 @@ public class HomeController {
     public Response<Void> saveButtons(
             @Valid @RequestBody HomeButtonSaveRequest request
     ) {
+        long start = System.nanoTime();
         homeService.saveButtons(request);
+        log.debug("[TIMING] HomeController.saveButtons : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
         return Response.ok();
     }
     @Operation(
@@ -133,9 +158,10 @@ public class HomeController {
     public Response<List<TodayHospitalListResponse>>
     getTodayHospitalSchedules() {
 
-        return Response.ok(
-                homeService.getTodayHospitalSchedules()
-        );
+        long start = System.nanoTime();
+        Response<List<TodayHospitalListResponse>> response = Response.ok(homeService.getTodayHospitalSchedules());
+        log.debug("[TIMING] HomeController.getTodayHospitalSchedules : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
+        return response;
     }
     @Operation(
             summary = "시니어 기기 연결 상태 상세 조회",
@@ -144,9 +170,10 @@ public class HomeController {
     @GetMapping("/device")
     public Response<DeviceDetailResponse> getDeviceDetail() {
 
-        return Response.ok(
-                homeService.getDeviceDetail()
-        );
+        long start = System.nanoTime();
+        Response<DeviceDetailResponse> response = Response.ok(homeService.getDeviceDetail());
+        log.debug("[TIMING] HomeController.getDeviceDetail : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
+        return response;
     }
 
     @Operation(
@@ -159,11 +186,10 @@ public class HomeController {
             @RequestParam double longitude
     ) {
 
-        return Response.ok(
-                weatherService.getCurrentWeather(
-                        latitude,
-                        longitude
-                )
-        );
+        long start = System.nanoTime();
+        WeatherResponse response = weatherService.getCurrentWeather(latitude, longitude);
+        log.debug("[TIMING] HomeController.getCurrentWeather : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
+        return Response.ok(response);
+
     }
 }

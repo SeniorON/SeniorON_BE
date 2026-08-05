@@ -40,6 +40,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.concurrent.TimeUnit;
+import lombok.extern.slf4j.Slf4j;
 
 import java.time.LocalDate;
 import java.time.Period;
@@ -51,6 +52,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.time.LocalDateTime;
 
+@Slf4j
 @Service
 public class HomeService {
 
@@ -334,7 +336,9 @@ public class HomeService {
     @Transactional
     public HomeResponse getHome() {
 
+        long methodStart = System.nanoTime();
         User currentUser = getCurrentUser();
+        log.debug("[TIMING] getCurrentUser : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - methodStart));
 
         if (currentUser.getRole() != Role.CHILD) {
             throw new BusinessException(
@@ -355,8 +359,10 @@ public class HomeService {
                         .map(UserSenior::getSenior)
                         .or(() -> findFamilySenior(currentUser));
 
+        long afterDeviceCheck = System.nanoTime();
         boolean deviceDisconnected =
                 isDeviceDisconnected(seniorUser);
+        log.debug("[TIMING] deviceDisconnected check : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - afterDeviceCheck));
 
         HomeResponse.ConnectionResponse connection =
                 deviceDisconnected
@@ -422,6 +428,7 @@ public class HomeService {
                         .map(this::getTodayHospitalSchedule)
                         .orElse(null);
 
+        log.debug("[TIMING] getHome total : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - methodStart));
         return new HomeResponse(
                 currentUser.getName(),
                 connection,
@@ -572,10 +579,7 @@ public class HomeService {
                 buttonRequests
         );
 
-        System.out.println("validateSaveButtonRequests : "
-                + TimeUnit.NANOSECONDS.toMillis(
-                System.nanoTime() - start
-        ) + "ms");
+        log.debug("validateSaveButtonRequests : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
 
         start = System.nanoTime();
 
@@ -583,10 +587,7 @@ public class HomeService {
                 user
         );
 
-        System.out.println("deleteAllByUser : "
-                + TimeUnit.NANOSECONDS.toMillis(
-                System.nanoTime() - start
-        ) + "ms");
+        log.debug("deleteAllByUser : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
 
         start = System.nanoTime();
 
@@ -600,10 +601,7 @@ public class HomeService {
                         )
                         .toList();
 
-        System.out.println("createHomeButton : "
-                + TimeUnit.NANOSECONDS.toMillis(
-                System.nanoTime() - start
-        ) + "ms");
+        log.debug("createHomeButton : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
 
         start = System.nanoTime();
 
@@ -611,10 +609,7 @@ public class HomeService {
                 newHomes
         );
 
-        System.out.println("saveAll : "
-                + TimeUnit.NANOSECONDS.toMillis(
-                System.nanoTime() - start
-        ) + "ms");
+        log.debug("saveAll : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
 
         start = System.nanoTime();
 
@@ -636,15 +631,9 @@ public class HomeService {
                 homeSetting
         );
 
-        System.out.println("homeSetting.save : "
-                + TimeUnit.NANOSECONDS.toMillis(
-                System.nanoTime() - start
-        ) + "ms");
+        log.debug("homeSetting.save : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
 
-        System.out.println("saveButtons TOTAL : "
-                + TimeUnit.NANOSECONDS.toMillis(
-                System.nanoTime() - totalStart
-        ) + "ms");
+        log.debug("saveButtons TOTAL : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - totalStart));
     }
 
     /**
@@ -1178,9 +1167,20 @@ public class HomeService {
 
         long totalStart = System.nanoTime();
 
-        User user = getCurrentUser();
+        long s = System.nanoTime();
+        User user = getCurrentUser(); // SecurityContextHolder에서 꺼냄 (DB 없음)
+        System.out.println("getCurrentUser : "
+                + TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - s) + "ms");
+
+        s = System.nanoTime();
         validatePrimaryManager(user);
-        validateDeviceConnected(user);
+        System.out.println("validatePrimaryManager : "
+                + TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - s) + "ms");
+
+        s = System.nanoTime();
+        validateDeviceConnected(user); // 내부: findSeniorUser() + deviceRepository 조회
+        System.out.println("validateDeviceConnected (DB 포함) : "
+                + TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - s) + "ms");
 
         long start = System.nanoTime();
 
@@ -1214,7 +1214,7 @@ public class HomeService {
                 System.nanoTime() - start
         ) + "ms");
 
-        System.out.println("updateFontSize TOTAL : "
+        System.out.println("updateFontSize TOTAL (Service 내부) : "
                 + TimeUnit.NANOSECONDS.toMillis(
                 System.nanoTime() - totalStart
         ) + "ms");
