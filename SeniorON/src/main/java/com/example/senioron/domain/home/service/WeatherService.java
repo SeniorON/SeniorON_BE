@@ -11,6 +11,7 @@ import org.springframework.web.client.RestClient;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class WeatherService {
@@ -29,12 +30,23 @@ public class WeatherService {
             double longitude
     ) {
 
+        long totalStart = System.nanoTime();
+
+        long start = System.nanoTime();
+
         validateCoordinates(
                 latitude,
                 longitude
         );
 
+        System.out.println("validateCoordinates : "
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - start
+        ) + "ms");
+
         OpenMeteoResponse response;
+
+        start = System.nanoTime();
 
         try {
             response = weatherRestClient
@@ -69,7 +81,16 @@ public class WeatherService {
             );
         }
 
-        validateWeatherResponse(response);
+        System.out.println("OpenMeteo API : "
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - start
+        ) + "ms");
+
+        start = System.nanoTime();
+
+        validateWeatherResponse(
+                response
+        );
 
         WeatherStatus weatherStatus =
                 WeatherStatus.fromCode(
@@ -80,6 +101,16 @@ public class WeatherService {
                 parseObservedAt(
                         response.current().time()
                 );
+
+        System.out.println("Response Parsing : "
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - start
+        ) + "ms");
+
+        System.out.println("getCurrentWeather TOTAL : "
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - totalStart
+        ) + "ms");
 
         return new WeatherResponse(
                 (int) Math.round(

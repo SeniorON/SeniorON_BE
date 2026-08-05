@@ -39,6 +39,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.concurrent.TimeUnit;
 
 import java.time.LocalDate;
 import java.time.Period;
@@ -538,6 +539,8 @@ public class HomeService {
             HomeButtonSaveRequest request
     ) {
 
+        long totalStart = System.nanoTime();
+
         User user = getCurrentUser();
         validatePrimaryManager(user);
         validateDeviceConnected(user);
@@ -563,13 +566,29 @@ public class HomeService {
             );
         }
 
+        long start = System.nanoTime();
+
         validateSaveButtonRequests(
                 buttonRequests
         );
 
+        System.out.println("validateSaveButtonRequests : "
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - start
+        ) + "ms");
+
+        start = System.nanoTime();
+
         homeRepository.deleteAllByUser(
                 user
         );
+
+        System.out.println("deleteAllByUser : "
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - start
+        ) + "ms");
+
+        start = System.nanoTime();
 
         List<Home> newHomes =
                 buttonRequests.stream()
@@ -581,9 +600,23 @@ public class HomeService {
                         )
                         .toList();
 
+        System.out.println("createHomeButton : "
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - start
+        ) + "ms");
+
+        start = System.nanoTime();
+
         homeRepository.saveAll(
                 newHomes
         );
+
+        System.out.println("saveAll : "
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - start
+        ) + "ms");
+
+        start = System.nanoTime();
 
         HomeSetting homeSetting =
                 homeSettingRepository
@@ -602,6 +635,16 @@ public class HomeService {
         homeSettingRepository.save(
                 homeSetting
         );
+
+        System.out.println("homeSetting.save : "
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - start
+        ) + "ms");
+
+        System.out.println("saveButtons TOTAL : "
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - totalStart
+        ) + "ms");
     }
 
     /**
@@ -1021,6 +1064,8 @@ public class HomeService {
     @Transactional(readOnly = true)
     public List<TodayHospitalListResponse> getTodayHospitalSchedules() {
 
+        long totalStart = System.nanoTime();
+
         User currentUser = getCurrentUser();
 
         if (currentUser.getRole() != Role.PARENT) {
@@ -1029,14 +1074,36 @@ public class HomeService {
             );
         }
 
+        long start = System.nanoTime();
+
         List<Hospital> hospitals =
                 findTodayHospitalSchedules(
                         currentUser
                 );
 
-        return hospitals.stream()
-                .map(TodayHospitalListResponse::from)
-                .toList();
+        System.out.println("findTodayHospitalSchedules : "
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - start
+        ) + "ms");
+
+        start = System.nanoTime();
+
+        List<TodayHospitalListResponse> result =
+                hospitals.stream()
+                        .map(TodayHospitalListResponse::from)
+                        .toList();
+
+        System.out.println("mapping Response : "
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - start
+        ) + "ms");
+
+        System.out.println("getTodayHospitalSchedules TOTAL : "
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - totalStart
+        ) + "ms");
+
+        return result;
     }
 
     /**
@@ -1109,9 +1176,13 @@ public class HomeService {
             HomeFontSizeUpdateRequest request
     ) {
 
+        long totalStart = System.nanoTime();
+
         User user = getCurrentUser();
         validatePrimaryManager(user);
         validateDeviceConnected(user);
+
+        long start = System.nanoTime();
 
         HomeSetting homeSetting =
                 homeSettingRepository
@@ -1123,6 +1194,13 @@ public class HomeService {
                                         .build()
                         );
 
+        System.out.println("findHomeSetting : "
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - start
+        ) + "ms");
+
+        start = System.nanoTime();
+
         homeSetting.updateFontSize(
                 request.getFontSize()
         );
@@ -1130,6 +1208,16 @@ public class HomeService {
         homeSettingRepository.save(
                 homeSetting
         );
+
+        System.out.println("saveHomeSetting : "
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - start
+        ) + "ms");
+
+        System.out.println("updateFontSize TOTAL : "
+                + TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - totalStart
+        ) + "ms");
     }
 
     private void validateSaveButtonRequests(
