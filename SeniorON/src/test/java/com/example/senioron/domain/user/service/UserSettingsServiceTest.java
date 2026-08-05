@@ -80,6 +80,7 @@ class UserSettingsServiceTest {
                 org.mockito.Mockito.mock(com.example.senioron.domain.socialaccount.repository.SocialAccountRepository.class),
                 new RefreshTokenService(refreshTokenRepository, jwtUtil),
                 org.mockito.Mockito.mock(com.example.senioron.domain.device.repository.DeviceRepository.class),
+                org.mockito.Mockito.mock(com.example.senioron.domain.senior.repository.SeniorRepository.class),
                 org.mockito.Mockito.mock(com.example.senioron.domain.senior.repository.UserSeniorRepository.class),
                 passwordEncoder,
                 jwtUtil,

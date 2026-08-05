@@ -9,6 +9,11 @@ import com.example.senioron.domain.user.dto.request.UserSignUpRequest;
 import com.example.senioron.domain.user.dto.request.UserWithdrawalRequest;
 import com.example.senioron.domain.user.dto.response.*;
 import com.example.senioron.domain.device.repository.DeviceRepository;
+import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.senior.entity.SeniorRelation;
+import com.example.senioron.domain.senior.entity.UserSenior;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.entity.RefreshToken;
 import com.example.senioron.domain.user.entity.SignupEmailVerificationCode;
 import com.example.senioron.domain.device.service.DeviceService;
@@ -30,6 +35,7 @@ import io.jsonwebtoken.JwtException;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -55,6 +61,7 @@ public class UserService {
     private final SocialAccountRepository socialAccountRepository;
     private final RefreshTokenService refreshTokenService;
     private final DeviceRepository deviceRepository;
+    private final SeniorRepository seniorRepository;
     private final UserSeniorRepository userSeniorRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
@@ -224,6 +231,54 @@ public class UserService {
     // 로그아웃하는 기기의 FCM 토큰을 비활성화한다.
     public void logout(User user, String deviceIdentifier) {
         deviceService.clearToken(user, deviceIdentifier);
+    }
+
+    public OnboardingStatusResponse getOnboardingStatus(User principal) {
+        if (principal == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
+        }
+
+        User user = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        Family family = user.getFamily();
+        boolean hasFamily = family != null;
+        Long seniorId = null;
+        boolean seniorProfileCompleted = false;
+        SeniorRelation relation = null;
+
+        if (hasFamily) {
+            Optional<UserSenior> userSenior =
+                    userSeniorRepository.findFirstByUserAndSenior_Family(user, family);
+            Optional<Senior> familySenior = userSenior
+                    .map(UserSenior::getSenior)
+                    .or(() -> seniorRepository.findFirstByFamily(family));
+
+            seniorId = familySenior
+                    .map(Senior::getSeniorId)
+                    .orElse(null);
+            seniorProfileCompleted = familySenior.isPresent();
+            relation = userSenior
+                    .map(UserSenior::getRelation)
+                    .orElse(null);
+        }
+
+        boolean onboardingCompleted =
+                hasFamily
+                        && user.getManagerType() != null
+                        && user.getManagerType() != ManagerType.NONE
+                        && seniorId != null
+                        && seniorProfileCompleted
+                        && relation != null;
+
+        return OnboardingStatusResponse.builder()
+                .hasFamily(hasFamily)
+                .managerType(user.getManagerType())
+                .seniorId(seniorId)
+                .seniorProfileCompleted(seniorProfileCompleted)
+                .relation(relation)
+                .onboardingCompleted(onboardingCompleted)
+                .build();
     }
 
     public TokenRefreshResponse refreshToken(TokenRefreshRequest request) {
