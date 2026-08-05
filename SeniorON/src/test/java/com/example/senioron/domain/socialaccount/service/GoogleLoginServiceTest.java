@@ -3,9 +3,11 @@ package com.example.senioron.domain.socialaccount.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.example.senioron.domain.device.service.DeviceService;
@@ -13,15 +15,16 @@ import com.example.senioron.domain.socialaccount.dto.google.request.GoogleLoginR
 import com.example.senioron.domain.socialaccount.dto.google.response.GoogleLoginResponse;
 import com.example.senioron.domain.socialaccount.entity.LoginProvider;
 import com.example.senioron.domain.socialaccount.entity.SocialAccount;
+import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.service.RefreshTokenService;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.jwt.JwtUtil;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class GoogleLoginServiceTest {
@@ -36,7 +39,7 @@ class GoogleLoginServiceTest {
     private static final String DEVICE_IDENTIFIER = "device-1";
 
     private final FirebaseIdTokenVerifier firebaseIdTokenVerifier = mock(FirebaseIdTokenVerifier.class);
-    private final GoogleSocialAccountIssuer googleSocialAccountIssuer = mock(GoogleSocialAccountIssuer.class);
+    private final SocialAccountRepository socialAccountRepository = mock(SocialAccountRepository.class);
     private final JwtUtil jwtUtil = mock(JwtUtil.class);
     private final RefreshTokenService refreshTokenService = mock(RefreshTokenService.class);
     private final DeviceService deviceService = mock(DeviceService.class);
@@ -47,7 +50,7 @@ class GoogleLoginServiceTest {
     void setUp() {
         googleLoginService = new GoogleLoginService(
                 firebaseIdTokenVerifier,
-                googleSocialAccountIssuer,
+                socialAccountRepository,
                 jwtUtil,
                 refreshTokenService,
                 deviceService
@@ -60,8 +63,8 @@ class GoogleLoginServiceTest {
         SocialAccount socialAccount = createSocialAccount(user);
         given(firebaseIdTokenVerifier.verify(FIREBASE_ID_TOKEN))
                 .willReturn(new VerifiedFirebaseUser(PROVIDER_ID, EMAIL, NAME));
-        given(googleSocialAccountIssuer.findOrCreate(PROVIDER_ID, EMAIL, NAME))
-                .willReturn(new GoogleSocialAccountIssuer.Result(socialAccount, false));
+        given(socialAccountRepository.findByProviderAndProviderId(LoginProvider.GOOGLE, PROVIDER_ID))
+                .willReturn(Optional.of(socialAccount));
         given(jwtUtil.createAccessToken(user)).willReturn(ACCESS_TOKEN);
         given(jwtUtil.createRefreshToken(user)).willReturn(REFRESH_TOKEN);
 
@@ -77,21 +80,24 @@ class GoogleLoginServiceTest {
     }
 
     @Test
-    void googleLoginCreatesAccountAndIssuesJwtForNewAccount() {
-        User user = createUser();
-        SocialAccount socialAccount = createSocialAccount(user);
+    void googleLoginReturnsNewUserWithoutCreatingAccountOrIssuingJwt() {
         given(firebaseIdTokenVerifier.verify(FIREBASE_ID_TOKEN))
                 .willReturn(new VerifiedFirebaseUser(PROVIDER_ID, EMAIL, NAME));
-        given(googleSocialAccountIssuer.findOrCreate(PROVIDER_ID, EMAIL, NAME))
-                .willReturn(new GoogleSocialAccountIssuer.Result(socialAccount, true));
-        given(jwtUtil.createAccessToken(user)).willReturn(ACCESS_TOKEN);
-        given(jwtUtil.createRefreshToken(user)).willReturn(REFRESH_TOKEN);
+        given(socialAccountRepository.findByProviderAndProviderId(LoginProvider.GOOGLE, PROVIDER_ID))
+                .willReturn(Optional.empty());
 
         GoogleLoginResponse response = googleLoginService.googleLogin(createRequest());
 
-        assertThat(response.getAccessToken()).isEqualTo(ACCESS_TOKEN);
-        assertThat(response.getRefreshToken()).isEqualTo(REFRESH_TOKEN);
+        assertThat(response.getAccessToken()).isNull();
+        assertThat(response.getRefreshToken()).isNull();
+        assertThat(response.getUsersId()).isNull();
+        assertThat(response.getName()).isEqualTo(NAME);
+        assertThat(response.getRole()).isNull();
         assertThat(response.isNewUser()).isTrue();
+        verify(jwtUtil, never()).createAccessToken(any());
+        verify(jwtUtil, never()).createRefreshToken(any());
+        verify(refreshTokenService, never()).saveOrRotate(any(), any(), any());
+        verify(deviceService, never()).registerToken(any(), any(), any());
     }
 
     @Test
@@ -100,8 +106,8 @@ class GoogleLoginServiceTest {
         SocialAccount socialAccount = createSocialAccount(user);
         given(firebaseIdTokenVerifier.verify(FIREBASE_ID_TOKEN))
                 .willReturn(new VerifiedFirebaseUser(PROVIDER_ID, EMAIL, NAME));
-        given(googleSocialAccountIssuer.findOrCreate(PROVIDER_ID, EMAIL, NAME))
-                .willReturn(new GoogleSocialAccountIssuer.Result(socialAccount, false));
+        given(socialAccountRepository.findByProviderAndProviderId(LoginProvider.GOOGLE, PROVIDER_ID))
+                .willReturn(Optional.of(socialAccount));
         given(jwtUtil.createAccessToken(user)).willReturn(ACCESS_TOKEN);
         given(jwtUtil.createRefreshToken(user)).willReturn(REFRESH_TOKEN);
 
@@ -109,26 +115,6 @@ class GoogleLoginServiceTest {
 
         verify(deviceService).registerToken(user, FCM_TOKEN, DEVICE_IDENTIFIER);
         verify(refreshTokenService).saveOrRotate(user, DEVICE_IDENTIFIER, REFRESH_TOKEN);
-    }
-
-    @Test
-    void googleLoginRetriesExistingLookupWhenConcurrentCreateHitsUniqueConstraint() {
-        User user = createUser();
-        SocialAccount socialAccount = createSocialAccount(user);
-        given(firebaseIdTokenVerifier.verify(FIREBASE_ID_TOKEN))
-                .willReturn(new VerifiedFirebaseUser(PROVIDER_ID, EMAIL, NAME));
-        given(googleSocialAccountIssuer.findOrCreate(PROVIDER_ID, EMAIL, NAME))
-                .willThrow(new DataIntegrityViolationException("duplicate social account"));
-        given(googleSocialAccountIssuer.findExisting(PROVIDER_ID))
-                .willReturn(new GoogleSocialAccountIssuer.Result(socialAccount, false));
-        given(jwtUtil.createAccessToken(user)).willReturn(ACCESS_TOKEN);
-        given(jwtUtil.createRefreshToken(user)).willReturn(REFRESH_TOKEN);
-
-        GoogleLoginResponse response = googleLoginService.googleLogin(createRequest());
-
-        assertThat(response.getAccessToken()).isEqualTo(ACCESS_TOKEN);
-        assertThat(response.isNewUser()).isFalse();
-        verify(googleSocialAccountIssuer).findExisting(PROVIDER_ID);
     }
 
     @Test
