@@ -11,5 +11,7 @@ public class GoogleLoginRequest {
     @NotBlank(message = "Firebase ID 토큰은 필수입니다.")
     private String firebaseIdToken;
 
+    private String fcmToken;
+
     private String deviceIdentifier;
 }

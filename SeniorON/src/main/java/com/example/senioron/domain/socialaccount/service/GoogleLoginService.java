@@ -3,6 +3,7 @@ package com.example.senioron.domain.socialaccount.service;
 import com.example.senioron.domain.socialaccount.dto.google.request.GoogleLoginRequest;
 import com.example.senioron.domain.socialaccount.dto.google.response.GoogleLoginResponse;
 import com.example.senioron.domain.socialaccount.entity.SocialAccount;
+import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.service.RefreshTokenService;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
@@ -22,6 +23,7 @@ public class GoogleLoginService {
     private final GoogleSocialAccountIssuer googleSocialAccountIssuer;
     private final JwtUtil jwtUtil;
     private final RefreshTokenService refreshTokenService;
+    private final DeviceService deviceService;
 
     public GoogleLoginResponse googleLogin(GoogleLoginRequest request) {
         VerifiedFirebaseUser firebaseUser =
@@ -38,6 +40,8 @@ public class GoogleLoginService {
 
         SocialAccount socialAccount = result.socialAccount();
         User user = socialAccount.getUser();
+        registerFcmTokenIfPresent(user, request.getFcmToken(), request.getDeviceIdentifier());
+
         String accessToken = jwtUtil.createAccessToken(user);
         String refreshToken = jwtUtil.createRefreshToken(user);
         refreshTokenService.saveOrRotate(user, request.getDeviceIdentifier(), refreshToken);
@@ -75,5 +79,11 @@ public class GoogleLoginService {
 
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private void registerFcmTokenIfPresent(User user, String fcmToken, String deviceIdentifier) {
+        if (!isBlank(fcmToken)) {
+            deviceService.registerToken(user, fcmToken, deviceIdentifier);
+        }
     }
 }

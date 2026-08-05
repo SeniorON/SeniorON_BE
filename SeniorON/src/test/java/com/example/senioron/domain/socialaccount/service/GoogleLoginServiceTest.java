@@ -8,6 +8,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
+import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.socialaccount.dto.google.request.GoogleLoginRequest;
 import com.example.senioron.domain.socialaccount.dto.google.response.GoogleLoginResponse;
 import com.example.senioron.domain.socialaccount.entity.LoginProvider;
@@ -31,11 +32,14 @@ class GoogleLoginServiceTest {
     private static final String NAME = "구글사용자";
     private static final String ACCESS_TOKEN = "senioron-jwt";
     private static final String REFRESH_TOKEN = "senioron-refresh-jwt";
+    private static final String FCM_TOKEN = "fcm-token";
+    private static final String DEVICE_IDENTIFIER = "device-1";
 
     private final FirebaseIdTokenVerifier firebaseIdTokenVerifier = mock(FirebaseIdTokenVerifier.class);
     private final GoogleSocialAccountIssuer googleSocialAccountIssuer = mock(GoogleSocialAccountIssuer.class);
     private final JwtUtil jwtUtil = mock(JwtUtil.class);
     private final RefreshTokenService refreshTokenService = mock(RefreshTokenService.class);
+    private final DeviceService deviceService = mock(DeviceService.class);
 
     private GoogleLoginService googleLoginService;
 
@@ -45,7 +49,8 @@ class GoogleLoginServiceTest {
                 firebaseIdTokenVerifier,
                 googleSocialAccountIssuer,
                 jwtUtil,
-                refreshTokenService
+                refreshTokenService,
+                deviceService
         );
     }
 
@@ -87,6 +92,23 @@ class GoogleLoginServiceTest {
         assertThat(response.getAccessToken()).isEqualTo(ACCESS_TOKEN);
         assertThat(response.getRefreshToken()).isEqualTo(REFRESH_TOKEN);
         assertThat(response.isNewUser()).isTrue();
+    }
+
+    @Test
+    void googleLoginRegistersFcmTokenWhenProvided() {
+        User user = createUser();
+        SocialAccount socialAccount = createSocialAccount(user);
+        given(firebaseIdTokenVerifier.verify(FIREBASE_ID_TOKEN))
+                .willReturn(new VerifiedFirebaseUser(PROVIDER_ID, EMAIL, NAME));
+        given(googleSocialAccountIssuer.findOrCreate(PROVIDER_ID, EMAIL, NAME))
+                .willReturn(new GoogleSocialAccountIssuer.Result(socialAccount, false));
+        given(jwtUtil.createAccessToken(user)).willReturn(ACCESS_TOKEN);
+        given(jwtUtil.createRefreshToken(user)).willReturn(REFRESH_TOKEN);
+
+        googleLoginService.googleLogin(createRequest(FCM_TOKEN, DEVICE_IDENTIFIER));
+
+        verify(deviceService).registerToken(user, FCM_TOKEN, DEVICE_IDENTIFIER);
+        verify(refreshTokenService).saveOrRotate(user, DEVICE_IDENTIFIER, REFRESH_TOKEN);
     }
 
     @Test
@@ -134,8 +156,14 @@ class GoogleLoginServiceTest {
     }
 
     private GoogleLoginRequest createRequest() {
+        return createRequest(null, null);
+    }
+
+    private GoogleLoginRequest createRequest(String fcmToken, String deviceIdentifier) {
         GoogleLoginRequest request = new GoogleLoginRequest();
         ReflectionTestUtils.setField(request, "firebaseIdToken", FIREBASE_ID_TOKEN);
+        ReflectionTestUtils.setField(request, "fcmToken", fcmToken);
+        ReflectionTestUtils.setField(request, "deviceIdentifier", deviceIdentifier);
         return request;
     }
 

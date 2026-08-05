@@ -1,15 +1,14 @@
 package com.example.senioron.domain.socialaccount.service;
 
+import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.socialaccount.dto.kakao.response.KakaoUserInfo;
 import com.example.senioron.domain.socialaccount.dto.kakao.request.KakaoLoginRequest;
 import com.example.senioron.domain.socialaccount.dto.kakao.response.KakaoLoginResponse;
 import com.example.senioron.domain.socialaccount.entity.LoginProvider;
 import com.example.senioron.domain.socialaccount.entity.SocialAccount;
 import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
-import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.entity.UserStatus;
-import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.domain.user.service.RefreshTokenService;
@@ -20,7 +19,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
 
-import java.time.LocalDate;
 import java.util.Optional;
 
 @Service
@@ -31,6 +29,7 @@ public class KakaoLoginService {
     private final SocialAccountRepository socialAccountRepository;
     private final JwtUtil jwtUtil;
     private final RefreshTokenService refreshTokenService;
+    private final DeviceService deviceService;
 
     /**
      * 카카오 Access Token으로 사용자 정보를 조회합니다.
@@ -78,6 +77,7 @@ public class KakaoLoginService {
 
             String accessToken = jwtUtil.createAccessToken(user);
             String refreshToken = jwtUtil.createRefreshToken(user);
+            registerFcmTokenIfPresent(user, request.getFcmToken(), request.getDeviceIdentifier());
             refreshTokenService.saveOrRotate(user, request.getDeviceIdentifier(), refreshToken);
 
             return KakaoLoginResponse.builder()
@@ -110,6 +110,12 @@ public class KakaoLoginService {
             throw new IllegalArgumentException(
                     "카카오 사용자 정보를 가져오지 못했습니다."
             );
+        }
+    }
+
+    private void registerFcmTokenIfPresent(User user, String fcmToken, String deviceIdentifier) {
+        if (fcmToken != null && !fcmToken.isBlank()) {
+            deviceService.registerToken(user, fcmToken, deviceIdentifier);
         }
     }
 }
