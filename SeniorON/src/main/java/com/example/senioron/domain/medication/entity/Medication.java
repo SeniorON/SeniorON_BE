@@ -6,14 +6,17 @@ import jakarta.persistence.Access;
 import jakarta.persistence.AccessType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.Index;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import lombok.AccessLevel;
@@ -23,9 +26,15 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "medication", indexes = {
-        @Index(name = "idx_medication_user_effective", columnList = "users_id, effective_from, effective_to")
-})
+@Table(
+        name = "medication",
+        indexes = {
+                @Index(
+                        name = "idx_medication_user_effective",
+                        columnList = "users_id, effective_from, effective_to"
+                )
+        }
+)
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
@@ -54,6 +63,26 @@ public class Medication extends BaseEntity {
 
     @Column(name = "medication_group_id", nullable = false)
     private String medicationGroupId;
+
+    @Column(name = "schedule_start_date", nullable = false)
+    private LocalDate scheduleStartDate;
+
+    @Column(name = "schedule_end_date")
+    private LocalDate scheduleEndDate;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "repeat_type", nullable = false, length = 20)
+    private MedicationRepeatType repeatType;
+
+    @Column(name = "repeat_interval", nullable = false)
+    private Integer repeatInterval;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "repeat_end_type", nullable = false, length = 20)
+    private MedicationRepeatEndType repeatEndType;
+
+    @Column(name = "duration_weeks")
+    private Integer durationWeeks;
 
     @Column(name = "effective_from", nullable = false)
     private LocalDateTime effectiveFrom;

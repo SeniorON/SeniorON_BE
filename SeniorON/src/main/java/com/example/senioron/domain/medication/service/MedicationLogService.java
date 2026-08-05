@@ -6,6 +6,7 @@ import com.example.senioron.domain.medication.dto.response.MedicationScheduleRes
 import com.example.senioron.domain.medication.dto.response.MedicationScheduleStatus;
 import com.example.senioron.domain.medication.entity.Medication;
 import com.example.senioron.domain.medication.entity.MedicationLog;
+import com.example.senioron.domain.medication.entity.MedicationRepeatType;
 import com.example.senioron.domain.medication.event.MedicationCheckedEvent;
 import com.example.senioron.domain.medication.repository.MedicationLogRepository;
 import com.example.senioron.domain.medication.repository.MedicationRepository;
@@ -15,11 +16,13 @@ import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import java.time.DateTimeException;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -221,7 +224,9 @@ public class MedicationLogService {
                         .findEffectiveMedicationsForMonth(
                                 parentUser,
                                 monthStart,
-                                monthEndExclusive
+                                monthEndExclusive,
+                                monthStartDate,
+                                monthEndExclusiveDate
                         );
 
         List<LocalDate> scheduledDates =
@@ -591,11 +596,31 @@ public class MedicationLogService {
             LocalDate startDate,
             LocalDate endExclusiveDate
     ) {
+        startDate
+                .datesUntil(
+                        endExclusiveDate
+                )
+                .forEach(
+                        this::createMedicationLogsForAllMedicationOwnersOnDate
+                );
+    }
+
+    private void createMedicationLogsForAllMedicationOwnersOnDate(
+            LocalDate date
+    ) {
+        LocalDateTime dayStart =
+                date.atStartOfDay();
+
+        LocalDateTime dayEndExclusive =
+                date.plusDays(1)
+                        .atStartOfDay();
+
         List<Medication> medications =
                 medicationRepository
                         .findAllEffectiveMedicationsForDate(
-                                startDate.atStartOfDay(),
-                                endExclusiveDate.atStartOfDay()
+                                dayStart,
+                                dayEndExclusive,
+                                date
                         );
 
         Map<Long, User> parentsById =
@@ -618,10 +643,9 @@ public class MedicationLogService {
 
         for (User parentUser :
                 parentsById.values()) {
-            createMedicationLogsForRange(
+            createMissingMedicationLogs(
                     parentUser,
-                    startDate,
-                    endExclusiveDate
+                    date
             );
         }
     }
@@ -659,7 +683,8 @@ public class MedicationLogService {
                         .findEffectiveMedicationsForDate(
                                 parentUser,
                                 dayStart,
-                                dayEndExclusive
+                                dayEndExclusive,
+                                date
                         );
 
         List<MedicationLog> existingMedicationLogs =
@@ -886,6 +911,170 @@ public class MedicationLogService {
             return false;
         }
 
+        LocalDate scheduleStartDate =
+                resolveScheduleStartDate(
+                        medication
+                );
+
+        if (date.isBefore(
+                scheduleStartDate
+        )) {
+            return false;
+        }
+
+        if (medication.getScheduleEndDate() != null
+                && date.isAfter(
+                medication.getScheduleEndDate()
+        )) {
+            return false;
+        }
+
+        MedicationRepeatType repeatType =
+                medication.getRepeatType();
+
+        int repeatInterval =
+                medication.getRepeatInterval() == null
+                        || medication.getRepeatInterval() < 1
+                        ? 1
+                        : medication.getRepeatInterval();
+
+        if (repeatType == null) {
+            return isSelectedWeekday(
+                    medication,
+                    date
+            );
+        }
+
+        return switch (repeatType) {
+            case DAILY ->
+                    isDailyScheduleDate(
+                            scheduleStartDate,
+                            date,
+                            repeatInterval
+                    );
+
+            case WEEKLY ->
+                    isWeeklyScheduleDate(
+                            medication,
+                            scheduleStartDate,
+                            date,
+                            repeatInterval
+                    );
+
+            case MONTHLY ->
+                    isMonthlyScheduleDate(
+                            scheduleStartDate,
+                            date,
+                            repeatInterval
+                    );
+        };
+    }
+
+    private LocalDate resolveScheduleStartDate(
+            Medication medication
+    ) {
+        if (medication.getScheduleStartDate() != null) {
+            return medication.getScheduleStartDate();
+        }
+
+        if (medication.getEffectiveFrom() != null) {
+            return medication.getEffectiveFrom()
+                    .toLocalDate();
+        }
+
+        throw new BusinessException(
+                ErrorCode.BAD_REQUEST
+        );
+    }
+
+    private boolean isDailyScheduleDate(
+            LocalDate scheduleStartDate,
+            LocalDate targetDate,
+            int repeatInterval
+    ) {
+        long elapsedDays =
+                ChronoUnit.DAYS.between(
+                        scheduleStartDate,
+                        targetDate
+                );
+
+        return elapsedDays >= 0
+                && elapsedDays % repeatInterval == 0;
+    }
+
+    private boolean isWeeklyScheduleDate(
+            Medication medication,
+            LocalDate scheduleStartDate,
+            LocalDate targetDate,
+            int repeatInterval
+    ) {
+        if (!isSelectedWeekday(
+                medication,
+                targetDate
+        )) {
+            return false;
+        }
+
+        LocalDate scheduleStartWeek =
+                scheduleStartDate.with(
+                        DayOfWeek.MONDAY
+                );
+
+        LocalDate targetWeek =
+                targetDate.with(
+                        DayOfWeek.MONDAY
+                );
+
+        long elapsedWeeks =
+                ChronoUnit.WEEKS.between(
+                        scheduleStartWeek,
+                        targetWeek
+                );
+
+        return elapsedWeeks >= 0
+                && elapsedWeeks % repeatInterval == 0;
+    }
+
+    private boolean isMonthlyScheduleDate(
+            LocalDate scheduleStartDate,
+            LocalDate targetDate,
+            int repeatInterval
+    ) {
+        YearMonth scheduleStartMonth =
+                YearMonth.from(
+                        scheduleStartDate
+                );
+
+        YearMonth targetMonth =
+                YearMonth.from(
+                        targetDate
+                );
+
+        long elapsedMonths =
+                ChronoUnit.MONTHS.between(
+                        scheduleStartMonth,
+                        targetMonth
+                );
+
+        if (elapsedMonths < 0
+                || elapsedMonths % repeatInterval != 0) {
+            return false;
+        }
+
+        int scheduledDayOfMonth =
+                Math.min(
+                        scheduleStartDate.getDayOfMonth(),
+                        targetMonth.lengthOfMonth()
+                );
+
+        return targetDate.getDayOfMonth()
+                == scheduledDayOfMonth;
+    }
+
+    private boolean isSelectedWeekday(
+            Medication medication,
+            LocalDate date
+    ) {
         if (medication.getMedicineDays() == null
                 || medication.getMedicineDays()
                 .isBlank()) {

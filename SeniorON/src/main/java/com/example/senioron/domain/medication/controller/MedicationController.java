@@ -8,8 +8,8 @@ import com.example.senioron.domain.medication.service.MedicationService;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.global.apiPayload.code.ResultCode;
 import com.example.senioron.global.apiPayload.response.Response;
-import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -29,7 +29,7 @@ public class MedicationController {
 
     @Operation(
             summary = "약 등록",
-            description = "주담당자 또는 보조담당자 자녀가 같은 가족에 속한 부모님의 복약 정보를 등록합니다."
+            description = "주담당자 또는 보조담당자 자녀가 같은 가족에 속한 부모님의 복약 정보와 반복 일정을 등록합니다."
     )
     @PostMapping("/parents/{parentUserId}")
     @ResponseStatus(HttpStatus.CREATED)
@@ -75,9 +75,10 @@ public class MedicationController {
 
         return Response.ok(result);
     }
+
     @Operation(
             summary = "약 수정",
-            description = "주담당자 또는 보조담당자 자녀가 약 그룹을 수정하고 변경된 정보에 따라 30일치 복약 로그를 다시 생성합니다."
+            description = "주담당자 또는 보조담당자 자녀가 약 그룹을 수정하고 변경된 반복 규칙과 복용 기간에 따라 복약 로그를 다시 생성합니다."
     )
     @PutMapping("/parents/{parentUserId}")
     public Response<String> updateMedication(
@@ -129,6 +130,4 @@ public class MedicationController {
 
         return Response.ok("약 일정이 성공적으로 삭제되었습니다.");
     }
-
-
 }
