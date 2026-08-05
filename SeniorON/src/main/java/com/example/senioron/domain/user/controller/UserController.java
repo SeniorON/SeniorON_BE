@@ -89,6 +89,14 @@ public class UserController {
         return Response.ok();
     }
 
+    @Operation(summary = "온보딩 상태 조회", description = "현재 로그인한 사용자의 가족 가입, 담당자 유형, 시니어 등록, 관계 등록 상태를 조회합니다.")
+    @GetMapping("/me/onboarding-status")
+    public Response<OnboardingStatusResponse> getOnboardingStatus(
+            @AuthenticationPrincipal User user
+    ) {
+        return Response.ok(userService.getOnboardingStatus(user));
+    }
+
     @Operation(summary = "역할 선택/변경", description = "현재 로그인한 사용자의 역할을 선택하거나 변경합니다.")
     @PatchMapping("/me/role")
     public Response<UserRoleUpdateResponse> updateRole(

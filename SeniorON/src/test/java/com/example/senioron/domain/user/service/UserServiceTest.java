@@ -12,7 +12,12 @@ import static org.mockito.Mockito.verify;
 
 import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.device.service.DeviceService;
+import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.inactivity.service.InactivitySettingService;
+import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.senior.entity.SeniorRelation;
+import com.example.senioron.domain.senior.entity.UserSenior;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.senior.repository.UserSeniorRepository;
 import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeSendRequest;
@@ -21,6 +26,7 @@ import com.example.senioron.domain.user.dto.request.TokenRefreshRequest;
 import com.example.senioron.domain.user.dto.request.UserLoginRequest;
 import com.example.senioron.domain.user.dto.request.UserSignUpRequest;
 import com.example.senioron.domain.user.dto.request.UserWithdrawalRequest;
+import com.example.senioron.domain.user.dto.response.OnboardingStatusResponse;
 import com.example.senioron.domain.user.dto.response.SignupEmailVerificationCodeVerifyResponse;
 import com.example.senioron.domain.user.dto.response.TokenRefreshResponse;
 import com.example.senioron.domain.user.dto.response.UserLoginResponse;
@@ -63,6 +69,7 @@ class UserServiceTest {
             mock(SignupEmailVerificationCodeIssuer.class);
     private final SocialAccountRepository socialAccountRepository = mock(SocialAccountRepository.class);
     private final DeviceRepository deviceRepository = mock(DeviceRepository.class);
+    private final SeniorRepository seniorRepository = mock(SeniorRepository.class);
     private final UserSeniorRepository userSeniorRepository = mock(UserSeniorRepository.class);
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
@@ -81,6 +88,7 @@ class UserServiceTest {
                 socialAccountRepository,
                 refreshTokenService,
                 deviceRepository,
+                seniorRepository,
                 userSeniorRepository,
                 passwordEncoder,
                 jwtUtil,
@@ -250,6 +258,77 @@ class UserServiceTest {
                 .asInstanceOf(type(BusinessException.class))
                 .extracting(BusinessException::getCode)
                 .isEqualTo(ErrorCode.WITHDRAWN_USER);
+    }
+
+    @Test
+    void getOnboardingStatusReturnsEmptyStateWhenFamilyIsMissing() {
+        User user = User.builder()
+                .usersId(1L)
+                .loginId("testId")
+                .email(EMAIL)
+                .password("encoded")
+                .name("test")
+                .role(Role.CHILD)
+                .managerType(ManagerType.NONE)
+                .build();
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+        OnboardingStatusResponse response = userService.getOnboardingStatus(user);
+
+        assertThat(response.isHasFamily()).isFalse();
+        assertThat(response.getManagerType()).isEqualTo(ManagerType.NONE);
+        assertThat(response.getSeniorId()).isNull();
+        assertThat(response.isSeniorProfileCompleted()).isFalse();
+        assertThat(response.getRelation()).isNull();
+        assertThat(response.isOnboardingCompleted()).isFalse();
+    }
+
+    @Test
+    void getOnboardingStatusReturnsSeniorWithoutCompletionWhenRelationIsMissing() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .familyCode("ABC123")
+                .build();
+        User user = createChild(1L, family, ManagerType.SUB);
+        Senior senior = createSenior(123L, family, user);
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(userSeniorRepository.findFirstByUserAndSenior_Family(user, family)).willReturn(Optional.empty());
+        given(seniorRepository.findFirstByFamily(family)).willReturn(Optional.of(senior));
+
+        OnboardingStatusResponse response = userService.getOnboardingStatus(user);
+
+        assertThat(response.isHasFamily()).isTrue();
+        assertThat(response.getManagerType()).isEqualTo(ManagerType.SUB);
+        assertThat(response.getSeniorId()).isEqualTo(123L);
+        assertThat(response.isSeniorProfileCompleted()).isTrue();
+        assertThat(response.getRelation()).isNull();
+        assertThat(response.isOnboardingCompleted()).isFalse();
+    }
+
+    @Test
+    void getOnboardingStatusReturnsCompletedStateWhenRequiredValuesExist() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .familyCode("ABC123")
+                .build();
+        User user = createChild(1L, family, ManagerType.PRIMARY);
+        Senior senior = createSenior(123L, family, user);
+        UserSenior userSenior = UserSenior.builder()
+                .user(user)
+                .senior(senior)
+                .relation(SeniorRelation.MOTHER)
+                .build();
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(userSeniorRepository.findFirstByUserAndSenior_Family(user, family)).willReturn(Optional.of(userSenior));
+
+        OnboardingStatusResponse response = userService.getOnboardingStatus(user);
+
+        assertThat(response.isHasFamily()).isTrue();
+        assertThat(response.getManagerType()).isEqualTo(ManagerType.PRIMARY);
+        assertThat(response.getSeniorId()).isEqualTo(123L);
+        assertThat(response.isSeniorProfileCompleted()).isTrue();
+        assertThat(response.getRelation()).isEqualTo(SeniorRelation.MOTHER);
+        assertThat(response.isOnboardingCompleted()).isTrue();
     }
 
     @Test
@@ -494,6 +573,31 @@ class UserServiceTest {
                 .managerType(managerType)
                 .status(UserStatus.ACTIVE)
                 .profileImageKey("profile-images/1/original.webp")
+                .build();
+    }
+
+    private User createChild(Long usersId, Family family, ManagerType managerType) {
+        return User.builder()
+                .usersId(usersId)
+                .family(family)
+                .loginId("child" + usersId)
+                .email("child" + usersId + "@example.com")
+                .password("encoded")
+                .name("자녀")
+                .role(Role.CHILD)
+                .managerType(managerType)
+                .status(UserStatus.ACTIVE)
+                .build();
+    }
+
+    private Senior createSenior(Long seniorId, Family family, User registeredBy) {
+        return Senior.builder()
+                .seniorId(seniorId)
+                .name("시니어")
+                .birth(LocalDate.of(1950, 1, 1))
+                .phoneNumber("01012345678")
+                .family(family)
+                .registeredBy(registeredBy)
                 .build();
     }
 
