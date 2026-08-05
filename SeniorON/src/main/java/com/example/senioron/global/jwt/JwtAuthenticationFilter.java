@@ -1,6 +1,7 @@
 package com.example.senioron.global.jwt;
 
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.entity.UserStatus;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.config.SecurityErrorResponseWriter;
@@ -37,6 +38,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             "/api/users/account-recovery/password",
             "/api/social-accounts/login/kakao",
             "/api/social-accounts/login/google",
+            "/api/social-accounts/signup",
             "/api/social-accounts/login/kakao/callback"
     );
 
@@ -79,7 +81,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 User user = userRepository.findById(usersId)
                         .orElse(null);
 
-                if (user != null) {
+                if (user != null && user.getStatus() == UserStatus.ACTIVE) {
                     UsernamePasswordAuthenticationToken authentication =
                             new UsernamePasswordAuthenticationToken(
                                     user,

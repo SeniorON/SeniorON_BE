@@ -7,23 +7,30 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.inactivity.service.InactivitySettingService;
+import com.example.senioron.domain.senior.repository.UserSeniorRepository;
+import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeSendRequest;
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeVerifyRequest;
 import com.example.senioron.domain.user.dto.request.TokenRefreshRequest;
 import com.example.senioron.domain.user.dto.request.UserLoginRequest;
 import com.example.senioron.domain.user.dto.request.UserSignUpRequest;
+import com.example.senioron.domain.user.dto.request.UserWithdrawalRequest;
 import com.example.senioron.domain.user.dto.response.SignupEmailVerificationCodeVerifyResponse;
 import com.example.senioron.domain.user.dto.response.TokenRefreshResponse;
 import com.example.senioron.domain.user.dto.response.UserLoginResponse;
 import com.example.senioron.domain.user.dto.response.UserSignUpResponse;
+import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.RefreshToken;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.SignupEmailVerificationCode;
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.entity.UserStatus;
 import com.example.senioron.domain.user.event.SignupEmailVerificationCodeSendEvent;
 import com.example.senioron.domain.user.repository.RefreshTokenRepository;
 import com.example.senioron.domain.user.repository.SignupEmailVerificationCodeRepository;
@@ -54,6 +61,9 @@ class UserServiceTest {
             mock(SignupEmailVerificationCodeRepository.class);
     private final SignupEmailVerificationCodeIssuer signupEmailVerificationCodeIssuer =
             mock(SignupEmailVerificationCodeIssuer.class);
+    private final SocialAccountRepository socialAccountRepository = mock(SocialAccountRepository.class);
+    private final DeviceRepository deviceRepository = mock(DeviceRepository.class);
+    private final UserSeniorRepository userSeniorRepository = mock(UserSeniorRepository.class);
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
     private final JwtUtil jwtUtil = new JwtUtil("12345678901234567890123456789012", 3600000L, 1209600000L);
@@ -68,7 +78,10 @@ class UserServiceTest {
                 refreshTokenRepository,
                 signupEmailVerificationCodeRepository,
                 signupEmailVerificationCodeIssuer,
+                socialAccountRepository,
                 refreshTokenService,
+                deviceRepository,
+                userSeniorRepository,
                 passwordEncoder,
                 jwtUtil,
                 mock(InactivitySettingService.class),
@@ -145,6 +158,98 @@ class UserServiceTest {
         assertThat(response.getRefreshToken()).isNotBlank();
         assertThat(response.getRefreshToken()).isNotEqualTo(loginResponse.getRefreshToken());
         assertThat(savedRefreshToken.getTokenHash()).isNotEqualTo(previousTokenHash);
+    }
+
+    @Test
+    void withdrawSucceedsWithValidConfirmation() {
+        User user = createWithdrawalUser(ManagerType.SUB);
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(user));
+
+        userService.withdraw(user, createWithdrawalRequest(UserService.WITHDRAWAL_CONFIRMATION));
+
+        assertThat(user.getStatus()).isEqualTo(UserStatus.WITHDRAWN);
+        assertThat(user.getWithdrawnAt()).isNotNull();
+        assertThat(user.getLoginId()).startsWith("withdrawn_1_");
+        assertThat(user.getEmail()).startsWith("withdrawn_1_").endsWith("@deleted.local");
+        assertThat(user.getName()).isEqualTo("탈퇴회원");
+        assertThat(user.getPhoneNumber()).isNull();
+        assertThat(user.getBirth()).isNull();
+        assertThat(user.getProfileImageKey()).isNull();
+        assertThat(user.getFamily()).isNull();
+        assertThat(user.getManagerType()).isNull();
+        assertThat(passwordEncoder.matches("password123!", user.getPassword())).isFalse();
+        verify(refreshTokenRepository).deleteAllByUser(user);
+        verify(deviceRepository).deleteAllByUser(user);
+        verify(socialAccountRepository).deleteAllByUser(user);
+        verify(userSeniorRepository).deleteAllByUser(user);
+    }
+
+    @Test
+    void withdrawFailsWhenConfirmationMismatch() {
+        User user = createWithdrawalUser(ManagerType.SUB);
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> userService.withdraw(user, createWithdrawalRequest("탈퇴")))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.INVALID_WITHDRAWAL_CONFIRMATION);
+
+        assertThat(user.getStatus()).isEqualTo(UserStatus.ACTIVE);
+        assertThat(user.getLoginId()).isEqualTo("withdraw-user");
+        verify(refreshTokenRepository, never()).deleteAllByUser(any(User.class));
+        verify(deviceRepository, never()).deleteAllByUser(any(User.class));
+        verify(socialAccountRepository, never()).deleteAllByUser(any(User.class));
+        verify(userSeniorRepository, never()).deleteAllByUser(any(User.class));
+    }
+
+    @Test
+    void primaryUserCannotWithdrawAndDataIsUnchanged() {
+        User user = createWithdrawalUser(ManagerType.PRIMARY);
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> userService.withdraw(user, createWithdrawalRequest(UserService.WITHDRAWAL_CONFIRMATION)))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.PRIMARY_USER_CANNOT_WITHDRAW);
+
+        assertThat(user.getStatus()).isEqualTo(UserStatus.ACTIVE);
+        assertThat(user.getWithdrawnAt()).isNull();
+        assertThat(user.getLoginId()).isEqualTo("withdraw-user");
+        assertThat(user.getEmail()).isEqualTo("withdraw@example.com");
+        assertThat(user.getName()).isEqualTo("탈퇴 전 사용자");
+        assertThat(user.getManagerType()).isEqualTo(ManagerType.PRIMARY);
+        verify(refreshTokenRepository, never()).deleteAllByUser(any(User.class));
+        verify(deviceRepository, never()).deleteAllByUser(any(User.class));
+        verify(socialAccountRepository, never()).deleteAllByUser(any(User.class));
+        verify(userSeniorRepository, never()).deleteAllByUser(any(User.class));
+    }
+
+    @Test
+    void refreshTokenFailsForWithdrawnUser() {
+        User user = createWithdrawalUser(ManagerType.SUB);
+        user.withdraw(
+                "withdrawn_1_test",
+                "withdrawn_1_test@deleted.local",
+                passwordEncoder.encode("withdrawn"),
+                LocalDateTime.now()
+        );
+        String refreshToken = jwtUtil.createRefreshToken(user);
+        RefreshToken savedRefreshToken = RefreshToken.builder()
+                .user(user)
+                .deviceIdentifier(null)
+                .tokenHash(refreshTokenService.hashToken(refreshToken))
+                .expiresAt(LocalDateTime.now().plusDays(14))
+                .build();
+        given(refreshTokenRepository.findByTokenHash(savedRefreshToken.getTokenHash()))
+                .willReturn(Optional.of(savedRefreshToken));
+
+        assertThatThrownBy(() -> userService.refreshToken(createTokenRefreshRequest(refreshToken)))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.WITHDRAWN_USER);
     }
 
     @Test
@@ -368,6 +473,28 @@ class UserServiceTest {
         TokenRefreshRequest request = new TokenRefreshRequest();
         ReflectionTestUtils.setField(request, "refreshToken", refreshToken);
         return request;
+    }
+
+    private UserWithdrawalRequest createWithdrawalRequest(String confirmation) {
+        UserWithdrawalRequest request = new UserWithdrawalRequest();
+        ReflectionTestUtils.setField(request, "confirmation", confirmation);
+        return request;
+    }
+
+    private User createWithdrawalUser(ManagerType managerType) {
+        return User.builder()
+                .usersId(1L)
+                .loginId("withdraw-user")
+                .email("withdraw@example.com")
+                .password(passwordEncoder.encode("password123!"))
+                .name("탈퇴 전 사용자")
+                .birth(LocalDate.of(1990, 1, 1))
+                .phoneNumber("010-1234-5678")
+                .role(Role.CHILD)
+                .managerType(managerType)
+                .status(UserStatus.ACTIVE)
+                .profileImageKey("profile-images/1/original.webp")
+                .build();
     }
 
     private RefreshToken captureSavedRefreshToken() {

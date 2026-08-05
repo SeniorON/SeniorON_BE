@@ -2,10 +2,13 @@ package com.example.senioron.domain.socialaccount.controller;
 
 import com.example.senioron.domain.socialaccount.dto.google.request.GoogleLoginRequest;
 import com.example.senioron.domain.socialaccount.dto.google.response.GoogleLoginResponse;
+import com.example.senioron.domain.socialaccount.dto.request.SocialSignupRequest;
+import com.example.senioron.domain.socialaccount.dto.response.SocialSignupResponse;
 import com.example.senioron.domain.socialaccount.dto.kakao.request.KakaoLoginRequest;
 import com.example.senioron.domain.socialaccount.dto.kakao.response.KakaoLoginResponse;
 import com.example.senioron.domain.socialaccount.service.GoogleLoginService;
 import com.example.senioron.domain.socialaccount.service.KakaoLoginService;
+import com.example.senioron.domain.socialaccount.service.SocialSignupService;
 import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,6 +26,7 @@ public class SocialAccountController {
 
     private final KakaoLoginService kakaoLoginService;
     private final GoogleLoginService googleLoginService;
+    private final SocialSignupService socialSignupService;
 
     @Operation(
             summary = "카카오 로그인",
@@ -46,6 +50,17 @@ public class SocialAccountController {
             @Valid @RequestBody GoogleLoginRequest request
     ) {
         return Response.ok(googleLoginService.googleLogin(request));
+    }
+
+    @Operation(
+            summary = "소셜 회원가입 완료",
+            description = "신규 소셜 사용자의 추가 정보를 받아 회원가입을 완료하고 JWT를 발급합니다. fcmToken과 deviceIdentifier를 함께 보내면 기기를 등록하고 refresh token을 해당 기기에 연결합니다."
+    )
+    @PostMapping("/signup")
+    public Response<SocialSignupResponse> socialSignup(
+            @Valid @RequestBody SocialSignupRequest request
+    ) {
+        return Response.ok(socialSignupService.signup(request));
     }
 
 

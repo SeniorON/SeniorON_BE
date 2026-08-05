@@ -11,5 +11,7 @@ public class KakaoLoginRequest {
     @NotBlank(message = "카카오 액세스 토큰은 필수입니다.")
     private String kakaoAccessToken;
 
+    private String fcmToken;
+
     private String deviceIdentifier;
 }

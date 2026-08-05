@@ -51,6 +51,9 @@ public interface DeviceRepository
             @Param("usersId") Long usersId,
             @Param("status") DeviceStatus status
     );
+
+    void deleteAllByUser(User user);
+
     List<Device> findAllByUser_FamilyAndUser_Role(
             Family family,
             Role role

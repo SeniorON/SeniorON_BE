@@ -13,4 +13,6 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
     Optional<RefreshToken> findByUserAndDeviceIdentifier(User user, String deviceIdentifier);
 
     long deleteByExpiresAtBefore(LocalDateTime now);
+
+    void deleteAllByUser(User user);
 }

@@ -6,6 +6,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "users", indexes = {
@@ -54,6 +55,21 @@ public class User extends BaseEntity {
     @Column(name = "profile_image_key")
     private String profileImageKey;
 
+    @Column(name = "withdrawn_at")
+    private LocalDateTime withdrawnAt;
+
+    @Column(name = "service_terms_agreed")
+    private Boolean serviceTermsAgreed;
+
+    @Column(name = "privacy_policy_agreed")
+    private Boolean privacyPolicyAgreed;
+
+    @Column(name = "age_over_14_agreed")
+    private Boolean ageOver14Agreed;
+
+    @Column(name = "marketing_agreed")
+    private Boolean marketingAgreed;
+
     public void updateRole(Role role) {
         this.role = role;
     }
@@ -81,5 +97,23 @@ public class User extends BaseEntity {
 
     public void updateProfileImageKey(String profileImageKey) {
         this.profileImageKey = profileImageKey;
+    }
+
+    public void withdraw(
+            String anonymizedLoginId,
+            String anonymizedEmail,
+            String anonymizedPassword,
+            LocalDateTime withdrawnAt
+    ) {
+        this.loginId = anonymizedLoginId;
+        this.email = anonymizedEmail;
+        this.name = "탈퇴회원";
+        this.phoneNumber = null;
+        this.password = anonymizedPassword;
+        this.birth = null;
+        this.profileImageKey = null;
+        this.status = UserStatus.WITHDRAWN;
+        this.withdrawnAt = withdrawnAt;
+        removeFromFamily();
     }
 }
