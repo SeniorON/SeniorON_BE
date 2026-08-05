@@ -38,7 +38,6 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -56,7 +55,7 @@ public class NotificationService {
     // SOS는 미발송 자체가 사고이므로 별도로 관리
     private static final String SOS_DISPATCH_METRIC = "sos_dispatch_total";
     private static final String TAG_RESULT = "result";
-    private static final int SOS_DISPATCH_POOL_SIZE = 8;
+    private static final int DISPATCH_POOL_SIZE = 8;
 
     private final NotificationRepository notificationRepository;
     private final NotificationSettingRepository notificationSettingRepository;
@@ -64,17 +63,18 @@ public class NotificationService {
     private final DeviceRepository deviceRepository;
     private final FcmSender fcmSender;
     private final MeterRegistry meterRegistry;
-    private final ExecutorService sosDispatchExecutor = Executors.newFixedThreadPool(SOS_DISPATCH_POOL_SIZE);
+    // 일반 알림과 SOS 알림 발송 모두 이 풀에서 처리해 요청/커밋 스레드를 블로킹하지 않는다.
+    private final ExecutorService dispatchExecutor = Executors.newFixedThreadPool(DISPATCH_POOL_SIZE);
 
     @PreDestroy
-    void shutdownSosDispatchExecutor() {
-        sosDispatchExecutor.shutdown();
+    void shutdownDispatchExecutor() {
+        dispatchExecutor.shutdown();
         try {
-            if (!sosDispatchExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
-                sosDispatchExecutor.shutdownNow();
+            if (!dispatchExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                dispatchExecutor.shutdownNow();
             }
         } catch (InterruptedException e) {
-            sosDispatchExecutor.shutdownNow();
+            dispatchExecutor.shutdownNow();
             Thread.currentThread().interrupt();
         }
     }
@@ -154,26 +154,27 @@ public class NotificationService {
         }
 
         NotificationType type = resolveType(event.getEventType());
+
+        // receivers는 전부 sender와 같은 가족의 자녀라 알림 설정을 공유하는 시니어가 동일하다.
+        // 수신자마다 반복 조회하지 않고 한 번만 확인한다.
+        if (!isEnabled(receivers.get(0), type)) {
+            return List.of();
+        }
+
         String title = resolveTitle(event.getEventType());
         String body = resolveBody(event);
-        List<Notification> notifications = new ArrayList<>();
-        for (User receiver : receivers) {
-            if (!isEnabled(receiver, type)) {
-                continue;
-            }
-            Notification notification = Notification.builder()
-                    .event(event)
-                    .sendUser(sender)
-                    .receiverUser(receiver)
-                    .notificationType(type)
-                    .title(title)
-                    .body(body)
-                    .linkUrl(event.getLinkUrl())
-                    .isRead(false)
-                    .build();
-            notifications.add(notification); // 임시 저장
-        }
-        if (notifications.isEmpty()) {return List.of();}
+        List<Notification> notifications = receivers.stream()
+                .map(receiver -> Notification.builder()
+                        .event(event)
+                        .sendUser(sender)
+                        .receiverUser(receiver)
+                        .notificationType(type)
+                        .title(title)
+                        .body(body)
+                        .linkUrl(event.getLinkUrl())
+                        .isRead(false)
+                        .build())
+                .toList();
         notificationRepository.saveAll(notifications); // 레포 저장
 
         //수신자들의 기기 토큰을 미리 한 번에 조회
@@ -198,18 +199,13 @@ public class NotificationService {
     }
 
     /**
-     * 수신자별로 등록된 모든 기기에 순차 발송한다. 한 대라도 성공하면 그 수신자는 발송 성공으로 센다.
+     * 수신자별로 등록된 모든 기기에 발송한다. afterCommit 콜백에서 호출되므로 요청 스레드를
+     * 블로킹하지 않도록 각 발송을 dispatchExecutor에 위임하고 결과를 기다리지 않는다.
      */
-    private NotificationDispatchResult dispatch(List<NotificationDispatchTarget> targets) {
-        int notifiedCount = 0;
-
+    private void dispatch(List<NotificationDispatchTarget> targets) {
         for (NotificationDispatchTarget target : targets) {
-            if (sendToAnyDevice(target)) {
-                notifiedCount++;
-            }
+            dispatchExecutor.execute(() -> sendToAnyDevice(target));
         }
-
-        return new NotificationDispatchResult(targets.size(), notifiedCount);
     }
 
     //병렬발송
@@ -217,7 +213,7 @@ public class NotificationService {
         long timeoutSeconds = 5L;
         List<CompletableFuture<Boolean>> futures = targets.stream()
                 .map(target -> CompletableFuture.supplyAsync(
-                        () -> sendToAnyDevice(target), sosDispatchExecutor)
+                        () -> sendToAnyDevice(target), dispatchExecutor)
                         .completeOnTimeout(false, timeoutSeconds, TimeUnit.SECONDS))
                 .toList();
 
