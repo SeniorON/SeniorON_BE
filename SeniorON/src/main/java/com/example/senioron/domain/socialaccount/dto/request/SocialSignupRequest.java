@@ -34,4 +34,8 @@ public class SocialSignupRequest {
 
     @NotNull
     private Boolean marketingAgreed;
+
+    private String fcmToken;
+
+    private String deviceIdentifier;
 }

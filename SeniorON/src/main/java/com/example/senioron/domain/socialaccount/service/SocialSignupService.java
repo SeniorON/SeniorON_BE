@@ -1,6 +1,7 @@
 package com.example.senioron.domain.socialaccount.service;
 
 import com.example.senioron.domain.inactivity.service.InactivitySettingService;
+import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.socialaccount.dto.kakao.response.KakaoUserInfo;
 import com.example.senioron.domain.socialaccount.dto.request.SocialSignupRequest;
 import com.example.senioron.domain.socialaccount.dto.response.SocialSignupResponse;
@@ -32,6 +33,7 @@ public class SocialSignupService {
     private final RefreshTokenService refreshTokenService;
     private final JwtUtil jwtUtil;
     private final InactivitySettingService inactivitySettingService;
+    private final DeviceService deviceService;
 
     public SocialSignupResponse signup(SocialSignupRequest request) {
         SocialTokenInfo socialTokenInfo = verifySocialToken(request);
@@ -48,9 +50,10 @@ public class SocialSignupService {
         User user = createUser(request, socialTokenInfo);
         SocialAccount socialAccount = createSocialAccount(request.getProvider(), socialTokenInfo.providerId(), user);
         inactivitySettingService.createDefaultSetting(user);
+        registerFcmTokenIfPresent(socialAccount.getUser(), request.getFcmToken(), request.getDeviceIdentifier());
 
         String refreshToken = jwtUtil.createRefreshToken(socialAccount.getUser());
-        refreshTokenService.saveOrRotate(socialAccount.getUser(), null, refreshToken);
+        refreshTokenService.saveOrRotate(socialAccount.getUser(), request.getDeviceIdentifier(), refreshToken);
         String accessToken = jwtUtil.createAccessToken(socialAccount.getUser());
 
         return SocialSignupResponse.builder()
@@ -142,6 +145,12 @@ public class SocialSignupService {
 
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private void registerFcmTokenIfPresent(User user, String fcmToken, String deviceIdentifier) {
+        if (!isBlank(fcmToken)) {
+            deviceService.registerToken(user, fcmToken, deviceIdentifier);
+        }
     }
 
     private record SocialTokenInfo(

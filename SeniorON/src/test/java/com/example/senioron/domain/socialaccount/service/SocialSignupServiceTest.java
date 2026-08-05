@@ -4,11 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.inactivity.service.InactivitySettingService;
 import com.example.senioron.domain.socialaccount.dto.kakao.response.KakaoUserInfo;
 import com.example.senioron.domain.socialaccount.dto.request.SocialSignupRequest;
@@ -16,7 +19,6 @@ import com.example.senioron.domain.socialaccount.dto.response.SocialSignupRespon
 import com.example.senioron.domain.socialaccount.entity.LoginProvider;
 import com.example.senioron.domain.socialaccount.entity.SocialAccount;
 import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
-import com.example.senioron.domain.user.entity.RefreshToken;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.entity.UserStatus;
 import com.example.senioron.domain.user.repository.UserRepository;
@@ -39,6 +41,8 @@ class SocialSignupServiceTest {
     private static final String NAME = "홍길동";
     private static final String ACCESS_TOKEN = "access-token";
     private static final String REFRESH_TOKEN = "refresh-token";
+    private static final String FCM_TOKEN = "fcm-token";
+    private static final String DEVICE_IDENTIFIER = "device-1";
 
     private final KakaoLoginService kakaoLoginService = mock(KakaoLoginService.class);
     private final FirebaseIdTokenVerifier firebaseIdTokenVerifier = mock(FirebaseIdTokenVerifier.class);
@@ -47,6 +51,7 @@ class SocialSignupServiceTest {
     private final RefreshTokenService refreshTokenService = mock(RefreshTokenService.class);
     private final JwtUtil jwtUtil = mock(JwtUtil.class);
     private final InactivitySettingService inactivitySettingService = mock(InactivitySettingService.class);
+    private final DeviceService deviceService = mock(DeviceService.class);
 
     private SocialSignupService socialSignupService;
 
@@ -59,7 +64,8 @@ class SocialSignupServiceTest {
                 userRepository,
                 refreshTokenService,
                 jwtUtil,
-                inactivitySettingService
+                inactivitySettingService,
+                deviceService
         );
 
         given(jwtUtil.createAccessToken(any(User.class))).willReturn(ACCESS_TOKEN);
@@ -88,7 +94,8 @@ class SocialSignupServiceTest {
         assertThat(response.isNewUser()).isFalse();
         verify(userRepository).saveAndFlush(any(User.class));
         verify(socialAccountRepository).saveAndFlush(any(SocialAccount.class));
-        verify(refreshTokenService).saveOrRotate(any(User.class), any(), any());
+        verify(deviceService, never()).registerToken(any(User.class), any(), any());
+        verify(refreshTokenService).saveOrRotate(any(User.class), isNull(), eq(REFRESH_TOKEN));
     }
 
     @Test
@@ -106,6 +113,23 @@ class SocialSignupServiceTest {
         assertThat(response.isNewUser()).isFalse();
         verify(userRepository).saveAndFlush(any(User.class));
         verify(socialAccountRepository).saveAndFlush(any(SocialAccount.class));
+        verify(refreshTokenService).saveOrRotate(any(User.class), isNull(), eq(REFRESH_TOKEN));
+    }
+
+    @Test
+    void googleSocialSignupRegistersDeviceAndBindsRefreshTokenWhenDeviceInfoProvided() {
+        given(firebaseIdTokenVerifier.verify(SOCIAL_TOKEN))
+                .willReturn(new VerifiedFirebaseUser(GOOGLE_PROVIDER_ID, EMAIL, "구글사용자"));
+        given(socialAccountRepository.existsByProviderAndProviderId(LoginProvider.GOOGLE, GOOGLE_PROVIDER_ID))
+                .willReturn(false);
+
+        SocialSignupResponse response =
+                socialSignupService.signup(createRequest(LoginProvider.GOOGLE, FCM_TOKEN, DEVICE_IDENTIFIER));
+
+        assertThat(response.getAccessToken()).isEqualTo(ACCESS_TOKEN);
+        assertThat(response.getRefreshToken()).isEqualTo(REFRESH_TOKEN);
+        verify(deviceService).registerToken(any(User.class), eq(FCM_TOKEN), eq(DEVICE_IDENTIFIER));
+        verify(refreshTokenService).saveOrRotate(any(User.class), eq(DEVICE_IDENTIFIER), eq(REFRESH_TOKEN));
     }
 
     @Test
@@ -206,12 +230,18 @@ class SocialSignupServiceTest {
     }
 
     private SocialSignupRequest createRequest(LoginProvider provider) {
+        return createRequest(provider, null, null);
+    }
+
+    private SocialSignupRequest createRequest(LoginProvider provider, String fcmToken, String deviceIdentifier) {
         return createRequest(
                 provider,
                 LocalDate.now().minusYears(20),
                 true,
                 true,
-                true
+                true,
+                fcmToken,
+                deviceIdentifier
         );
     }
 
@@ -222,6 +252,18 @@ class SocialSignupServiceTest {
             boolean privacyPolicyAgreed,
             boolean ageOver14Agreed
     ) {
+        return createRequest(provider, birth, serviceTermsAgreed, privacyPolicyAgreed, ageOver14Agreed, null, null);
+    }
+
+    private SocialSignupRequest createRequest(
+            LoginProvider provider,
+            LocalDate birth,
+            boolean serviceTermsAgreed,
+            boolean privacyPolicyAgreed,
+            boolean ageOver14Agreed,
+            String fcmToken,
+            String deviceIdentifier
+    ) {
         SocialSignupRequest request = new SocialSignupRequest();
         ReflectionTestUtils.setField(request, "provider", provider);
         ReflectionTestUtils.setField(request, "socialToken", SOCIAL_TOKEN);
@@ -231,6 +273,8 @@ class SocialSignupServiceTest {
         ReflectionTestUtils.setField(request, "privacyPolicyAgreed", privacyPolicyAgreed);
         ReflectionTestUtils.setField(request, "ageOver14Agreed", ageOver14Agreed);
         ReflectionTestUtils.setField(request, "marketingAgreed", false);
+        ReflectionTestUtils.setField(request, "fcmToken", fcmToken);
+        ReflectionTestUtils.setField(request, "deviceIdentifier", deviceIdentifier);
         return request;
     }
 
