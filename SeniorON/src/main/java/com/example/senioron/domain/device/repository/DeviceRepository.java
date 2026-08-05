@@ -33,10 +33,8 @@ public interface DeviceRepository
 
     List<Device> findAllByUser(User user);
 
-    Optional<Device> findByUserAndDeviceIdentifier(
-            User user,
-            String deviceIdentifier
-    );
+    // device_identifier는 기기 기준 유니크 키라 계정과 무관하게 기기 하나당 row가 하나만 존재한다.
+    Optional<Device> findByDeviceIdentifier(String deviceIdentifier);
     List<Device> findAllByUser_FamilyAndUser_Role(
             Family family,
             Role role

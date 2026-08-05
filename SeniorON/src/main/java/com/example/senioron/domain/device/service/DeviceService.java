@@ -28,12 +28,14 @@ public class DeviceService {
             throw new BusinessException(ErrorCode.DEVICE_IDENTIFIER_REQUIRED);
         }
 
-        Device device = deviceRepository.findByUserAndDeviceIdentifier(user, deviceIdentifier)
+        Device device = deviceRepository.findByDeviceIdentifier(deviceIdentifier)
                 .orElseGet(() -> Device.builder()
                         .user(user)
                         .deviceIdentifier(deviceIdentifier)
                         .build());
 
+        // 같은 기기에서 다른 계정으로 로그인한 경우 소유자를 새 계정으로 교체한다.
+        device.reassignOwner(user);
         device.updateDeviceToken(deviceToken);
         device.updateDeviceStatus(
                 DeviceStatus.ONLINE,
@@ -42,6 +44,23 @@ public class DeviceService {
         );
 
         deviceRepository.save(device);
+    }
+
+    // 로그아웃 시 해당 기기의 FCM 토큰을 비활성화한다. 이미 다른 계정으로 소유자가 넘어간
+    // 기기라면(재로그인 등으로 로그아웃보다 먼저 소유자가 바뀐 경우) 건드리지 않는다.
+    @Transactional
+    public void clearToken(User user, String deviceIdentifier) {
+        if (deviceIdentifier == null || deviceIdentifier.isBlank()) {
+            return;
+        }
+
+        deviceRepository.findByDeviceIdentifier(deviceIdentifier)
+                .filter(device -> device.getUser() != null
+                        && device.getUser().getUsersId().equals(user.getUsersId()))
+                .ifPresent(device -> {
+                    device.updateDeviceToken(null);
+                    device.disconnect();
+                });
     }
 
     @Transactional
@@ -77,8 +96,7 @@ public class DeviceService {
         }
 
         Device device = deviceRepository
-                .findByUserAndDeviceIdentifier(
-                        user,
+                .findByDeviceIdentifier(
                         request.deviceIdentifier()
                 )
                 .orElseGet(() ->
@@ -90,6 +108,7 @@ public class DeviceService {
                                 .build()
                 );
 
+        device.reassignOwner(user);
         device.updateDeviceInfo(
                 request.deviceName(),
                 DeviceStatus.ONLINE,

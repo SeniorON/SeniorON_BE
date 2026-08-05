@@ -208,6 +208,12 @@ public class UserService {
                 .build();
     }
 
+    // 로그아웃 서비스: 같은 기기에서 다른 계정이 로그인해도 이전 계정으로 알림이 가지 않도록
+    // 로그아웃하는 기기의 FCM 토큰을 비활성화한다.
+    public void logout(User user, String deviceIdentifier) {
+        deviceService.clearToken(user, deviceIdentifier);
+    }
+
     public TokenRefreshResponse refreshToken(TokenRefreshRequest request) {
         String refreshToken = request.getRefreshToken();
 
