@@ -7,6 +7,7 @@ import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.example.senioron.domain.device.dto.request.DeviceStatusUpdateRequest;
@@ -28,13 +29,33 @@ public class DeviceService {
             throw new BusinessException(ErrorCode.DEVICE_IDENTIFIER_REQUIRED);
         }
 
-        Device device = deviceRepository.findByDeviceIdentifier(deviceIdentifier)
-                .orElseGet(() -> Device.builder()
-                        .user(user)
-                        .deviceIdentifier(deviceIdentifier)
-                        .build());
+        Optional<Device> existingDevice = deviceRepository.findByDeviceIdentifier(deviceIdentifier);
+        if (existingDevice.isPresent()) {
+            Device device = existingDevice.get();
+            applyToken(device, user, deviceToken);
+            deviceRepository.save(device);
+            return;
+        }
 
-        // 같은 기기에서 다른 계정으로 로그인한 경우 소유자를 새 계정으로 교체한다.
+        Device newDevice = Device.builder()
+                .user(user)
+                .deviceIdentifier(deviceIdentifier)
+                .build();
+        applyToken(newDevice, user, deviceToken);
+
+        try {
+            deviceRepository.saveAndFlush(newDevice);
+        } catch (DataIntegrityViolationException e) {
+            // 동시 요청으로 같은 기기가 먼저 등록된 경우, 그 row를 재조회해 갱신한다.
+            Device device = deviceRepository.findByDeviceIdentifier(deviceIdentifier)
+                    .orElseThrow(() -> e);
+            applyToken(device, user, deviceToken);
+            deviceRepository.save(device);
+        }
+    }
+
+    // 같은 기기에서 다른 계정으로 로그인한 경우 소유자를 새 계정으로 교체한다.
+    private void applyToken(Device device, User user, String deviceToken) {
         device.reassignOwner(user);
         device.updateDeviceToken(deviceToken);
         device.updateDeviceStatus(
@@ -42,25 +63,18 @@ public class DeviceService {
                 device.getBatteryLevel(),
                 LocalDateTime.now()
         );
-
-        deviceRepository.save(device);
     }
 
-    // 로그아웃 시 해당 기기의 FCM 토큰을 비활성화한다. 이미 다른 계정으로 소유자가 넘어간
-    // 기기라면(재로그인 등으로 로그아웃보다 먼저 소유자가 바뀐 경우) 건드리지 않는다.
+    // 로그아웃 시 해당 기기의 FCM 토큰을 비활성화한다. 소유자 확인과 토큰 제거를
+    // 하나의 UPDATE로 묶어, 로그아웃 처리 중 다른 계정이 재로그인해 소유자가
+    // 바뀌어도 그 계정의 토큰을 덮어쓰지 않도록 한다.
     @Transactional
     public void clearToken(User user, String deviceIdentifier) {
         if (deviceIdentifier == null || deviceIdentifier.isBlank()) {
             return;
         }
 
-        deviceRepository.findByDeviceIdentifier(deviceIdentifier)
-                .filter(device -> device.getUser() != null
-                        && device.getUser().getUsersId().equals(user.getUsersId()))
-                .ifPresent(device -> {
-                    device.updateDeviceToken(null);
-                    device.disconnect();
-                });
+        deviceRepository.clearTokenIfOwnedBy(deviceIdentifier, user.getUsersId(), DeviceStatus.DISCONNECTED);
     }
 
     @Transactional
