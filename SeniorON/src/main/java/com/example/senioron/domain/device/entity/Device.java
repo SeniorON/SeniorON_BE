@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(
-        uniqueConstraints = @UniqueConstraint(columnNames = {"users_id", "device_identifier"}),
+        uniqueConstraints = @UniqueConstraint(columnNames = {"device_identifier"}),
         indexes = {
                 @Index(name = "idx_device_users_id", columnList = "users_id")
         }
@@ -54,6 +54,11 @@ public class Device extends BaseEntity {
 
     public void updateDeviceToken(String deviceToken) {
         this.deviceToken = deviceToken;
+    }
+
+    // 같은 기기(device_identifier)에 다른 계정이 로그인하면 소유자를 그 계정으로 교체한다.
+    public void reassignOwner(User user) {
+        this.user = user;
     }
 
     public void updateDeviceInfo(
