@@ -55,7 +55,7 @@ public class NotificationService {
     // SOS는 미발송 자체가 사고이므로 별도로 관리
     private static final String SOS_DISPATCH_METRIC = "sos_dispatch_total";
     private static final String TAG_RESULT = "result";
-    private static final int SOS_DISPATCH_POOL_SIZE = 4;
+    private static final int SOS_DISPATCH_POOL_SIZE = 8;
     private static final int GENERAL_DISPATCH_POOL_SIZE = 8;
 
     private final NotificationRepository notificationRepository;
