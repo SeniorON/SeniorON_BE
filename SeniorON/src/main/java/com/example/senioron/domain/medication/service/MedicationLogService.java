@@ -10,9 +10,10 @@ import com.example.senioron.domain.medication.entity.MedicationRepeatType;
 import com.example.senioron.domain.medication.event.MedicationCheckedEvent;
 import com.example.senioron.domain.medication.repository.MedicationLogRepository;
 import com.example.senioron.domain.medication.repository.MedicationRepository;
+import com.example.senioron.domain.medication.support.MedicationFamilyAuthorization;
+import com.example.senioron.domain.medication.support.MedicationWeekdayUtils;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
-import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import java.time.DateTimeException;
@@ -23,12 +24,10 @@ import java.time.LocalTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -56,8 +55,8 @@ public class MedicationLogService {
 
     private final MedicationLogRepository medicationLogRepository;
     private final MedicationRepository medicationRepository;
-    private final UserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final MedicationFamilyAuthorization medicationFamilyAuthorization;
 
     public List<MedicationScheduleResponse>
     getOwnDailyMedicationSchedules(
@@ -65,9 +64,10 @@ public class MedicationLogService {
             LocalDate date
     ) {
         User parentUser =
-                getUserOrThrow(
-                        requesterUserId
-                );
+                medicationFamilyAuthorization
+                        .getUserOrThrow(
+                                requesterUserId
+                        );
 
         if (parentUser.getRole() != Role.PARENT) {
             throw new BusinessException(
@@ -88,19 +88,22 @@ public class MedicationLogService {
             LocalDate date
     ) {
         User requester =
-                getUserOrThrow(
-                        requesterUserId
-                );
+                medicationFamilyAuthorization
+                        .getUserOrThrow(
+                                requesterUserId
+                        );
 
-        validateChild(
-                requester
-        );
+        medicationFamilyAuthorization
+                .validateChild(
+                        requester
+                );
 
         User parentUser =
-                getSameFamilyParentOrThrow(
-                        requester,
-                        parentUserId
-                );
+                medicationFamilyAuthorization
+                        .getSameFamilyParentOrThrow(
+                                requester,
+                                parentUserId
+                        );
 
         return getDailyMedicationSchedules(
                 parentUser,
@@ -117,19 +120,22 @@ public class MedicationLogService {
             Integer month
     ) {
         User requester =
-                getUserOrThrow(
-                        requesterUserId
-                );
+                medicationFamilyAuthorization
+                        .getUserOrThrow(
+                                requesterUserId
+                        );
 
-        validateChild(
-                requester
-        );
+        medicationFamilyAuthorization
+                .validateChild(
+                        requester
+                );
 
         User parentUser =
-                getSameFamilyParentOrThrow(
-                        requester,
-                        parentUserId
-                );
+                medicationFamilyAuthorization
+                        .getSameFamilyParentOrThrow(
+                                requester,
+                                parentUserId
+                        );
 
         return getMonthlyMedicationSchedules(
                 parentUser,
@@ -229,13 +235,20 @@ public class MedicationLogService {
                                 monthEndExclusiveDate
                         );
 
+        List<Medication> schedulableMedications =
+                medications.stream()
+                        .filter(
+                                this::hasScheduleAnchorOrWarn
+                        )
+                        .toList();
+
         List<LocalDate> scheduledDates =
                 monthStartDate
                         .datesUntil(
                                 monthEndExclusiveDate
                         )
                         .filter(date ->
-                                medications.stream()
+                                schedulableMedications.stream()
                                         .anyMatch(medication ->
                                                 isScheduledForDate(
                                                         medication,
@@ -290,9 +303,10 @@ public class MedicationLogService {
             Long requesterUserId
     ) {
         User parentUser =
-                getUserOrThrow(
-                        requesterUserId
-                );
+                medicationFamilyAuthorization
+                        .getUserOrThrow(
+                                requesterUserId
+                        );
 
         if (parentUser.getRole() != Role.PARENT) {
             throw new BusinessException(
@@ -367,9 +381,10 @@ public class MedicationLogService {
             Long requesterUserId
     ) {
         User parentUser =
-                getUserOrThrow(
-                        requesterUserId
-                );
+                medicationFamilyAuthorization
+                        .getUserOrThrow(
+                                requesterUserId
+                        );
 
         if (parentUser.getRole() != Role.PARENT) {
             throw new BusinessException(
@@ -489,9 +504,10 @@ public class MedicationLogService {
             Long parentUserId
     ) {
         User parentUser =
-                getUserOrThrow(
-                        parentUserId
-                );
+                medicationFamilyAuthorization
+                        .getUserOrThrow(
+                                parentUserId
+                        );
 
         if (parentUser.getRole() != Role.PARENT) {
             throw new BusinessException(
@@ -552,9 +568,10 @@ public class MedicationLogService {
             Long parentUserId
     ) {
         User parentUser =
-                getUserOrThrow(
-                        parentUserId
-                );
+                medicationFamilyAuthorization
+                        .getUserOrThrow(
+                                parentUserId
+                        );
 
         if (parentUser.getRole() != Role.PARENT) {
             throw new BusinessException(
@@ -628,6 +645,9 @@ public class MedicationLogService {
                         .map(
                                 Medication::getUser
                         )
+                        .filter(
+                                Objects::nonNull
+                        )
                         .filter(user ->
                                 user.getRole() == Role.PARENT
                         )
@@ -687,6 +707,13 @@ public class MedicationLogService {
                                 date
                         );
 
+        List<Medication> schedulableMedications =
+                medications.stream()
+                        .filter(
+                                this::hasScheduleAnchorOrWarn
+                        )
+                        .toList();
+
         List<MedicationLog> existingMedicationLogs =
                 medicationLogRepository
                         .findByUserUsersIdAndPlannedDateOrderByPlannedTimeAsc(
@@ -709,7 +736,7 @@ public class MedicationLogService {
                         );
 
         List<MedicationLog> newMedicationLogs =
-                medications.stream()
+                schedulableMedications.stream()
                         .filter(medication ->
                                 isScheduledForDate(
                                         medication,
@@ -757,6 +784,30 @@ public class MedicationLogService {
                     newMedicationLogs.size()
             );
         }
+    }
+
+    private boolean hasScheduleAnchorOrWarn(
+            Medication medication
+    ) {
+        if (medication.getScheduleStartDate() != null
+                || medication.getEffectiveFrom() != null) {
+            return true;
+        }
+
+        Long userId =
+                medication.getUser() == null
+                        ? null
+                        : medication.getUser()
+                        .getUsersId();
+
+        log.warn(
+                "복약 스케줄 기준일 누락으로 로그 생성을 건너뜁니다. medicationId: {}, medicationGroupId: {}, userId: {}",
+                medication.getMedication_id(),
+                medication.getMedicationGroupId(),
+                userId
+        );
+
+        return false;
     }
 
     private List<MedicationLog> deduplicateMedicationLogs(
@@ -916,6 +967,14 @@ public class MedicationLogService {
                         medication
                 );
 
+        if (scheduleStartDate == null) {
+            hasScheduleAnchorOrWarn(
+                    medication
+            );
+
+            return false;
+        }
+
         if (date.isBefore(
                 scheduleStartDate
         )) {
@@ -939,10 +998,11 @@ public class MedicationLogService {
                         : medication.getRepeatInterval();
 
         if (repeatType == null) {
-            return isSelectedWeekday(
-                    medication,
-                    date
-            );
+            return MedicationWeekdayUtils
+                    .isSelectedWeekday(
+                            medication.getMedicineDays(),
+                            date
+                    );
         }
 
         return switch (repeatType) {
@@ -982,9 +1042,7 @@ public class MedicationLogService {
                     .toLocalDate();
         }
 
-        throw new BusinessException(
-                ErrorCode.BAD_REQUEST
-        );
+        return null;
     }
 
     private boolean isDailyScheduleDate(
@@ -1008,10 +1066,11 @@ public class MedicationLogService {
             LocalDate targetDate,
             int repeatInterval
     ) {
-        if (!isSelectedWeekday(
-                medication,
-                targetDate
-        )) {
+        if (!MedicationWeekdayUtils
+                .isSelectedWeekday(
+                        medication.getMedicineDays(),
+                        targetDate
+                )) {
             return false;
         }
 
@@ -1069,126 +1128,5 @@ public class MedicationLogService {
 
         return targetDate.getDayOfMonth()
                 == scheduledDayOfMonth;
-    }
-
-    private boolean isSelectedWeekday(
-            Medication medication,
-            LocalDate date
-    ) {
-        if (medication.getMedicineDays() == null
-                || medication.getMedicineDays()
-                .isBlank()) {
-            return false;
-        }
-
-        String targetDay =
-                normalizeDay(
-                        date.getDayOfWeek()
-                                .name()
-                );
-
-        return Arrays.stream(
-                        medication.getMedicineDays()
-                                .split(",")
-                )
-                .map(
-                        String::trim
-                )
-                .map(day ->
-                        day.toUpperCase(
-                                Locale.ROOT
-                        )
-                )
-                .map(
-                        this::normalizeDay
-                )
-                .anyMatch(day ->
-                        Objects.equals(
-                                day,
-                                targetDay
-                        )
-                );
-    }
-
-    private void validateChild(
-            User requester
-    ) {
-        if (requester.getRole() != Role.CHILD) {
-            throw new BusinessException(
-                    ErrorCode.FORBIDDEN
-            );
-        }
-
-        if (requester.getFamily() == null) {
-            throw new BusinessException(
-                    ErrorCode.FAMILY_NOT_FOUND
-            );
-        }
-    }
-
-    private User getSameFamilyParentOrThrow(
-            User requester,
-            Long parentUserId
-    ) {
-        User parentUser =
-                getUserOrThrow(
-                        parentUserId
-                );
-
-        if (parentUser.getRole() != Role.PARENT) {
-            throw new BusinessException(
-                    ErrorCode.FAMILY_MEMBER_NOT_FOUND
-            );
-        }
-
-        boolean belongsToSameFamily =
-                parentUser.getFamily() != null
-                        && Objects.equals(
-                        requester.getFamily()
-                                .getFamilyId(),
-                        parentUser.getFamily()
-                                .getFamilyId()
-                );
-
-        if (!belongsToSameFamily) {
-            throw new BusinessException(
-                    ErrorCode.FAMILY_MEMBER_NOT_FOUND
-            );
-        }
-
-        return parentUser;
-    }
-
-    private User getUserOrThrow(
-            Long userId
-    ) {
-        return userRepository
-                .findById(
-                        userId
-                )
-                .orElseThrow(() ->
-                        new BusinessException(
-                                ErrorCode.USER_NOT_FOUND
-                        )
-                );
-    }
-
-    private String normalizeDay(
-            String day
-    ) {
-        if (day == null) {
-            return null;
-        }
-
-        return switch (day) {
-            case "SUN", "SUNDAY", "일" -> "SUN";
-            case "MON", "MONDAY", "월" -> "MON";
-            case "TUE", "TUESDAY", "화" -> "TUE";
-            case "WED", "WEDNESDAY", "수" -> "WED";
-            case "THU", "THURSDAY", "목" -> "THU";
-            case "FRI", "FRIDAY", "금" -> "FRI";
-            case "SAT", "SATURDAY", "토" -> "SAT";
-            default -> null;
-        };
     }
 }

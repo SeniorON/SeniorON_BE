@@ -7,114 +7,116 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import java.util.List;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Getter
 @NoArgsConstructor
-@Schema(description = "약 복용 정보 등록 요청")
+@AllArgsConstructor
+@Schema(description = "복약 등록 요청")
 public class MedicationCreateRequest {
 
-    @NotBlank(message = "약 이름은 필수입니다.")
+    @NotBlank
     @Schema(
             description = "약 이름",
-            example = "아스피린"
+            example = "혈압약"
     )
     private String medicineName;
 
     @Schema(
-            description = "성분명 (선택 입력)",
-            example = "아세틸살리실산 500mg"
+            description = "약 성분명",
+            example = "암로디핀 5mg",
+            nullable = true
     )
     private String ingredientName;
 
-    @NotEmpty(message = "복용 시간은 최소 하나 이상 지정해야 합니다.")
+    @NotEmpty
     @Schema(
-            description = "복용 시간 목록 (24시간 형식: HH:mm)",
-            example = "[\"08:30\", \"19:00\"]"
+            description = "복용 시간 목록, HH:mm 형식",
+            example = "[\"08:00\", \"20:00\"]"
     )
     private List<
-            @NotNull(message = "복용 시간 값은 필수입니다.")
+            @NotBlank
             @Pattern(
-                    regexp = "^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$",
-                    message = "복용 시간은 올바른 24시간 형식(HH:mm)이어야 합니다. (예: 08:30)"
+                    regexp = "^([01]\\d|2[0-3]):[0-5]\\d$"
             )
                     String
             > medicineTimes;
 
-    @NotBlank(message = "복용 시작일은 필수입니다.")
+    @NotBlank
     @Pattern(
-            regexp = "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$",
-            message = "복용 시작일은 yyyy-MM-dd 형식이어야 합니다. (예: 2026-08-04)"
+            regexp = "^\\d{4}-\\d{2}-\\d{2}$"
     )
     @Schema(
-            description = "복용 시작일 (yyyy-MM-dd)",
-            example = "2026-08-04"
+            description = "복용 시작일, yyyy-MM-dd 형식",
+            example = "2026-08-05"
     )
     private String startDate;
 
-    @NotBlank(message = "반복 유형은 필수입니다.")
+    @NotBlank
     @Pattern(
-            regexp = "^(DAILY|WEEKLY|MONTHLY)$",
-            message = "반복 유형은 DAILY, WEEKLY, MONTHLY 중 하나여야 합니다."
+            regexp = "^(DAILY|WEEKLY|MONTHLY)$"
     )
     @Schema(
             description = "반복 유형",
-            example = "WEEKLY",
-            allowableValues = {"DAILY", "WEEKLY", "MONTHLY"}
+            allowableValues = {
+                    "DAILY",
+                    "WEEKLY",
+                    "MONTHLY"
+            },
+            example = "WEEKLY"
     )
     private String repeatType;
 
-    @NotNull(message = "반복 주기는 필수입니다.")
-    @Min(value = 1, message = "반복 주기는 1 이상이어야 합니다.")
+    @NotNull
+    @Min(1)
     @Schema(
-            description = "반복 간격. 예를 들어 WEEKLY이고 값이 2이면 2주마다 반복합니다.",
-            example = "2",
-            minimum = "1"
+            description = "반복 간격",
+            example = "2"
     )
     private Integer repeatInterval;
 
     @Schema(
-            description = "복용 요일 목록. WEEKLY 반복일 때 필수이며 DAILY, MONTHLY에서는 사용하지 않습니다.",
+            description = "주간 반복 요일 목록. WEEKLY일 때 필수",
             example = "[\"월\", \"수\", \"금\"]"
     )
     private List<
-            @NotBlank(message = "복용 요일 값은 비어 있을 수 없습니다.")
             @Pattern(
-                    regexp = "^[월화수목금토일]$",
-                    message = "요일은 '월', '화', '수', '목', '금', '토', '일' 중 하나여야 합니다."
+                    regexp = "^(월|화|수|목|금|토|일)$"
             )
                     String
             > medicineDays;
 
-    @NotBlank(message = "복용 종료 방식은 필수입니다.")
+    @NotBlank
     @Pattern(
-            regexp = "^(ONGOING|DURATION|END_DATE)$",
-            message = "복용 종료 방식은 ONGOING, DURATION, END_DATE 중 하나여야 합니다."
+            regexp = "^(ONGOING|DURATION|END_DATE)$"
     )
     @Schema(
-            description = "복용 종료 방식",
-            example = "DURATION",
-            allowableValues = {"ONGOING", "DURATION", "END_DATE"}
+            description = "복용 종료 조건",
+            allowableValues = {
+                    "ONGOING",
+                    "DURATION",
+                    "END_DATE"
+            },
+            example = "DURATION"
     )
     private String repeatEndType;
 
-    @Min(value = 1, message = "복용 기간은 1주 이상이어야 합니다.")
+    @Min(1)
     @Schema(
-            description = "복용 기간(주). repeatEndType이 DURATION일 때 필수입니다.",
+            description = "주 단위 복용 기간. repeatEndType이 DURATION일 때 필수이며 MONTHLY 반복에서는 사용할 수 없음",
             example = "4",
-            nullable = true,
-            minimum = "1"
+            nullable = true
     )
     private Integer durationWeeks;
 
     @Pattern(
-            regexp = "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$",
-            message = "복용 종료일은 yyyy-MM-dd 형식이어야 합니다. (예: 2026-08-30)"
+            regexp = "^\\d{4}-\\d{2}-\\d{2}$"
     )
     @Schema(
-            description = "복용 종료일. repeatEndType이 END_DATE일 때 필수입니다.",
-            example = "2026-08-30",
+            description = "복용 종료일. repeatEndType이 END_DATE일 때 필수, yyyy-MM-dd 형식",
+            example = "2026-09-01",
             nullable = true
     )
     private String endDate;
