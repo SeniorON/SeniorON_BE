@@ -23,7 +23,7 @@ public class GoogleSocialAccountIssuer {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Result findOrCreate(String providerId, String email, String name) {
         return socialAccountRepository.findByProviderAndProviderId(LoginProvider.GOOGLE, providerId)
-                .map(socialAccount -> new Result(initializeUser(socialAccount), false))
+                .map(socialAccount -> new Result(validateActive(initializeUser(socialAccount)), false))
                 .orElseGet(() -> new Result(create(providerId, email, name), true));
     }
 
@@ -33,7 +33,7 @@ public class GoogleSocialAccountIssuer {
                 socialAccountRepository.findByProviderAndProviderId(LoginProvider.GOOGLE, providerId)
                         .orElseThrow(() -> new BusinessException(ErrorCode.GOOGLE_LOGIN_CONFLICT));
 
-        return new Result(initializeUser(socialAccount), false);
+        return new Result(validateActive(initializeUser(socialAccount)), false);
     }
 
     private SocialAccount create(String providerId, String email, String name) {
@@ -56,6 +56,14 @@ public class GoogleSocialAccountIssuer {
 
     private SocialAccount initializeUser(SocialAccount socialAccount) {
         socialAccount.getUser().getUsersId();
+        return socialAccount;
+    }
+
+    private SocialAccount validateActive(SocialAccount socialAccount) {
+        if (socialAccount.getUser().getStatus() == UserStatus.WITHDRAWN) {
+            throw new BusinessException(ErrorCode.WITHDRAWN_USER);
+        }
+
         return socialAccount;
     }
 

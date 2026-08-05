@@ -8,7 +8,10 @@ import com.example.senioron.domain.socialaccount.entity.SocialAccount;
 import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.entity.UserStatus;
 import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.global.apiPayload.code.ErrorCode;
+import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.domain.user.service.RefreshTokenService;
 import com.example.senioron.global.jwt.JwtUtil;
 import lombok.RequiredArgsConstructor;
@@ -69,6 +72,9 @@ public class KakaoLoginService {
         // 기존 카카오 회원인 경우 JWT 발급 후 로그인
         if (existingSocialAccount.isPresent()) {
             User user = existingSocialAccount.get().getUser();
+            if (user.getStatus() == UserStatus.WITHDRAWN) {
+                throw new BusinessException(ErrorCode.WITHDRAWN_USER);
+            }
 
             String accessToken = jwtUtil.createAccessToken(user);
             String refreshToken = jwtUtil.createRefreshToken(user);

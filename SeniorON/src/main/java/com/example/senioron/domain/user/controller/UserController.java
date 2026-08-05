@@ -6,6 +6,7 @@ import com.example.senioron.domain.user.dto.request.TokenRefreshRequest;
 import com.example.senioron.domain.user.dto.request.UserLoginRequest;
 import com.example.senioron.domain.user.dto.request.UserRoleUpdateRequest;
 import com.example.senioron.domain.user.dto.request.UserSignUpRequest;
+import com.example.senioron.domain.user.dto.request.UserWithdrawalRequest;
 import com.example.senioron.domain.user.dto.response.*;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.service.UserService;
@@ -64,6 +65,16 @@ public class UserController {
     @PostMapping("/token/refresh")
     public Response<TokenRefreshResponse> refreshToken(@Valid @RequestBody TokenRefreshRequest request) {
         return Response.ok(userService.refreshToken(request));
+    }
+
+    @Operation(summary = "회원 탈퇴", description = "현재 로그인한 사용자를 탈퇴 처리합니다. 확인 문구는 '회원 탈퇴'입니다.")
+    @DeleteMapping("/me")
+    public Response<Void> withdraw(
+            @AuthenticationPrincipal User user,
+            @Valid @RequestBody UserWithdrawalRequest request
+    ) {
+        userService.withdraw(user, request);
+        return Response.ok();
     }
 
     @Operation(summary = "역할 선택/변경", description = "현재 로그인한 사용자의 역할을 선택하거나 변경합니다.")

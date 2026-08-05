@@ -37,6 +37,9 @@ public interface DeviceRepository
             User user,
             String deviceIdentifier
     );
+
+    void deleteAllByUser(User user);
+
     List<Device> findAllByUser_FamilyAndUser_Role(
             Family family,
             Role role

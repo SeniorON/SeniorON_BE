@@ -43,6 +43,9 @@ public enum ErrorCode implements BaseCode {
     INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "USER401_2", "Refresh Token이 유효하지 않습니다."),
     EXPIRED_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "USER401_3", "Refresh Token이 만료되었습니다."),
     REFRESH_TOKEN_DEVICE_MISMATCH(HttpStatus.UNAUTHORIZED, "USER401_4", "Refresh Token의 기기 정보가 일치하지 않습니다."),
+    PRIMARY_USER_CANNOT_WITHDRAW(HttpStatus.FORBIDDEN, "USER403_1", "주 자녀는 탈퇴할 수 없습니다. 다른 사람에게 권한을 양도한 후 탈퇴해주세요."),
+    INVALID_WITHDRAWAL_CONFIRMATION(HttpStatus.BAD_REQUEST, "USER400_13", "회원 탈퇴 확인 문구가 일치하지 않습니다."),
+    WITHDRAWN_USER(HttpStatus.UNAUTHORIZED, "USER401_5", "탈퇴한 회원입니다."),
 
     // Email Error
     EMAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "EMAIL500", "이메일 발송에 실패했습니다."),

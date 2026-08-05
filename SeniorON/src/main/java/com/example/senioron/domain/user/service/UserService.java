@@ -6,11 +6,16 @@ import com.example.senioron.domain.user.dto.request.TokenRefreshRequest;
 import com.example.senioron.domain.user.dto.request.UserLoginRequest;
 import com.example.senioron.domain.user.dto.request.UserRoleUpdateRequest;
 import com.example.senioron.domain.user.dto.request.UserSignUpRequest;
+import com.example.senioron.domain.user.dto.request.UserWithdrawalRequest;
 import com.example.senioron.domain.user.dto.response.*;
+import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.user.entity.RefreshToken;
 import com.example.senioron.domain.user.entity.SignupEmailVerificationCode;
 import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.inactivity.service.InactivitySettingService;
+import com.example.senioron.domain.senior.repository.UserSeniorRepository;
+import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
+import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.entity.UserStatus;
 import com.example.senioron.domain.user.event.SignupEmailVerificationCodeSendEvent;
@@ -25,6 +30,7 @@ import io.jsonwebtoken.JwtException;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Objects;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -39,13 +45,17 @@ public class UserService {
 
     private static final int VERIFICATION_CODE_BOUND = 1_000_000;
     private static final int VERIFICATION_CODE_EXPIRATION_MINUTES = 5;
+    public static final String WITHDRAWAL_CONFIRMATION = "회원 탈퇴";
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final SignupEmailVerificationCodeRepository signupEmailVerificationCodeRepository;
     private final SignupEmailVerificationCodeIssuer signupEmailVerificationCodeIssuer;
+    private final SocialAccountRepository socialAccountRepository;
     private final RefreshTokenService refreshTokenService;
+    private final DeviceRepository deviceRepository;
+    private final UserSeniorRepository userSeniorRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final InactivitySettingService inactivitySettingService;
@@ -186,6 +196,8 @@ public class UserService {
         User user = userRepository.findByLoginId(request.getLoginId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
+        validateActiveUser(user);
+
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             throw new BusinessException(ErrorCode.INVALID_PASSWORD);
         }
@@ -234,6 +246,8 @@ public class UserService {
         }
 
         User user = savedRefreshToken.getUser();
+        validateActiveUser(user);
+
         String newAccessToken = jwtUtil.createAccessToken(user);
         String newRefreshToken = jwtUtil.createRefreshToken(user);
         savedRefreshToken.rotate(refreshTokenService.hashToken(newRefreshToken), jwtUtil.getRefreshTokenExpiresAt());
@@ -242,6 +256,34 @@ public class UserService {
                 .accessToken(newAccessToken)
                 .refreshToken(newRefreshToken)
                 .build();
+    }
+
+    public void withdraw(User principal, UserWithdrawalRequest request) {
+        if (principal == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
+        }
+
+        User user = userRepository.findByIdForUpdate(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        if (user.getStatus() == UserStatus.WITHDRAWN) {
+            throw new BusinessException(ErrorCode.WITHDRAWN_USER);
+        }
+
+        if (!WITHDRAWAL_CONFIRMATION.equals(request.getConfirmation())) {
+            throw new BusinessException(ErrorCode.INVALID_WITHDRAWAL_CONFIRMATION);
+        }
+
+        if (user.getManagerType() == ManagerType.PRIMARY) {
+            throw new BusinessException(ErrorCode.PRIMARY_USER_CANNOT_WITHDRAW);
+        }
+
+        refreshTokenRepository.deleteAllByUser(user);
+        deviceRepository.deleteAllByUser(user);
+        socialAccountRepository.deleteAllByUser(user);
+        userSeniorRepository.deleteAllByUser(user);
+
+        anonymizeAndWithdraw(user);
     }
 
     // 계정의 역할 수정 서비스
@@ -273,6 +315,24 @@ public class UserService {
 
     private String generateVerificationCode() {
         return String.format("%06d", SECURE_RANDOM.nextInt(VERIFICATION_CODE_BOUND));
+    }
+
+    private void validateActiveUser(User user) {
+        if (user.getStatus() == UserStatus.WITHDRAWN) {
+            throw new BusinessException(ErrorCode.WITHDRAWN_USER);
+        }
+    }
+
+    private void anonymizeAndWithdraw(User user) {
+        String suffix = user.getUsersId() + "_" + UUID.randomUUID().toString().replace("-", "");
+        String anonymizedPassword = passwordEncoder.encode("withdrawn_" + suffix);
+
+        user.withdraw(
+                "withdrawn_" + suffix,
+                "withdrawn_" + suffix + "@deleted.local",
+                anonymizedPassword,
+                LocalDateTime.now()
+        );
     }
 
     private Long getRefreshTokenUsersId(String refreshToken) {

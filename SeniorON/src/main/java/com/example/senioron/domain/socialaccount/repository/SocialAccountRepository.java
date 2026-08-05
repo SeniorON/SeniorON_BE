@@ -24,4 +24,6 @@ public interface SocialAccountRepository
             LoginProvider provider,
             String providerId
     );
+
+    void deleteAllByUser(User user);
 }
