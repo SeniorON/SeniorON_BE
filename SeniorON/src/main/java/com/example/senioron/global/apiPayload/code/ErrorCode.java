@@ -115,6 +115,11 @@ public enum ErrorCode implements BaseCode {
     COMPANION_LLM_TIMEOUT(HttpStatus.GATEWAY_TIMEOUT, "COMPANION504_2", "대화 생성 요청 시간이 초과되었습니다."),
     COMPANION_LLM_EMPTY_RESPONSE(HttpStatus.BAD_GATEWAY, "COMPANION502_3", "대화 생성 결과가 비어 있습니다."),
     COMPANION_PROMPT_NOT_FOUND(HttpStatus.INTERNAL_SERVER_ERROR, "COMPANION500_2", "말벗 시스템 프롬프트를 불러오지 못했습니다."),
+    COMPANION_SAFETY_CHECK_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "COMPANION500_3", "안전 검사 중 오류가 발생했습니다."),
+    COMPANION_SAFETY_CLASSIFIER_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "COMPANION503_4", "안전 분류 서비스가 설정되지 않았습니다."),
+    COMPANION_SAFETY_CLASSIFIER_UNAVAILABLE(HttpStatus.BAD_GATEWAY, "COMPANION502_5", "안전 분류 서비스를 이용할 수 없습니다."),
+    COMPANION_SAFETY_CLASSIFIER_TIMEOUT(HttpStatus.GATEWAY_TIMEOUT, "COMPANION504_4", "안전 분류 요청 시간이 초과되었습니다."),
+    COMPANION_SAFETY_CLASSIFIER_INVALID_RESPONSE(HttpStatus.BAD_GATEWAY, "COMPANION502_6", "안전 분류 결과를 처리하지 못했습니다."),
 
     // Photo Error
     UNSUPPORTED_IMAGE_TYPE(HttpStatus.BAD_REQUEST,"IMAGE400_1", "JPG, PNG, WEBP 형식의 이미지만 업로드할 수 있습니다."),
