@@ -2,6 +2,7 @@ package com.example.senioron.domain.medication.repository;
 
 import com.example.senioron.domain.medication.entity.Medication;
 import com.example.senioron.domain.user.entity.User;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -31,6 +32,11 @@ public interface MedicationRepository
                     m.effectiveTo IS NULL
                     OR m.effectiveTo > :dayStart
               )
+              AND m.scheduleStartDate <= :targetDate
+              AND (
+                    m.scheduleEndDate IS NULL
+                    OR m.scheduleEndDate >= :targetDate
+              )
             ORDER BY m.medicineTime ASC
             """)
     List<Medication> findEffectiveMedicationsForDate(
@@ -41,7 +47,10 @@ public interface MedicationRepository
             LocalDateTime dayStart,
 
             @Param("dayEndExclusive")
-            LocalDateTime dayEndExclusive
+            LocalDateTime dayEndExclusive,
+
+            @Param("targetDate")
+            LocalDate targetDate
     );
 
     @Query("""
@@ -53,6 +62,11 @@ public interface MedicationRepository
                     m.effectiveTo IS NULL
                     OR m.effectiveTo > :monthStart
               )
+              AND m.scheduleStartDate < :monthEndDateExclusive
+              AND (
+                    m.scheduleEndDate IS NULL
+                    OR m.scheduleEndDate >= :monthStartDate
+              )
             ORDER BY m.medicineTime ASC
             """)
     List<Medication> findEffectiveMedicationsForMonth(
@@ -63,7 +77,13 @@ public interface MedicationRepository
             LocalDateTime monthStart,
 
             @Param("monthEndExclusive")
-            LocalDateTime monthEndExclusive
+            LocalDateTime monthEndExclusive,
+
+            @Param("monthStartDate")
+            LocalDate monthStartDate,
+
+            @Param("monthEndDateExclusive")
+            LocalDate monthEndDateExclusive
     );
 
     @Query("""
@@ -75,6 +95,11 @@ public interface MedicationRepository
                     m.effectiveTo IS NULL
                     OR m.effectiveTo > :dayStart
               )
+              AND m.scheduleStartDate <= :targetDate
+              AND (
+                    m.scheduleEndDate IS NULL
+                    OR m.scheduleEndDate >= :targetDate
+              )
             ORDER BY u.usersId ASC,
                      m.medicineTime ASC
             """)
@@ -83,6 +108,9 @@ public interface MedicationRepository
             LocalDateTime dayStart,
 
             @Param("dayEndExclusive")
-            LocalDateTime dayEndExclusive
+            LocalDateTime dayEndExclusive,
+
+            @Param("targetDate")
+            LocalDate targetDate
     );
 }
