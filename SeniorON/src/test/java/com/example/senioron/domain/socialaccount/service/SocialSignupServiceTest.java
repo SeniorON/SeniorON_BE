@@ -34,6 +34,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.client.RestClientException;
 
 class SocialSignupServiceTest {
 
@@ -151,6 +152,52 @@ class SocialSignupServiceTest {
                 .extracting(BusinessException::getCode)
                 .isEqualTo(ErrorCode.SOCIAL_ACCOUNT_ALREADY_EXISTS);
 
+        verify(userRepository, never()).saveAndFlush(any(User.class));
+    }
+
+    @Test
+    void socialSignupFailsWhenGoogleTokenIsInvalid() {
+        given(firebaseIdTokenVerifier.verify(SOCIAL_TOKEN))
+                .willThrow(new BusinessException(ErrorCode.INVALID_FIREBASE_ID_TOKEN));
+
+        assertThatThrownBy(() -> socialSignupService.signup(createRequest(LoginProvider.GOOGLE)))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.INVALID_SOCIAL_TOKEN);
+
+        verify(socialAccountRepository, never()).existsByProviderAndProviderId(any(), any());
+        verify(userRepository, never()).saveAndFlush(any(User.class));
+    }
+
+    @Test
+    void socialSignupFailsWhenKakaoTokenIsInvalid() {
+        given(kakaoLoginService.getUserInfo(SOCIAL_TOKEN))
+                .willThrow(new RestClientException("kakao token rejected"));
+
+        assertThatThrownBy(() -> socialSignupService.signup(createRequest(LoginProvider.KAKAO)))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.INVALID_SOCIAL_TOKEN);
+
+        verify(socialAccountRepository, never()).existsByProviderAndProviderId(any(), any());
+        verify(userRepository, never()).saveAndFlush(any(User.class));
+    }
+
+    @Test
+    void socialSignupFailsWhenSocialTokenIsBlank() {
+        SocialSignupRequest request = createRequest(LoginProvider.KAKAO);
+        ReflectionTestUtils.setField(request, "socialToken", " ");
+
+        assertThatThrownBy(() -> socialSignupService.signup(request))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.INVALID_SOCIAL_TOKEN);
+
+        verify(kakaoLoginService, never()).getUserInfo(any());
+        verify(socialAccountRepository, never()).existsByProviderAndProviderId(any(), any());
         verify(userRepository, never()).saveAndFlush(any(User.class));
     }
 

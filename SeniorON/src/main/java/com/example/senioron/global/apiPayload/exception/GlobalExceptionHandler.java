@@ -129,8 +129,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     @ExceptionHandler({
-            ConstraintViolationException.class,
-            DataIntegrityViolationException.class,
             IllegalArgumentException.class,
             IncorrectResultSizeDataAccessException.class,
             InvalidDataAccessApiUsageException.class,
@@ -149,6 +147,25 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(Response.fail(ErrorCode.BAD_REQUEST));
+    }
+
+    @ExceptionHandler({
+            ConstraintViolationException.class,
+            DataIntegrityViolationException.class
+    })
+    public ResponseEntity<Object> handleDatabaseExceptions(Exception ex) {
+        log.error(
+                "[GLOBAL_EXCEPTION] DatabaseException exceptionClass={} message={} rootCauseClass={} rootCauseMessage={} sqlState={} constraintName={}",
+                ex.getClass().getName(),
+                sanitizeMessage(ex.getMessage()),
+                rootCauseClassName(ex),
+                rootCauseMessage(ex),
+                sqlState(ex),
+                constraintName(ex)
+        );
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Response.fail(ErrorCode.INTERNAL_SERVER_ERROR));
     }
 
     // ===================== 시스템 오류 (500) ======================

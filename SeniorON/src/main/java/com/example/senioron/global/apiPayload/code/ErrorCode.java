@@ -51,6 +51,7 @@ public enum ErrorCode implements BaseCode {
     REQUIRED_TERMS_NOT_AGREED(HttpStatus.BAD_REQUEST, "USER400_14", "필수 약관에 동의해야 합니다."),
     UNDER_AGE_14(HttpStatus.BAD_REQUEST, "USER400_15", "만 14세 이상만 가입할 수 있습니다."),
     INVALID_BIRTH_DATE(HttpStatus.BAD_REQUEST, "USER400_16", "생년월일이 올바르지 않습니다."),
+    INVALID_SOCIAL_TOKEN(HttpStatus.BAD_REQUEST, "USER400_17", "유효하지 않거나 만료된 소셜 토큰입니다."),
 
     // Email Error
     EMAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "EMAIL500", "이메일 발송에 실패했습니다."),

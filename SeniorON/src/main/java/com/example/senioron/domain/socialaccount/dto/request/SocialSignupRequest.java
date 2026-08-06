@@ -15,7 +15,6 @@ public class SocialSignupRequest {
     @NotNull
     private LoginProvider provider;
 
-    @NotBlank
     private String socialToken;
 
     @NotBlank

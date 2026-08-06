@@ -22,6 +22,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestClientException;
 
 @Slf4j
 @Service
@@ -179,19 +180,44 @@ public class SocialSignupService {
     }
 
     private SocialTokenInfo verifySocialToken(SocialSignupRequest request) {
+        if (isBlank(request.getSocialToken())) {
+            throw new BusinessException(ErrorCode.INVALID_SOCIAL_TOKEN);
+        }
+
         if (request.getProvider() == LoginProvider.KAKAO) {
-            KakaoUserInfo kakaoUserInfo = kakaoLoginService.getUserInfo(request.getSocialToken());
+            KakaoUserInfo kakaoUserInfo;
+            try {
+                kakaoUserInfo = kakaoLoginService.getUserInfo(request.getSocialToken());
+            } catch (RestClientException e) {
+                log.warn(
+                        "[TOKEN_VERIFY] failed provider={} tokenVerifySuccess=false exceptionClass={} rootCauseClass={}",
+                        request.getProvider(),
+                        e.getClass().getName(),
+                        rootCauseClassName(e)
+                );
+                throw new BusinessException(ErrorCode.INVALID_SOCIAL_TOKEN);
+            }
+
             if (kakaoUserInfo == null || kakaoUserInfo.getId() == null) {
-                throw new BusinessException(ErrorCode.BAD_REQUEST);
+                throw new BusinessException(ErrorCode.INVALID_SOCIAL_TOKEN);
             }
 
             return new SocialTokenInfo(String.valueOf(kakaoUserInfo.getId()), kakaoUserInfo.getEmail());
         }
 
         if (request.getProvider() == LoginProvider.GOOGLE) {
-            VerifiedFirebaseUser firebaseUser = firebaseIdTokenVerifier.verify(request.getSocialToken());
+            VerifiedFirebaseUser firebaseUser;
+            try {
+                firebaseUser = firebaseIdTokenVerifier.verify(request.getSocialToken());
+            } catch (BusinessException e) {
+                if (e.getCode() == ErrorCode.INVALID_FIREBASE_ID_TOKEN) {
+                    throw new BusinessException(ErrorCode.INVALID_SOCIAL_TOKEN);
+                }
+                throw e;
+            }
+
             if (firebaseUser == null || isBlank(firebaseUser.uid())) {
-                throw new BusinessException(ErrorCode.INVALID_FIREBASE_ID_TOKEN);
+                throw new BusinessException(ErrorCode.INVALID_SOCIAL_TOKEN);
             }
 
             return new SocialTokenInfo(firebaseUser.uid(), firebaseUser.email());
