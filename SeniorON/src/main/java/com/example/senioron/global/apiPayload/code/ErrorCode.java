@@ -57,6 +57,8 @@ public enum ErrorCode implements BaseCode {
 
     // Device Error
     SENIOR_DEVICE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "DEVICE_403", "시니어 기기 정보 갱신 권한이 없습니다."),
+    DEVICE_LOCATION_NOT_FOUND(HttpStatus.NOT_FOUND, "DEVICE_LOCATION_NOT_FOUND", "시니어의 위치 정보가 없습니다."),
+    SENIOR_HOME_LOCATION_NOT_FOUND(HttpStatus.NOT_FOUND, "SENIOR_HOME_LOCATION_NOT_FOUND", "등록된 집 위치 정보가 없습니다."),
 
     // Home Error
     HOME_BUTTON_NOT_FOUND(HttpStatus.NOT_FOUND, "HOME404", "버튼을 찾을 수 없습니다."),

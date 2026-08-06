@@ -3,6 +3,11 @@ package com.example.senioron.domain.device.service;
 import com.example.senioron.domain.device.entity.Device;
 import com.example.senioron.domain.device.entity.DeviceStatus;
 import com.example.senioron.domain.device.repository.DeviceRepository;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
+import com.example.senioron.domain.device.dto.request.DeviceLocationUpdateRequest;
+import com.example.senioron.domain.device.dto.response.DeviceLocationResponse;
+import com.example.senioron.domain.device.dto.response.HomeLocationResponse;
+import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
@@ -23,6 +28,9 @@ import java.util.Optional;
 public class DeviceService {
 
     private final DeviceRepository deviceRepository;
+
+    private final SeniorRepository seniorRepository;
+
     @Transactional
     public void registerToken(User user, String deviceToken, String deviceIdentifier) {
         if (deviceIdentifier == null || deviceIdentifier.isBlank()) {
@@ -235,4 +243,111 @@ public class DeviceService {
             );
         }
     }
+
+    @Transactional
+    public void updateLocation(
+            User currentUser,
+            DeviceLocationUpdateRequest request
+    ) {
+        if (currentUser.getRole() != Role.PARENT) {
+            throw new BusinessException(
+                    ErrorCode.SENIOR_DEVICE_ACCESS_DENIED
+            );
+        }
+
+        if (currentUser.getFamily() == null) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_NOT_CONNECTED
+            );
+        }
+
+        Device device = deviceRepository
+                .findByDeviceIdentifierAndUser(
+                        request.deviceIdentifier(),
+                        currentUser
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.DEVICE_NOT_FOUND
+                        )
+                );
+
+        if (device.getConnectionStatus()
+                == DeviceStatus.DISCONNECTED) {
+            throw new BusinessException(
+                    ErrorCode.DEVICE_NOT_CONNECTED
+            );
+        }
+
+        device.updateLocation(
+                request.latitude(),
+                request.longitude(),
+                LocalDateTime.now()
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public DeviceLocationResponse getLatestLocation(
+            User currentUser
+    ) {
+        if (currentUser.getRole() != Role.CHILD) {
+            throw new BusinessException(
+                    ErrorCode.SENIOR_DEVICE_ACCESS_DENIED
+            );
+        }
+
+        if (currentUser.getFamily() == null) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_NOT_CONNECTED
+            );
+        }
+
+        Device device = deviceRepository
+                .findFirstByUser_FamilyAndUser_RoleAndLastLocationUpdatedAtIsNotNullOrderByLastLocationUpdatedAtDescDeviceIdDesc(
+                        currentUser.getFamily(),
+                        Role.PARENT
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.DEVICE_LOCATION_NOT_FOUND
+                        )
+                );
+
+        return DeviceLocationResponse.from(device);
+    }
+
+    @Transactional(readOnly = true)
+    public HomeLocationResponse getHomeLocation(
+            User currentUser
+    ) {
+        if (currentUser.getRole() != Role.PARENT) {
+            throw new BusinessException(
+                    ErrorCode.SENIOR_DEVICE_ACCESS_DENIED
+            );
+        }
+
+        if (currentUser.getFamily() == null) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_NOT_CONNECTED
+            );
+        }
+
+        Senior senior = seniorRepository
+                .findFirstByFamily(currentUser.getFamily())
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.SENIOR_NOT_FOUND
+                        )
+                );
+
+        if (senior.getLatitude() == null
+                || senior.getLongitude() == null) {
+            throw new BusinessException(
+                    ErrorCode.SENIOR_HOME_LOCATION_NOT_FOUND
+            );
+        }
+
+        return HomeLocationResponse.from(senior);
+    }
+
 }

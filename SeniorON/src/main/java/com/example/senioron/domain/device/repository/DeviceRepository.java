@@ -58,4 +58,16 @@ public interface DeviceRepository
             Family family,
             Role role
     );
+
+    Optional<Device> findByDeviceIdentifierAndUser(
+            String deviceIdentifier,
+            User user
+    );
+
+    Optional<Device>
+    findFirstByUser_FamilyAndUser_RoleAndLastLocationUpdatedAtIsNotNullOrderByLastLocationUpdatedAtDescDeviceIdDesc(
+            Family family,
+            Role role
+    );
+
 }

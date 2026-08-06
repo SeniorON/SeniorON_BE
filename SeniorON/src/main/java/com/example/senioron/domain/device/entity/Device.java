@@ -42,6 +42,12 @@ public class Device extends BaseEntity {
 
     private LocalDateTime lastConnectedAt;
 
+    private Double latitude;
+
+    private Double longitude;
+
+    private LocalDateTime lastLocationUpdatedAt;
+
     public void updateDeviceStatus(
             DeviceStatus connectionStatus,
             Integer batteryLevel,
@@ -79,5 +85,15 @@ public class Device extends BaseEntity {
     public void reconnect() {
         this.connectionStatus = DeviceStatus.ONLINE;
         this.lastConnectedAt = LocalDateTime.now();
+    }
+
+    public void updateLocation(
+            Double latitude,
+            Double longitude,
+            LocalDateTime lastLocationUpdatedAt
+    ) {
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.lastLocationUpdatedAt = lastLocationUpdatedAt;
     }
 }
