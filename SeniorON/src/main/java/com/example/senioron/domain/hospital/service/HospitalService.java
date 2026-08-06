@@ -173,10 +173,7 @@ public class HospitalService {
                                         hospital.getScheduleTime()
                                 )
                                 .reminderType(
-                                        hospital.getReminderType() != null
-                                                ? hospital.getReminderType()
-                                                .name()
-                                                : null
+                                        hospital.getReminderType()
                                 )
                                 .build()
                 )
@@ -376,10 +373,7 @@ public class HospitalService {
                         hospital.getScheduleTime()
                 )
                 .reminderType(
-                        hospital.getReminderType() != null
-                                ? hospital.getReminderType()
-                                .name()
-                                : null
+                        hospital.getReminderType()
                 )
                 .build();
     }
