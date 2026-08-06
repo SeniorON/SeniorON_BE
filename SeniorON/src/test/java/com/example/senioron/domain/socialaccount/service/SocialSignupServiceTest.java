@@ -209,7 +209,23 @@ class SocialSignupServiceTest {
     void socialSignupStopsWhenUserCreationFails() {
         given(kakaoLoginService.getUserInfo(SOCIAL_TOKEN)).willReturn(createKakaoUserInfo());
         given(userRepository.saveAndFlush(any(User.class)))
-                .willThrow(new DataIntegrityViolationException("duplicate email"));
+                .willThrow(new DataIntegrityViolationException("user save failed"));
+
+        assertThatThrownBy(() -> socialSignupService.signup(createRequest(LoginProvider.KAKAO)))
+                .isInstanceOf(DataIntegrityViolationException.class);
+
+        verify(socialAccountRepository, never()).saveAndFlush(any(SocialAccount.class));
+        verify(inactivitySettingService, never()).createDefaultSetting(any(User.class));
+        verify(deviceService, never()).registerToken(any(User.class), any(), any());
+        verify(jwtUtil, never()).createAccessToken(any(User.class));
+        verify(jwtUtil, never()).createRefreshToken(any(User.class));
+        verify(refreshTokenService, never()).saveOrRotate(any(User.class), any(), any());
+    }
+
+    @Test
+    void socialSignupFailsWhenEmailAlreadyExists() {
+        given(kakaoLoginService.getUserInfo(SOCIAL_TOKEN)).willReturn(createKakaoUserInfo());
+        given(userRepository.existsByEmail(EMAIL)).willReturn(true);
 
         assertThatThrownBy(() -> socialSignupService.signup(createRequest(LoginProvider.KAKAO)))
                 .isInstanceOf(BusinessException.class)
@@ -217,7 +233,12 @@ class SocialSignupServiceTest {
                 .extracting(BusinessException::getCode)
                 .isEqualTo(ErrorCode.DUPLICATE_EMAIL);
 
+        verify(userRepository, never()).saveAndFlush(any(User.class));
         verify(socialAccountRepository, never()).saveAndFlush(any(SocialAccount.class));
+        verify(inactivitySettingService, never()).createDefaultSetting(any(User.class));
+        verify(deviceService, never()).registerToken(any(User.class), any(), any());
+        verify(jwtUtil, never()).createAccessToken(any(User.class));
+        verify(jwtUtil, never()).createRefreshToken(any(User.class));
         verify(refreshTokenService, never()).saveOrRotate(any(User.class), any(), any());
     }
 
