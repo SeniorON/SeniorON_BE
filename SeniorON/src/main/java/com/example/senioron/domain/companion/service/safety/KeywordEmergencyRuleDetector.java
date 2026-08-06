@@ -64,8 +64,7 @@ public class KeywordEmergencyRuleDetector
     ) {
         return utterance
                 .toLowerCase(Locale.ROOT)
-                .replaceAll("\\s+", " ")
-                .trim();
+                .replaceAll("\\s+", "");
     }
 
     private record EmergencyRule(
@@ -76,6 +75,12 @@ public class KeywordEmergencyRuleDetector
                 String utterance
         ) {
             return phrases.stream()
+                    .map(phrase ->
+                            phrase.replaceAll(
+                                    "\\s+",
+                                    ""
+                            )
+                    )
                     .anyMatch(
                             utterance::contains
                     );

@@ -3,6 +3,7 @@ package com.example.senioron.domain.companion.service.safety;
 import com.example.senioron.domain.companion.service.model.CompanionMessageContent;
 import com.example.senioron.domain.companion.service.model.SafetyDecision;
 import com.example.senioron.domain.companion.service.port.ContextualSafetyClassifierPort;
+import com.example.senioron.global.apiPayload.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -21,20 +22,36 @@ public class CompanionSafetyChecker {
             List<CompanionMessageContent> recentMessages,
             String currentUtterance
     ) {
-        Optional<String> matchedRuleId =
+        Optional<String> candidateRuleId =
                 emergencyRuleDetector.detectRuleId(
                         currentUtterance
                 );
 
-        if (matchedRuleId.isPresent()) {
-            return SafetyDecision.emergency(
-                    matchedRuleId.get()
-            );
-        }
+        try {
+            SafetyDecision contextualDecision =
+                    contextualSafetyClassifier.classify(
+                            recentMessages,
+                            currentUtterance
+                    );
 
-        return contextualSafetyClassifier.classify(
-                recentMessages,
-                currentUtterance
-        );
+            if (candidateRuleId.isPresent()
+                    && contextualDecision.isEmergency()) {
+
+                return SafetyDecision.emergency(
+                        candidateRuleId.get()
+                );
+            }
+
+            return contextualDecision;
+
+        } catch (BusinessException exception) {
+            if (candidateRuleId.isPresent()) {
+                return SafetyDecision.emergency(
+                        candidateRuleId.get()
+                );
+            }
+
+            throw exception;
+        }
     }
 }
