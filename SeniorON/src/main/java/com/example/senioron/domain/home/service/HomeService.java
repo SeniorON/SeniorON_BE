@@ -227,12 +227,6 @@ public class HomeService {
     private List<Home> getDisconnectedPreviewButtons(
             User homeOwner
     ) {
-        /*
-         * 연결 해제 상태에서는 기존 DB 버튼을 수정하거나 삭제하지 않고
-         * 응답에만 초기 기본 런처를 표시
-         *
-         * TODO 재연결 시 기존 설정 복구 여부가 확정되면 정책 재검토
-         */
         return createInitialHomeButtons(homeOwner);
     }
 
@@ -940,12 +934,6 @@ public class HomeService {
                         )
                         .orElse(true);
 
-        /*
-         * 연결 해제 상태에서는 기존 자녀 설정을 시니어에게 내려주지 않고
-         * 초기 기본 런처를 응답한다.
-         *
-         * TODO 재연결 시 기존 설정 복구 여부가 확정되면 정책 재검토
-         */
         List<Home> homes =
                 deviceDisconnected
                         ? createInitialHomeButtons(primaryChild)

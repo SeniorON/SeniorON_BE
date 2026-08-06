@@ -46,7 +46,6 @@ public class DeviceService {
         try {
             deviceRepository.saveAndFlush(newDevice);
         } catch (DataIntegrityViolationException e) {
-            // 동시 요청으로 같은 기기가 먼저 등록된 경우, 그 row를 재조회해 갱신한다.
             Device device = deviceRepository.findByDeviceIdentifier(deviceIdentifier)
                     .orElseThrow(() -> e);
             applyToken(device, user, deviceToken);
@@ -54,10 +53,19 @@ public class DeviceService {
         }
     }
 
-    // 같은 기기에서 다른 계정으로 로그인한 경우 소유자를 새 계정으로 교체한다.
-    private void applyToken(Device device, User user, String deviceToken) {
+    private void applyToken(
+            Device device,
+            User user,
+            String deviceToken
+    ) {
         device.reassignOwner(user);
         device.updateDeviceToken(deviceToken);
+
+        if (device.getConnectionStatus()
+                == DeviceStatus.DISCONNECTED) {
+            return;
+        }
+
         device.updateDeviceStatus(
                 DeviceStatus.ONLINE,
                 device.getBatteryLevel(),
@@ -65,9 +73,6 @@ public class DeviceService {
         );
     }
 
-    // 로그아웃 시 해당 기기의 FCM 토큰을 비활성화한다. 소유자 확인과 토큰 제거를
-    // 하나의 UPDATE로 묶어, 로그아웃 처리 중 다른 계정이 재로그인해 소유자가
-    // 바뀌어도 그 계정의 토큰을 덮어쓰지 않도록 한다.
     @Transactional
     public void clearToken(User user, String deviceIdentifier) {
         if (deviceIdentifier == null || deviceIdentifier.isBlank()) {
@@ -171,6 +176,44 @@ public class DeviceService {
         }
 
         devices.forEach(Device::disconnect);
+    }
+
+    @Transactional
+    public void reconnectDevice(
+            User seniorUser
+    ) {
+        if (seniorUser.getRole() != Role.PARENT) {
+            throw new BusinessException(
+                    ErrorCode.SENIOR_DEVICE_ACCESS_DENIED
+            );
+        }
+
+        List<Device> devices =
+                deviceRepository.findAllByUser(
+                        seniorUser
+                );
+
+        if (devices.isEmpty()) {
+            return;
+        }
+
+        boolean hasDisconnectedDevice =
+                devices.stream()
+                        .anyMatch(device ->
+                                device.getConnectionStatus()
+                                        == DeviceStatus.DISCONNECTED
+                        );
+
+        if (!hasDisconnectedDevice) {
+            return;
+        }
+
+        devices.stream()
+                .filter(device ->
+                        device.getConnectionStatus()
+                                == DeviceStatus.DISCONNECTED
+                )
+                .forEach(Device::reconnect);
     }
 
     private void validateDeviceDisconnectAuthority(

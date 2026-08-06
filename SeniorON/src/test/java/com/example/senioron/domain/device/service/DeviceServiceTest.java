@@ -49,8 +49,9 @@ class DeviceServiceTest {
         assertThat(device.getConnectionStatus()).isEqualTo(DeviceStatus.DISCONNECTED);
     }
 
-    // 기기 A에서 부모 로그인 → 토큰 등록 → 부모 로그아웃 → 같은 기기 A에서 자녀 로그인 → 토큰 등록.
-    // 이 시점에 device-A와 연결된 row가 자녀 것 1개만 남아있어야 한다.
+    // 기기 A에서 부모 로그인 → 로그아웃 → 같은 기기 A에서 자녀 로그인.
+    // 기기 row와 토큰 소유자는 자녀 계정으로 변경되지만,
+    // 로그인만으로는 기기 연결 상태가 복구되지 않아 DISCONNECTED를 유지한다.
     @Test
     void reloginWithDifferentAccountOnSameDeviceLeavesOnlyOneActiveTokenOwnedByNewAccount() {
         User parent = saveUser("parent", Role.PARENT);
@@ -65,7 +66,17 @@ class DeviceServiceTest {
         Device device = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow();
         assertThat(device.getUser().getUsersId()).isEqualTo(child.getUsersId());
         assertThat(device.getDeviceToken()).isEqualTo("fcm-token-child");
-        assertThat(device.getConnectionStatus()).isEqualTo(DeviceStatus.ONLINE);
+        assertThat(device.getConnectionStatus())
+                .isEqualTo(DeviceStatus.DISCONNECTED);
+    }
+
+    @Test
+    void reconnectDeviceWithoutRegisteredDeviceDoesNothing() {
+        User parent = saveUser("parent", Role.PARENT);
+
+        deviceService().reconnectDevice(parent);
+
+        assertThat(deviceRepository.count()).isZero();
     }
 
     private User saveUser(String prefix, Role role) {

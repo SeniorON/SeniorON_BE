@@ -12,6 +12,7 @@ import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.storage.S3Service;
@@ -33,6 +34,7 @@ public class FamilyService {
     private final FamilyPhotoRepository familyPhotoRepository;
     private final FamilyPhotoPermissionService familyPhotoPermissionService;
     private final UserSeniorRepository userSeniorRepository;
+    private final DeviceService deviceService;
 
     private static final int RECENT_UPLOADER_COUNT = 3;
     private static final int RECENT_PHOTO_COUNT = 4;
@@ -107,6 +109,8 @@ public class FamilyService {
             user.updateManagerType(ManagerType.SUB);
         } else if (user.getRole() == Role.PARENT) {
             user.updateManagerType(ManagerType.NONE);
+
+            deviceService.reconnectDevice(user);
         }
 
         return FamilyJoinResponse.builder()

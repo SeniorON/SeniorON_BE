@@ -56,7 +56,6 @@ public class Device extends BaseEntity {
         this.deviceToken = deviceToken;
     }
 
-    // 같은 기기(device_identifier)에 다른 계정이 로그인하면 소유자를 그 계정으로 교체한다.
     public void reassignOwner(User user) {
         this.user = user;
     }
@@ -75,5 +74,10 @@ public class Device extends BaseEntity {
 
     public void disconnect() {
         this.connectionStatus = DeviceStatus.DISCONNECTED;
+    }
+
+    public void reconnect() {
+        this.connectionStatus = DeviceStatus.ONLINE;
+        this.lastConnectedAt = LocalDateTime.now();
     }
 }
