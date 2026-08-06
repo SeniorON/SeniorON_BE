@@ -119,6 +119,27 @@ class UserWithdrawalRepositoryTest {
         assertThat(socialAccountRepository.count()).isEqualTo(1L);
     }
 
+    @Test
+    void socialUserCanBeSavedWithoutLoginIdAndPassword() {
+        User user = userRepository.saveAndFlush(User.builder()
+                .email("new-social@example.com")
+                .name("소셜 사용자")
+                .birth(LocalDate.of(1990, 1, 1))
+                .role(Role.CHILD)
+                .status(UserStatus.ACTIVE)
+                .build());
+
+        SocialAccount socialAccount = socialAccountRepository.saveAndFlush(SocialAccount.builder()
+                .user(user)
+                .provider(LoginProvider.GOOGLE)
+                .providerId("new-google-provider-id")
+                .build());
+
+        assertThat(user.getLoginId()).isNull();
+        assertThat(user.getPassword()).isNull();
+        assertThat(socialAccount.getUser().getUsersId()).isEqualTo(user.getUsersId());
+    }
+
     private User createUser(String loginId, String email, Family family) {
         return User.builder()
                 .loginId(loginId)

@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -20,6 +21,7 @@ import com.example.senioron.domain.socialaccount.entity.LoginProvider;
 import com.example.senioron.domain.socialaccount.entity.SocialAccount;
 import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.UserStatus;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.domain.user.service.RefreshTokenService;
@@ -29,6 +31,7 @@ import com.example.senioron.global.jwt.JwtUtil;
 import java.time.LocalDate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -91,6 +94,7 @@ class SocialSignupServiceTest {
         assertThat(response.getRefreshToken()).isEqualTo(REFRESH_TOKEN);
         assertThat(response.getUsersId()).isEqualTo(1L);
         assertThat(response.getName()).isEqualTo(NAME);
+        assertThat(response.getRole()).isEqualTo(Role.CHILD);
         assertThat(response.isNewUser()).isFalse();
         verify(userRepository).saveAndFlush(any(User.class));
         verify(socialAccountRepository).saveAndFlush(any(SocialAccount.class));
@@ -110,8 +114,11 @@ class SocialSignupServiceTest {
         assertThat(response.getAccessToken()).isEqualTo(ACCESS_TOKEN);
         assertThat(response.getRefreshToken()).isEqualTo(REFRESH_TOKEN);
         assertThat(response.getUsersId()).isEqualTo(1L);
+        assertThat(response.getRole()).isEqualTo(Role.CHILD);
         assertThat(response.isNewUser()).isFalse();
-        verify(userRepository).saveAndFlush(any(User.class));
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository, atLeastOnce()).saveAndFlush(userCaptor.capture());
+        assertThat(userCaptor.getValue().getRole()).isEqualTo(Role.CHILD);
         verify(socialAccountRepository).saveAndFlush(any(SocialAccount.class));
         verify(refreshTokenService).saveOrRotate(any(User.class), isNull(), eq(REFRESH_TOKEN));
     }
@@ -202,7 +209,23 @@ class SocialSignupServiceTest {
     void socialSignupStopsWhenUserCreationFails() {
         given(kakaoLoginService.getUserInfo(SOCIAL_TOKEN)).willReturn(createKakaoUserInfo());
         given(userRepository.saveAndFlush(any(User.class)))
-                .willThrow(new DataIntegrityViolationException("duplicate email"));
+                .willThrow(new DataIntegrityViolationException("user save failed"));
+
+        assertThatThrownBy(() -> socialSignupService.signup(createRequest(LoginProvider.KAKAO)))
+                .isInstanceOf(DataIntegrityViolationException.class);
+
+        verify(socialAccountRepository, never()).saveAndFlush(any(SocialAccount.class));
+        verify(inactivitySettingService, never()).createDefaultSetting(any(User.class));
+        verify(deviceService, never()).registerToken(any(User.class), any(), any());
+        verify(jwtUtil, never()).createAccessToken(any(User.class));
+        verify(jwtUtil, never()).createRefreshToken(any(User.class));
+        verify(refreshTokenService, never()).saveOrRotate(any(User.class), any(), any());
+    }
+
+    @Test
+    void socialSignupFailsWhenEmailAlreadyExists() {
+        given(kakaoLoginService.getUserInfo(SOCIAL_TOKEN)).willReturn(createKakaoUserInfo());
+        given(userRepository.existsByEmail(EMAIL)).willReturn(true);
 
         assertThatThrownBy(() -> socialSignupService.signup(createRequest(LoginProvider.KAKAO)))
                 .isInstanceOf(BusinessException.class)
@@ -210,7 +233,12 @@ class SocialSignupServiceTest {
                 .extracting(BusinessException::getCode)
                 .isEqualTo(ErrorCode.DUPLICATE_EMAIL);
 
+        verify(userRepository, never()).saveAndFlush(any(User.class));
         verify(socialAccountRepository, never()).saveAndFlush(any(SocialAccount.class));
+        verify(inactivitySettingService, never()).createDefaultSetting(any(User.class));
+        verify(deviceService, never()).registerToken(any(User.class), any(), any());
+        verify(jwtUtil, never()).createAccessToken(any(User.class));
+        verify(jwtUtil, never()).createRefreshToken(any(User.class));
         verify(refreshTokenService, never()).saveOrRotate(any(User.class), any(), any());
     }
 
@@ -269,6 +297,7 @@ class SocialSignupServiceTest {
         ReflectionTestUtils.setField(request, "socialToken", SOCIAL_TOKEN);
         ReflectionTestUtils.setField(request, "name", NAME);
         ReflectionTestUtils.setField(request, "birth", birth);
+        ReflectionTestUtils.setField(request, "role", Role.CHILD);
         ReflectionTestUtils.setField(request, "serviceTermsAgreed", serviceTermsAgreed);
         ReflectionTestUtils.setField(request, "privacyPolicyAgreed", privacyPolicyAgreed);
         ReflectionTestUtils.setField(request, "ageOver14Agreed", ageOver14Agreed);
