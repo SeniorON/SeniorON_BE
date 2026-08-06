@@ -194,9 +194,7 @@ public class DeviceService {
                 );
 
         if (devices.isEmpty()) {
-            throw new BusinessException(
-                    ErrorCode.DEVICE_NOT_FOUND
-            );
+            return;
         }
 
         boolean hasDisconnectedDevice =

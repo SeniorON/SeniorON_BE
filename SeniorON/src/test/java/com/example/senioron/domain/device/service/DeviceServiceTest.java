@@ -70,6 +70,15 @@ class DeviceServiceTest {
                 .isEqualTo(DeviceStatus.DISCONNECTED);
     }
 
+    @Test
+    void reconnectDeviceWithoutRegisteredDeviceDoesNothing() {
+        User parent = saveUser("parent", Role.PARENT);
+
+        deviceService().reconnectDevice(parent);
+
+        assertThat(deviceRepository.count()).isZero();
+    }
+
     private User saveUser(String prefix, Role role) {
         String unique = UUID.randomUUID().toString();
 
