@@ -1,6 +1,7 @@
 package com.example.senioron.domain.device.controller;
 
 import com.example.senioron.domain.device.dto.request.DeviceStatusUpdateRequest;
+import com.example.senioron.domain.device.dto.request.FcmTokenUpdateRequest;
 import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.user.entity.User;
 import io.swagger.v3.oas.annotations.Operation;
@@ -37,6 +38,27 @@ public class DeviceController {
         deviceService.updateDeviceStatus(
                 currentUser,
                 request
+        );
+
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(
+            summary = "FCM 토큰 갱신",
+            description = "로그인 상태를 유지한 채, 현재 기기(deviceIdentifier)의 FCM 토큰만 갱신"
+    )
+    @PatchMapping("/fcm-token")
+    public ResponseEntity<Void> updateFcmToken(
+            @Valid @RequestBody FcmTokenUpdateRequest request,
+            Authentication authentication
+    ) {
+        User currentUser =
+                (User) authentication.getPrincipal();
+
+        deviceService.registerToken(
+                currentUser,
+                request.deviceToken(),
+                request.deviceIdentifier()
         );
 
         return ResponseEntity.noContent().build();
