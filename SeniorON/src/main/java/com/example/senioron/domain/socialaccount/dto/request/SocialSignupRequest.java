@@ -1,6 +1,7 @@
 package com.example.senioron.domain.socialaccount.dto.request;
 
 import com.example.senioron.domain.socialaccount.entity.LoginProvider;
+import com.example.senioron.domain.user.entity.Role;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
@@ -22,6 +23,9 @@ public class SocialSignupRequest {
 
     @NotNull
     private LocalDate birth;
+
+    @NotNull
+    private Role role;
 
     @NotNull
     private Boolean serviceTermsAgreed;

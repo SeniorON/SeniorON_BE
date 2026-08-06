@@ -113,6 +113,7 @@ public class SocialSignupService {
                             .email(blankToNull(socialTokenInfo.email()))
                             .name(request.getName())
                             .birth(request.getBirth())
+                            .role(request.getRole())
                             .status(UserStatus.ACTIVE)
                             .serviceTermsAgreed(request.getServiceTermsAgreed())
                             .privacyPolicyAgreed(request.getPrivacyPolicyAgreed())
