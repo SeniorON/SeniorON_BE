@@ -106,24 +106,30 @@ public class SocialSignupService {
         }
     }
 
-    private User createUser(SocialSignupRequest request, SocialTokenInfo socialTokenInfo) {
-        try {
-            return userRepository.saveAndFlush(
-                    User.builder()
-                            .email(blankToNull(socialTokenInfo.email()))
-                            .name(request.getName())
-                            .birth(request.getBirth())
-                            .role(request.getRole())
-                            .status(UserStatus.ACTIVE)
-                            .serviceTermsAgreed(request.getServiceTermsAgreed())
-                            .privacyPolicyAgreed(request.getPrivacyPolicyAgreed())
-                            .ageOver14Agreed(request.getAgeOver14Agreed())
-                            .marketingAgreed(request.getMarketingAgreed())
-                            .build()
-            );
-        } catch (DataIntegrityViolationException e) {
+    private User createUser(
+            SocialSignupRequest request,
+            SocialTokenInfo socialTokenInfo
+    ) {
+        String email = blankToNull(socialTokenInfo.email());
+
+        // 소셜 제공자에게 이메일을 받은 경우에만 중복 여부를 검사한다.
+        if (email != null && userRepository.existsByEmail(email)) {
             throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
         }
+
+        return userRepository.saveAndFlush(
+                User.builder()
+                        .email(email)
+                        .name(request.getName())
+                        .birth(request.getBirth())
+                        .role(request.getRole())
+                        .status(UserStatus.ACTIVE)
+                        .serviceTermsAgreed(request.getServiceTermsAgreed())
+                        .privacyPolicyAgreed(request.getPrivacyPolicyAgreed())
+                        .ageOver14Agreed(request.getAgeOver14Agreed())
+                        .marketingAgreed(request.getMarketingAgreed())
+                        .build()
+        );
     }
 
     private SocialAccount createSocialAccount(LoginProvider provider, String providerId, User user) {

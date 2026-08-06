@@ -26,4 +26,5 @@ public interface SocialAccountRepository
     );
 
     void deleteAllByUser(User user);
+
 }
