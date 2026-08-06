@@ -54,4 +54,17 @@ class KeywordEmergencyRuleDetectorTest {
                 detector.detectRuleId(" ")
         ).isEmpty();
     }
+
+    @Test
+    void detectsEmergencyWithoutWhitespace() {
+        Optional<String> result =
+                detector.detectRuleId(
+                        "지금숨을못쉬겠어"
+                );
+
+        assertThat(result)
+                .contains(
+                        "PHYSICAL_BREATHING_001"
+                );
+    }
 }

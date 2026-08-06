@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static org.assertj.core.api.AssertionsForClassTypes.assertThatCode;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -83,6 +84,64 @@ class CompanionSafetyPushServiceTest {
                 "child-token-2",
                 "말벗 안전 확인 알림",
                 "부모님의 안전 확인이 필요합니다. 직접 연락해 상태를 확인해 주세요."
+        );
+    }
+
+    @Test
+    void continuesSendingWhenOneDeviceFails() {
+        String title =
+                "말벗 안전 확인 알림";
+
+        String body =
+                "부모님의 안전 확인이 필요합니다. 직접 연락해 상태를 확인해 주세요.";
+
+        given(
+                recipientService.findChildTokens(
+                        PARENT_USER_ID
+                )
+        ).willReturn(
+                List.of(
+                        "failed-token",
+                        "success-token"
+                )
+        );
+
+        given(
+                fcmSender.send(
+                        "failed-token",
+                        title,
+                        body
+                )
+        ).willThrow(
+                new RuntimeException(
+                        "FCM test failure"
+                )
+        );
+
+        given(
+                fcmSender.send(
+                        "success-token",
+                        title,
+                        body
+                )
+        ).willReturn(true);
+
+        assertThatCode(() ->
+                service.sendToChildren(
+                        PARENT_USER_ID
+                )
+        ).doesNotThrowAnyException();
+
+        verify(fcmSender).send(
+                "failed-token",
+                title,
+                body
+        );
+
+        verify(fcmSender).send(
+                "success-token",
+                title,
+                body
         );
     }
 
