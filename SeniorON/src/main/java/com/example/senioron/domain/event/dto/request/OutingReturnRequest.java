@@ -3,6 +3,7 @@ package com.example.senioron.domain.event.dto.request;
 import com.example.senioron.domain.event.entity.OutingPhase;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.*;
 import lombok.Builder;
 import lombok.Getter;
@@ -19,11 +20,13 @@ public class OutingReturnRequest {
     @NotNull
     @DecimalMin(value = "-90", inclusive = true)
     @DecimalMax(value = "90", inclusive = true)
+    @Schema(example = "37.5665")
     private BigDecimal latitude;
 
     @NotNull
     @DecimalMin(value = "-180", inclusive = true)
     @DecimalMax(value = "180", inclusive = true)
+    @Schema(example = "126.9780")
     private BigDecimal longitude;
 
     @NotNull @Min(0) @Max(100)
