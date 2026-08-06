@@ -11,6 +11,7 @@ import com.example.senioron.domain.device.entity.DeviceStatus;
 import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -23,8 +24,17 @@ import org.springframework.dao.DataIntegrityViolationException;
  */
 class DeviceServiceRegisterTokenRaceTest {
 
-    private final DeviceRepository deviceRepository = mock(DeviceRepository.class);
-    private final DeviceService deviceService = new DeviceService(deviceRepository);
+    private final DeviceRepository deviceRepository =
+            mock(DeviceRepository.class);
+
+    private final SeniorRepository seniorRepository =
+            mock(SeniorRepository.class);
+
+    private final DeviceService deviceService =
+            new DeviceService(
+                    deviceRepository,
+                    seniorRepository
+            );
 
     @Test
     void retriesByRefetchingWhenConcurrentFirstRegistrationRacesOnUniqueConstraint() {

@@ -7,6 +7,7 @@ import com.example.senioron.domain.device.entity.DeviceStatus;
 import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.repository.UserRepository;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -28,11 +29,17 @@ class DeviceServiceTest {
     @Autowired
     private DeviceRepository deviceRepository;
 
+    @Autowired
+    private SeniorRepository seniorRepository;
+
     private DeviceService deviceService;
 
     private DeviceService deviceService() {
         if (deviceService == null) {
-            deviceService = new DeviceService(deviceRepository);
+            deviceService = new DeviceService(
+                    deviceRepository,
+                    seniorRepository
+            );
         }
         return deviceService;
     }

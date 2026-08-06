@@ -3,6 +3,9 @@ package com.example.senioron.domain.device.controller;
 import com.example.senioron.domain.device.dto.request.DeviceStatusUpdateRequest;
 import com.example.senioron.domain.device.dto.request.FcmTokenUpdateRequest;
 import com.example.senioron.domain.device.service.DeviceService;
+import com.example.senioron.domain.device.dto.request.DeviceLocationUpdateRequest;
+import com.example.senioron.domain.device.dto.response.DeviceLocationResponse;
+import com.example.senioron.domain.device.dto.response.HomeLocationResponse;
 import com.example.senioron.domain.user.entity.User;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -59,6 +62,56 @@ public class DeviceController {
                 currentUser,
                 request.deviceToken(),
                 request.deviceIdentifier()
+        );
+
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(
+            summary = "시니어 최근 위치 조회",
+            description = "자녀가 같은 가족에 연결된 시니어의 최근 위치를 조회"
+    )
+    @GetMapping("/location")
+    public ResponseEntity<DeviceLocationResponse> getLatestLocation(
+            Authentication authentication
+    ) {
+        User currentUser =
+                (User) authentication.getPrincipal();
+
+        return ResponseEntity.ok(
+                deviceService.getLatestLocation(currentUser)
+        );
+    }
+    @Operation(
+            summary = "시니어 집 좌표 조회",
+            description = "시니어가 자녀가 등록한 집 좌표를 조회"
+    )
+    @GetMapping("/home-location")
+    public ResponseEntity<HomeLocationResponse> getHomeLocation(
+            Authentication authentication
+    ) {
+        User currentUser =
+                (User) authentication.getPrincipal();
+
+        return ResponseEntity.ok(
+                deviceService.getHomeLocation(currentUser)
+        );
+    }
+    @Operation(
+            summary = "시니어 현재 위치 갱신",
+            description = "시니어 기기의 현재 위도와 경도를 갱신"
+    )
+    @PatchMapping("/location")
+    public ResponseEntity<Void> updateLocation(
+            @Valid @RequestBody DeviceLocationUpdateRequest request,
+            Authentication authentication
+    ) {
+        User currentUser =
+                (User) authentication.getPrincipal();
+
+        deviceService.updateLocation(
+                currentUser,
+                request
         );
 
         return ResponseEntity.noContent().build();
