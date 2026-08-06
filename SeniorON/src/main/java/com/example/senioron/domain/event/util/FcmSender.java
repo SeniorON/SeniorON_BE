@@ -34,6 +34,12 @@ public class FcmSender {
     private final MeterRegistry meterRegistry;
 
     public boolean send(String fcmToken, String title, String body) {
+        return send(fcmToken, title, body, null);
+    }
+
+    // eventId가 있으면 data 페이로드에 같이 실어 보내, 푸시를 탭했을 때 프론트가
+    // 알림 목록을 거치지 않고 바로 해당 이벤트 상세로 딥링크할 수 있게 한다.
+    public boolean send(String fcmToken, String title, String body, Long eventId) {
         if (fcmToken == null || fcmToken.isBlank()) {
             countSend("skipped", "NO_TOKEN");
             log.warn("FCM 토큰이 비어있어 발송을 건너뜁니다.");
@@ -46,13 +52,18 @@ public class FcmSender {
             return false;
         }
 
-        Message message = Message.builder()
+        Message.Builder messageBuilder = Message.builder()
                 .setToken(fcmToken)
                 .setNotification(Notification.builder()
                         .setTitle(title)
                         .setBody(body)
-                        .build())
-                .build();
+                        .build());
+
+        if (eventId != null) {
+            messageBuilder.putData("eventId", String.valueOf(eventId));
+        }
+
+        Message message = messageBuilder.build();
 
         long start = System.nanoTime();
 

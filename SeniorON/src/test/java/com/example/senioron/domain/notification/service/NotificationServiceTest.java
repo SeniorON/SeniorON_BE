@@ -247,17 +247,17 @@ class NotificationServiceTest {
     void dispatchSosSendsToMultipleReceiversInParallel() throws Exception {
         long perCallDelayMillis = 300;
         given(fcmSender.send(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
-                org.mockito.ArgumentMatchers.anyString()))
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyLong()))
                 .willAnswer(invocation -> {
                     Thread.sleep(perCallDelayMillis);
                     return true;
                 });
 
         List<NotificationDispatchTarget> targets = List.of(
-                new NotificationDispatchTarget(1L, "SOS", "도움이 필요해요", List.of("token-1")),
-                new NotificationDispatchTarget(2L, "SOS", "도움이 필요해요", List.of("token-2")),
-                new NotificationDispatchTarget(3L, "SOS", "도움이 필요해요", List.of("token-3")),
-                new NotificationDispatchTarget(4L, "SOS", "도움이 필요해요", List.of("token-4"))
+                new NotificationDispatchTarget(1L, "SOS", "도움이 필요해요", 100L, List.of("token-1")),
+                new NotificationDispatchTarget(2L, "SOS", "도움이 필요해요", 100L, List.of("token-2")),
+                new NotificationDispatchTarget(3L, "SOS", "도움이 필요해요", 100L, List.of("token-3")),
+                new NotificationDispatchTarget(4L, "SOS", "도움이 필요해요", 100L, List.of("token-4"))
         );
 
         long startedAt = System.nanoTime();

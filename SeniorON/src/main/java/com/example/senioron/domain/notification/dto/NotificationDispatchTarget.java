@@ -11,6 +11,7 @@ public record NotificationDispatchTarget(
         Long receiverId,
         String title,
         String body,
+        Long eventId,
         List<String> deviceTokens
 ) {
 }

@@ -199,6 +199,7 @@ public class NotificationService {
                             receiverId,
                             notification.getTitle(),
                             notification.getBody(),
+                            event.getEventId(),
                             deviceTokensByUserId.getOrDefault(receiverId, List.of())
                     );
                 })
@@ -236,7 +237,7 @@ public class NotificationService {
         boolean delivered = false;
         for (String deviceToken : target.deviceTokens()) {
             try {
-                boolean sent = fcmSender.send(deviceToken, target.title(), target.body());
+                boolean sent = fcmSender.send(deviceToken, target.title(), target.body(), target.eventId());
                 delivered = delivered || sent;
             } catch (Exception e) {
                 log.warn("FCM 발송 처리 중 예외 발생, receiverId={}", target.receiverId(), e);
