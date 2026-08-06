@@ -14,10 +14,6 @@ public record NotificationDispatchResult(
         return new NotificationDispatchResult(0, 0);
     }
 
-    public boolean hasReceiver() {
-        return receiverCount > 0;
-    }
-
     public boolean isFullyDelivered() {
         return receiverCount > 0 && notifiedCount == receiverCount;
     }
