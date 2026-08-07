@@ -37,12 +37,15 @@ public class UserSignUpRequest {
     @NotNull(message = "회원 역할을 선택해 주세요.")
     private Role role;
 
+    @NotNull
     @AssertTrue(message = "서비스 이용약관에 동의해 주세요.")
     private Boolean agreeServiceTerms;
 
+    @NotNull
     @AssertTrue(message = "개인정보 처리방침에 동의해 주세요.")
     private Boolean agreePrivacyPolicy;
 
+    @NotNull
     @AssertTrue(message = "만 14세 이상 동의가 필요합니다.")
     private Boolean agreeAgeOver14;
 
