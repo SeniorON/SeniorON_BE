@@ -1,5 +1,6 @@
 package com.example.senioron.domain.medication.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -49,6 +50,16 @@ public class MedicationScheduleResponse {
             format = "time"
     )
     private LocalTime plannedTime;
+
+    @JsonFormat(pattern = "HH:mm")
+    @Schema(
+            description = "실제 복용 완료 시간. 미복용 상태인 경우 null",
+            example = "14:00",
+            type = "string",
+            format = "time",
+            nullable = true
+    )
+    private LocalTime takenTime;
 
     @Schema(
             description = "복용 여부",

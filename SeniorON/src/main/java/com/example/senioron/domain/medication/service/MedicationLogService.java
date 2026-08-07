@@ -186,6 +186,12 @@ public class MedicationLogService {
                                 .plannedTime(
                                         medicationLog.getPlannedTime()
                                 )
+                                .takenTime(
+                                        medicationLog.getTakenAt() != null
+                                                ? medicationLog.getTakenAt()
+                                                .toLocalTime()
+                                                : null
+                                )
                                 .isTaken(
                                         medicationLog.getIsTaken()
                                 )
@@ -418,15 +424,11 @@ public class MedicationLogService {
                         KOREA_ZONE_ID
                 );
 
-        LocalDateTime plannedAt =
-                LocalDateTime.of(
-                        medicationLog.getPlannedDate(),
-                        medicationLog.getPlannedTime()
-                );
-
-        if (plannedAt.isAfter(
-                now
-        )) {
+        if (medicationLog
+                .getPlannedDate()
+                .isAfter(
+                        now.toLocalDate()
+                )) {
             throw new BusinessException(
                     ErrorCode.BAD_REQUEST
             );
