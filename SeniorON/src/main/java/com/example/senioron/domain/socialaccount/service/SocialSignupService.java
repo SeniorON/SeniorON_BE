@@ -20,9 +20,11 @@ import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 
 @Slf4j
 @Service
@@ -188,6 +190,18 @@ public class SocialSignupService {
             KakaoUserInfo kakaoUserInfo;
             try {
                 kakaoUserInfo = kakaoLoginService.getUserInfo(request.getSocialToken());
+            } catch (RestClientResponseException e) {
+                log.warn(
+                        "[TOKEN_VERIFY] failed provider={} tokenVerifySuccess=false exceptionClass={} rootCauseClass={} httpStatus={}",
+                        request.getProvider(),
+                        e.getClass().getName(),
+                        rootCauseClassName(e),
+                        e.getStatusCode()
+                );
+                if (isAuthenticationRejected(e)) {
+                    throw new BusinessException(ErrorCode.INVALID_SOCIAL_TOKEN);
+                }
+                throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
             } catch (RestClientException e) {
                 log.warn(
                         "[TOKEN_VERIFY] failed provider={} tokenVerifySuccess=false exceptionClass={} rootCauseClass={}",
@@ -195,7 +209,7 @@ public class SocialSignupService {
                         e.getClass().getName(),
                         rootCauseClassName(e)
                 );
-                throw new BusinessException(ErrorCode.INVALID_SOCIAL_TOKEN);
+                throw new BusinessException(ErrorCode.INTERNAL_SERVER_ERROR);
             }
 
             if (kakaoUserInfo == null || kakaoUserInfo.getId() == null) {
@@ -328,6 +342,11 @@ public class SocialSignupService {
 
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private boolean isAuthenticationRejected(RestClientResponseException exception) {
+        return exception.getStatusCode().isSameCodeAs(HttpStatus.UNAUTHORIZED)
+                || exception.getStatusCode().isSameCodeAs(HttpStatus.FORBIDDEN);
     }
 
     private void registerFcmTokenIfPresent(User user, String fcmToken, String deviceIdentifier) {

@@ -33,8 +33,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 
 class SocialSignupServiceTest {
 
@@ -171,15 +174,45 @@ class SocialSignupServiceTest {
     }
 
     @Test
-    void socialSignupFailsWhenKakaoTokenIsInvalid() {
+    void socialSignupFailsWhenKakaoTokenIsRejected() {
         given(kakaoLoginService.getUserInfo(SOCIAL_TOKEN))
-                .willThrow(new RestClientException("kakao token rejected"));
+                .willThrow(new HttpClientErrorException(HttpStatus.UNAUTHORIZED));
 
         assertThatThrownBy(() -> socialSignupService.signup(createRequest(LoginProvider.KAKAO)))
                 .isInstanceOf(BusinessException.class)
                 .asInstanceOf(type(BusinessException.class))
                 .extracting(BusinessException::getCode)
                 .isEqualTo(ErrorCode.INVALID_SOCIAL_TOKEN);
+
+        verify(socialAccountRepository, never()).existsByProviderAndProviderId(any(), any());
+        verify(userRepository, never()).saveAndFlush(any(User.class));
+    }
+
+    @Test
+    void socialSignupFailsWithServerErrorWhenKakaoProviderReturnsServerError() {
+        given(kakaoLoginService.getUserInfo(SOCIAL_TOKEN))
+                .willThrow(new HttpServerErrorException(HttpStatus.BAD_GATEWAY));
+
+        assertThatThrownBy(() -> socialSignupService.signup(createRequest(LoginProvider.KAKAO)))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.INTERNAL_SERVER_ERROR);
+
+        verify(socialAccountRepository, never()).existsByProviderAndProviderId(any(), any());
+        verify(userRepository, never()).saveAndFlush(any(User.class));
+    }
+
+    @Test
+    void socialSignupFailsWithServerErrorWhenKakaoProviderIsUnreachable() {
+        given(kakaoLoginService.getUserInfo(SOCIAL_TOKEN))
+                .willThrow(new ResourceAccessException("kakao timeout"));
+
+        assertThatThrownBy(() -> socialSignupService.signup(createRequest(LoginProvider.KAKAO)))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.INTERNAL_SERVER_ERROR);
 
         verify(socialAccountRepository, never()).existsByProviderAndProviderId(any(), any());
         verify(userRepository, never()).saveAndFlush(any(User.class));
