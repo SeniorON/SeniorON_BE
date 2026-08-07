@@ -330,6 +330,73 @@ public class MedicationLogController {
         );
     }
 
+    @PatchMapping(
+            "/medication-logs/{medicationLogId}/check"
+    )
+    @Operation(
+            summary = "선택한 복약 일정 체크 API",
+            description = "부모 사용자가 선택한 복약 일정을 완료 처리합니다. 오늘 일정은 복용 예정 시간 이전에도 완료 처리할 수 있습니다."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "선택한 복약 일정 체크 성공"
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "미래 날짜의 복약 일정은 완료 처리할 수 없음",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = Response.class
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "부모 사용자가 아니어서 복약 체크 권한이 없음",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = Response.class
+                            )
+                    )
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "복약 일정을 찾을 수 없거나 본인의 일정이 아님",
+                    content = @Content(
+                            schema = @Schema(
+                                    implementation = Response.class
+                            )
+                    )
+            )
+    })
+    public Response<MedicationCheckResponse>
+    checkMedication(
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal
+            User user,
+
+            @Parameter(
+                    description = "완료 처리할 복약 로그 ID",
+                    example = "1",
+                    required = true
+            )
+            @PathVariable("medicationLogId")
+            Long medicationLogId
+    ) {
+        MedicationCheckResponse response =
+                medicationLogService
+                        .checkMedication(
+                                medicationLogId,
+                                user.getUsersId()
+                        );
+
+        return Response.ok(
+                ResultCode.OK,
+                response
+        );
+    }
+
     @ExceptionHandler(
             MissingServletRequestParameterException.class
     )
