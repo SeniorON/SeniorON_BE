@@ -132,6 +132,7 @@ public enum ErrorCode implements BaseCode {
     INQUIRY_TITLE_REQUIRED(HttpStatus.BAD_REQUEST, "INQUIRY400_1", "문의 제목을 입력해주세요."),
     INQUIRY_CONTENT_REQUIRED(HttpStatus.BAD_REQUEST, "INQUIRY400_2", "문의글 내용을 입력해주세요."),
     INQUIRY_IMAGE_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "INQUIRY400_3", "문의 이미지는 최대 5장까지 첨부할 수 있습니다."),
+    INQUIRY_NOT_FOUND(HttpStatus.NOT_FOUND, "INQUIRY404", "문의글을 찾을 수 없습니다."),
 
     // Medication Error
     MEDICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "MED404", "복약 정보를 찾을 수 없습니다."),

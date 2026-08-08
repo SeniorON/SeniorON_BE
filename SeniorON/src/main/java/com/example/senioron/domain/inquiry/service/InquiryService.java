@@ -2,6 +2,8 @@ package com.example.senioron.domain.inquiry.service;
 
 import com.example.senioron.domain.inquiry.dto.request.InquiryCreateRequest;
 import com.example.senioron.domain.inquiry.dto.response.InquiryCreateResponse;
+import com.example.senioron.domain.inquiry.dto.response.InquiryDetailResponse;
+import com.example.senioron.domain.inquiry.dto.response.InquiryListItemResponse;
 import com.example.senioron.domain.inquiry.entity.Inquiry;
 import com.example.senioron.domain.inquiry.entity.InquiryImage;
 import com.example.senioron.domain.inquiry.entity.InquiryStatus;
@@ -76,6 +78,38 @@ public class InquiryService {
                 .toList();
 
         return InquiryCreateResponse.from(savedInquiry, imageUrls);
+    }
+
+    @Transactional(readOnly = true)
+    public List<InquiryListItemResponse> getMyInquiries(User principal) {
+        User user = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        return inquiryRepository
+                .findByUserUsersIdOrderByCreatedAtDescInquiryIdDesc(user.getUsersId())
+                .stream()
+                .map(InquiryListItemResponse::from)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public InquiryDetailResponse getMyInquiry(
+            User principal,
+            Long inquiryId
+    ) {
+        User user = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        Inquiry inquiry = inquiryRepository
+                .findByInquiryIdAndUserUsersId(inquiryId, user.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.INQUIRY_NOT_FOUND));
+
+        List<String> imageUrls = inquiry.getImages().stream()
+                .map(InquiryImage::getImageUrl)
+                .map(s3Service::getFileUrl)
+                .toList();
+
+        return InquiryDetailResponse.from(inquiry, imageUrls);
     }
 
     private void validateRequest(InquiryCreateRequest request) {

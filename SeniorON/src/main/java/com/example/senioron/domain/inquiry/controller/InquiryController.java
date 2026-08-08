@@ -2,6 +2,8 @@ package com.example.senioron.domain.inquiry.controller;
 
 import com.example.senioron.domain.inquiry.dto.request.InquiryCreateRequest;
 import com.example.senioron.domain.inquiry.dto.response.InquiryCreateResponse;
+import com.example.senioron.domain.inquiry.dto.response.InquiryDetailResponse;
+import com.example.senioron.domain.inquiry.dto.response.InquiryListItemResponse;
 import com.example.senioron.domain.inquiry.service.InquiryService;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.global.apiPayload.code.ResultCode;
@@ -14,6 +16,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
@@ -45,5 +49,24 @@ public class InquiryController {
         );
 
         return Response.ok(ResultCode.CREATED, result);
+    }
+
+    @Operation(summary = "나의 1:1 문의 목록 조회", description = "현재 로그인한 사용자가 작성한 1:1 문의 목록을 최신순으로 조회합니다.")
+    @GetMapping
+    public Response<List<InquiryListItemResponse>> getMyInquiries(
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal User user
+    ) {
+        return Response.ok(inquiryService.getMyInquiries(user));
+    }
+
+    @Operation(summary = "1:1 문의 상세 조회", description = "현재 로그인한 사용자가 작성한 특정 문의의 내용, 첨부 이미지 및 답변을 조회합니다.")
+    @GetMapping("/{inquiryId}")
+    public Response<InquiryDetailResponse> getMyInquiry(
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal User user,
+            @PathVariable("inquiryId") Long inquiryId
+    ) {
+        return Response.ok(inquiryService.getMyInquiry(user, inquiryId));
     }
 }
