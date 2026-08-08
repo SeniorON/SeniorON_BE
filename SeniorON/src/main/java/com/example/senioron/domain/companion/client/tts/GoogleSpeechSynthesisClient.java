@@ -143,7 +143,7 @@ public class GoogleSpeechSynthesisClient
         }
 
         if (properties.getSpeakingRate() < 0.25
-                || properties.getSpeakingRate() > 4.0
+                || properties.getSpeakingRate() > 2.0
                 || properties.getPitch() < -20.0
                 || properties.getPitch() > 20.0
                 || properties.getVolumeGainDb() < -96.0

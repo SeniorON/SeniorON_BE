@@ -32,6 +32,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class GoogleSpeechSynthesisClientTest {
@@ -269,6 +270,20 @@ class GoogleSpeechSynthesisClientTest {
         assertBusinessError(
                 ErrorCode
                         .COMPANION_TTS_NOT_CONFIGURED
+        );
+    }
+
+    @Test
+    void 발화_속도가_2점을_초과하면_API_호출_전에_거부한다() {
+        properties.setSpeakingRate(2.1);
+
+        assertBusinessError(
+                ErrorCode.COMPANION_TTS_NOT_CONFIGURED
+        );
+
+        verifyNoInteractions(
+                clientProvider,
+                googleClient
         );
     }
 
