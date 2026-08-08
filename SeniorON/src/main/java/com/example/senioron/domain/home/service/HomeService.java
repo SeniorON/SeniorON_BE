@@ -384,9 +384,7 @@ public class HomeService {
                         .toList();
 
         HomeResponse.SeniorProfileResponse seniorProfileResponse =
-                deviceDisconnected
-                        ? HomeResponse.SeniorProfileResponse.empty()
-                        : seniorProfile
+                seniorProfile
                         .map(senior ->
                                 createSeniorProfileResponse(
                                         senior,

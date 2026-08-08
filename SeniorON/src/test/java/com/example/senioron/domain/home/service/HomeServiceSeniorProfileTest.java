@@ -207,6 +207,86 @@ class HomeServiceSeniorProfileTest {
         assertThat(response.getSeniorProfile().getRelation()).isEqualTo("GRANDPARENT");
     }
 
+    @Test
+    void getHomeReturnsSeniorProfileEvenWhenDeviceIsDisconnected() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .build();
+
+        User primaryChild =
+                createChild(
+                        1L,
+                        family,
+                        ManagerType.PRIMARY
+                );
+
+        Senior senior =
+                createSenior(
+                        10L,
+                        family,
+                        primaryChild
+                );
+
+        UserSenior relation =
+                createUserSenior(
+                        primaryChild,
+                        senior,
+                        SeniorRelation.MOTHER,
+                        null
+                );
+
+        User parent = User.builder()
+                .usersId(3L)
+                .name("시니어")
+                .role(Role.PARENT)
+                .family(family)
+                .build();
+
+        setCurrentUser(primaryChild);
+
+        given(userRepository.findByFamilyAndUsersIdNotAndRole(
+                family,
+                1L,
+                Role.PARENT
+        )).willReturn(List.of(parent));
+
+        given(userSeniorRepository.findFirstByUserAndSenior_Family(
+                primaryChild,
+                family
+        )).willReturn(Optional.of(relation));
+
+        Device device = Device.builder()
+                .user(parent)
+                .deviceIdentifier("device-1")
+                .deviceName("Galaxy S24")
+                .connectionStatus(DeviceStatus.DISCONNECTED)
+                .batteryLevel(72)
+                .lastConnectedAt(LocalDateTime.now())
+                .build();
+
+        given(deviceRepository
+                .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(parent))
+                .willReturn(Optional.of(device));
+
+        HomeResponse response =
+                homeService.getHome();
+
+        assertThat(response.getSeniorProfile().getName())
+                .isEqualTo("김영희");
+
+        assertThat(response.getSeniorProfile().getRelation())
+                .isEqualTo("MOTHER");
+
+        assertThat(response.getSeniorProfile().getBirth())
+                .isEqualTo(LocalDate.of(1950, 1, 1));
+
+        assertThat(response.getSeniorProfile().getAddress())
+                .isEqualTo("서울시");
+
+        assertThat(response.getSeniorProfile().getDetailAddress())
+                .isEqualTo("101호");
+    }
+
     private SeniorProfileUpdateRequest createRequest(
             String name,
             SeniorRelation relation,
