@@ -46,6 +46,10 @@ public class Inquiry {
     @Builder.Default
     private List<InquiryAnswer> answers = new ArrayList<>();
 
+    public void addImage(InquiryImage image) {
+        images.add(image);
+    }
+
     @PrePersist
     public void prePersist() {
         if (status == null) {
