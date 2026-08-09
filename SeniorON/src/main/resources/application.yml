@@ -31,7 +31,7 @@ spring:
             enable: ${MAIL_SMTP_STARTTLS_ENABLE:false}
 
 jwt:
-  secret: this-is-a-temporary-secret-key-for-senioron-jwt-please-change-later
+  secret: ${JWT_SECRET}
   access-token-expiration: 3600000
   refresh-token-expiration: 1209600000
 
@@ -95,13 +95,3 @@ ai:
       max-tokens: ${ANTHROPIC_MAX_TOKENS:512}
       connect-timeout: 3s
       read-timeout: 30s
-
-  tts:
-    google:
-      language-code: ${GOOGLE_TTS_LANGUAGE_CODE:ko-KR}
-      voice-name: ${GOOGLE_TTS_VOICE_NAME:ko-KR-Neural2-A}
-      audio-encoding: ${GOOGLE_TTS_AUDIO_ENCODING:MP3}
-      speaking-rate: ${GOOGLE_TTS_SPEAKING_RATE:0.9}
-      pitch: ${GOOGLE_TTS_PITCH:0.0}
-      volume-gain-db: ${GOOGLE_TTS_VOLUME_GAIN_DB:0.0}
-      request-timeout: ${GOOGLE_TTS_REQUEST_TIMEOUT:30s}
