@@ -33,7 +33,7 @@ public class MedicationNotificationScheduler {
             ZoneId.of("Asia/Seoul");
 
     private static final long MISSED_DELAY_MINUTES =
-            30L;
+            120L;
 
     private final MedicationLogRepository medicationLogRepository;
     private final UserRepository userRepository;
@@ -207,12 +207,42 @@ public class MedicationNotificationScheduler {
     ) {
         for (ParentReminderNotification notification
                 : notifications) {
+
+            if (!isMedicationStillUntaken(
+                    notification.medicationLogId()
+            )) {
+                log.info(
+                        "이미 복용 완료되어 부모 복약 알림 발송을 건너뜁니다. "
+                                + "parentUserId={}, medicationLogId={}",
+                        notification.parentUserId(),
+                        notification.medicationLogId()
+                );
+
+                continue;
+            }
+
             int successCount = 0;
             int failureCount = 0;
             int skippedCount = 0;
 
             for (DeviceTarget device
                     : notification.devices()) {
+
+                if (!isMedicationStillUntaken(
+                        notification.medicationLogId()
+                )) {
+                    skippedCount++;
+
+                    log.info(
+                            "알림 발송 직전 복용 완료가 확인되어 부모 복약 알림을 건너뜁니다. "
+                                    + "deviceId={}, medicationLogId={}",
+                            device.deviceId(),
+                            notification.medicationLogId()
+                    );
+
+                    continue;
+                }
+
                 String deviceToken =
                         device.deviceToken();
 
@@ -223,12 +253,17 @@ public class MedicationNotificationScheduler {
                 }
 
                 try {
-                    fcmSender.sendData(
-                            deviceToken,
-                            notification.data()
-                    );
+                    boolean sent =
+                            fcmSender.sendData(
+                                    deviceToken,
+                                    notification.data()
+                            );
 
-                    successCount++;
+                    if (sent) {
+                        successCount++;
+                    } else {
+                        failureCount++;
+                    }
                 } catch (RuntimeException e) {
                     failureCount++;
 
@@ -425,12 +460,42 @@ public class MedicationNotificationScheduler {
     ) {
         for (ChildMissedNotification notification
                 : notifications) {
+
+            if (!isMedicationStillUntaken(
+                    notification.medicationLogId()
+            )) {
+                log.info(
+                        "이미 복용 완료되어 자녀 미복용 알림 발송을 건너뜁니다. "
+                                + "parentUserId={}, medicationLogId={}",
+                        notification.parentUserId(),
+                        notification.medicationLogId()
+                );
+
+                continue;
+            }
+
             int successCount = 0;
             int failureCount = 0;
             int skippedCount = 0;
 
             for (DeviceTarget device
                     : notification.devices()) {
+
+                if (!isMedicationStillUntaken(
+                        notification.medicationLogId()
+                )) {
+                    skippedCount++;
+
+                    log.info(
+                            "알림 발송 직전 복용 완료가 확인되어 자녀 미복용 알림을 건너뜁니다. "
+                                    + "deviceId={}, medicationLogId={}",
+                            device.deviceId(),
+                            notification.medicationLogId()
+                    );
+
+                    continue;
+                }
+
                 String deviceToken =
                         device.deviceToken();
 
@@ -441,13 +506,18 @@ public class MedicationNotificationScheduler {
                 }
 
                 try {
-                    fcmSender.send(
-                            deviceToken,
-                            notification.title(),
-                            notification.body()
-                    );
+                    boolean sent =
+                            fcmSender.send(
+                                    deviceToken,
+                                    notification.title(),
+                                    notification.body()
+                            );
 
-                    successCount++;
+                    if (sent) {
+                        successCount++;
+                    } else {
+                        failureCount++;
+                    }
                 } catch (RuntimeException e) {
                     failureCount++;
 
@@ -474,6 +544,15 @@ public class MedicationNotificationScheduler {
                     skippedCount
             );
         }
+    }
+
+    private boolean isMedicationStillUntaken(
+            Long medicationLogId
+    ) {
+        return medicationLogRepository
+                .existsByMedicationLogIdAndIsTakenFalse(
+                        medicationLogId
+                );
     }
 
     private Map<Long, List<DeviceTarget>>
