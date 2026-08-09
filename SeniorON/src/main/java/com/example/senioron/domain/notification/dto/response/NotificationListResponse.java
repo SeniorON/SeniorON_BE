@@ -9,7 +9,7 @@ import java.util.List;
 @Getter
 @Builder
 public class NotificationListResponse {
-    private long totalCount;
+    private Long totalCount;
     private List<NotificationItem> items;
     private Long nextCursor;
 
