@@ -54,9 +54,11 @@ services:
       # .env와 동일한 방식: 서버에 파일을 한 번 올려두면 git pull이 건드리지 않고 계속 남아있고,
       # 아래 volumes로 컨테이너 안에 마운트만 한다. file: 접두어는 FirebaseConfig가 해석한다.
       FIREBASE_SERVICE_ACCOUNT_PATH: file:/run/secrets/firebase-adminsdk.json
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/senioron-tts-cloud.json
 
     volumes:
       - /home/ubuntu/senioron-8c2e1-firebase-adminsdk-fbsvc-ba018605fb.json:/run/secrets/firebase-adminsdk.json:ro
+      - /home/ubuntu/senioron-tts-cloud.json:/run/secrets/senioron-tts-cloud.json:ro
 
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/8080' 2>/dev/null && exit 0 || exit 1"]

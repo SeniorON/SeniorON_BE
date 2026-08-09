@@ -124,9 +124,18 @@ public enum ErrorCode implements BaseCode {
     COMPANION_SAFETY_CLASSIFIER_UNAVAILABLE(HttpStatus.BAD_GATEWAY, "COMPANION502_5", "안전 분류 서비스를 이용할 수 없습니다."),
     COMPANION_SAFETY_CLASSIFIER_TIMEOUT(HttpStatus.GATEWAY_TIMEOUT, "COMPANION504_4", "안전 분류 요청 시간이 초과되었습니다."),
     COMPANION_SAFETY_CLASSIFIER_INVALID_RESPONSE(HttpStatus.BAD_GATEWAY, "COMPANION502_6", "안전 분류 결과를 처리하지 못했습니다."),
+    COMPANION_TTS_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "COMPANION503_3", "음성 합성 서비스가 설정되지 않았습니다."),
+    COMPANION_TTS_UNAVAILABLE(HttpStatus.BAD_GATEWAY, "COMPANION502_4", "음성 합성 서비스를 이용할 수 없습니다."),
+    COMPANION_TTS_TIMEOUT(HttpStatus.GATEWAY_TIMEOUT, "COMPANION504_3", "음성 합성 요청 시간이 초과되었습니다."),
 
     // Photo Error
     UNSUPPORTED_IMAGE_TYPE(HttpStatus.BAD_REQUEST,"IMAGE400_1", "JPG, PNG, WEBP 형식의 이미지만 업로드할 수 있습니다."),
+
+    // Inquiry Error
+    INQUIRY_TITLE_REQUIRED(HttpStatus.BAD_REQUEST, "INQUIRY400_1", "문의 제목을 입력해주세요."),
+    INQUIRY_CONTENT_REQUIRED(HttpStatus.BAD_REQUEST, "INQUIRY400_2", "문의글 내용을 입력해주세요."),
+    INQUIRY_IMAGE_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "INQUIRY400_3", "문의 이미지는 최대 5장까지 첨부할 수 있습니다."),
+    INQUIRY_NOT_FOUND(HttpStatus.NOT_FOUND, "INQUIRY404", "문의글을 찾을 수 없습니다."),
 
     // Medication Error
     MEDICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "MED404", "복약 정보를 찾을 수 없습니다."),
