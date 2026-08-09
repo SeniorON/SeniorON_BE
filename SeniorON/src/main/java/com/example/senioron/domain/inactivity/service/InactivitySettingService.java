@@ -58,6 +58,20 @@ public class InactivitySettingService {
         return InactivitySettingResponse.from(setting);
     }
 
+    // 부모(시니어) 기기가 폴링으로 자신의 무활동 감지 설정을 직접 조회
+    @Transactional
+    public InactivitySettingResponse getMySetting(User principal) {
+        User currentUser = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        if (currentUser.getRole() != Role.PARENT) {
+            throw new BusinessException(ErrorCode.INACTIVITY_SETTING_PARENT_ONLY);
+        }
+
+        InactivitySetting setting = inactivitySettingRepository.findById(currentUser.getUsersId())
+                .orElseGet(() -> createDefaultInternal(currentUser));
+        return InactivitySettingResponse.from(setting);
+    }
+
     // 가족 구성원(대상자)의 무활동 감지 설정 수정
     public InactivitySettingResponse updateSetting(User principal, Long targetUserId, InactivitySettingRequest request) {
         User targetUser = resolveTargetUser(principal, targetUserId);

@@ -25,6 +25,14 @@ public class InactivitySettingController {
 
     private final InactivitySettingService inactivitySettingService;
 
+    @Operation(summary = "내 무활동 감지 설정 조회", description = "부모님(시니어) 기기가 폴링으로 자신의 무활동 감지 임계 시간을 직접 조회합니다")
+    @GetMapping("/me")
+    public Response<InactivitySettingResponse> getMySetting(
+            @AuthenticationPrincipal User user
+    ) {
+        return Response.ok(inactivitySettingService.getMySetting(user));
+    }
+
     @Operation(summary = "무활동 감지 설정 조회", description = "자녀가 같은 가족의 대상자(부모님)의 무활동 감지 설정을 조회합니다")
     @GetMapping("/{targetUserId}")
     public Response<InactivitySettingResponse> getSetting(
