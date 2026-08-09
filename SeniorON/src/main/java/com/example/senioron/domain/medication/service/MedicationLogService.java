@@ -48,7 +48,7 @@ public class MedicationLogService {
             ZoneId.of("Asia/Seoul");
 
     private static final long MISSED_DELAY_MINUTES =
-            30L;
+            120L;
 
     private static final int ROLLING_WINDOW_DAYS =
             30;
