@@ -11,6 +11,7 @@ import com.example.senioron.domain.companion.service.model.TurnClaimStatus;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,7 +39,8 @@ public class CompanionTurnClaimTransactionService {
             turnRepository;
 
     @Transactional(
-            propagation = Propagation.REQUIRES_NEW
+            propagation = Propagation.REQUIRES_NEW,
+            timeout = 5
     )
     public TurnClaimResult claim(
             Long conversationId,
@@ -46,16 +48,7 @@ public class CompanionTurnClaimTransactionService {
             String requestId
     ) {
         CompanionConversation conversation =
-                conversationRepository
-                        .findByIdForUpdate(
-                                conversationId
-                        )
-                        .orElseThrow(() ->
-                                new BusinessException(
-                                        ErrorCode
-                                                .COMPANION_CONVERSATION_NOT_FOUND
-                                )
-                        );
+                lockConversation(conversationId);
 
         if (!conversation.isOwnedBy(userId)) {
             throw new BusinessException(
@@ -113,6 +106,28 @@ public class CompanionTurnClaimTransactionService {
                 saved.getStatus(),
                 null
         );
+    }
+
+    private CompanionConversation lockConversation(
+            Long conversationId
+    ) {
+        try {
+            return conversationRepository
+                    .findByIdForUpdate(
+                            conversationId
+                    )
+                    .orElseThrow(() ->
+                            new BusinessException(
+                                    ErrorCode
+                                            .COMPANION_CONVERSATION_NOT_FOUND
+                            )
+                    );
+        } catch (PessimisticLockingFailureException exception) {
+            throw new BusinessException(
+                    ErrorCode
+                            .COMPANION_TURN_IN_PROGRESS
+            );
+        }
     }
 
     private TurnClaimResult claimExistingTurn(

@@ -4,29 +4,24 @@ import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.response.Response;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
-import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 @Order(Ordered.HIGHEST_PRECEDENCE)
 @RestControllerAdvice(
         assignableTypes =
                 CompanionVoiceController.class
 )
-public class CompanionVoiceExceptionHandler
-        extends ResponseEntityExceptionHandler {
+public class CompanionVoiceExceptionHandler {
 
-    @Override
-    protected ResponseEntity<Object>
+    @ExceptionHandler(
+            MaxUploadSizeExceededException.class
+    )
+    public ResponseEntity<Response<Void>>
     handleMaxUploadSizeExceededException(
-            MaxUploadSizeExceededException ex,
-            HttpHeaders headers,
-            HttpStatusCode status,
-            WebRequest request
+            MaxUploadSizeExceededException exception
     ) {
         return ResponseEntity
                 .status(

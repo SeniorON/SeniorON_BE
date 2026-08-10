@@ -203,7 +203,7 @@ class CompanionVoiceTurnServiceTest {
                 .isEqualTo(reply.text());
 
         assertThat(result.response().audioBase64())
-                .containsExactly(1, 2, 3);
+                .isEqualTo("AQID");
 
         verify(persistenceService)
                 .saveTranscription(

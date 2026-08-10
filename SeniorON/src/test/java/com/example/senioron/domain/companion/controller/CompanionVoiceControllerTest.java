@@ -17,6 +17,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Base64;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -306,7 +307,10 @@ class CompanionVoiceControllerTest {
                 audio == null
                         ? null
                         : "mp3",
-                audio
+                audio == null
+                        ? null
+                        : Base64.getEncoder()
+                        .encodeToString(audio)
         );
     }
 }

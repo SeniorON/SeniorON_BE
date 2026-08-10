@@ -21,11 +21,14 @@ import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Base64;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CompanionVoiceTurnService {
@@ -130,6 +133,12 @@ public class CompanionVoiceTurnService {
                                         claim.turnId()
                                 );
             } catch (RuntimeException exception) {
+                log.warn(
+                        "[COMPANION_VOICE_TURN] snapshot load failed turnId={} stage=PERSISTENCE",
+                        claim.turnId(),
+                        exception
+                );
+
                 return persistenceFailure(
                         conversationId,
                         claim.turnId(),
@@ -151,8 +160,8 @@ public class CompanionVoiceTurnService {
             );
         }
 
-        FailureStage retryStage =
-                claim.retryStage();
+        ResumePlan resumePlan =
+                resolveResumePlan(claim);
 
         String transcript =
                 snapshot == null
@@ -169,10 +178,7 @@ public class CompanionVoiceTurnService {
                         ? null
                         : snapshot.safetyType();
 
-        if (claim.status()
-                == TurnClaimStatus.CREATED
-                || retryStage
-                == FailureStage.STT) {
+        if (resumePlan.runStt()) {
 
             TranscriptionResult transcription;
 
@@ -190,6 +196,7 @@ public class CompanionVoiceTurnService {
 
                 SynthesizedAudio fallbackAudio =
                         trySynthesizeFallback(
+                                claim.turnId(),
                                 STT_FALLBACK_RESPONSE
                         );
 
@@ -221,6 +228,12 @@ public class CompanionVoiceTurnService {
                                 transcription
                         );
             } catch (RuntimeException exception) {
+                log.warn(
+                        "[COMPANION_VOICE_TURN] transcription persistence failed turnId={} stage=PERSISTENCE",
+                        claim.turnId(),
+                        exception
+                );
+
                 return persistenceFailure(
                         conversationId,
                         claim.turnId(),
@@ -232,11 +245,24 @@ public class CompanionVoiceTurnService {
             }
         }
 
-        if (retryStage
-                != FailureStage.TTS) {
+        if ((resumePlan.runSafety()
+                || resumePlan.runResponseGeneration())
+                && (transcript == null
+                || transcript.isBlank())) {
 
-            if (retryStage
-                    != FailureStage.LLM) {
+            return persistenceFailure(
+                    conversationId,
+                    claim.turnId(),
+                    claim.turnStatus(),
+                    null,
+                    assistantText,
+                    safetyType
+            );
+        }
+
+        if (resumePlan.runResponseGeneration()) {
+
+            if (resumePlan.runSafety()) {
 
                 SafetyDecision decision;
 
@@ -369,6 +395,12 @@ public class CompanionVoiceTurnService {
                                 outputTokens
                         );
             } catch (RuntimeException exception) {
+                log.warn(
+                        "[COMPANION_VOICE_TURN] response persistence failed turnId={} stage=PERSISTENCE",
+                        claim.turnId(),
+                        exception
+                );
+
                 return persistenceFailure(
                         conversationId,
                         claim.turnId(),
@@ -435,6 +467,12 @@ public class CompanionVoiceTurnService {
                                     .voice()
                     );
         } catch (RuntimeException exception) {
+            log.warn(
+                    "[COMPANION_VOICE_TURN] completion persistence failed turnId={} stage=PERSISTENCE",
+                    claim.turnId(),
+                    exception
+            );
+
             return persistenceFailure(
                     conversationId,
                     claim.turnId(),
@@ -587,22 +625,31 @@ public class CompanionVoiceTurnService {
                     turnId,
                     failureStage
             );
-        } catch (RuntimeException ignored) {
-            /*
-             * 실패 상태 기록 자체가 실패하더라도
-             * 원래 단계 오류 응답을 유지한다.
-             */
+        } catch (RuntimeException exception) {
+            log.error(
+                    "[COMPANION_VOICE_TURN] failed to persist failure state turnId={} failureStage={}",
+                    turnId,
+                    failureStage,
+                    exception
+            );
         }
     }
 
     private SynthesizedAudio
     trySynthesizeFallback(
+            Long turnId,
             String text
     ) {
         try {
             return speechSynthesisPort
                     .synthesize(text);
         } catch (RuntimeException exception) {
+            log.warn(
+                    "[COMPANION_VOICE_TURN] fallback TTS failed turnId={} originalStage=STT",
+                    turnId,
+                    exception
+            );
+
             return null;
         }
     }
@@ -648,7 +695,75 @@ public class CompanionVoiceTurnService {
                         : audio.format(),
                 audio == null
                         ? null
-                        : audio.bytes()
+                        : Base64.getEncoder()
+                        .encodeToString(
+                                audio.bytes()
+                        )
         );
+    }
+
+    private record ResumePlan(
+            boolean runStt,
+            boolean runSafety,
+            boolean runResponseGeneration
+    ) {
+    }
+
+    private ResumePlan resolveResumePlan(
+            TurnClaimResult claim
+    ) {
+        if (claim.status()
+                == TurnClaimStatus.CREATED) {
+
+            return new ResumePlan(
+                    true,
+                    true,
+                    true
+            );
+        }
+
+        if (claim.status()
+                != TurnClaimStatus.RETRY
+                || claim.retryStage() == null) {
+
+            throw new IllegalStateException(
+                    "재시도 단계가 올바르지 않습니다."
+            );
+        }
+
+        return switch (claim.retryStage()) {
+            case STT ->
+                    new ResumePlan(
+                            true,
+                            true,
+                            true
+                    );
+
+            case SAFETY ->
+                    new ResumePlan(
+                            false,
+                            true,
+                            true
+                    );
+
+            case LLM ->
+                    new ResumePlan(
+                            false,
+                            false,
+                            true
+                    );
+
+            case TTS ->
+                    new ResumePlan(
+                            false,
+                            false,
+                            false
+                    );
+
+            case PERSISTENCE ->
+                    throw new IllegalStateException(
+                            "저장 실패는 자동 재시도할 수 없습니다."
+                    );
+        };
     }
 }

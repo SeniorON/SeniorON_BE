@@ -16,18 +16,6 @@ public record CompanionVoiceTurnResponse(
         SafetyType safetyType,
         String audioContentType,
         String audioFormat,
-        byte[] audioBase64
+        String audioBase64
 ) {
-    public CompanionVoiceTurnResponse {
-        audioBase64 = audioBase64 == null
-                ? null
-                : audioBase64.clone();
-    }
-
-    @Override
-    public byte[] audioBase64() {
-        return audioBase64 == null
-                ? null
-                : audioBase64.clone();
-    }
 }
