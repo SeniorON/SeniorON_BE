@@ -91,13 +91,19 @@ public class HomeService {
                         ? null
                         : buttonRequest.getPackageName().trim();
 
+        String actionValue =
+                buttonRequest.getActionValue() == null
+                        || buttonRequest.getActionValue().isBlank()
+                        ? null
+                        : buttonRequest.getActionValue().trim();
+
         return Home.createButton(
                 user,
                 buttonRequest.getButtonOrder(),
                 buttonName,
                 null,
                 buttonRequest.getActionType(),
-                buttonRequest.getActionValue().trim(),
+                actionValue,
                 packageName
         );
     }
@@ -1223,15 +1229,15 @@ public class HomeService {
                             String packageName =
                                     buttonRequest.getPackageName();
 
-                            if (actionType == null
-                                    || actionValue == null
-                                    || actionValue.isBlank()) {
+                            if (actionType == null) {
                                 return true;
                             }
 
                             if (actionType == ActionType.DEFAULT) {
-                                return packageName != null
-                                        && !packageName.isBlank();
+                                return actionValue == null
+                                        || actionValue.isBlank()
+                                        || (packageName != null
+                                        && !packageName.isBlank());
                             }
 
                             if (actionType == ActionType.APP) {

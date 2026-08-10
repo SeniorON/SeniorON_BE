@@ -13,7 +13,10 @@ import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.notification.dto.NotificationDispatchResult;
 import com.example.senioron.domain.notification.dto.NotificationDispatchTarget;
 import com.example.senioron.domain.notification.dto.response.NotificationHomeListResponse;
+import com.example.senioron.domain.notification.dto.response.NotificationHomeResponse;
+import com.example.senioron.domain.notification.dto.response.NotificationListResponse;
 import com.example.senioron.domain.notification.dto.response.ParentDeviceStatusResponse;
+import com.example.senioron.domain.notification.entity.Notification;
 import com.example.senioron.domain.notification.entity.NotificationSetting;
 import com.example.senioron.domain.notification.entity.NotificationSettingType;
 import com.example.senioron.domain.notification.entity.NotificationType;
@@ -26,10 +29,12 @@ import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class NotificationServiceTest {
 
@@ -227,6 +232,73 @@ class NotificationServiceTest {
         NotificationHomeListResponse response = notificationService.getHomeSettings(CHILD_ID);
 
         assertThat(response.getEnabledCount()).isEqualTo(4);
+    }
+
+    // 타입별로 따로 조회하지 않고 한 번에 받아온 목록에서, 자바에서 타입별 최신 1건만 골라야 한다.
+    @Test
+    void getHomeSettingsPicksMostRecentNotificationPerType() {
+        given(userRepository.findByFamilyAndUsersIdNotAndRole(family, CHILD_ID, Role.PARENT))
+                .willReturn(List.of(parentA));
+
+        Notification olderInactivity = notificationAt(NotificationType.INACTIVITY, "예전 무활동 알림", LocalDateTime.now().minusHours(2));
+        Notification newerInactivity = notificationAt(NotificationType.INACTIVITY, "최신 무활동 알림", LocalDateTime.now().minusMinutes(10));
+        Notification sosNotification = notificationAt(NotificationType.SOS, "SOS", LocalDateTime.now().minusMinutes(5));
+
+        // 리포지토리는 ORDER BY createdAt DESC로 정렬된 결과를 준다 — 그 순서 그대로 스텁한다.
+        given(notificationRepository.findLatestUnreadByTypes(
+                org.mockito.ArgumentMatchers.eq(CHILD_ID),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any()))
+                .willReturn(List.of(newerInactivity, sosNotification, olderInactivity));
+
+        NotificationHomeListResponse response = notificationService.getHomeSettings(CHILD_ID);
+
+        NotificationHomeResponse inactivityCard = response.getItems().stream()
+                .filter(item -> item.getType() == NotificationType.INACTIVITY)
+                .findFirst()
+                .orElseThrow();
+        assertThat(inactivityCard.getSummary()).isEqualTo("최신 무활동 알림");
+    }
+
+    private Notification notificationAt(NotificationType type, String body, LocalDateTime createdAt) {
+        Notification notification = Notification.builder()
+                .sendUser(parentA)
+                .receiverUser(child)
+                .notificationType(type)
+                .title(type.name())
+                .body(body)
+                .isRead(false)
+                .build();
+        ReflectionTestUtils.setField(notification, "createdAt", createdAt);
+        return notification;
+    }
+
+    // 첫 페이지(cursor 없음)에서만 전체 개수를 세고, 다음 페이지("더보기")에서는 다시 세지 않아야 한다.
+    @Test
+    void getNotificationListOnlyCountsTotalOnFirstPage() {
+        given(notificationRepository.findByTypeWithCursor(
+                org.mockito.ArgumentMatchers.eq(CHILD_ID),
+                org.mockito.ArgumentMatchers.eq(NotificationType.SOS),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any()))
+                .willReturn(List.of());
+        given(notificationRepository.countByTypeWithin30Days(
+                org.mockito.ArgumentMatchers.eq(CHILD_ID),
+                org.mockito.ArgumentMatchers.eq(NotificationType.SOS),
+                org.mockito.ArgumentMatchers.any()))
+                .willReturn(7L);
+
+        NotificationListResponse firstPage = notificationService.getNotificationList(CHILD_ID, NotificationType.SOS, null, 20);
+        NotificationListResponse secondPage = notificationService.getNotificationList(CHILD_ID, NotificationType.SOS, 100L, 20);
+
+        assertThat(firstPage.getTotalCount()).isEqualTo(7L);
+        assertThat(secondPage.getTotalCount()).isNull();
+        org.mockito.Mockito.verify(notificationRepository, org.mockito.Mockito.times(1))
+                .countByTypeWithin30Days(
+                        org.mockito.ArgumentMatchers.eq(CHILD_ID),
+                        org.mockito.ArgumentMatchers.eq(NotificationType.SOS),
+                        org.mockito.ArgumentMatchers.any());
     }
 
     // 30일이 지난 알림을 생성 시각 기준으로 일괄 삭제해야 한다.

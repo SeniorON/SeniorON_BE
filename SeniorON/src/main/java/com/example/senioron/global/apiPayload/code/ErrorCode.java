@@ -160,6 +160,7 @@ public enum ErrorCode implements BaseCode {
     
     // Inactivity Error
     INACTIVITY_SETTING_NOT_FOUND(HttpStatus.NOT_FOUND, "INACTIVITY404", "비활동 감지 설정을 찾을 수 없습니다."),
+    INACTIVITY_SETTING_PARENT_ONLY(HttpStatus.FORBIDDEN, "INACTIVITY403", "부모 계정만 자신의 무활동 감지 설정을 조회할 수 있습니다."),
 
     // Event Error
     EVENT_NOT_FOUND(HttpStatus.NOT_FOUND, "EVENT404", "이벤트를 찾을 수 없습니다."),
