@@ -154,4 +154,66 @@ class CompanionTurnTest {
                 .status(ConversationStatus.ACTIVE)
                 .build();
     }
+
+    @Test
+    void emergencyTtsFailureRestoresResponseGenerated() {
+        CompanionTurn turn =
+                createReceivedTurn();
+
+        turn.markTranscribed(
+                "OPENAI",
+                "gpt-4o-mini-transcribe"
+        );
+
+        turn.markSafetyResult(
+                SafetyType.EMERGENCY,
+                "EMERGENCY_KEYWORD"
+        );
+
+        turn.markResponseGenerated(
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+
+        turn.markFailed(
+                FailureStage.TTS
+        );
+
+        turn.prepareRetry();
+
+        assertThat(turn.getStatus())
+                .isEqualTo(
+                        TurnStatus.RESPONSE_GENERATED
+                );
+
+        assertThat(turn.getFailureStage())
+                .isNull();
+    }
+
+    @Test
+    void persistenceFailureCannotBeRetried() {
+        CompanionTurn turn =
+                createReceivedTurn();
+
+        turn.markFailed(
+                FailureStage.PERSISTENCE
+        );
+
+        assertThatThrownBy(
+                turn::prepareRetry
+        ).isInstanceOf(
+                IllegalStateException.class
+        );
+
+        assertThat(turn.getStatus())
+                .isEqualTo(TurnStatus.FAILED);
+
+        assertThat(turn.getFailureStage())
+                .isEqualTo(
+                        FailureStage.PERSISTENCE
+                );
+    }
 }

@@ -10,6 +10,7 @@ public enum ResultCode implements BaseCode {
 
     OK(HttpStatus.OK, "COMMON_200", "성공적으로 처리되었습니다."),
     CREATED(HttpStatus.CREATED, "COMMON_201", "성공적으로 생성되었습니다."),
+    ACCEPTED(HttpStatus.ACCEPTED, "COMMON_202", "요청을 처리 중입니다."),
     NO_CONTENT(HttpStatus.NO_CONTENT, "COMMON_204", "성공적으로 삭제되었습니다.");
 
     private final HttpStatus status;

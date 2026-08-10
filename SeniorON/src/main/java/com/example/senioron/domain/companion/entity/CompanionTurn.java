@@ -22,6 +22,10 @@ import java.util.UUID;
                 @Index(
                         name = "idx_companion_turn_conversation_created",
                         columnList = "conversation_id,created_at"
+                ),
+                @Index(
+                        name = "idx_companion_turn_conversation_status",
+                        columnList = "conversation_id,status"
                 )
         }
 )
@@ -233,24 +237,30 @@ public class CompanionTurn extends BaseEntity {
     public void prepareRetry() {
         requiredStatus(TurnStatus.FAILED);
 
-        if (hasGeneratedResponse()) {
-            status = TurnStatus.RESPONSE_GENERATED;
-        } else if (hasTranscription()) {
-            status = TurnStatus.TRANSCRIBED;
-        } else {
-            status = TurnStatus.RECEIVED;
+        if (failureStage == null) {
+            throw new IllegalStateException(
+                    "실패 단계가 기록되지 않은 턴은 "
+                            + "재시도할 수 없습니다."
+            );
         }
 
+        status = switch (failureStage) {
+            case STT ->
+                    TurnStatus.RECEIVED;
+
+            case SAFETY, LLM ->
+                    TurnStatus.TRANSCRIBED;
+
+            case TTS ->
+                    TurnStatus.RESPONSE_GENERATED;
+
+            case PERSISTENCE ->
+                    throw new IllegalStateException(
+                            "저장 실패 턴은 "
+                                    + "자동 재시도할 수 없습니다."
+                    );
+        };
+
         failureStage = null;
-    }
-
-    private boolean hasTranscription() {
-        return sttProvider != null || sttModel != null;
-    }
-
-    private boolean hasGeneratedResponse() {
-        return llmProvider != null
-                || llmModel != null
-                || promptVersion != null;
     }
 }

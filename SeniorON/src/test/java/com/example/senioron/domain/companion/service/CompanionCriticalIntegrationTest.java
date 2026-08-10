@@ -8,6 +8,8 @@ import com.example.senioron.domain.companion.entity.CompanionConversation;
 import com.example.senioron.domain.companion.entity.ConversationStatus;
 import com.example.senioron.domain.companion.repository.CompanionConversationRepository;
 import com.example.senioron.domain.companion.repository.CompanionTurnRepository;
+import com.example.senioron.domain.companion.service.model.TurnClaimResult;
+import com.example.senioron.domain.companion.service.model.TurnClaimStatus;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.entity.UserStatus;
@@ -43,8 +45,8 @@ class CompanionCriticalIntegrationTest {
     private CompanionTurnRepository turnRepository;
 
     @Autowired
-    private CompanionTurnCreationTransactionService
-            turnCreationTransactionService;
+    private CompanionTurnClaimTransactionService
+            turnClaimTransactionService;
 
     @Autowired
     private CompanionConversationService
@@ -54,30 +56,49 @@ class CompanionCriticalIntegrationTest {
     private TransactionTemplate transactionTemplate;
 
     @Test
-    void existingTurnCanBeQueriedAfterDuplicateTransactionRollsBack() {
+    void sameRequestIdIsClaimedOnlyOnce() {
         Long conversationId =
                 createCommittedConversation();
 
-        String requestId =
-                UUID.randomUUID().toString();
+        Long userId =
+                transactionTemplate.execute(status ->
+                        conversationRepository
+                                .findById(conversationId)
+                                .orElseThrow()
+                                .getUser()
+                                .getUsersId()
+                );
 
-        Long createdTurnId =
-                turnCreationTransactionService.create(
+        String requestId =
+                UUID.randomUUID()
+                        .toString();
+
+        TurnClaimResult first =
+                turnClaimTransactionService.claim(
                         conversationId,
+                        userId,
                         requestId
                 );
 
-        assertThat(createdTurnId)
-                .isNotNull();
-
-        assertThatThrownBy(() ->
-                turnCreationTransactionService.create(
+        TurnClaimResult second =
+                turnClaimTransactionService.claim(
                         conversationId,
+                        userId,
                         requestId
-                )
-        ).isInstanceOf(
-                DataIntegrityViolationException.class
-        );
+                );
+
+        assertThat(first.status())
+                .isEqualTo(
+                        TurnClaimStatus.CREATED
+                );
+
+        assertThat(second.status())
+                .isEqualTo(
+                        TurnClaimStatus.PROCESSING
+                );
+
+        assertThat(second.turnId())
+                .isEqualTo(first.turnId());
 
         assertThat(
                 turnRepository

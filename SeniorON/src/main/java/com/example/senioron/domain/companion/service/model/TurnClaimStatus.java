@@ -1,6 +1,8 @@
 package com.example.senioron.domain.companion.service.model;
 
-public enum TurnCreationStatus {
+public enum TurnClaimStatus {
     CREATED,
-    ALREADY_EXISTS
+    PROCESSING,
+    COMPLETED,
+    RETRY
 }

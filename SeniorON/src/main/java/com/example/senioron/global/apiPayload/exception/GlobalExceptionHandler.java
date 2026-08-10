@@ -24,6 +24,7 @@ import org.springframework.web.bind.ServletRequestBindingException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 import java.sql.SQLException;
@@ -272,5 +273,36 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             return sanitized.substring(0, maxLength) + "...";
         }
         return sanitized;
+    }
+
+    @Override
+    protected ResponseEntity<Object>
+    handleMaxUploadSizeExceededException(
+            MaxUploadSizeExceededException ex,
+            HttpHeaders headers,
+            HttpStatusCode status,
+            WebRequest request
+    ) {
+        log.warn(
+                "[GLOBAL_EXCEPTION] "
+                        + "MaxUploadSizeExceededException "
+                        + "exceptionClass={} message={}",
+                ex.getClass().getName(),
+                sanitizeMessage(
+                        ex.getMessage()
+                )
+        );
+
+        return ResponseEntity
+                .status(
+                        ErrorCode
+                                .COMPANION_AUDIO_SIZE_EXCEEDED
+                                .getStatus()
+                )
+                .body(
+                        Response.fail(
+                                ErrorCode
+                                        .COMPANION_AUDIO_SIZE_EXCEEDED                        )
+                );
     }
 }
