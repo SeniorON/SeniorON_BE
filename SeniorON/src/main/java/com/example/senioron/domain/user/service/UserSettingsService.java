@@ -2,11 +2,11 @@ package com.example.senioron.domain.user.service;
 
 import com.example.senioron.domain.user.dto.request.NameUpdateRequest;
 import com.example.senioron.domain.user.dto.request.PasswordChangeRequest;
-import com.example.senioron.domain.user.dto.response.CurrentNameResponse;
 import com.example.senioron.domain.user.dto.response.NameUpdateResponse;
 import com.example.senioron.domain.user.dto.response.PasswordChangeResponse;
 import com.example.senioron.domain.user.dto.response.ProfileImageResponse;
 import com.example.senioron.domain.user.dto.response.ProfileImageUpdateResponse;
+import com.example.senioron.domain.user.dto.response.UserAccountResponse;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
@@ -42,11 +42,13 @@ public class UserSettingsService {
     private final S3Service s3Service;
 
     @Transactional(readOnly = true)
-    public CurrentNameResponse getCurrentName(User principal) {
+    public UserAccountResponse getAccount(User principal) {
         validateAuthenticated(principal);
 
-        return CurrentNameResponse.builder()
+        return UserAccountResponse.builder()
                 .name(principal.getName())
+                .role(principal.getRole())
+                .email(principal.getEmail())
                 .build();
     }
 

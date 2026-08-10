@@ -15,6 +15,8 @@ import com.example.senioron.domain.user.dto.response.UserLoginResponse;
 import com.example.senioron.domain.user.dto.response.PasswordChangeResponse;
 import com.example.senioron.domain.user.dto.response.ProfileImageResponse;
 import com.example.senioron.domain.user.dto.response.ProfileImageUpdateResponse;
+import com.example.senioron.domain.user.dto.response.UserAccountResponse;
+import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
@@ -45,6 +47,17 @@ class UserSettingsServiceTest {
     @BeforeEach
     void setUp() {
         userSettingsService = new UserSettingsService(userRepository, passwordEncoder, s3Service);
+    }
+
+    @Test
+    void getAccountReturnsCurrentUserNameRoleAndEmail() {
+        User user = createUser(passwordEncoder.encode(CURRENT_PASSWORD));
+
+        UserAccountResponse response = userSettingsService.getAccount(user);
+
+        assertThat(response.getName()).isEqualTo("테스트");
+        assertThat(response.getRole()).isEqualTo(Role.CHILD);
+        assertThat(response.getEmail()).isEqualTo("test@example.com");
     }
 
     @Test
@@ -249,6 +262,7 @@ class UserSettingsServiceTest {
                 .email("test@example.com")
                 .password(encodedPassword)
                 .name("테스트")
+                .role(Role.CHILD)
                 .build();
     }
 
