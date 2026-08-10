@@ -16,13 +16,20 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 public class CompanionTurnClaimTransactionService {
+
+    private static final Duration
+            TURN_STALE_TIMEOUT =
+            Duration.ofMinutes(5);
 
     private static final Set<TurnStatus>
             PROCESSING_STATUSES =
@@ -40,7 +47,8 @@ public class CompanionTurnClaimTransactionService {
 
     @Transactional(
             propagation = Propagation.REQUIRES_NEW,
-            timeout = 5
+            timeout = 5,
+            noRollbackFor = BusinessException.class
     )
     public TurnClaimResult claim(
             Long conversationId,
@@ -63,6 +71,8 @@ public class CompanionTurnClaimTransactionService {
                             .COMPANION_CONVERSATION_ENDED
             );
         }
+
+        failStaleTurns(conversationId);
 
         Optional<CompanionTurn> existingTurn =
                 turnRepository
@@ -106,6 +116,36 @@ public class CompanionTurnClaimTransactionService {
                 saved.getStatus(),
                 null
         );
+    }
+
+    private void failStaleTurns(
+            Long conversationId
+    ) {
+        LocalDateTime staleThreshold =
+                LocalDateTime.now()
+                        .minus(
+                                TURN_STALE_TIMEOUT
+                        );
+
+        List<CompanionTurn> staleTurns =
+                turnRepository
+                        .findAllByConversationConversationIdAndStatusInAndUpdatedAtBefore(
+                                conversationId,
+                                PROCESSING_STATUSES,
+                                staleThreshold
+                        );
+
+        if (staleTurns.isEmpty()) {
+            return;
+        }
+
+        staleTurns.forEach(turn ->
+                turn.markFailed(
+                        FailureStage.PERSISTENCE
+                )
+        );
+
+        turnRepository.flush();
     }
 
     private CompanionConversation lockConversation(
