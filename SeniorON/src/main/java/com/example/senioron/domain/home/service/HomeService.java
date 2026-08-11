@@ -74,7 +74,7 @@ public class HomeService {
     private final UserSeniorRepository userSeniorRepository;
     private final HomeSettingRepository homeSettingRepository;
     private final FamilyRepository familyRepository;
-    private static final long DEVICE_OFFLINE_THRESHOLD_MINUTES = 30;
+    private static final long DEVICE_OFFLINE_THRESHOLD_MINUTES = 11;
 
     private Home createHomeButton(
             User user,
@@ -255,16 +255,7 @@ public class HomeService {
             );
         }
 
-        String trimmedName =
-                resolvedName.trim();
-
-        if (trimmedName.length() > 6) {
-            throw new BusinessException(
-                    ErrorCode.HOME_BUTTON_NAME_TOO_LONG
-            );
-        }
-
-        return trimmedName;
+        return resolvedName.trim();
     }
 
     private boolean isDeviceConnected(
