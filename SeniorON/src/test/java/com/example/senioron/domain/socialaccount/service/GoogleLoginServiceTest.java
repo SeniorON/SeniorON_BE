@@ -45,16 +45,41 @@ class GoogleLoginServiceTest {
     private final DeviceService deviceService = mock(DeviceService.class);
 
     private GoogleLoginService googleLoginService;
+    private GoogleLoginTransactionService googleLoginTransactionService;
 
     @BeforeEach
     void setUp() {
-        googleLoginService = new GoogleLoginService(
-                firebaseIdTokenVerifier,
+        googleLoginTransactionService = new GoogleLoginTransactionService(
                 socialAccountRepository,
                 jwtUtil,
                 refreshTokenService,
                 deviceService
         );
+        googleLoginService = new GoogleLoginService(
+                firebaseIdTokenVerifier,
+                googleLoginTransactionService
+        );
+    }
+
+    @Test
+    void googleLoginVerifiesFirebaseTokenBeforeTransactionService() {
+        GoogleLoginTransactionService transactionService = mock(GoogleLoginTransactionService.class);
+        GoogleLoginService service = new GoogleLoginService(firebaseIdTokenVerifier, transactionService);
+        GoogleLoginRequest request = createRequest();
+        VerifiedFirebaseUser firebaseUser = new VerifiedFirebaseUser(PROVIDER_ID, EMAIL, NAME);
+        GoogleLoginResponse expected = GoogleLoginResponse.builder()
+                .name(NAME)
+                .newUser(true)
+                .build();
+
+        given(firebaseIdTokenVerifier.verify(FIREBASE_ID_TOKEN)).willReturn(firebaseUser);
+        given(transactionService.login(request, firebaseUser)).willReturn(expected);
+
+        GoogleLoginResponse response = service.googleLogin(request);
+
+        assertThat(response).isSameAs(expected);
+        verify(firebaseIdTokenVerifier).verify(FIREBASE_ID_TOKEN);
+        verify(transactionService).login(request, firebaseUser);
     }
 
     @Test
@@ -131,14 +156,18 @@ class GoogleLoginServiceTest {
 
     @Test
     void googleLoginRejectsMissingRequiredFirebaseUserInfo() {
+        GoogleLoginTransactionService transactionService = mock(GoogleLoginTransactionService.class);
+        GoogleLoginService service = new GoogleLoginService(firebaseIdTokenVerifier, transactionService);
         given(firebaseIdTokenVerifier.verify(anyString()))
                 .willReturn(new VerifiedFirebaseUser(PROVIDER_ID, EMAIL, " "));
 
-        assertThatThrownBy(() -> googleLoginService.googleLogin(createRequest()))
+        assertThatThrownBy(() -> service.googleLogin(createRequest()))
                 .isInstanceOf(BusinessException.class)
                 .asInstanceOf(type(BusinessException.class))
                 .extracting(BusinessException::getCode)
                 .isEqualTo(ErrorCode.INVALID_FIREBASE_ID_TOKEN);
+
+        verify(transactionService, never()).login(any(), any());
     }
 
     private GoogleLoginRequest createRequest() {
