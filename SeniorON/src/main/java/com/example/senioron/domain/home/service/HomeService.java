@@ -287,15 +287,15 @@ public class HomeService {
                 .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
                         seniorUser.get()
                 )
-                .map(this::isExplicitlyDisconnected)
+                .map(this::isDeviceDisconnected)
                 .orElse(true);
     }
 
-    private boolean isExplicitlyDisconnected(
+    private boolean isDeviceDisconnected(
             Device device
     ) {
-        return device.getConnectionStatus()
-                == DeviceStatus.DISCONNECTED;
+        return device.getConnectionStatus() == DeviceStatus.DISCONNECTED
+                || !isDeviceConnected(device.getLastConnectedAt());
     }
 
 
@@ -748,9 +748,15 @@ public class HomeService {
                 );
             }
 
+            String buttonName =
+                    resolveButtonName(
+                            buttonRequest.getButtonName(),
+                            null
+                    );
+
             home.updateButton(
                     buttonRequest.getButtonOrder(),
-                    buttonRequest.getButtonName(),
+                    buttonName,
                     buttonRequest.getIcon(),
                     home.getActionType(),
                     home.getActionValue(),
@@ -923,10 +929,7 @@ public class HomeService {
                         .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
                                 parent
                         )
-                        .map(device ->
-                                device.getConnectionStatus()
-                                        == DeviceStatus.DISCONNECTED
-                        )
+                        .map(this::isDeviceDisconnected)
                         .orElse(true);
 
         List<Home> homes =
