@@ -74,7 +74,7 @@ public class HomeService {
     private final UserSeniorRepository userSeniorRepository;
     private final HomeSettingRepository homeSettingRepository;
     private final FamilyRepository familyRepository;
-    private static final long DEVICE_OFFLINE_THRESHOLD_MINUTES = 30;
+    private static final long DEVICE_OFFLINE_THRESHOLD_MINUTES = 11;
 
     private Home createHomeButton(
             User user,
@@ -255,16 +255,7 @@ public class HomeService {
             );
         }
 
-        String trimmedName =
-                resolvedName.trim();
-
-        if (trimmedName.length() > 6) {
-            throw new BusinessException(
-                    ErrorCode.HOME_BUTTON_NAME_TOO_LONG
-            );
-        }
-
-        return trimmedName;
+        return resolvedName.trim();
     }
 
     private boolean isDeviceConnected(
@@ -296,15 +287,15 @@ public class HomeService {
                 .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
                         seniorUser.get()
                 )
-                .map(this::isExplicitlyDisconnected)
+                .map(this::isDeviceDisconnected)
                 .orElse(true);
     }
 
-    private boolean isExplicitlyDisconnected(
+    private boolean isDeviceDisconnected(
             Device device
     ) {
-        return device.getConnectionStatus()
-                == DeviceStatus.DISCONNECTED;
+        return device.getConnectionStatus() == DeviceStatus.DISCONNECTED
+                || !isDeviceConnected(device.getLastConnectedAt());
     }
 
 
@@ -757,9 +748,15 @@ public class HomeService {
                 );
             }
 
+            String buttonName =
+                    resolveButtonName(
+                            buttonRequest.getButtonName(),
+                            null
+                    );
+
             home.updateButton(
                     buttonRequest.getButtonOrder(),
-                    buttonRequest.getButtonName(),
+                    buttonName,
                     buttonRequest.getIcon(),
                     home.getActionType(),
                     home.getActionValue(),
@@ -932,10 +929,7 @@ public class HomeService {
                         .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
                                 parent
                         )
-                        .map(device ->
-                                device.getConnectionStatus()
-                                        == DeviceStatus.DISCONNECTED
-                        )
+                        .map(this::isDeviceDisconnected)
                         .orElse(true);
 
         List<Home> homes =
