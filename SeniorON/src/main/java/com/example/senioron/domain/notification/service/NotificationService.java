@@ -57,6 +57,9 @@ public class NotificationService {
     private static final String TAG_RESULT = "result";
     private static final int SOS_DISPATCH_POOL_SIZE = 8;
     private static final int GENERAL_DISPATCH_POOL_SIZE = 8;
+    private static final List<NotificationType> HOME_NOTIFICATION_TYPES = List.of(
+            NotificationType.SOS, NotificationType.INACTIVITY, NotificationType.RISK_LINK, NotificationType.OUTING_RETURN
+    );
 
     private final NotificationRepository notificationRepository;
     private final NotificationSettingRepository notificationSettingRepository;
@@ -350,21 +353,26 @@ public class NotificationService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND));
         NotificationSetting setting = notificationSettingRepository.findById(senior.getUsersId())
                 .orElseGet(() -> createDefaultSettingInternal(senior));
+
+        // 타입별로 따로 조회하지 않고 한 번에 가져와서 자바에서 타입별 최신 1건만 뽑는다.
+        // ORDER BY createdAt DESC라 각 타입에서 먼저 만나는 게 최신이다.
+        LocalDateTime threshold = LocalDateTime.now().minusDays(2);
+        Map<NotificationType, Notification> latestByType = notificationRepository
+                .findLatestUnreadByTypes(userId, HOME_NOTIFICATION_TYPES, threshold)
+                .stream()
+                .collect(Collectors.toMap(
+                        Notification::getNotificationType,
+                        notification -> notification,
+                        (first, second) -> first
+                ));
+
         List<NotificationHomeResponse> items = List.of(
-                buildGroup(userId, NotificationType.SOS, true), // SOS 알림은 필수 알림이라 항상 on으로 표시
-                buildGroup(userId, NotificationType.INACTIVITY, setting.getInactivityEnabled()),
-                buildGroup(userId, NotificationType.RISK_LINK, setting.getRiskLinkEnabled()),
-                buildGroup(userId, NotificationType.OUTING_RETURN, setting.getOutingReturnEnabled())
+                NotificationHomeResponse.of(NotificationType.SOS, true, latestByType.get(NotificationType.SOS)), // SOS 알림은 필수 알림이라 항상 on으로 표시
+                NotificationHomeResponse.of(NotificationType.INACTIVITY, setting.getInactivityEnabled(), latestByType.get(NotificationType.INACTIVITY)),
+                NotificationHomeResponse.of(NotificationType.RISK_LINK, setting.getRiskLinkEnabled(), latestByType.get(NotificationType.RISK_LINK)),
+                NotificationHomeResponse.of(NotificationType.OUTING_RETURN, setting.getOutingReturnEnabled(), latestByType.get(NotificationType.OUTING_RETURN))
         );
         return NotificationHomeListResponse.of(items);
-    }
-
-    private NotificationHomeResponse buildGroup(Long userId, NotificationType type, boolean enabled) {
-        LocalDateTime threshold = LocalDateTime.now().minusDays(2);
-        Notification latest = notificationRepository
-                .findLatestUnread(userId, type, threshold)
-                .orElse(null);
-        return NotificationHomeResponse.of(type, enabled, latest);
     }
 
 
@@ -466,7 +474,11 @@ public class NotificationService {
         boolean hasNext = notifications.size() > size;
         List<Notification> pageItems = hasNext ? notifications.subList(0, size) : notifications;
         Long nextCursor = hasNext ? pageItems.get(pageItems.size() - 1).getNotificationId() : null;
-        long totalCount = notificationRepository.countByTypeWithin30Days(userId, type, thirtyDaysLimit);
+        // 첫 페이지에서만 전체 개수를 센다. 다음 페이지("더보기")마다 다시 세는 건 낭비라,
+        // 프론트가 첫 응답에서 받은 값을 그대로 들고 있는다는 전제로 이후 페이지는 null을 내려준다.
+        Long totalCount = cursor == null
+                ? notificationRepository.countByTypeWithin30Days(userId, type, thirtyDaysLimit)
+                : null;
 
         List<NotificationListResponse.NotificationItem> items = pageItems.stream()
                 .map(n -> NotificationListResponse.NotificationItem.builder()

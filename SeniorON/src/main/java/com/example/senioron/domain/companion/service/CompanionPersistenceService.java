@@ -11,20 +11,18 @@ import com.example.senioron.domain.companion.repository.CompanionMessageReposito
 import com.example.senioron.domain.companion.repository.CompanionTurnRepository;
 import com.example.senioron.domain.companion.service.model.CompanionContextMessage;
 import com.example.senioron.domain.companion.service.model.CompanionMessageContent;
-import com.example.senioron.domain.companion.service.model.TurnCreationResult;
+import com.example.senioron.domain.companion.service.model.CompanionTurnSnapshot;
+import com.example.senioron.domain.companion.service.model.TranscriptionResult;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -33,71 +31,15 @@ public class CompanionPersistenceService {
 
     private static final int MAX_RECENT_MESSAGE_LIMIT = 20;
 
-    private final CompanionConversationRepository
-            conversationRepository;
+    private final CompanionConversationRepository conversationRepository;
 
-    private final CompanionTurnRepository
-            turnRepository;
+    private final CompanionTurnRepository turnRepository;
 
-    private final CompanionMessageRepository
-            messageRepository;
-
-    private final CompanionTurnCreationTransactionService
-            turnCreationTransactionService;
+    private final CompanionMessageRepository messageRepository;
 
     private final CompanionTextCipher textCipher;
 
-    @Transactional(propagation = Propagation.NEVER)
-    public TurnCreationResult createTurn(
-            Long conversationId,
-            String requestId
-    ) {
-        Optional<CompanionTurn> existing = turnRepository.findByConversationConversationIdAndRequestId(
-                conversationId,
-                requestId
-        );
 
-        if (existing.isPresent()) {
-            return TurnCreationResult.alreadyExists();
-        }
-
-        try {
-            Long createdTurnId = turnCreationTransactionService.create(
-                    conversationId,
-                    requestId
-            );
-
-            return TurnCreationResult.created(createdTurnId);
-        } catch (
-                DataIntegrityViolationException exception
-        ) {
-            boolean duplicateExists = turnRepository.findByConversationConversationIdAndRequestId(
-                            conversationId,
-                            requestId
-                    )
-                    .isPresent();
-
-            if (duplicateExists) {
-                return TurnCreationResult.alreadyExists();
-            }
-
-            throw exception;
-        }
-    }
-
-    @Transactional
-    public void markTranscribed(
-            Long turnId,
-            String provider,
-            String model
-    ) {
-        CompanionTurn turn = getTurn(turnId);
-
-        turn.markTranscribed(
-                provider,
-                model
-        );
-    }
 
     @Transactional
     public void markSafetyResult(
@@ -113,25 +55,6 @@ public class CompanionPersistenceService {
         );
     }
 
-    @Transactional
-    public void markResponseGenerated(
-            Long turnId,
-            String provider,
-            String model,
-            String promptVersion,
-            Integer inputTokens,
-            Integer outputTokens
-    ) {
-        CompanionTurn turn = getTurn(turnId);
-
-        turn.markResponseGenerated(
-                provider,
-                model,
-                promptVersion,
-                inputTokens,
-                outputTokens
-        );
-    }
 
     @Transactional
     public void markCompleted(
@@ -157,31 +80,6 @@ public class CompanionPersistenceService {
         turn.markFailed(failureStage);
     }
 
-    @Transactional
-    public void prepareRetry(Long turnId) {
-        CompanionTurn turn = getTurn(turnId);
-
-        turn.prepareRetry();
-    }
-
-    @Transactional
-    public void saveMessage(
-            Long turnId,
-            MessageRole role,
-            String plaintext
-    ) {
-        CompanionTurn turn = getTurn(turnId);
-
-        String encryptedContent = textCipher.encrypt(plaintext);
-
-        CompanionMessage message = CompanionMessage.create(
-                turn,
-                role,
-                encryptedContent
-        );
-
-        messageRepository.save(message);
-    }
 
     @Transactional(readOnly = true)
     public List<CompanionMessageContent>
@@ -271,6 +169,178 @@ public class CompanionPersistenceService {
                                                 .getEncryptedContent()
                                 ),
                                 message.getCreatedAt()
+                        )
+                )
+                .toList();
+    }
+
+    @Transactional
+    public void saveTranscription(
+            Long turnId,
+            TranscriptionResult result
+    ) {
+        if (result == null) {
+            throw new BusinessException(
+                    ErrorCode
+                            .COMPANION_PERSISTENCE_FAILED
+            );
+        }
+
+        CompanionTurn turn =
+                getTurn(turnId);
+
+        turn.markTranscribed(
+                result.provider(),
+                result.model()
+        );
+
+        saveEncryptedMessage(
+                turn,
+                MessageRole.USER,
+                result.text()
+        );
+    }
+
+    @Transactional
+    public void saveGeneratedResponse(
+            Long turnId,
+            String assistantText,
+            String provider,
+            String model,
+            String promptVersion,
+            Integer inputTokens,
+            Integer outputTokens
+    ) {
+        CompanionTurn turn =
+                getTurn(turnId);
+
+        turn.markResponseGenerated(
+                provider,
+                model,
+                promptVersion,
+                inputTokens,
+                outputTokens
+        );
+
+        saveEncryptedMessage(
+                turn,
+                MessageRole.ASSISTANT,
+                assistantText
+        );
+    }
+
+    private void saveEncryptedMessage(
+            CompanionTurn turn,
+            MessageRole role,
+            String plaintext
+    ) {
+        String encryptedContent =
+                textCipher.encrypt(plaintext);
+
+        CompanionMessage message =
+                CompanionMessage.create(
+                        turn,
+                        role,
+                        encryptedContent
+                );
+
+        messageRepository.save(message);
+    }
+
+    @Transactional(readOnly = true)
+    public CompanionTurnSnapshot loadTurnSnapshot(
+            Long turnId
+    ) {
+        CompanionTurn turn =
+                getTurn(turnId);
+
+        String transcript =
+                loadMessageOrNull(
+                        turnId,
+                        MessageRole.USER
+                );
+
+        String assistantText =
+                loadMessageOrNull(
+                        turnId,
+                        MessageRole.ASSISTANT
+                );
+
+        return new CompanionTurnSnapshot(
+                turn.getConversation()
+                        .getConversationId(),
+                turn.getTurnId(),
+                turn.getStatus(),
+                turn.getFailureStage(),
+                turn.getSafetyType(),
+                transcript,
+                assistantText
+        );
+    }
+
+    private String loadMessageOrNull(
+            Long turnId,
+            MessageRole role
+    ) {
+        return messageRepository
+                .findByTurnTurnIdAndRole(
+                        turnId,
+                        role
+                )
+                .map(
+                        CompanionMessage
+                                ::getEncryptedContent
+                )
+                .map(textCipher::decrypt)
+                .orElse(null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CompanionMessageContent>
+    loadRecentMessagesExcludingTurn(
+            Long conversationId,
+            Long turnId,
+            int limit
+    ) {
+        if (conversationId == null
+                || turnId == null
+                || limit <= 0) {
+
+            throw new BusinessException(
+                    ErrorCode.BAD_REQUEST
+            );
+        }
+
+        int actualLimit =
+                Math.min(
+                        limit,
+                        MAX_RECENT_MESSAGE_LIMIT
+                );
+
+        List<CompanionMessage> latestFirst =
+                messageRepository
+                        .findByConversationConversationIdAndTurnTurnIdNotOrderByMessageIdDesc(
+                                conversationId,
+                                turnId,
+                                PageRequest.of(
+                                        0,
+                                        actualLimit
+                                )
+                        );
+
+        List<CompanionMessage> oldestFirst =
+                new ArrayList<>(latestFirst);
+
+        Collections.reverse(oldestFirst);
+
+        return oldestFirst.stream()
+                .map(message ->
+                        new CompanionMessageContent(
+                                message.getRole(),
+                                textCipher.decrypt(
+                                        message
+                                                .getEncryptedContent()
+                                )
                         )
                 )
                 .toList();

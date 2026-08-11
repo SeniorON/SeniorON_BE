@@ -10,21 +10,23 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
+    // 홈 화면 카드용. 타입별로 따로 조회하지 않고 한 번에 가져와, 자바에서 타입별 최신 1건만 뽑는다.
+    // sendUser/event는 카드에 바로 필요해서 지연 로딩 대신 같이 가져온다.
     @Query("""
     SELECT n FROM Notification n
+    LEFT JOIN FETCH n.sendUser
+    LEFT JOIN FETCH n.event
     WHERE n.receiverUser.usersId = :userId
-    AND n.notificationType = :type
+    AND n.notificationType IN :types
     AND n.isRead = false
     AND n.createdAt >= :threshold
     ORDER BY n.createdAt DESC
-    LIMIT 1
     """)
-    Optional<Notification> findLatestUnread(
+    List<Notification> findLatestUnreadByTypes(
             @Param("userId") Long userId,
-            @Param("type") NotificationType type,
+            @Param("types") List<NotificationType> types,
             @Param("threshold") LocalDateTime threshold
     );
 

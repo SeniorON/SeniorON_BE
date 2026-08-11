@@ -47,7 +47,11 @@ public class CompanionMessage extends BaseEntity {
     private MessageRole role;
 
     @Lob
-    @Column(name = "encrypted_content", nullable = false)
+    @Column(
+            name = "encrypted_content",
+            nullable = false,
+            columnDefinition = "LONGTEXT"
+    )
     private String encryptedContent;
 
     public static CompanionMessage create(

@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.example.senioron.domain.companion.crypto.CompanionTextCipher;
@@ -20,8 +19,7 @@ import com.example.senioron.domain.companion.repository.CompanionMessageReposito
 import com.example.senioron.domain.companion.repository.CompanionTurnRepository;
 import com.example.senioron.domain.companion.service.model.CompanionContextMessage;
 import com.example.senioron.domain.companion.service.model.CompanionMessageContent;
-import com.example.senioron.domain.companion.service.model.TurnCreationResult;
-import com.example.senioron.domain.companion.service.model.TurnCreationStatus;
+import com.example.senioron.domain.companion.service.model.TranscriptionResult;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.entity.UserStatus;
@@ -37,7 +35,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -63,11 +60,6 @@ class CompanionPersistenceServiceTest {
                     CompanionMessageRepository.class
             );
 
-    private final CompanionTurnCreationTransactionService
-            turnCreationTransactionService =
-            Mockito.mock(
-                    CompanionTurnCreationTransactionService.class
-            );
 
     private final CompanionTextCipher textCipher =
             Mockito.mock(CompanionTextCipher.class);
@@ -81,128 +73,8 @@ class CompanionPersistenceServiceTest {
                         conversationRepository,
                         turnRepository,
                         messageRepository,
-                        turnCreationTransactionService,
                         textCipher
                 );
-    }
-
-    @Test
-    void createsNewTurn() {
-        String requestId =
-                UUID.randomUUID().toString();
-
-        given(
-                turnRepository
-                        .findByConversationConversationIdAndRequestId(
-                                CONVERSATION_ID,
-                                requestId
-                        )
-        ).willReturn(Optional.empty());
-
-        given(
-                turnCreationTransactionService.create(
-                        CONVERSATION_ID,
-                        requestId
-                )
-        ).willReturn(TURN_ID);
-
-        TurnCreationResult result =
-                service.createTurn(
-                        CONVERSATION_ID,
-                        requestId
-                );
-
-        assertThat(result.status())
-                .isEqualTo(
-                        TurnCreationStatus.CREATED
-                );
-
-        assertThat(result.createdTurnId())
-                .isEqualTo(TURN_ID);
-    }
-
-    @Test
-    void returnsAlreadyExistsForExistingRequestId() {
-        String requestId =
-                UUID.randomUUID().toString();
-
-        CompanionTurn existing =
-                createTurn(requestId);
-
-        given(
-                turnRepository
-                        .findByConversationConversationIdAndRequestId(
-                                CONVERSATION_ID,
-                                requestId
-                        )
-        ).willReturn(Optional.of(existing));
-
-        TurnCreationResult result =
-                service.createTurn(
-                        CONVERSATION_ID,
-                        requestId
-                );
-
-        assertThat(result.status())
-                .isEqualTo(
-                        TurnCreationStatus.ALREADY_EXISTS
-                );
-
-        assertThat(result.createdTurnId())
-                .isNull();
-
-        verify(
-                turnCreationTransactionService,
-                never()
-        ).create(
-                CONVERSATION_ID,
-                requestId
-        );
-    }
-
-    @Test
-    void convertsUniqueConflictToAlreadyExists() {
-        String requestId =
-                UUID.randomUUID().toString();
-
-        CompanionTurn existing =
-                createTurn(requestId);
-
-        given(
-                turnRepository
-                        .findByConversationConversationIdAndRequestId(
-                                CONVERSATION_ID,
-                                requestId
-                        )
-        ).willReturn(
-                Optional.empty(),
-                Optional.of(existing)
-        );
-
-        given(
-                turnCreationTransactionService.create(
-                        CONVERSATION_ID,
-                        requestId
-                )
-        ).willThrow(
-                new DataIntegrityViolationException(
-                        "duplicate request"
-                )
-        );
-
-        TurnCreationResult result =
-                service.createTurn(
-                        CONVERSATION_ID,
-                        requestId
-                );
-
-        assertThat(result.status())
-                .isEqualTo(
-                        TurnCreationStatus.ALREADY_EXISTS
-                );
-
-        assertThat(result.createdTurnId())
-                .isNull();
     }
 
     @Test
@@ -226,10 +98,13 @@ class CompanionPersistenceServiceTest {
                 textCipher.encrypt(plaintext)
         ).willReturn(encrypted);
 
-        service.saveMessage(
+        service.saveTranscription(
                 TURN_ID,
-                MessageRole.USER,
-                plaintext
+                new TranscriptionResult(
+                        plaintext,
+                        "OPENAI",
+                        "gpt-4o-mini-transcribe"
+                )
         );
 
         ArgumentCaptor<CompanionMessage> captor =
@@ -249,6 +124,19 @@ class CompanionPersistenceServiceTest {
                 captor.getValue()
                         .getEncryptedContent()
         ).doesNotContain(plaintext);
+
+        assertThat(turn.getStatus())
+                .isEqualTo(
+                        TurnStatus.TRANSCRIBED
+                );
+
+        assertThat(turn.getSttProvider())
+                .isEqualTo("OPENAI");
+
+        assertThat(turn.getSttModel())
+                .isEqualTo(
+                        "gpt-4o-mini-transcribe"
+                );
     }
 
     @Test
