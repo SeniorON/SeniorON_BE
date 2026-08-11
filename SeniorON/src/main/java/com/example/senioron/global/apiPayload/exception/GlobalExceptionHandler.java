@@ -23,7 +23,9 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.ServletRequestBindingException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.ServletWebRequest;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 import java.sql.SQLException;
@@ -31,6 +33,7 @@ import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.regex.Pattern;
 
 /**
  *  Exception 처리기
@@ -38,6 +41,12 @@ import java.util.NoSuchElementException;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
+
+    private static final Pattern
+            COMPANION_VOICE_TURN_PATH =
+            Pattern.compile(
+                    "^/api/companion/conversations/[^/]+/voice-turn/?$"
+            );
 
     // ===================== 사용자 정의 예외 ======================
 
@@ -272,5 +281,72 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             return sanitized.substring(0, maxLength) + "...";
         }
         return sanitized;
+    }
+
+    @Override
+    protected ResponseEntity<Object>
+    handleMaxUploadSizeExceededException(
+            MaxUploadSizeExceededException ex,
+            HttpHeaders headers,
+            HttpStatusCode status,
+            WebRequest request
+    ) {
+        ErrorCode errorCode =
+                resolveUploadSizeErrorCode(
+                        request
+                );
+
+        log.warn(
+                "[GLOBAL_EXCEPTION] upload size exceeded "
+                        + "exceptionClass={} message={} errorCode={}",
+                ex.getClass().getName(),
+                sanitizeMessage(ex.getMessage()),
+                errorCode
+        );
+
+        return ResponseEntity
+                .status(
+                        errorCode.getStatus()
+                )
+                .body(
+                        Response.fail(
+                                errorCode
+                        )
+                );
+    }
+
+    private ErrorCode resolveUploadSizeErrorCode(
+            WebRequest request
+    ) {
+        if (!(request instanceof
+                ServletWebRequest servletWebRequest)) {
+
+            return ErrorCode.PAYLOAD_TOO_LARGE;
+        }
+
+        String requestUri =
+                servletWebRequest
+                        .getRequest()
+                        .getRequestURI();
+
+        String contextPath =
+                servletWebRequest
+                        .getRequest()
+                        .getContextPath();
+
+        String requestPath =
+                requestUri.substring(
+                        contextPath.length()
+                );
+
+        if (COMPANION_VOICE_TURN_PATH
+                .matcher(requestPath)
+                .matches()) {
+
+            return ErrorCode
+                    .COMPANION_AUDIO_SIZE_EXCEEDED;
+        }
+
+        return ErrorCode.PAYLOAD_TOO_LARGE;
     }
 }

@@ -75,8 +75,9 @@ class CompanionSafetyServiceTest {
 
         given(
                 persistenceService
-                        .loadRecentMessages(
+                        .loadRecentMessagesExcludingTurn(
                                 CONVERSATION_ID,
+                                TURN_ID,
                                 6
                         )
         ).willReturn(recentMessages);
@@ -135,8 +136,9 @@ class CompanionSafetyServiceTest {
 
         given(
                 persistenceService
-                        .loadRecentMessages(
+                        .loadRecentMessagesExcludingTurn(
                                 CONVERSATION_ID,
+                                TURN_ID,
                                 6
                         )
         ).willReturn(recentMessages);

@@ -5,13 +5,21 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.example.senioron.domain.companion.dto.response.CompanionConversationStartResponse;
 import com.example.senioron.domain.companion.entity.CompanionConversation;
+import com.example.senioron.domain.companion.entity.CompanionTurn;
 import com.example.senioron.domain.companion.entity.ConversationStatus;
+import com.example.senioron.domain.companion.entity.FailureStage;
+import com.example.senioron.domain.companion.entity.SafetyType;
+import com.example.senioron.domain.companion.entity.TurnStatus;
 import com.example.senioron.domain.companion.repository.CompanionConversationRepository;
 import com.example.senioron.domain.companion.repository.CompanionTurnRepository;
+import com.example.senioron.domain.companion.service.model.TurnClaimResult;
+import com.example.senioron.domain.companion.service.model.TurnClaimStatus;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.entity.UserStatus;
 import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.global.apiPayload.code.ErrorCode;
+import com.example.senioron.global.apiPayload.exception.BusinessException;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -43,8 +51,8 @@ class CompanionCriticalIntegrationTest {
     private CompanionTurnRepository turnRepository;
 
     @Autowired
-    private CompanionTurnCreationTransactionService
-            turnCreationTransactionService;
+    private CompanionTurnClaimTransactionService
+            turnClaimTransactionService;
 
     @Autowired
     private CompanionConversationService
@@ -54,30 +62,45 @@ class CompanionCriticalIntegrationTest {
     private TransactionTemplate transactionTemplate;
 
     @Test
-    void existingTurnCanBeQueriedAfterDuplicateTransactionRollsBack() {
+    void sameRequestIdIsClaimedOnlyOnce() {
         Long conversationId =
                 createCommittedConversation();
 
-        String requestId =
-                UUID.randomUUID().toString();
+        Long userId =
+                loadConversationUserId(
+                        conversationId
+                );
 
-        Long createdTurnId =
-                turnCreationTransactionService.create(
+        String requestId =
+                UUID.randomUUID()
+                        .toString();
+
+        TurnClaimResult first =
+                turnClaimTransactionService.claim(
                         conversationId,
+                        userId,
                         requestId
                 );
 
-        assertThat(createdTurnId)
-                .isNotNull();
-
-        assertThatThrownBy(() ->
-                turnCreationTransactionService.create(
+        TurnClaimResult second =
+                turnClaimTransactionService.claim(
                         conversationId,
+                        userId,
                         requestId
-                )
-        ).isInstanceOf(
-                DataIntegrityViolationException.class
-        );
+                );
+
+        assertThat(first.status())
+                .isEqualTo(
+                        TurnClaimStatus.CREATED
+                );
+
+        assertThat(second.status())
+                .isEqualTo(
+                        TurnClaimStatus.PROCESSING
+                );
+
+        assertThat(second.turnId())
+                .isEqualTo(first.turnId());
 
         assertThat(
                 turnRepository
@@ -86,6 +109,203 @@ class CompanionCriticalIntegrationTest {
                                 requestId
                         )
         ).isPresent();
+    }
+
+    @Test
+    void differentRequestIsRejectedWhileTurnIsProcessing() {
+        Long conversationId =
+                createCommittedConversation();
+
+        Long userId =
+                loadConversationUserId(
+                        conversationId
+                );
+
+        turnClaimTransactionService.claim(
+                conversationId,
+                userId,
+                UUID.randomUUID().toString()
+        );
+
+        assertThatThrownBy(() ->
+                turnClaimTransactionService.claim(
+                        conversationId,
+                        userId,
+                        UUID.randomUUID().toString()
+                )
+        ).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception ->
+                        assertThat(exception.getCode())
+                                .isEqualTo(
+                                        ErrorCode
+                                                .COMPANION_TURN_IN_PROGRESS
+                                )
+        );
+    }
+
+    @Test
+    void failedTurnReturnsRetryWithOriginalStage() {
+        Long conversationId =
+                createCommittedConversation();
+
+        Long userId =
+                loadConversationUserId(
+                        conversationId
+                );
+
+        String requestId =
+                UUID.randomUUID().toString();
+
+        TurnClaimResult first =
+                turnClaimTransactionService.claim(
+                        conversationId,
+                        userId,
+                        requestId
+                );
+
+        transactionTemplate.executeWithoutResult(status -> {
+            CompanionTurn turn =
+                    turnRepository
+                            .findById(first.turnId())
+                            .orElseThrow();
+
+            turn.markFailed(
+                    FailureStage.STT
+            );
+        });
+
+        TurnClaimResult retry =
+                turnClaimTransactionService.claim(
+                        conversationId,
+                        userId,
+                        requestId
+                );
+
+        assertThat(retry.status())
+                .isEqualTo(TurnClaimStatus.RETRY);
+
+        assertThat(retry.retryStage())
+                .isEqualTo(FailureStage.STT);
+
+        assertThat(retry.turnStatus())
+                .isEqualTo(TurnStatus.RECEIVED);
+    }
+
+    @Test
+    void completedTurnReturnsCompletedClaim() {
+        Long conversationId =
+                createCommittedConversation();
+
+        Long userId =
+                loadConversationUserId(
+                        conversationId
+                );
+
+        String requestId =
+                UUID.randomUUID().toString();
+
+        TurnClaimResult first =
+                turnClaimTransactionService.claim(
+                        conversationId,
+                        userId,
+                        requestId
+                );
+
+        transactionTemplate.executeWithoutResult(status -> {
+            CompanionTurn turn =
+                    turnRepository
+                            .findById(first.turnId())
+                            .orElseThrow();
+
+            turn.markTranscribed(
+                    "OPENAI",
+                    "gpt-4o-mini-transcribe"
+            );
+
+            turn.markSafetyResult(
+                    SafetyType.NORMAL,
+                    null
+            );
+
+            turn.markResponseGenerated(
+                    "ANTHROPIC",
+                    "claude-haiku",
+                    "companion-v1",
+                    10,
+                    5
+            );
+
+            turn.markCompleted(
+                    "GOOGLE_CLOUD",
+                    "ko-KR-Neural2-A"
+            );
+        });
+
+        TurnClaimResult completed =
+                turnClaimTransactionService.claim(
+                        conversationId,
+                        userId,
+                        requestId
+                );
+
+        assertThat(completed.status())
+                .isEqualTo(
+                        TurnClaimStatus.COMPLETED
+                );
+
+        assertThat(completed.turnStatus())
+                .isEqualTo(
+                        TurnStatus.COMPLETED
+                );
+    }
+
+    @Test
+    void persistenceFailureCannotBeRetried() {
+        Long conversationId =
+                createCommittedConversation();
+
+        Long userId =
+                loadConversationUserId(
+                        conversationId
+                );
+
+        String requestId =
+                UUID.randomUUID().toString();
+
+        TurnClaimResult first =
+                turnClaimTransactionService.claim(
+                        conversationId,
+                        userId,
+                        requestId
+                );
+
+        transactionTemplate.executeWithoutResult(status -> {
+            CompanionTurn turn =
+                    turnRepository
+                            .findById(first.turnId())
+                            .orElseThrow();
+
+            turn.markFailed(
+                    FailureStage.PERSISTENCE
+            );
+        });
+
+        assertThatThrownBy(() ->
+                turnClaimTransactionService.claim(
+                        conversationId,
+                        userId,
+                        requestId
+                )
+        ).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception ->
+                        assertThat(exception.getCode())
+                                .isEqualTo(
+                                        ErrorCode
+                                                .COMPANION_PERSISTENCE_FAILED
+                                )
+        );
     }
 
     @Test
@@ -203,6 +423,18 @@ class CompanionCriticalIntegrationTest {
             return conversation
                     .getConversationId();
         });
+    }
+
+    private Long loadConversationUserId(
+            Long conversationId
+    ) {
+        return transactionTemplate.execute(status ->
+                conversationRepository
+                        .findById(conversationId)
+                        .orElseThrow()
+                        .getUser()
+                        .getUsersId()
+        );
     }
 
     private User createCommittedParent() {

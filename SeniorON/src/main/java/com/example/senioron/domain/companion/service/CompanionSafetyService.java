@@ -30,8 +30,9 @@ public class CompanionSafetyService {
         List<CompanionMessageContent>
                 recentMessages =
                 persistenceService
-                        .loadRecentMessages(
+                        .loadRecentMessagesExcludingTurn(
                                 conversationId,
+                                turnId,
                                 properties
                                         .getRecentMessageLimit()
                         );

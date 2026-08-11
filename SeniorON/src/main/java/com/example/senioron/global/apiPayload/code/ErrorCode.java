@@ -15,6 +15,7 @@ public enum ErrorCode implements BaseCode {
     FORBIDDEN(HttpStatus.FORBIDDEN, "COMMON403", "금지된 요청입니다."),
     NOT_FOUND(HttpStatus.NOT_FOUND, "COMMON404", "찾을 수 없는 요청입니다."),
     INVALID_DATE_FORMAT(HttpStatus.BAD_REQUEST,"COMMON400_1","날짜 형식이 올바르지 않습니다. yyyy-MM-dd 형식으로 입력해 주세요."),
+    PAYLOAD_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "COMMON413", "업로드 파일 크기가 허용 범위를 초과했습니다."),
 
     // User Error
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "USER404", "사용자를 찾을 수 없습니다."),
@@ -127,6 +128,8 @@ public enum ErrorCode implements BaseCode {
     COMPANION_TTS_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "COMPANION503_3", "음성 합성 서비스가 설정되지 않았습니다."),
     COMPANION_TTS_UNAVAILABLE(HttpStatus.BAD_GATEWAY, "COMPANION502_4", "음성 합성 서비스를 이용할 수 없습니다."),
     COMPANION_TTS_TIMEOUT(HttpStatus.GATEWAY_TIMEOUT, "COMPANION504_3", "음성 합성 요청 시간이 초과되었습니다."),
+    COMPANION_TURN_IN_PROGRESS(HttpStatus.CONFLICT, "COMPANION409_3", "현재 대화의 음성 요청을 처리 중입니다."),
+    COMPANION_PERSISTENCE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "COMPANION500_4", "대화 처리 결과를 저장하지 못했습니다."),
 
     // Photo Error
     UNSUPPORTED_IMAGE_TYPE(HttpStatus.BAD_REQUEST,"IMAGE400_1", "JPG, PNG, WEBP 형식의 이미지만 업로드할 수 있습니다."),
