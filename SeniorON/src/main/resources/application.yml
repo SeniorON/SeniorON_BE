@@ -52,6 +52,10 @@ management:
 kakao:
   client-id: ${KAKAO_CLIENT_ID}
   redirect-uri: ${KAKAO_REDIRECT_URI}
+  user:
+    info-url: ${KAKAO_USER_INFO_URL:https://kapi.kakao.com/v2/user/me}
+    connect-timeout: ${KAKAO_USER_CONNECT_TIMEOUT:3s}
+    read-timeout: ${KAKAO_USER_READ_TIMEOUT:5s}
   local:
     api-key: ${KAKAO_LOCAL_API_KEY:}
 
