@@ -38,6 +38,7 @@ public enum ErrorCode implements BaseCode {
     SIGNUP_EMAIL_VERIFICATION_CODE_NOT_FOUND(HttpStatus.NOT_FOUND, "USER404_3", "회원가입 이메일 인증 요청 이력이 없습니다."),
     INVALID_SIGNUP_EMAIL_VERIFICATION_CODE(HttpStatus.BAD_REQUEST, "USER400_11", "회원가입 이메일 인증 코드가 올바르지 않습니다."),
     EXPIRED_SIGNUP_EMAIL_VERIFICATION_CODE(HttpStatus.BAD_REQUEST, "USER400_12", "회원가입 이메일 인증 코드가 만료되었습니다."),
+    SIGNUP_EMAIL_NOT_VERIFIED(HttpStatus.BAD_REQUEST, "USER400_18", "회원가입 이메일 인증이 완료되지 않았습니다."),
     SIGNUP_EMAIL_ALREADY_VERIFIED(HttpStatus.CONFLICT, "USER409_2", "이미 인증이 완료된 이메일입니다."),
     INVALID_FIREBASE_ID_TOKEN(HttpStatus.UNAUTHORIZED, "USER401_1", "Firebase ID 토큰이 유효하지 않습니다."),
     FIREBASE_AUTH_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "USER503_1", "Firebase 인증을 사용할 수 없습니다."),

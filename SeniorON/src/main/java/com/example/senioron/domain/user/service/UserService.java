@@ -93,6 +93,11 @@ public class UserService {
             throw new BusinessException(ErrorCode.PASSWORD_MISMATCH);
         }
 
+        SignupEmailVerificationCode verificationCode = signupEmailVerificationCodeRepository
+                .findByEmail(request.getEmail())
+                .orElseThrow(() -> new BusinessException(ErrorCode.SIGNUP_EMAIL_VERIFICATION_CODE_NOT_FOUND));
+        validateSignupEmailVerified(verificationCode, LocalDateTime.now());
+
         User user = User.builder()
                 .loginId(request.getLoginId())
                 .email(request.getEmail())
@@ -105,6 +110,7 @@ public class UserService {
 
         User savedUser = userRepository.save(user);
         inactivitySettingService.createDefaultSetting(savedUser);
+        signupEmailVerificationCodeRepository.delete(verificationCode);
 
         return UserSignUpResponse.builder()
                 .usersId(savedUser.getUsersId())
@@ -381,6 +387,19 @@ public class UserService {
     private void validateActiveUser(User user) {
         if (user.getStatus() == UserStatus.WITHDRAWN) {
             throw new BusinessException(ErrorCode.WITHDRAWN_USER);
+        }
+    }
+
+    private void validateSignupEmailVerified(
+            SignupEmailVerificationCode verificationCode,
+            LocalDateTime now
+    ) {
+        if (!verificationCode.isVerified()) {
+            throw new BusinessException(ErrorCode.SIGNUP_EMAIL_NOT_VERIFIED);
+        }
+
+        if (verificationCode.isExpired(now)) {
+            throw new BusinessException(ErrorCode.EXPIRED_SIGNUP_EMAIL_VERIFICATION_CODE);
         }
     }
 

@@ -101,8 +101,10 @@ class UserServiceTest {
     @Test
     void signUpSavesRequestedRole() {
         UserSignUpRequest request = createSignUpRequest(Role.CHILD);
+        SignupEmailVerificationCode savedCode = createVerifiedSignupEmailVerificationCode();
         given(userRepository.existsByLoginId("testId")).willReturn(false);
         given(userRepository.existsByEmail(EMAIL)).willReturn(false);
+        given(signupEmailVerificationCodeRepository.findByEmail(EMAIL)).willReturn(Optional.of(savedCode));
         given(userRepository.save(any(User.class))).willAnswer(invocation -> {
             User user = invocation.getArgument(0);
             ReflectionTestUtils.setField(user, "usersId", 1L);
@@ -117,6 +119,68 @@ class UserServiceTest {
 
         assertThat(savedUser.getRole()).isEqualTo(Role.CHILD);
         assertThat(response.getRole()).isEqualTo(Role.CHILD);
+        verify(signupEmailVerificationCodeRepository).delete(savedCode);
+    }
+
+    @Test
+    void signUpThrowsExceptionWhenSignupEmailVerificationMissing() {
+        UserSignUpRequest request = createSignUpRequest(Role.CHILD);
+        given(userRepository.existsByLoginId("testId")).willReturn(false);
+        given(userRepository.existsByEmail(EMAIL)).willReturn(false);
+        given(signupEmailVerificationCodeRepository.findByEmail(EMAIL)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.signUp(request))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SIGNUP_EMAIL_VERIFICATION_CODE_NOT_FOUND);
+
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void signUpThrowsExceptionWhenSignupEmailIsNotVerified() {
+        UserSignUpRequest request = createSignUpRequest(Role.CHILD);
+        SignupEmailVerificationCode savedCode = createVerificationCode(
+                passwordEncoder.encode(VERIFICATION_CODE),
+                LocalDateTime.now().minusMinutes(1),
+                LocalDateTime.now().plusMinutes(4)
+        );
+        given(userRepository.existsByLoginId("testId")).willReturn(false);
+        given(userRepository.existsByEmail(EMAIL)).willReturn(false);
+        given(signupEmailVerificationCodeRepository.findByEmail(EMAIL)).willReturn(Optional.of(savedCode));
+
+        assertThatThrownBy(() -> userService.signUp(request))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SIGNUP_EMAIL_NOT_VERIFIED);
+
+        verify(userRepository, never()).save(any(User.class));
+        verify(signupEmailVerificationCodeRepository, never()).delete(any(SignupEmailVerificationCode.class));
+    }
+
+    @Test
+    void signUpThrowsExceptionWhenSignupEmailVerificationExpired() {
+        UserSignUpRequest request = createSignUpRequest(Role.CHILD);
+        SignupEmailVerificationCode savedCode = createVerificationCode(
+                passwordEncoder.encode(VERIFICATION_CODE),
+                LocalDateTime.now().minusMinutes(10),
+                LocalDateTime.now().minusMinutes(1)
+        );
+        savedCode.verify(LocalDateTime.now().minusMinutes(2));
+        given(userRepository.existsByLoginId("testId")).willReturn(false);
+        given(userRepository.existsByEmail(EMAIL)).willReturn(false);
+        given(signupEmailVerificationCodeRepository.findByEmail(EMAIL)).willReturn(Optional.of(savedCode));
+
+        assertThatThrownBy(() -> userService.signUp(request))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.EXPIRED_SIGNUP_EMAIL_VERIFICATION_CODE);
+
+        verify(userRepository, never()).save(any(User.class));
+        verify(signupEmailVerificationCodeRepository, never()).delete(any(SignupEmailVerificationCode.class));
     }
 
     @Test
@@ -510,6 +574,16 @@ class UserServiceTest {
                 .issuedAt(issuedAt)
                 .expiresAt(expiresAt)
                 .build();
+    }
+
+    private SignupEmailVerificationCode createVerifiedSignupEmailVerificationCode() {
+        SignupEmailVerificationCode savedCode = createVerificationCode(
+                passwordEncoder.encode(VERIFICATION_CODE),
+                LocalDateTime.now().minusMinutes(1),
+                LocalDateTime.now().plusMinutes(4)
+        );
+        savedCode.verify(LocalDateTime.now().minusSeconds(30));
+        return savedCode;
     }
 
     private SignupEmailVerificationCodeVerifyRequest createVerifyRequest(String email, String verificationCode) {
