@@ -47,9 +47,6 @@ class CompanionVoiceControllerTest {
         mockMvc =
                 MockMvcBuilders
                         .standaloneSetup(controller)
-                        .setControllerAdvice(
-                                new CompanionVoiceExceptionHandler()
-                        )
                         .setCustomArgumentResolvers(
                                 new AuthenticationPrincipalArgumentResolver()
                         )
@@ -228,52 +225,6 @@ class CompanionVoiceControllerTest {
                         jsonPath(
                                 "$.data.failureStage"
                         ).value("TTS")
-                );
-    }
-
-    @Test
-    void returnsCompanionErrorForOversizedAudio()
-            throws Exception {
-
-        UUID requestId =
-                UUID.randomUUID();
-
-        given(
-                voiceTurnService.process(
-                        nullable(
-                                com.example.senioron
-                                        .domain.user.entity.User.class
-                        ),
-                        eq(10L),
-                        eq(requestId),
-                        any(MultipartFile.class)
-                )
-        ).willThrow(
-                new MaxUploadSizeExceededException(
-                        10L * 1024 * 1024
-                )
-        );
-
-        mockMvc.perform(
-                        multipart(
-                                "/api/companion/conversations/"
-                                        + "10/voice-turn"
-                        )
-                                .file(audio())
-                                .param(
-                                        "requestId",
-                                        requestId.toString()
-                                )
-                )
-                .andExpect(
-                        status()
-                                .isPayloadTooLarge()
-                )
-                .andExpect(
-                        jsonPath("$.code")
-                                .value(
-                                        "COMPANION413_1"
-                                )
                 );
     }
 

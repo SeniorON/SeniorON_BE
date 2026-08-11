@@ -197,6 +197,8 @@ class CompanionTurnStaleRecoveryIntegrationTest {
     private void makeTurnStale(
             Long turnId
     ) {
+        // 운영 stale 기준은 5분이다.
+        // 경계 시간 오차를 피하려고 1분의 여유를 둔다.
         LocalDateTime staleUpdatedAt =
                 LocalDateTime.now()
                         .minusMinutes(6);

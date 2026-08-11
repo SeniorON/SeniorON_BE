@@ -67,12 +67,8 @@ class CompanionCriticalIntegrationTest {
                 createCommittedConversation();
 
         Long userId =
-                transactionTemplate.execute(status ->
-                        conversationRepository
-                                .findById(conversationId)
-                                .orElseThrow()
-                                .getUser()
-                                .getUsersId()
+                loadConversationUserId(
+                        conversationId
                 );
 
         String requestId =
