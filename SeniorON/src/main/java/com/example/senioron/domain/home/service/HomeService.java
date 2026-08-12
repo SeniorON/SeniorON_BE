@@ -356,9 +356,7 @@ public class HomeService {
         log.debug("[TIMING] deviceDisconnected check : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - afterDeviceCheck));
 
         HomeResponse.ConnectionResponse connection =
-                deviceDisconnected
-                        ? HomeResponse.ConnectionResponse.disconnected()
-                        : createConnectionResponse(seniorUser);
+                createConnectionResponse(seniorUser);
 
         List<Home> homes =
                 deviceDisconnected
@@ -1499,11 +1497,20 @@ public class HomeService {
                                 .disconnected();
                     }
 
-                    return new HomeResponse.ConnectionResponse(
-                            device.getDeviceName(),
+                    boolean connected =
                             isDeviceConnected(
                                     device.getLastConnectedAt()
-                            ),
+                            );
+
+                    DeviceStatus currentStatus =
+                            connected
+                                    ? DeviceStatus.ONLINE
+                                    : DeviceStatus.OFFLINE;
+
+                    return new HomeResponse.ConnectionResponse(
+                            device.getDeviceName(),
+                            connected,
+                            currentStatus,
                             device.getBatteryLevel()
                     );
                 })

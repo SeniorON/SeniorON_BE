@@ -205,6 +205,10 @@ class HomeServiceSeniorProfileTest {
 
         assertThat(response.getSeniorProfile().getName()).isEqualTo("김영희");
         assertThat(response.getSeniorProfile().getRelation()).isEqualTo("GRANDPARENT");
+
+        assertThat(response.getConnection().getConnected()).isTrue();
+        assertThat(response.getConnection().getConnectionStatus())
+                .isEqualTo(DeviceStatus.ONLINE);
     }
 
     @Test
@@ -285,6 +289,82 @@ class HomeServiceSeniorProfileTest {
 
         assertThat(response.getSeniorProfile().getDetailAddress())
                 .isEqualTo("101호");
+
+        assertThat(response.getConnection().getConnected()).isFalse();
+
+        assertThat(response.getConnection().getConnectionStatus())
+                .isEqualTo(DeviceStatus.DISCONNECTED);
+    }
+
+    @Test
+    void getHomeReturnsOfflineStatusWhenDeviceHasNotConnectedForMoreThan11Minutes() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .build();
+
+        User primaryChild =
+                createChild(
+                        1L,
+                        family,
+                        ManagerType.PRIMARY
+                );
+
+        Senior senior =
+                createSenior(
+                        10L,
+                        family,
+                        primaryChild
+                );
+
+        UserSenior relation =
+                createUserSenior(
+                        primaryChild,
+                        senior,
+                        SeniorRelation.MOTHER,
+                        null
+                );
+
+        User parent = User.builder()
+                .usersId(3L)
+                .name("시니어")
+                .role(Role.PARENT)
+                .family(family)
+                .build();
+
+        setCurrentUser(primaryChild);
+
+        given(userRepository.findByFamilyAndUsersIdNotAndRole(
+                family,
+                1L,
+                Role.PARENT
+        )).willReturn(List.of(parent));
+
+        given(userSeniorRepository.findFirstByUserAndSenior_Family(
+                primaryChild,
+                family
+        )).willReturn(Optional.of(relation));
+
+        Device device = Device.builder()
+                .user(parent)
+                .deviceIdentifier("device-1")
+                .deviceName("Galaxy S24")
+                .connectionStatus(DeviceStatus.ONLINE)
+                .batteryLevel(72)
+                .lastConnectedAt(LocalDateTime.now().minusMinutes(12))
+                .build();
+
+        given(deviceRepository
+                .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(parent))
+                .willReturn(Optional.of(device));
+
+        HomeResponse response =
+                homeService.getHome();
+
+        assertThat(response.getConnection().getConnected())
+                .isFalse();
+
+        assertThat(response.getConnection().getConnectionStatus())
+                .isEqualTo(DeviceStatus.OFFLINE);
     }
 
     private SeniorProfileUpdateRequest createRequest(
