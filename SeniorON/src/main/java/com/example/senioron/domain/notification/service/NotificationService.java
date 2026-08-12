@@ -402,7 +402,8 @@ public class NotificationService {
             if (parents.isEmpty()) {
                 throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
             }
-            if (!areAllDevicesOnline(findParentDeviceStatuses(parents))) {
+            // 부모님 기기가 전부 오프라인이면(=연락 닿을 방법이 없으면) 변경을 차단 (fail-safe)
+            if (!isAnyDeviceOnline(findParentDeviceStatuses(parents))) {
                 throw new BusinessException(ErrorCode.PARENT_DEVICE_OFFLINE);
             }
             senior = parents.get(0);
@@ -420,21 +421,13 @@ public class NotificationService {
         return NotificationSettingResponse.from(type, enabled);
     }
 
-    // 자녀가 알림 설정을 변경하기 전, 같은 가족의 부모님 기기가 하나라도 오프라인이면 변경을 차단 (fail-safe)
-    private void validateParentDeviceOnline(User child) {
-        if (!areAllDevicesOnline(findParentDeviceStatuses(child))) {
-            throw new BusinessException(ErrorCode.PARENT_DEVICE_OFFLINE);
-        }
-    }
-
-    // 자녀가 부모님 기기의 온/오프라인 상태만 조회
+    // 자녀가 부모님 기기의 온/오프라인 상태만 조회. 기기 중 하나라도 온라인이면 온라인으로 본다.
     @Transactional(readOnly = true)
     public ParentDeviceStatusResponse getParentDeviceStatus(Long childUserId) {
         User child = userRepository.findById(childUserId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        List<DeviceStatus> statuses = findParentDeviceStatuses(child);
-        boolean online = !statuses.isEmpty() && statuses.stream().allMatch(status -> status == DeviceStatus.ONLINE);
+        boolean online = isAnyDeviceOnline(findParentDeviceStatuses(child));
 
         return ParentDeviceStatusResponse.builder()
                 .online(online)
@@ -460,9 +453,8 @@ public class NotificationService {
                 .toList();
     }
 
-    private boolean areAllDevicesOnline(List<DeviceStatus> statuses) {
-        return !statuses.isEmpty()
-                && statuses.stream().allMatch(status -> status == DeviceStatus.ONLINE);
+    private boolean isAnyDeviceOnline(List<DeviceStatus> statuses) {
+        return statuses.stream().anyMatch(status -> status == DeviceStatus.ONLINE);
     }
 
     @Transactional(readOnly = true)
