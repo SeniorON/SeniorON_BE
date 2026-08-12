@@ -74,9 +74,9 @@ class NotificationServiceTest {
                 .willReturn(Optional.of(NotificationSetting.builder().user(parentA).build()));
     }
 
-    // 부모가 여러 명이고, 그중 한 명의 기기만 OFFLINE인 경우에도 놓치지 않고 차단해야 한다.
+    // 부모가 여러 명이고, 그중 한 명의 기기라도 ONLINE이면 허용해야 한다 (나머지 하나가 방치된 기기여도).
     @Test
-    void blocksSettingChangeWhenAnyParentDeviceIsOfflineAmongMultipleParents() {
+    void allowsSettingChangeWhenAtLeastOneParentDeviceIsOnlineAmongMultipleParents() {
         given(userRepository.findByFamilyAndUsersIdNotAndRole(family, CHILD_ID, Role.PARENT))
                 .willReturn(List.of(parentA, parentB));
         given(deviceRepository.findAllByUserIn(List.of(parentA, parentB))).willReturn(List.of(
@@ -84,19 +84,29 @@ class NotificationServiceTest {
                 Device.builder().connectionStatus(DeviceStatus.OFFLINE).build()
         ));
 
-        assertThatThrownBy(() -> notificationService.updateSetting(CHILD_ID, NotificationSettingType.INACTIVITY, true))
-                .asInstanceOf(type(BusinessException.class))
-                .extracting(BusinessException::getCode)
-                .isEqualTo(ErrorCode.PARENT_DEVICE_OFFLINE);
+        assertThat(notificationService.updateSetting(CHILD_ID, NotificationSettingType.INACTIVITY, true)).isNotNull();
     }
 
-    // 한 명의 부모가 기기를 여러 대 갖고 있고, 그중 하나만 OFFLINE이어도 차단해야 한다.
+    // 한 명의 부모가 기기를 여러 대 갖고 있어도, 그중 하나만 ONLINE이면 허용해야 한다 (예전에 쓰던 기기가 방치돼 있어도 막히면 안 됨).
     @Test
-    void blocksSettingChangeWhenOneOfMultipleDevicesOfSameParentIsOffline() {
+    void allowsSettingChangeWhenAtLeastOneDeviceOfSameParentIsOnline() {
         given(userRepository.findByFamilyAndUsersIdNotAndRole(family, CHILD_ID, Role.PARENT))
                 .willReturn(List.of(parentA));
         given(deviceRepository.findAllByUserIn(List.of(parentA))).willReturn(List.of(
                 Device.builder().connectionStatus(DeviceStatus.ONLINE).build(),
+                Device.builder().connectionStatus(DeviceStatus.OFFLINE).build()
+        ));
+
+        assertThat(notificationService.updateSetting(CHILD_ID, NotificationSettingType.INACTIVITY, true)).isNotNull();
+    }
+
+    // 부모님 기기가 전부 OFFLINE이면(연락 닿을 방법이 없으면) 그때는 여전히 차단해야 한다.
+    @Test
+    void blocksSettingChangeWhenAllParentDevicesAreOffline() {
+        given(userRepository.findByFamilyAndUsersIdNotAndRole(family, CHILD_ID, Role.PARENT))
+                .willReturn(List.of(parentA));
+        given(deviceRepository.findAllByUserIn(List.of(parentA))).willReturn(List.of(
+                Device.builder().connectionStatus(DeviceStatus.OFFLINE).build(),
                 Device.builder().connectionStatus(DeviceStatus.OFFLINE).build()
         ));
 
@@ -194,12 +204,26 @@ class NotificationServiceTest {
         assertThat(notificationService.isEnabled(childB, NotificationType.INACTIVITY)).isFalse();
     }
 
+    // 기기가 여러 대라도 그중 하나만 ONLINE이면 온라인으로 봐야 한다 (방치된 기기 하나 때문에 항상 오프라인으로 뜨면 안 됨).
     @Test
-    void parentDeviceStatusIsOnlineOnlyWhenAllDevicesAreOnline() {
+    void parentDeviceStatusIsOnlineWhenAtLeastOneDeviceIsOnline() {
         given(userRepository.findByFamilyAndUsersIdNotAndRole(family, CHILD_ID, Role.PARENT))
                 .willReturn(List.of(parentA, parentB));
         given(deviceRepository.findAllByUserIn(List.of(parentA, parentB))).willReturn(List.of(
                 Device.builder().connectionStatus(DeviceStatus.ONLINE).build(),
+                Device.builder().connectionStatus(DeviceStatus.OFFLINE).build()
+        ));
+
+        ParentDeviceStatusResponse response = notificationService.getParentDeviceStatus(CHILD_ID);
+
+        assertThat(response.isOnline()).isTrue();
+    }
+
+    @Test
+    void parentDeviceStatusIsOfflineWhenAllDevicesAreOffline() {
+        given(userRepository.findByFamilyAndUsersIdNotAndRole(family, CHILD_ID, Role.PARENT))
+                .willReturn(List.of(parentA));
+        given(deviceRepository.findAllByUserIn(List.of(parentA))).willReturn(List.of(
                 Device.builder().connectionStatus(DeviceStatus.OFFLINE).build()
         ));
 
