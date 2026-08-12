@@ -137,8 +137,12 @@ public class UserSettingsService {
         User user = userRepository.findById(principal.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
+        String profileImageKey = user.getProfileImageKey();
+        boolean isDefaultProfileImage = profileImageKey == null;
+
         return ProfileImageResponse.builder()
-                .profileImageUrl(s3Service.getFileUrl(user.getProfileImageKey()))
+                .profileImageUrl(isDefaultProfileImage ? null : s3Service.getFileUrl(profileImageKey))
+                .isDefaultProfileImage(isDefaultProfileImage)
                 .build();
     }
 

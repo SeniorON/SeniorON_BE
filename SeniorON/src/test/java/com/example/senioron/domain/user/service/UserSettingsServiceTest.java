@@ -242,10 +242,11 @@ class UserSettingsServiceTest {
         ProfileImageResponse response = userSettingsService.getProfileImage(user);
 
         assertThat(response.getProfileImageUrl()).isEqualTo(imageUrl);
+        assertThat(response.getIsDefaultProfileImage()).isFalse();
     }
 
     @Test
-    void getProfileImageReturnsNullWhenProfileImageMissing() {
+    void getProfileImageReturnsNullAndDefaultFlagWhenProfileImageMissing() {
         User user = createUser(passwordEncoder.encode(CURRENT_PASSWORD));
 
         given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
@@ -253,6 +254,8 @@ class UserSettingsServiceTest {
         ProfileImageResponse response = userSettingsService.getProfileImage(user);
 
         assertThat(response.getProfileImageUrl()).isNull();
+        assertThat(response.getIsDefaultProfileImage()).isTrue();
+        verify(s3Service, never()).getFileUrl(org.mockito.Mockito.any());
     }
 
     private User createUser(String encodedPassword) {
