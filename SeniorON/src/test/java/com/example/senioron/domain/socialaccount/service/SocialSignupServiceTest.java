@@ -14,6 +14,7 @@ import static org.mockito.Mockito.verify;
 
 import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.inactivity.service.InactivitySettingService;
+import com.example.senioron.domain.socialaccount.client.KakaoUserClient;
 import com.example.senioron.domain.socialaccount.dto.kakao.response.KakaoUserInfo;
 import com.example.senioron.domain.socialaccount.dto.request.SocialSignupRequest;
 import com.example.senioron.domain.socialaccount.dto.response.SocialSignupResponse;
@@ -51,7 +52,7 @@ class SocialSignupServiceTest {
     private static final String FCM_TOKEN = "fcm-token";
     private static final String DEVICE_IDENTIFIER = "device-1";
 
-    private final KakaoLoginService kakaoLoginService = mock(KakaoLoginService.class);
+    private final KakaoUserClient kakaoUserClient = mock(KakaoUserClient.class);
     private final FirebaseIdTokenVerifier firebaseIdTokenVerifier = mock(FirebaseIdTokenVerifier.class);
     private final SocialAccountRepository socialAccountRepository = mock(SocialAccountRepository.class);
     private final UserRepository userRepository = mock(UserRepository.class);
@@ -64,15 +65,18 @@ class SocialSignupServiceTest {
 
     @BeforeEach
     void setUp() {
-        socialSignupService = new SocialSignupService(
-                kakaoLoginService,
-                firebaseIdTokenVerifier,
+        SocialSignupTransactionService socialSignupTransactionService = new SocialSignupTransactionService(
                 socialAccountRepository,
                 userRepository,
                 refreshTokenService,
                 jwtUtil,
                 inactivitySettingService,
                 deviceService
+        );
+        socialSignupService = new SocialSignupService(
+                kakaoUserClient,
+                firebaseIdTokenVerifier,
+                socialSignupTransactionService
         );
 
         given(jwtUtil.createAccessToken(any(User.class))).willReturn(ACCESS_TOKEN);
@@ -88,7 +92,7 @@ class SocialSignupServiceTest {
 
     @Test
     void kakaoSocialSignupSucceeds() {
-        given(kakaoLoginService.getUserInfo(SOCIAL_TOKEN)).willReturn(createKakaoUserInfo());
+        given(kakaoUserClient.getUserInfo(SOCIAL_TOKEN)).willReturn(createKakaoUserInfo());
         given(socialAccountRepository.existsByProviderAndProviderId(LoginProvider.KAKAO, KAKAO_PROVIDER_ID))
                 .willReturn(false);
 
@@ -145,7 +149,7 @@ class SocialSignupServiceTest {
 
     @Test
     void socialSignupFailsWhenSocialAccountAlreadyExists() {
-        given(kakaoLoginService.getUserInfo(SOCIAL_TOKEN)).willReturn(createKakaoUserInfo());
+        given(kakaoUserClient.getUserInfo(SOCIAL_TOKEN)).willReturn(createKakaoUserInfo());
         given(socialAccountRepository.existsByProviderAndProviderId(LoginProvider.KAKAO, KAKAO_PROVIDER_ID))
                 .willReturn(true);
 
@@ -175,7 +179,7 @@ class SocialSignupServiceTest {
 
     @Test
     void socialSignupFailsWhenKakaoTokenIsRejected() {
-        given(kakaoLoginService.getUserInfo(SOCIAL_TOKEN))
+        given(kakaoUserClient.getUserInfo(SOCIAL_TOKEN))
                 .willThrow(new HttpClientErrorException(HttpStatus.UNAUTHORIZED));
 
         assertThatThrownBy(() -> socialSignupService.signup(createRequest(LoginProvider.KAKAO)))
@@ -190,7 +194,7 @@ class SocialSignupServiceTest {
 
     @Test
     void socialSignupFailsWithServerErrorWhenKakaoProviderReturnsServerError() {
-        given(kakaoLoginService.getUserInfo(SOCIAL_TOKEN))
+        given(kakaoUserClient.getUserInfo(SOCIAL_TOKEN))
                 .willThrow(new HttpServerErrorException(HttpStatus.BAD_GATEWAY));
 
         assertThatThrownBy(() -> socialSignupService.signup(createRequest(LoginProvider.KAKAO)))
@@ -205,7 +209,7 @@ class SocialSignupServiceTest {
 
     @Test
     void socialSignupFailsWithServerErrorWhenKakaoProviderIsUnreachable() {
-        given(kakaoLoginService.getUserInfo(SOCIAL_TOKEN))
+        given(kakaoUserClient.getUserInfo(SOCIAL_TOKEN))
                 .willThrow(new ResourceAccessException("kakao timeout"));
 
         assertThatThrownBy(() -> socialSignupService.signup(createRequest(LoginProvider.KAKAO)))
@@ -229,14 +233,14 @@ class SocialSignupServiceTest {
                 .extracting(BusinessException::getCode)
                 .isEqualTo(ErrorCode.INVALID_SOCIAL_TOKEN);
 
-        verify(kakaoLoginService, never()).getUserInfo(any());
+        verify(kakaoUserClient, never()).getUserInfo(any());
         verify(socialAccountRepository, never()).existsByProviderAndProviderId(any(), any());
         verify(userRepository, never()).saveAndFlush(any(User.class));
     }
 
     @Test
     void socialSignupFailsWhenRequiredTermsAreNotAgreed() {
-        given(kakaoLoginService.getUserInfo(SOCIAL_TOKEN)).willReturn(createKakaoUserInfo());
+        given(kakaoUserClient.getUserInfo(SOCIAL_TOKEN)).willReturn(createKakaoUserInfo());
 
         assertThatThrownBy(() -> socialSignupService.signup(createRequest(
                 LoginProvider.KAKAO,
@@ -253,7 +257,7 @@ class SocialSignupServiceTest {
 
     @Test
     void socialSignupFailsWhenUserIsUnder14() {
-        given(kakaoLoginService.getUserInfo(SOCIAL_TOKEN)).willReturn(createKakaoUserInfo());
+        given(kakaoUserClient.getUserInfo(SOCIAL_TOKEN)).willReturn(createKakaoUserInfo());
 
         assertThatThrownBy(() -> socialSignupService.signup(createRequest(
                 LoginProvider.KAKAO,
@@ -270,7 +274,7 @@ class SocialSignupServiceTest {
 
     @Test
     void socialSignupFailsWhenBirthIsFutureDate() {
-        given(kakaoLoginService.getUserInfo(SOCIAL_TOKEN)).willReturn(createKakaoUserInfo());
+        given(kakaoUserClient.getUserInfo(SOCIAL_TOKEN)).willReturn(createKakaoUserInfo());
 
         assertThatThrownBy(() -> socialSignupService.signup(createRequest(
                 LoginProvider.KAKAO,
@@ -287,7 +291,7 @@ class SocialSignupServiceTest {
 
     @Test
     void socialSignupStopsWhenUserCreationFails() {
-        given(kakaoLoginService.getUserInfo(SOCIAL_TOKEN)).willReturn(createKakaoUserInfo());
+        given(kakaoUserClient.getUserInfo(SOCIAL_TOKEN)).willReturn(createKakaoUserInfo());
         given(userRepository.saveAndFlush(any(User.class)))
                 .willThrow(new DataIntegrityViolationException("user save failed"));
 
@@ -304,7 +308,7 @@ class SocialSignupServiceTest {
 
     @Test
     void socialSignupFailsWhenEmailAlreadyExists() {
-        given(kakaoLoginService.getUserInfo(SOCIAL_TOKEN)).willReturn(createKakaoUserInfo());
+        given(kakaoUserClient.getUserInfo(SOCIAL_TOKEN)).willReturn(createKakaoUserInfo());
         given(userRepository.existsByEmail(EMAIL)).willReturn(true);
 
         assertThatThrownBy(() -> socialSignupService.signup(createRequest(LoginProvider.KAKAO)))
@@ -324,7 +328,7 @@ class SocialSignupServiceTest {
 
     @Test
     void socialSignupFailsWhenSocialAccountCreationFails() {
-        given(kakaoLoginService.getUserInfo(SOCIAL_TOKEN)).willReturn(createKakaoUserInfo());
+        given(kakaoUserClient.getUserInfo(SOCIAL_TOKEN)).willReturn(createKakaoUserInfo());
         given(socialAccountRepository.saveAndFlush(any(SocialAccount.class)))
                 .willThrow(new DataIntegrityViolationException("duplicate social account"));
 

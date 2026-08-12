@@ -46,6 +46,7 @@ cloud:
 firebase:
   service-account-path: senioron-8c2e1-firebase-adminsdk-fbsvc-ba018605fb.json
 
-#jwt:
-#  access-token-expiration: 60000
-#  refresh-token-expiration: 1209600000
+jwt:
+  secret: local-test-jwt-secret-key-local-test-jwt-secret-key
+  access-token-expiration: 3600000
+  refresh-token-expiration: 1209600000
