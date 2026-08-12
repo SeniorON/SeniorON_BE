@@ -166,9 +166,13 @@ public enum ErrorCode implements BaseCode {
 
     // Event Error
     EVENT_NOT_FOUND(HttpStatus.NOT_FOUND, "EVENT404", "이벤트를 찾을 수 없습니다."),
+    EVENT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "EVENT403", "같은 가족만 이벤트 상세를 조회할 수 있습니다."),
 
     // Notification Error
-    NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "NOTI404", "알림을 찾을 수 없습니다.");
+    NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "NOTI404", "알림을 찾을 수 없습니다."),
+    NOTIFICATION_CHILD_ONLY(HttpStatus.FORBIDDEN, "NOTI403", "자녀 계정만 이용할 수 있습니다."),
+    NOTIFICATION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "NOTI403_1", "본인이 받은 알림만 처리할 수 있습니다."),
+    NOTIFICATION_SIZE_OUT_OF_RANGE(HttpStatus.BAD_REQUEST, "NOTI400", "조회 개수는 1~50 사이여야 합니다.");
 
     private final HttpStatus status;
     private final String code;

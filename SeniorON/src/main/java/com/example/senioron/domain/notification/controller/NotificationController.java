@@ -38,7 +38,7 @@ public class NotificationController {
             @AuthenticationPrincipal User user
     ){
         if (user.getRole() != Role.CHILD) {
-            throw new BusinessException(ErrorCode.FORBIDDEN);
+            throw new BusinessException(ErrorCode.NOTIFICATION_CHILD_ONLY);
         }
         return Response.ok(notificationService.getHomeSettings(user.getUsersId()));
     }
@@ -49,7 +49,7 @@ public class NotificationController {
             @AuthenticationPrincipal User user
     ){
         if (user.getRole() != Role.CHILD) {
-            throw new BusinessException(ErrorCode.FORBIDDEN);
+            throw new BusinessException(ErrorCode.NOTIFICATION_CHILD_ONLY);
         }
         return Response.ok(notificationService.getParentDeviceStatus(user.getUsersId()));
     }
@@ -62,7 +62,7 @@ public class NotificationController {
             @AuthenticationPrincipal User user
     ){
         if (user.getRole() != Role.CHILD) {
-            throw new BusinessException(ErrorCode.FORBIDDEN);
+            throw new BusinessException(ErrorCode.NOTIFICATION_CHILD_ONLY);
         }
         return Response.ok(notificationService.updateSetting(user.getUsersId(), type, req.getEnabled()));
     }

@@ -325,6 +325,38 @@ class NotificationServiceTest {
                         org.mockito.ArgumentMatchers.any());
     }
 
+    // 조회 개수가 범위(1~50) 밖이면 구체적인 코드로 거부해야 한다.
+    @Test
+    void rejectsOutOfRangeSizeWithSpecificErrorCode() {
+        assertThatThrownBy(() -> notificationService.getNotificationList(CHILD_ID, NotificationType.SOS, null, 0))
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.NOTIFICATION_SIZE_OUT_OF_RANGE);
+
+        assertThatThrownBy(() -> notificationService.getNotificationList(CHILD_ID, NotificationType.SOS, null, 51))
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.NOTIFICATION_SIZE_OUT_OF_RANGE);
+    }
+
+    // 본인이 받은 알림이 아니면 읽음처리/삭제 둘 다 구체적인 코드로 거부해야 한다.
+    @Test
+    void rejectsReadAndDeleteOnSomeoneElsesNotificationWithSpecificErrorCode() {
+        Notification othersNotification = notificationAt(NotificationType.SOS, "다른 사람 알림", LocalDateTime.now());
+        ReflectionTestUtils.setField(othersNotification, "receiverUser", parentA);
+        given(notificationRepository.findById(1L)).willReturn(java.util.Optional.of(othersNotification));
+
+        assertThatThrownBy(() -> notificationService.markAsRead(CHILD_ID, 1L))
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.NOTIFICATION_ACCESS_DENIED);
+
+        assertThatThrownBy(() -> notificationService.deleteNotification(CHILD_ID, 1L))
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.NOTIFICATION_ACCESS_DENIED);
+    }
+
     // 30일이 지난 알림을 생성 시각 기준으로 일괄 삭제해야 한다.
     @Test
     void deleteOldNotificationsDeletesByThirtyDayThreshold() {
