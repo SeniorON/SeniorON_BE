@@ -44,6 +44,7 @@ public class AccountRecoveryService {
 
         return LoginIdFindResponse.builder()
                 .loginId(user.getLoginId())
+                .createdAt(user.getCreatedAt())
                 .build();
     }
 
