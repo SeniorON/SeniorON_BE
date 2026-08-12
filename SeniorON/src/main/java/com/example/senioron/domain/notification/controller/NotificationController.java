@@ -16,18 +16,14 @@ import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "알림",description = "알림 관련 메소드")
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/notification")
-@Validated
 public class NotificationController {
 
     private final NotificationService notificationService;
@@ -38,7 +34,7 @@ public class NotificationController {
             @AuthenticationPrincipal User user
     ){
         if (user.getRole() != Role.CHILD) {
-            throw new BusinessException(ErrorCode.FORBIDDEN);
+            throw new BusinessException(ErrorCode.NOTIFICATION_CHILD_ONLY);
         }
         return Response.ok(notificationService.getHomeSettings(user.getUsersId()));
     }
@@ -49,7 +45,7 @@ public class NotificationController {
             @AuthenticationPrincipal User user
     ){
         if (user.getRole() != Role.CHILD) {
-            throw new BusinessException(ErrorCode.FORBIDDEN);
+            throw new BusinessException(ErrorCode.NOTIFICATION_CHILD_ONLY);
         }
         return Response.ok(notificationService.getParentDeviceStatus(user.getUsersId()));
     }
@@ -62,7 +58,7 @@ public class NotificationController {
             @AuthenticationPrincipal User user
     ){
         if (user.getRole() != Role.CHILD) {
-            throw new BusinessException(ErrorCode.FORBIDDEN);
+            throw new BusinessException(ErrorCode.NOTIFICATION_CHILD_ONLY);
         }
         return Response.ok(notificationService.updateSetting(user.getUsersId(), type, req.getEnabled()));
     }
@@ -73,7 +69,7 @@ public class NotificationController {
             @AuthenticationPrincipal User user,
             @RequestParam NotificationType type,
             @RequestParam(required = false) Long cursor,
-            @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size
+            @RequestParam(defaultValue = "20") int size
 
             ){
         return Response.ok(notificationService.getNotificationList(user.getUsersId(), type, cursor, size));

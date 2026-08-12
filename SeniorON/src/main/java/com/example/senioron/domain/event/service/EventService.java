@@ -183,7 +183,7 @@ public class EventService {
 
         if (eventOwner.getFamily() == null || currentUser.getFamily() == null
                 || !Objects.equals(currentUser.getFamily().getFamilyId(), eventOwner.getFamily().getFamilyId())) {
-            throw new BusinessException(ErrorCode.FORBIDDEN);
+            throw new BusinessException(ErrorCode.EVENT_ACCESS_DENIED);
         }
     }
 
