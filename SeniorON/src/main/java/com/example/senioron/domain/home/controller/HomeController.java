@@ -46,34 +46,6 @@ public class HomeController {
     }
 
     @Operation(
-            summary = "홈 버튼 수정",
-            description = "로그인한 사용자의 홈 버튼 순서, 이름, 아이콘 수정"
-    )
-    @PatchMapping("/buttons")
-    public Response<Void> updateButtons(
-            @Valid @RequestBody HomeButtonUpdateRequest request
-    ) {
-        long start = System.nanoTime();
-        homeService.updateButtons(request);
-        log.debug("[TIMING] HomeController.updateButtons : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
-        return Response.ok();
-    }
-
-    @Operation(
-            summary = "홈 버튼 추가",
-            description = "선택한 버튼 옵션을 로그인한 사용자의 홈 화면에 추가"
-    )
-    @PostMapping("/buttons")
-    public Response<HomeButtonCreateResponse> createButton(
-            @Valid @RequestBody HomeButtonCreateRequest request
-    ) {
-        long start = System.nanoTime();
-        Response<HomeButtonCreateResponse> response = Response.ok(homeService.createButton(request));
-        log.debug("[TIMING] HomeController.createButton : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
-        return response;
-    }
-
-    @Operation(
             summary = "추가 가능한 홈 버튼 목록 조회",
             description = "사용자가 홈 화면에 추가할 수 있는 버튼 옵션 목록 조회"
     )
@@ -84,21 +56,6 @@ public class HomeController {
         log.debug("[TIMING] HomeController.getButtonOptions : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
         return response;
     }
-
-    @Operation(
-            summary = "홈 버튼 삭제",
-            description = "로그인한 사용자의 홈 버튼을 삭제하고 남은 버튼 순서를 재정렬"
-    )
-    @DeleteMapping("/buttons/{buttonId}")
-    public Response<Void> deleteButton(
-            @PathVariable Long buttonId
-    ) {
-        long start = System.nanoTime();
-        homeService.deleteButton(buttonId);
-        log.debug("[TIMING] HomeController.deleteButton : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
-        return Response.ok();
-    }
-
     @Operation(
             summary = "부모님 홈 조회",
             description = "부모님 앱에서 글자 크기와 홈 버튼 설정 조회"

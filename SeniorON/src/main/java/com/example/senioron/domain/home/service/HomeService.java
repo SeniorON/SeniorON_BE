@@ -5,15 +5,12 @@ import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.device.entity.Device;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.repository.FamilyRepository;
-import com.example.senioron.domain.home.dto.request.HomeButtonCreateRequest;
 import com.example.senioron.domain.home.dto.request.HomeButtonSaveRequest;
-import com.example.senioron.domain.home.dto.request.HomeButtonUpdateRequest;
 import com.example.senioron.domain.home.dto.request.HomeFontSizeUpdateRequest;
 import com.example.senioron.domain.home.dto.request.SeniorProfileUpdateRequest;
 import com.example.senioron.domain.home.dto.response.*;
 import com.example.senioron.domain.device.dto.response.DeviceDetailResponse;
 import com.example.senioron.domain.home.entity.ActionType;
-import com.example.senioron.domain.home.entity.ButtonOption;
 import com.example.senioron.domain.home.entity.FontSize;
 import com.example.senioron.domain.home.entity.Home;
 import com.example.senioron.domain.home.entity.HomeSetting;
@@ -45,10 +42,8 @@ import lombok.extern.slf4j.Slf4j;
 import java.time.LocalDate;
 import java.time.Period;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.time.LocalDateTime;
 
@@ -636,146 +631,6 @@ public class HomeService {
     }
 
     /**
-     * 기존 홈 버튼 이름, 아이콘, 순서 수정
-     */
-    @Transactional
-    public void updateButtons(
-            HomeButtonUpdateRequest request
-    ) {
-
-        User user = getCurrentUser();
-        validatePrimaryManager(user);
-        validateDeviceConnected(user);
-
-        List<Home> homes =
-                homeRepository
-                        .findAllByUserOrderByButtonOrderAsc(
-                                user
-                        );
-
-        if (request.getButtons() == null
-                || request.getButtons().size() != homes.size()) {
-
-            throw new BusinessException(
-                    ErrorCode.INVALID_HOME_BUTTON_REQUEST
-            );
-        }
-
-        Map<Long, Home> homeMap =
-                homes.stream()
-                        .collect(
-                                Collectors.toMap(
-                                        Home::getHomeId,
-                                        Function.identity()
-                                )
-                        );
-
-        boolean hasNullButtonId =
-                request.getButtons()
-                        .stream()
-                        .anyMatch(buttonRequest ->
-                                buttonRequest.getButtonId() == null
-                        );
-
-        if (hasNullButtonId) {
-            throw new BusinessException(
-                    ErrorCode.HOME_BUTTON_NOT_FOUND
-            );
-        }
-
-        long buttonIdCount =
-                request.getButtons()
-                        .stream()
-                        .map(
-                                HomeButtonUpdateRequest.ButtonRequest
-                                        ::getButtonId
-                        )
-                        .distinct()
-                        .count();
-
-        if (buttonIdCount
-                != request.getButtons().size()) {
-
-            throw new BusinessException(
-                    ErrorCode.DUPLICATE_HOME_BUTTON_ID
-            );
-        }
-
-        boolean hasNullButtonOrder =
-                request.getButtons()
-                        .stream()
-                        .anyMatch(buttonRequest ->
-                                buttonRequest.getButtonOrder() == null
-                        );
-
-        if (hasNullButtonOrder) {
-            throw new BusinessException(
-                    ErrorCode.INVALID_HOME_BUTTON_ORDER
-            );
-        }
-
-        long buttonOrderCount =
-                request.getButtons()
-                        .stream()
-                        .map(
-                                HomeButtonUpdateRequest.ButtonRequest
-                                        ::getButtonOrder
-                        )
-                        .distinct()
-                        .count();
-
-        if (buttonOrderCount
-                != request.getButtons().size()) {
-
-            throw new BusinessException(
-                    ErrorCode.DUPLICATE_HOME_BUTTON_ORDER
-            );
-        }
-
-        List<Integer> sortedOrders =
-                request.getButtons()
-                        .stream()
-                        .map(
-                                HomeButtonUpdateRequest.ButtonRequest
-                                        ::getButtonOrder
-                        )
-                        .sorted()
-                        .toList();
-
-        validateSequentialOrders(sortedOrders);
-
-        for (HomeButtonUpdateRequest.ButtonRequest buttonRequest
-                : request.getButtons()) {
-
-            Home home =
-                    homeMap.get(
-                            buttonRequest.getButtonId()
-                    );
-
-            if (home == null) {
-                throw new BusinessException(
-                        ErrorCode.HOME_BUTTON_NOT_FOUND
-                );
-            }
-
-            String buttonName =
-                    resolveButtonName(
-                            buttonRequest.getButtonName(),
-                            null
-                    );
-
-            home.updateButton(
-                    buttonRequest.getButtonOrder(),
-                    buttonName,
-                    buttonRequest.getIcon(),
-                    home.getActionType(),
-                    home.getActionValue(),
-                    home.getPackageName()
-            );
-        }
-    }
-
-    /**
      * 추가 가능한 홈 버튼 옵션 조회
      */
     @Transactional(readOnly = true)
@@ -798,123 +653,6 @@ public class HomeService {
                         )
                 )
                 .toList();
-    }
-
-    /**
-     * 홈 버튼 개별 추가
-     */
-    @Transactional
-    public HomeButtonCreateResponse createButton(
-            HomeButtonCreateRequest request
-    ) {
-
-        User user = getCurrentUser();
-        validatePrimaryManager(user);
-        validateDeviceConnected(user);
-
-        ButtonOption buttonOption =
-                buttonOptionRepository
-                        .findById(request.getOptionId())
-                        .orElseThrow(() ->
-                                new BusinessException(
-                                        ErrorCode.BUTTON_OPTION_NOT_FOUND
-                                )
-                        );
-
-        boolean alreadyExists =
-                homeRepository
-                        .existsByUserAndActionTypeAndActionValue(
-                                user,
-                                buttonOption.getActionType(),
-                                buttonOption.getActionValue()
-                        );
-
-        if (alreadyExists) {
-            throw new BusinessException(
-                    ErrorCode.HOME_BUTTON_ALREADY_EXISTS
-            );
-        }
-
-        List<Home> homes =
-                homeRepository
-                        .findAllByUserOrderByButtonOrderAsc(
-                                user
-                        );
-
-        if (homes.size() >= MAX_BUTTON_COUNT) {
-            throw new BusinessException(
-                    ErrorCode.HOME_BUTTON_LIMIT_EXCEEDED
-            );
-        }
-
-        int newButtonOrder =
-                homes.stream()
-                        .mapToInt(Home::getButtonOrder)
-                        .max()
-                        .orElse(0)
-                        + 1;
-
-        Home newButton =
-                Home.createButton(
-                        user,
-                        newButtonOrder,
-                        buttonOption.getButtonName(),
-                        buttonOption.getIcon(),
-                        buttonOption.getActionType(),
-                        buttonOption.getActionValue(),
-                        null
-                );
-
-        Home savedButton =
-                homeRepository.save(
-                        newButton
-                );
-
-        return HomeButtonCreateResponse.from(
-                savedButton
-        );
-    }
-
-    /**
-     * 홈 버튼 개별 삭제
-     */
-    @Transactional
-    public void deleteButton(
-            Long buttonId
-    ) {
-
-        User user = getCurrentUser();
-        validatePrimaryManager(user);
-        validateDeviceConnected(user);
-
-        Home home =
-                homeRepository
-                        .findByHomeIdAndUser(
-                                buttonId,
-                                user
-                        )
-                        .orElseThrow(() ->
-                                new BusinessException(
-                                        ErrorCode.HOME_BUTTON_NOT_FOUND
-                                )
-                        );
-
-        homeRepository.delete(home);
-
-        List<Home> remainingButtons =
-                homeRepository
-                        .findAllByUserOrderByButtonOrderAsc(
-                                user
-                        );
-
-        for (int i = 0;
-             i < remainingButtons.size();
-             i++) {
-
-            remainingButtons
-                    .get(i)
-                    .updateButtonOrder(i + 1);
-        }
     }
 
     /**
