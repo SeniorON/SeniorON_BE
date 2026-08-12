@@ -1,5 +1,6 @@
 package com.example.senioron.domain.home.dto.response;
 
+import com.example.senioron.domain.device.entity.DeviceStatus;
 import com.example.senioron.domain.home.entity.ActionType;
 import com.example.senioron.domain.home.entity.FontSize;
 import com.example.senioron.domain.home.entity.MusicApp;
@@ -75,21 +76,29 @@ public class HomeResponse {
         return buttons;
     }
 
+
     public static class ConnectionResponse {
+
 
         @JsonProperty("device_name")
         private String deviceName;
 
         private Boolean connected;
+
+        @JsonProperty("connection_status")
+        private DeviceStatus connectionStatus;
+
         private Integer battery;
 
         public ConnectionResponse(
                 String deviceName,
                 Boolean connected,
+                DeviceStatus connectionStatus,
                 Integer battery
         ) {
             this.deviceName = deviceName;
             this.connected = connected;
+            this.connectionStatus = connectionStatus;
             this.battery = battery;
         }
 
@@ -97,6 +106,7 @@ public class HomeResponse {
             return new ConnectionResponse(
                     null,
                     false,
+                    DeviceStatus.DISCONNECTED,
                     null
             );
         }
@@ -107,6 +117,10 @@ public class HomeResponse {
 
         public Boolean getConnected() {
             return connected;
+        }
+
+        public DeviceStatus getConnectionStatus() {
+            return connectionStatus;
         }
 
         public Integer getBattery() {
