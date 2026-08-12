@@ -271,7 +271,7 @@ public class HomeService {
                                 DEVICE_OFFLINE_THRESHOLD_MINUTES
                         );
 
-        return lastConnectedAt.isAfter(
+        return !lastConnectedAt.isBefore(
                 offlineThreshold
         );
     }
@@ -351,12 +351,24 @@ public class HomeService {
                         .or(() -> findFamilySenior(currentUser));
 
         long afterDeviceCheck = System.nanoTime();
+        Optional<Device> latestDevice =
+                seniorUser.flatMap(user ->
+                        deviceRepository
+                                .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(user)
+                );
+
         boolean deviceDisconnected =
-                isDeviceDisconnected(seniorUser);
-        log.debug("[TIMING] deviceDisconnected check : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - afterDeviceCheck));
+                latestDevice
+                        .map(this::isDeviceDisconnected)
+                        .orElse(true);
+
+        log.debug(
+                "[TIMING] deviceDisconnected check : {}ms",
+                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - afterDeviceCheck)
+        );
 
         HomeResponse.ConnectionResponse connection =
-                createConnectionResponse(seniorUser);
+                createConnectionResponse(latestDevice);
 
         List<Home> homes =
                 deviceDisconnected
@@ -1474,51 +1486,41 @@ public class HomeService {
     }
 
     private HomeResponse.ConnectionResponse createConnectionResponse(
-            Optional<User> seniorUser
+            Optional<Device> latestDevice
     ) {
 
-        if (seniorUser.isEmpty()) {
+        if (latestDevice.isEmpty()) {
             return HomeResponse
                     .ConnectionResponse
                     .disconnected();
         }
 
-        return deviceRepository
-                .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
-                        seniorUser.get()
-                )
-                .map(device -> {
+        Device device = latestDevice.get();
 
-                    if (device.getConnectionStatus()
-                            == DeviceStatus.DISCONNECTED) {
+        if (device.getConnectionStatus()
+                == DeviceStatus.DISCONNECTED) {
 
-                        return HomeResponse
-                                .ConnectionResponse
-                                .disconnected();
-                    }
+            return HomeResponse
+                    .ConnectionResponse
+                    .disconnected();
+        }
 
-                    boolean connected =
-                            isDeviceConnected(
-                                    device.getLastConnectedAt()
-                            );
-
-                    DeviceStatus currentStatus =
-                            connected
-                                    ? DeviceStatus.ONLINE
-                                    : DeviceStatus.OFFLINE;
-
-                    return new HomeResponse.ConnectionResponse(
-                            device.getDeviceName(),
-                            connected,
-                            currentStatus,
-                            device.getBatteryLevel()
-                    );
-                })
-                .orElseGet(
-                        HomeResponse
-                                .ConnectionResponse
-                                ::disconnected
+        boolean connected =
+                isDeviceConnected(
+                        device.getLastConnectedAt()
                 );
+
+        DeviceStatus currentStatus =
+                connected
+                        ? DeviceStatus.ONLINE
+                        : DeviceStatus.OFFLINE;
+
+        return new HomeResponse.ConnectionResponse(
+                device.getDeviceName(),
+                connected,
+                currentStatus,
+                device.getBatteryLevel()
+        );
     }
 
     private HomeResponse.SeniorProfileResponse
