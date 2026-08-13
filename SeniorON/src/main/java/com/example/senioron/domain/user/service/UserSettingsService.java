@@ -130,6 +130,34 @@ public class UserSettingsService {
                 .build();
     }
 
+    public ProfileImageResponse resetProfileImage(User principal) {
+        validateAuthenticated(principal);
+
+        User user = userRepository.findByIdForUpdate(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        String previousProfileImageKey = user.getProfileImageKey();
+
+        if (previousProfileImageKey == null) {
+            return defaultProfileImageResponse();
+        }
+
+        boolean synchronizationActive = TransactionSynchronizationManager.isSynchronizationActive();
+
+        if (synchronizationActive) {
+            registerProfileImageCleanup(previousProfileImageKey, null);
+        }
+
+        user.updateProfileImageKey(null);
+        userRepository.flush();
+
+        if (!synchronizationActive) {
+            deletePreviousProfileImageSilently(previousProfileImageKey, null);
+        }
+
+        return defaultProfileImageResponse();
+    }
+
     @Transactional(readOnly = true)
     public ProfileImageResponse getProfileImage(User principal) {
         validateAuthenticated(principal);
@@ -143,6 +171,13 @@ public class UserSettingsService {
         return ProfileImageResponse.builder()
                 .profileImageUrl(isDefaultProfileImage ? null : s3Service.getFileUrl(profileImageKey))
                 .isDefaultProfileImage(isDefaultProfileImage)
+                .build();
+    }
+
+    private ProfileImageResponse defaultProfileImageResponse() {
+        return ProfileImageResponse.builder()
+                .profileImageUrl(null)
+                .isDefaultProfileImage(true)
                 .build();
     }
 

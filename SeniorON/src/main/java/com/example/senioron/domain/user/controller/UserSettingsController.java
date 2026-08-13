@@ -19,6 +19,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -82,6 +83,17 @@ public class UserSettingsController {
             @RequestPart(value = "image", required = false) MultipartFile image
     ) {
         return Response.ok(userSettingsService.updateProfileImage(user, image));
+    }
+
+    @Operation(
+            summary = "프로필 이미지 초기화",
+            description = "로그인한 사용자의 프로필 이미지를 제거하고 기본 이미지 상태로 변경합니다."
+    )
+    @DeleteMapping("/profile-image")
+    public Response<ProfileImageResponse> resetProfileImage(
+            @AuthenticationPrincipal User user
+    ) {
+        return Response.ok(userSettingsService.resetProfileImage(user));
     }
 
     @Operation(
