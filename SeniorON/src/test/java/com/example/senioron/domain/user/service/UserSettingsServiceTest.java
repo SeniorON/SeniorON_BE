@@ -246,6 +246,49 @@ class UserSettingsServiceTest {
     }
 
     @Test
+    void resetProfileImageRemovesImageKeyAndDeletesPreviousImage() {
+        User user = createUser(passwordEncoder.encode(CURRENT_PASSWORD));
+        user.updateProfileImageKey("profile-images/1/profile.webp");
+
+        given(userRepository.findByIdForUpdate(USER_ID)).willReturn(Optional.of(user));
+
+        ProfileImageResponse response = userSettingsService.resetProfileImage(user);
+
+        assertThat(user.getProfileImageKey()).isNull();
+        assertThat(response.getProfileImageUrl()).isNull();
+        assertThat(response.getIsDefaultProfileImage()).isTrue();
+        verify(userRepository).flush();
+        verify(s3Service).delete("profile-images/1/profile.webp");
+    }
+
+    @Test
+    void resetProfileImageSucceedsWhenAlreadyDefault() {
+        User user = createUser(passwordEncoder.encode(CURRENT_PASSWORD));
+
+        given(userRepository.findByIdForUpdate(USER_ID)).willReturn(Optional.of(user));
+
+        ProfileImageResponse response = userSettingsService.resetProfileImage(user);
+
+        assertThat(user.getProfileImageKey()).isNull();
+        assertThat(response.getProfileImageUrl()).isNull();
+        assertThat(response.getIsDefaultProfileImage()).isTrue();
+        verify(userRepository, never()).flush();
+        verify(s3Service, never()).delete(org.mockito.Mockito.anyString());
+    }
+
+    @Test
+    void resetProfileImageThrowsExceptionWhenUserNotAuthenticated() {
+        assertThatThrownBy(() -> userSettingsService.resetProfileImage(null))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.USER_NOT_AUTHENTICATED);
+
+        verify(userRepository, never()).findByIdForUpdate(org.mockito.Mockito.anyLong());
+        verify(s3Service, never()).delete(org.mockito.Mockito.anyString());
+    }
+
+    @Test
     void getProfileImageReturnsNullAndDefaultFlagWhenProfileImageMissing() {
         User user = createUser(passwordEncoder.encode(CURRENT_PASSWORD));
 
