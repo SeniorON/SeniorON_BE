@@ -77,7 +77,7 @@ companion:
 
   prompt:
     resource: classpath:prompts/companion-system-prompt.txt
-    version: v1
+    version: v2
     recent-message-limit: 20
 
 ai:
