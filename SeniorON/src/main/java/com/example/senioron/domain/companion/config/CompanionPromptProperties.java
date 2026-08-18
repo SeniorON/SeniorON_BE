@@ -19,7 +19,7 @@ public class CompanionPromptProperties {
 
     private Resource resource = new ClassPathResource("prompts/companion-system-prompt.txt");
 
-    private String version = "v1";
+    private String version = "v2";
 
     @Min(1)
     @Max(20)

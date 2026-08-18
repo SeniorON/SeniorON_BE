@@ -17,8 +17,8 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
-import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.regex.Pattern;
 
 @Component
 @Slf4j
@@ -26,8 +26,13 @@ public class AnthropicConversationClient {
 
     private static final String PROVIDER = "ANTHROPIC";
 
-    private static final DateTimeFormatter
-            MESSAGE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    private static final Pattern
+            LEADING_SPEECH_TIME_PATTERN =
+            Pattern.compile(
+                    "^\\s*\\[발화\\s*시각\\s*:\\s*"
+                            + "\\d{4}-\\d{1,2}-\\d{1,2}\\s+"
+                            + "\\d{1,2}:\\d{2}\\]\\s*"
+            );
 
     private final RestClient restClient;
 
@@ -161,18 +166,11 @@ public class AnthropicConversationClient {
                 };
 
         String content =
-                message.content();
-
-        if (message.occurredAt() != null) {
-            content =
-                    "[발화 시각: "
-                            + message.occurredAt()
-                            .format(
-                                    MESSAGE_TIME_FORMATTER
-                            )
-                            + "] "
-                            + content;
-        }
+                message.role() == MessageRole.ASSISTANT
+                        ? sanitizeResponseText(
+                        message.content()
+                )
+                        : message.content();
 
         return new AnthropicMessageRequest.Message(
                 role,
@@ -264,7 +262,10 @@ public class AnthropicConversationClient {
             throw unavailableException();
         }
 
-        String text = findFirstText(response);
+        String text =
+                sanitizeResponseText(
+                        findFirstText(response)
+                );
 
         if (text == null || text.isBlank()) {
             throw new BusinessException(ErrorCode.COMPANION_LLM_EMPTY_RESPONSE);
@@ -314,6 +315,19 @@ public class AnthropicConversationClient {
                 )
                 .findFirst()
                 .orElse(null);
+    }
+
+    private String sanitizeResponseText(
+            String text
+    ) {
+        if (text == null) {
+            return null;
+        }
+
+        return LEADING_SPEECH_TIME_PATTERN
+                .matcher(text)
+                .replaceFirst("")
+                .strip();
     }
 
     private void logProviderFailure(

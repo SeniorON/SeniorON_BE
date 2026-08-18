@@ -88,7 +88,7 @@ class AnthropicConversationClientTest {
                         ),
                         new CompanionContextMessage(
                                 MessageRole.ASSISTANT,
-                                "공원에 다녀오셨군요.",
+                                "[발화 시각: 2026-07-31 18:31] 공원에 다녀오셨군요.",
                                 LocalDateTime.of(
                                         2026,
                                         7,
@@ -166,7 +166,7 @@ class AnthropicConversationClientTest {
                         jsonPath(
                                 "$.messages[0].content"
                         ).value(
-                                "[발화 시각: 2026-07-31 18:30] 어제 공원에 갔어요."
+                                "어제 공원에 갔어요."
                         )
                 )
                 .andExpect(
@@ -178,7 +178,7 @@ class AnthropicConversationClientTest {
                         jsonPath(
                                 "$.messages[1].content"
                         ).value(
-                                "[발화 시각: 2026-07-31 18:31] 공원에 다녀오셨군요."
+                                "공원에 다녀오셨군요."
                         )
                 )
                 .andExpect(
@@ -190,7 +190,7 @@ class AnthropicConversationClientTest {
                         jsonPath(
                                 "$.messages[2].content"
                         ).value(
-                                "[발화 시각: 2026-08-01 09:10] 오늘도 가볼까요?"
+                                "오늘도 가볼까요?"
                         )
                 )
                 .andRespond(
@@ -244,6 +244,57 @@ class AnthropicConversationClientTest {
 
         assertThat(result.outputTokens())
                 .isEqualTo(25);
+
+        server.verify();
+    }
+
+    @Test
+    void 응답_앞의_발화_시각을_제거한다() {
+        server.expect(
+                        requestTo(
+                                BASE_URL
+                                        + "/v1/messages"
+                        )
+                )
+                .andExpect(
+                        method(HttpMethod.POST)
+                )
+                .andRespond(
+                        withSuccess(
+                                """
+                                {
+                                  "model": "claude-haiku-4-5-20251001",
+                                  "content": [
+                                    {
+                                      "type": "text",
+                                      "text": "[발화 시각: 2026-08-18 23:09] 특별히 정해진 주제는 없습니다."
+                                    }
+                                  ],
+                                  "stop_reason": "end_turn",
+                                  "usage": {
+                                    "input_tokens": 50,
+                                    "output_tokens": 15
+                                  }
+                                }
+                                """,
+                                MediaType.APPLICATION_JSON
+                        )
+                );
+
+        CompanionReplyResult result =
+                client.generateReply(
+                        "테스트 시스템 프롬프트",
+                        "v2",
+                        messages
+                );
+
+        assertThat(result.text())
+                .isEqualTo(
+                        "특별히 정해진 주제는 없습니다."
+                );
+
+        assertThat(result.promptVersion())
+                .isEqualTo("v2");
 
         server.verify();
     }
@@ -572,7 +623,7 @@ class AnthropicConversationClientTest {
                         jsonPath(
                                 "$.messages[0].content"
                         ).value(
-                                "[발화 시각: 2026-08-01 09:10] 오늘도 산책할까요?"
+                                "오늘도 산책할까요?"
                         )
                 )
                 .andRespond(
