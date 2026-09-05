@@ -2,13 +2,21 @@ global:
   scrape_interval: 15s
 
 scrape_configs:
-  - job_name: 'spring'
-
+  - job_name: 'spring-blue'
     metrics_path: '/actuator/prometheus'
-
     static_configs:
       - targets:
-          - app:8080
+          - app-blue:8080
+        labels:
+          color: blue
+
+  - job_name: 'spring-green'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets:
+          - app-green:8080
+        labels:
+          color: green
 
   - job_name: 'node-exporter'
     static_configs:

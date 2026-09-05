@@ -38,3 +38,9 @@ tools/fcm-token-tester/firebase-config.js
 
 # Existing application secrets
 application-secret.yml
+
+# Blue-Green active Nginx upstream
+nginx/conf.d/upstream.conf
+
+# Blue-Green deployment runtime state
+.current-color
