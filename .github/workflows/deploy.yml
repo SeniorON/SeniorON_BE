@@ -15,6 +15,7 @@ concurrency:
 
 jobs:
   deploy:
+    permissions: {}
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
 
@@ -47,8 +48,6 @@ jobs:
 
           git checkout --detach "$IMAGE_TAG"
 
-          chmod +x scripts/blue-green-deploy.sh
-
-          ./scripts/blue-green-deploy.sh
+          bash scripts/blue-green-deploy.sh
 
           REMOTE_SCRIPT

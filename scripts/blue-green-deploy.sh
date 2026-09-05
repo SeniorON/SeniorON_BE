@@ -76,10 +76,17 @@ cleanup_service() {
 
 switch_upstream() {
     local color="$1"
+    local src="nginx/upstream.$color.conf"
 
-    cp \
-        "nginx/upstream.$color.conf" \
-        "nginx/conf.d/upstream.conf"
+    if [[ ! -f "$src" ]]; then
+        echo "ERROR: upstream config not found: $src"
+        return 1
+    fi
+
+    if ! cp "$src" "nginx/conf.d/upstream.conf"; then
+        echo "ERROR: Failed to copy upstream config for $color."
+        return 1
+    fi
 
     echo "Testing Nginx configuration..."
 
@@ -95,20 +102,37 @@ switch_upstream() {
         return 1
     fi
 
+    if ! grep -q "app-$color:8080" "nginx/conf.d/upstream.conf"; then
+        echo "ERROR: Active upstream does not point to app-$color."
+        return 1
+    fi
+
     return 0
 }
 
 rollback_upstream() {
     local color="$1"
+    local src="nginx/upstream.$color.conf"
 
     echo ""
     echo "=========================================="
     echo " Rolling back traffic to $color"
     echo "=========================================="
 
-    cp \
-        "nginx/upstream.$color.conf" \
-        "nginx/conf.d/upstream.conf"
+    if [[ ! -f "$src" ]]; then
+        echo "CRITICAL: Rollback upstream config not found: $src"
+        return 1
+    fi
+
+    if ! cp "$src" "nginx/conf.d/upstream.conf"; then
+        echo "CRITICAL: Failed to copy rollback upstream config."
+        return 1
+    fi
+
+    if ! grep -q "app-$color:8080" "nginx/conf.d/upstream.conf"; then
+        echo "CRITICAL: Rollback upstream does not point to app-$color."
+        return 1
+    fi
 
     if ! docker compose exec -T nginx nginx -t; then
         echo "CRITICAL: Rollback Nginx configuration test FAILED."
