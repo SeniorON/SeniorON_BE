@@ -176,6 +176,8 @@ class HomeServiceSeniorProfileTest {
         setCurrentUser(subChild);
         given(userRepository.findByFamilyAndUsersIdNotAndRole(family, 2L, Role.CHILD))
                 .willReturn(List.of(primaryChild));
+        given(userRepository.findByIdForUpdate(1L))
+                .willReturn(Optional.of(primaryChild));
         User parent = User.builder()
                 .usersId(3L)
                 .name("시니어")
