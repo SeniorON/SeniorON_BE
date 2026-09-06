@@ -201,28 +201,28 @@ public class HomeService {
         );
     }
 
-    private List<Home> getOrCreateInitialHomeButtons(
-            User user
-    ) {
+    private List<Home> getOrCreateInitialHomeButtons(User user) {
+
+        // 같은 사용자의 초기 버튼 생성을 동시에 실행하지 못하도록 DB 행 잠금
+        User lockedUser = userRepository
+                .findByIdForUpdate(user.getUsersId())
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.USER_NOT_FOUND)
+                );
 
         List<Home> homes =
-                homeRepository
-                        .findAllByUserOrderByButtonOrderAsc(
-                                user
-                        );
+                homeRepository.findAllByUserOrderByButtonOrderAsc(
+                        lockedUser
+                );
 
         if (!homes.isEmpty()) {
             return homes;
         }
 
         List<Home> initialButtons =
-                createInitialHomeButtons(
-                        user
-                );
+                createInitialHomeButtons(lockedUser);
 
-        return homeRepository.saveAll(
-                initialButtons
-        );
+        return homeRepository.saveAll(initialButtons);
     }
 
     private List<Home> getDisconnectedPreviewButtons(
@@ -580,6 +580,7 @@ public class HomeService {
         homeRepository.deleteAllByUser(
                 user
         );
+        homeRepository.flush();
 
         log.debug("deleteAllByUser : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
 
@@ -599,7 +600,7 @@ public class HomeService {
 
         start = System.nanoTime();
 
-        homeRepository.saveAll(
+        homeRepository.saveAllAndFlush(
                 newHomes
         );
 
