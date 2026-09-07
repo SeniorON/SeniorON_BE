@@ -70,6 +70,7 @@ public class HomeService {
     private final HomeSettingRepository homeSettingRepository;
     private final FamilyRepository familyRepository;
     private static final long DEVICE_OFFLINE_THRESHOLD_MINUTES = 11;
+    private final HomeWebSocketService homeWebSocketService;
 
     private Home createHomeButton(
             User user,
@@ -303,7 +304,8 @@ public class HomeService {
             SeniorRepository seniorRepository,
             UserSeniorRepository userSeniorRepository,
             HomeSettingRepository homeSettingRepository,
-            FamilyRepository familyRepository
+            FamilyRepository familyRepository,
+            HomeWebSocketService homeWebSocketService
     ) {
         this.homeRepository = homeRepository;
         this.buttonOptionRepository = buttonOptionRepository;
@@ -314,6 +316,7 @@ public class HomeService {
         this.userSeniorRepository = userSeniorRepository;
         this.homeSettingRepository = homeSettingRepository;
         this.familyRepository = familyRepository;
+        this.homeWebSocketService = homeWebSocketService;
     }
 
     /**
@@ -546,6 +549,13 @@ public class HomeService {
         validatePrimaryManager(user);
         validateDeviceConnected(user);
 
+        User seniorUser = findSeniorUser(user)
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.DEVICE_NOT_CONNECTED
+                        )
+                );
+
         List<HomeButtonSaveRequest.ButtonRequest> buttonRequests =
                 request.getButtons();
 
@@ -624,6 +634,10 @@ public class HomeService {
 
         homeSettingRepository.save(
                 homeSetting
+        );
+
+        homeWebSocketService.notifyHomeUpdated(
+                seniorUser.getUsersId()
         );
 
         log.debug("homeSetting.save : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
@@ -917,6 +931,13 @@ public class HomeService {
         System.out.println("validateDeviceConnected (DB 포함) : "
                 + TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - s) + "ms");
 
+        User seniorUser = findSeniorUser(user)
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.DEVICE_NOT_CONNECTED
+                        )
+                );
+
         long start = System.nanoTime();
 
         HomeSetting homeSetting =
@@ -942,6 +963,10 @@ public class HomeService {
 
         homeSettingRepository.save(
                 homeSetting
+        );
+
+        homeWebSocketService.notifyHomeUpdated(
+                seniorUser.getUsersId()
         );
 
         System.out.println("saveHomeSetting : "

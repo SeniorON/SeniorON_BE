@@ -55,6 +55,8 @@ class HomeServiceSeniorProfileTest {
 
 
     private HomeService homeService;
+    private final HomeWebSocketService homeWebSocketService =
+            org.mockito.Mockito.mock(HomeWebSocketService.class);
 
     @BeforeEach
     void setUp() {
@@ -67,7 +69,8 @@ class HomeServiceSeniorProfileTest {
                 seniorRepository,
                 userSeniorRepository,
                 homeSettingRepository,
-                familyRepository
+                familyRepository,
+                homeWebSocketService
         );
     }
 
