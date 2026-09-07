@@ -29,7 +29,7 @@ public class EventDetailResponse {
     private String linkUrl;              // RISK_LINK 전용
     private Boolean isDangerous;         // RISK_LINK 전용
 
-    public static EventDetailResponse of(Event event) {
+    public static EventDetailResponse of(Event event, Integer currentBatteryLevel) {
         return EventDetailResponse.builder()
                 .eventId(event.getEventId())
                 .eventType(event.getEventType())
@@ -39,7 +39,7 @@ public class EventDetailResponse {
                 .address(event.getAddress())
                 .latitude(event.getLatitude())
                 .longitude(event.getLongitude())
-                .deviceBattery(event.getDeviceBattery())
+                .deviceBattery(currentBatteryLevel)
                 .phase(event.getPhase())
                 .lastSeenAt(event.getLastSeenAt())
                 .linkUrl(event.getLinkUrl())

@@ -6,6 +6,8 @@ import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static org.mockito.BDDMockito.given;
 
 import com.example.senioron.domain.event.dto.response.EventDetailResponse;
+import com.example.senioron.domain.device.entity.Device;
+import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.event.entity.Event;
 import com.example.senioron.domain.event.entity.EventType;
 import com.example.senioron.domain.event.repository.EventRepository;
@@ -36,6 +38,7 @@ class EventServiceDetailAccessTest {
     private final SafeBrowsingClient safeBrowsingClient = org.mockito.Mockito.mock(SafeBrowsingClient.class);
     private final ApplicationContext applicationContext = org.mockito.Mockito.mock(ApplicationContext.class);
     private final UserRepository userRepository = org.mockito.Mockito.mock(UserRepository.class);
+    private final DeviceRepository deviceRepository = org.mockito.Mockito.mock(DeviceRepository.class);
     private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     private EventService eventService;
@@ -44,7 +47,7 @@ class EventServiceDetailAccessTest {
     void setUp() {
         eventService = new EventService(
                 eventRepository, notificationService, geocodingClient, safeBrowsingClient,
-                applicationContext, userRepository, meterRegistry);
+                applicationContext, userRepository, deviceRepository, meterRegistry);
     }
 
     @Test
@@ -87,5 +90,30 @@ class EventServiceDetailAccessTest {
         EventDetailResponse response = eventService.getEventDetail(familyMember, EVENT_ID);
 
         assertThat(response).isNotNull();
+    }
+
+    @Test
+    void returnsLatestDeviceBatteryInsteadOfEventBatterySnapshot() {
+        Family family = Family.builder().familyId(1L).build();
+        User eventOwner = User.builder().usersId(1L).role(Role.PARENT).family(family).build();
+        User familyMember = User.builder().usersId(2L).role(Role.CHILD).family(family).build();
+        Event event = Event.builder()
+                .eventType(EventType.SOS)
+                .triggeredUser(eventOwner)
+                .deviceBattery(80)
+                .build();
+        Device latestDevice = Device.builder()
+                .user(eventOwner)
+                .batteryLevel(63)
+                .build();
+
+        given(eventRepository.findById(EVENT_ID)).willReturn(Optional.of(event));
+        given(userRepository.findById(familyMember.getUsersId())).willReturn(Optional.of(familyMember));
+        given(deviceRepository.findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(eventOwner))
+                .willReturn(Optional.of(latestDevice));
+
+        EventDetailResponse response = eventService.getEventDetail(familyMember, EVENT_ID);
+
+        assertThat(response.getDeviceBattery()).isEqualTo(63);
     }
 }

@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.example.senioron.domain.event.dto.request.RiskLinkRequest;
+import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.event.dto.response.RiskLinkResponse;
 import com.example.senioron.domain.event.entity.Event;
 import com.example.senioron.domain.event.entity.EventType;
@@ -39,6 +40,7 @@ class EventServiceRiskLinkTest {
     private final SafeBrowsingClient safeBrowsingClient = org.mockito.Mockito.mock(SafeBrowsingClient.class);
     private final ApplicationContext applicationContext = org.mockito.Mockito.mock(ApplicationContext.class);
     private final UserRepository userRepository = org.mockito.Mockito.mock(UserRepository.class);
+    private final DeviceRepository deviceRepository = org.mockito.Mockito.mock(DeviceRepository.class);
     private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     private EventService eventService;
@@ -48,7 +50,7 @@ class EventServiceRiskLinkTest {
     void setUp() {
         eventService = new EventService(
                 eventRepository, notificationService, geocodingClient, safeBrowsingClient,
-                applicationContext, userRepository, meterRegistry);
+                applicationContext, userRepository, deviceRepository, meterRegistry);
 
         senior = User.builder().usersId(1L).name("시니어").role(Role.PARENT).build();
 
