@@ -44,11 +44,11 @@ wait_for_health() {
     echo ""
     echo "Waiting for $service health..."
 
-    for i in $(seq 1 40); do
+    for i in $(seq 1 75); do
         local status
         status=$(get_health_status "$service")
 
-        echo "[$i/40] $service health=$status"
+        echo "[$i/75] $service health=$status"
 
         if [[ "$status" == "healthy" ]]; then
             echo "$service is healthy."
