@@ -95,6 +95,7 @@ services:
           "CMD-SHELL",
           "wget -qO- http://localhost:8080/actuator/health/readiness | grep -q '\"status\":\"UP\"'"
         ]
+
       interval: 5s
       timeout: 5s
       retries: 20
