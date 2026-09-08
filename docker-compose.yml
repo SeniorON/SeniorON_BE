@@ -39,7 +39,7 @@ services:
 
     mem_limit: 1024m
     environment:
-      JAVA_TOOL_OPTIONS: "-Djava.net.preferIPv4Stack=true -Xms128m -Xmx256m -XX:+UseG1GC"
+      JAVA_TOOL_OPTIONS: "-Djava.net.preferIPv4Stack=true -Xms384m -Xmx512m -XX:+UseG1GC"
       SPRING_PROFILES_ACTIVE: prod
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
@@ -58,10 +58,10 @@ services:
           "CMD-SHELL",
           "wget -qO- http://localhost:8080/actuator/health/readiness | grep -q '\"status\":\"UP\"'"
         ]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 30s
+      interval: 3s
+      timeout: 3s
+      retries: 25
+      start_period: 15s
 
     restart: unless-stopped
 
@@ -76,7 +76,7 @@ services:
 
     mem_limit: 1024m
     environment:
-      JAVA_TOOL_OPTIONS: "-Djava.net.preferIPv4Stack=true -Xms128m -Xmx256m -XX:+UseG1GC"
+      JAVA_TOOL_OPTIONS: "-Djava.net.preferIPv4Stack=true -Xms384m -Xmx512m -XX:+UseG1GC"
       SPRING_PROFILES_ACTIVE: prod
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
@@ -95,12 +95,13 @@ services:
           "CMD-SHELL",
           "wget -qO- http://localhost:8080/actuator/health/readiness | grep -q '\"status\":\"UP\"'"
         ]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 30s
+      interval: 3s
+      timeout: 3s
+      retries: 25
+      start_period: 15s
 
     restart: unless-stopped
+
 
   prometheus:
     image: prom/prometheus:latest
