@@ -25,6 +25,8 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
+          echo "${{ secrets.EC2_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
 
       - name: EC2 Blue-Green 배포
         env:
@@ -35,7 +37,8 @@ jobs:
           set -euo pipefail
 
           ssh \
-            -o StrictHostKeyChecking=no \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile=~/.ssh/known_hosts \
             -i ~/.ssh/id_ed25519 \
             "$EC2_USER@$EC2_HOST" \
             "IMAGE_TAG='$IMAGE_TAG' bash -s" <<'REMOTE_SCRIPT'
