@@ -74,7 +74,11 @@ public class JwtUtil {
     }
 
     public Long getUsersId(String token) {
-        String subject = parseClaims(token).getSubject();
+        return getUsersId(parseClaims(token));
+    }
+
+    public Long getUsersId(Claims claims) {
+        String subject = claims.getSubject();
 
         if (subject == null || subject.isBlank()) {
             throw new IllegalArgumentException("JWT subject is missing");
@@ -84,19 +88,27 @@ public class JwtUtil {
     }
 
     public boolean isAccessToken(String token) {
-        String tokenType = parseClaims(token).get(TOKEN_TYPE_CLAIM, String.class);
+        return isAccessToken(parseClaims(token));
+    }
+
+    public boolean isAccessToken(Claims claims) {
+        String tokenType = claims.get(TOKEN_TYPE_CLAIM, String.class);
         return tokenType == null || ACCESS_TOKEN_TYPE.equals(tokenType);
     }
 
     public boolean isRefreshToken(String token) {
-        return REFRESH_TOKEN_TYPE.equals(parseClaims(token).get(TOKEN_TYPE_CLAIM, String.class));
+        return isRefreshToken(parseClaims(token));
+    }
+
+    public boolean isRefreshToken(Claims claims) {
+        return REFRESH_TOKEN_TYPE.equals(claims.get(TOKEN_TYPE_CLAIM, String.class));
     }
 
     public LocalDateTime getRefreshTokenExpiresAt() {
         return LocalDateTime.now().plus(Duration.ofMillis(refreshTokenExpiration));
     }
 
-    private Claims parseClaims(String token) {
+    public Claims parseClaims(String token) {
         return Jwts.parser()
                 .verifyWith(secretKey)
                 .build()

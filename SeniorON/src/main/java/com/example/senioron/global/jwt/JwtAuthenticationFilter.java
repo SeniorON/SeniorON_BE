@@ -5,6 +5,7 @@ import com.example.senioron.domain.user.entity.UserStatus;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.config.SecurityErrorResponseWriter;
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -78,11 +79,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (token != null) {
             try {
                 long jwtStart = System.currentTimeMillis();
-                if (!jwtUtil.isAccessToken(token)) {
+                Claims claims = jwtUtil.parseClaims(token);
+
+                if (!jwtUtil.isAccessToken(claims)) {
                     throw new JwtException("Only access token can authenticate requests.");
                 }
 
-                Long usersId = jwtUtil.getUsersId(token);
+                Long usersId = jwtUtil.getUsersId(claims);
                 log.debug("[TIMING] JWT 파싱: {}ms | {}",
                         System.currentTimeMillis() - jwtStart, path);
 
