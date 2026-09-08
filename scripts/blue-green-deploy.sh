@@ -44,11 +44,11 @@ wait_for_health() {
     echo ""
     echo "Waiting for $service health..."
 
-    for i in $(seq 1 30); do
+    for i in $(seq 1 40); do
         local status
         status=$(get_health_status "$service")
 
-        echo "[$i/30] $service health=$status"
+        echo "[$i/40] $service health=$status"
 
         if [[ "$status" == "healthy" ]]; then
             echo "$service is healthy."
@@ -60,7 +60,7 @@ wait_for_health() {
             return 1
         fi
 
-        sleep 5
+        sleep 2
     done
 
     echo "ERROR: $service health check timeout."
@@ -235,7 +235,7 @@ echo ""
 echo "[2/7] Starting $NEXT_SERVICE..."
 
 IMAGE_TAG="$IMAGE_TAG" \
-docker compose up -d "$NEXT_SERVICE"
+docker compose up -d --remove-orphans "$NEXT_SERVICE"
 
 # --------------------------------------------------
 # 4. Health Check
