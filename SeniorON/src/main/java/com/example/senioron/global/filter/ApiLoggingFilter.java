@@ -1,10 +1,13 @@
 package com.example.senioron.global.filter;
 
+import com.example.senioron.global.jwt.JwtAuthenticationFilter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -12,6 +15,7 @@ import java.io.IOException;
 
 @Slf4j
 @Component
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class ApiLoggingFilter extends OncePerRequestFilter {
 
     @Override
@@ -32,7 +36,7 @@ public class ApiLoggingFilter extends OncePerRequestFilter {
             return;
         }
 
-        long start = System.currentTimeMillis();
+        long start = System.nanoTime();
 
         // QueryString은 기록하지 않음 (민감정보 노출 방지)
         String requestUri = request.getRequestURI();
@@ -54,20 +58,20 @@ public class ApiLoggingFilter extends OncePerRequestFilter {
             );
 
             // ApiLoggingFilter 전처리 시간 (Security Filter 진입 전까지)
-            long preChainMs = System.currentTimeMillis() - start;
+            long preChainMs = elapsedMillis(start);
             log.debug("[TIMING] pre-chain (Security 진입 전): {}ms | {} {}",
                     preChainMs, request.getMethod(), requestUri);
 
-            long chainStart = System.currentTimeMillis();
+            long chainStart = System.nanoTime();
             filterChain.doFilter(request, response);
-            long chainMs = System.currentTimeMillis() - chainStart;
+            long chainMs = elapsedMillis(chainStart);
 
             log.debug("[TIMING] chain (Security+Service+Tx): {}ms | {} {}",
                     chainMs, request.getMethod(), requestUri);
 
         } catch (Exception e) {
 
-            long duration = System.currentTimeMillis() - start;
+            long duration = elapsedMillis(start);
 
             log.error(
                     "[EXCEPTION] {} {} | {}ms",
@@ -81,8 +85,18 @@ public class ApiLoggingFilter extends OncePerRequestFilter {
 
         } finally {
 
-            long duration = System.currentTimeMillis() - start;
+            long duration = elapsedMillis(start);
             int status = response.getStatus();
+            long jwtAuthenticationMs = getLongAttribute(
+                    request,
+                    JwtAuthenticationFilter.JWT_AUTHENTICATION_TIME_ATTRIBUTE,
+                    0L
+            );
+            long controllerServiceAfterJwtMs = getLongAttribute(
+                    request,
+                    JwtAuthenticationFilter.CONTROLLER_SERVICE_AFTER_JWT_TIME_ATTRIBUTE,
+                    Math.max(0L, duration - jwtAuthenticationMs)
+            );
 
             if (status >= 500) {
                 log.error(
@@ -101,6 +115,30 @@ public class ApiLoggingFilter extends OncePerRequestFilter {
                         duration
                 );
             }
+
+            log.info(
+                    "[PERF] {} {} - request total={}ms jwtAuthentication={}ms controller/service after JWT={}ms status={}",
+                    request.getMethod(),
+                    requestUri,
+                    duration,
+                    jwtAuthenticationMs,
+                    controllerServiceAfterJwtMs,
+                    status
+            );
         }
+    }
+
+    private long getLongAttribute(HttpServletRequest request, String attributeName, long defaultValue) {
+        Object value = request.getAttribute(attributeName);
+
+        if (value instanceof Long longValue) {
+            return longValue;
+        }
+
+        return defaultValue;
+    }
+
+    private long elapsedMillis(long startNanos) {
+        return (System.nanoTime() - startNanos) / 1_000_000L;
     }
 }

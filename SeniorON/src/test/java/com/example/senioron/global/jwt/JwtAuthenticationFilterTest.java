@@ -53,6 +53,10 @@ class JwtAuthenticationFilterTest {
         filter.doFilterInternal(request, response, filterChain);
 
         verify(jwtUtil, times(1)).parseClaims(token);
+        assertThat(request.getAttribute(JwtAuthenticationFilter.JWT_AUTHENTICATION_TIME_ATTRIBUTE))
+                .isInstanceOf(Long.class);
+        assertThat(request.getAttribute(JwtAuthenticationFilter.CONTROLLER_SERVICE_AFTER_JWT_TIME_ATTRIBUTE))
+                .isInstanceOf(Long.class);
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         assertThat(authentication).isNotNull();
         assertThat(authentication.getPrincipal()).isSameAs(user);

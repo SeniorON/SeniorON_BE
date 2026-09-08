@@ -27,6 +27,9 @@ import java.util.Collections;
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
+    public static final String JWT_AUTHENTICATION_TIME_ATTRIBUTE = "jwtAuthenticationTimeMs";
+    public static final String CONTROLLER_SERVICE_AFTER_JWT_TIME_ATTRIBUTE = "controllerServiceAfterJwtTimeMs";
+
     private static final Set<String> PUBLIC_PATHS = Set.of(
             "/swagger-ui.html",
             "/api/users/signup",
@@ -71,14 +74,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             FilterChain filterChain
     ) throws ServletException, IOException {
 
-        long filterStart = System.currentTimeMillis();
         String path = request.getRequestURI();
+        long jwtAuthenticationStart = System.nanoTime();
 
         String token = resolveToken(request);
 
-        if (token != null) {
-            try {
-                long jwtStart = System.currentTimeMillis();
+        try {
+            if (token != null) {
+                long jwtStart = System.nanoTime();
                 Claims claims = jwtUtil.parseClaims(token);
 
                 if (!jwtUtil.isAccessToken(claims)) {
@@ -87,13 +90,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 Long usersId = jwtUtil.getUsersId(claims);
                 log.debug("[TIMING] JWT 파싱: {}ms | {}",
-                        System.currentTimeMillis() - jwtStart, path);
+                        elapsedMillis(jwtStart), path);
 
-                long dbStart = System.currentTimeMillis();
+                long dbStart = System.nanoTime();
                 User user = userRepository.findById(usersId)
                         .orElse(null);
                 log.debug("[TIMING] JWT Filter DB조회 (findById): {}ms | {}",
-                        System.currentTimeMillis() - dbStart, path);
+                        elapsedMillis(dbStart), path);
 
                 if (user != null && user.getStatus() == UserStatus.ACTIVE) {
                     UsernamePasswordAuthenticationToken authentication =
@@ -105,17 +108,32 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                     SecurityContextHolder.getContext().setAuthentication(authentication);
                 }
-            } catch (JwtException | IllegalArgumentException e) {
-                SecurityContextHolder.clearContext();
-                securityErrorResponseWriter.write(response, ErrorCode.UNAUTHORIZED);
-                return;
             }
+        } catch (JwtException | IllegalArgumentException e) {
+            request.setAttribute(
+                    JWT_AUTHENTICATION_TIME_ATTRIBUTE,
+                    elapsedMillis(jwtAuthenticationStart)
+            );
+            request.setAttribute(CONTROLLER_SERVICE_AFTER_JWT_TIME_ATTRIBUTE, 0L);
+            SecurityContextHolder.clearContext();
+            securityErrorResponseWriter.write(response, ErrorCode.UNAUTHORIZED);
+            return;
         }
 
-        log.debug("[TIMING] JWT Filter 전체: {}ms | {}",
-                System.currentTimeMillis() - filterStart, path);
+        long jwtAuthenticationMs = elapsedMillis(jwtAuthenticationStart);
+        request.setAttribute(JWT_AUTHENTICATION_TIME_ATTRIBUTE, jwtAuthenticationMs);
 
-        filterChain.doFilter(request, response);
+        long downstreamStart = System.nanoTime();
+        try {
+            filterChain.doFilter(request, response);
+        } finally {
+            request.setAttribute(
+                    CONTROLLER_SERVICE_AFTER_JWT_TIME_ATTRIBUTE,
+                    elapsedMillis(downstreamStart)
+            );
+            log.debug("[TIMING] JWT Authentication: {}ms | {}",
+                    jwtAuthenticationMs, path);
+        }
     }
 
     private String resolveToken(HttpServletRequest request) {
@@ -126,5 +144,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         return null;
+    }
+
+    private long elapsedMillis(long startNanos) {
+        return (System.nanoTime() - startNanos) / 1_000_000L;
     }
 }
