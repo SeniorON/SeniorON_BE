@@ -58,10 +58,10 @@ services:
           "CMD-SHELL",
           "wget -qO- http://localhost:8080/actuator/health/readiness | grep -q '\"status\":\"UP\"'"
         ]
-      interval: 3s
-      timeout: 3s
-      retries: 25
-      start_period: 15s
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 90s
 
     restart: unless-stopped
 
@@ -95,10 +95,11 @@ services:
           "CMD-SHELL",
           "wget -qO- http://localhost:8080/actuator/health/readiness | grep -q '\"status\":\"UP\"'"
         ]
-      interval: 3s
-      timeout: 3s
-      retries: 25
-      start_period: 15s
+
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 90s
 
     restart: unless-stopped
 
