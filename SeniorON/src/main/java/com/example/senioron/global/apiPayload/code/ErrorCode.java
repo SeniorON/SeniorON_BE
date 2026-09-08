@@ -100,6 +100,10 @@ public enum ErrorCode implements BaseCode {
     CANNOT_CHANGE_PRIMARY_TO_SELF(HttpStatus.BAD_REQUEST, "FAMILY400_2", "본인은 주 담당자 변경 대상으로 선택할 수 없습니다."),
     FAMILY_PHOTO_NOT_FOUND(HttpStatus.NOT_FOUND, "FAMILY_PHOTO404", "가족 사진을 찾을 수 없습니다."),
     FAMILY_PHOTO_DELETE_FORBIDDEN(HttpStatus.FORBIDDEN, "FAMILY_PHOTO403", "해당 가족 사진을 삭제할 권한이 없습니다."),
+    FAMILY_PHOTO_UPLOAD_NOT_FOUND(HttpStatus.NOT_FOUND, "FAMILY_PHOTO404_1", "업로드된 사진 파일을 찾을 수 없습니다."),
+    FAMILY_PHOTO_UPLOAD_FORBIDDEN(HttpStatus.FORBIDDEN, "FAMILY_PHOTO403_1", "해당 사진 업로드를 완료할 권한이 없습니다."),
+    FAMILY_PHOTO_SIZE_EXCEEDED(HttpStatus.BAD_REQUEST, "FAMILY_PHOTO400_1", "사진 크기는 10MB 이하여야 합니다."),
+    FAMILY_PHOTO_ALREADY_REGISTERED(HttpStatus.CONFLICT, "FAMILY_PHOTO409", "이미 등록 완료된 사진입니다."),
     PRIMARY_MANAGER_MUST_BE_CHILD(HttpStatus.BAD_REQUEST, "FAMILY400_3", "주 담당자는 자녀 계정만 지정할 수 있습니다."),
 
     // Companion Error

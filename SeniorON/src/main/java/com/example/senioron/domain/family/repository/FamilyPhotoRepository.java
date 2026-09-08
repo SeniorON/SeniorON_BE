@@ -170,4 +170,6 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
             Long usersId,
             String idempotencyKey
     );
+
+    boolean existsByImageKey(String imageKey);
 }

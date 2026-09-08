@@ -1,19 +1,39 @@
 package com.example.senioron.domain.family.entity;
 
-import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.common.entity.BaseEntity;
 import com.example.senioron.domain.user.entity.User;
 import jakarta.persistence.*;
-import java.time.*;
 import lombok.*;
-import com.example.senioron.common.entity.BaseEntity;
+
+import java.time.*;
 
 @Entity
-@Table(name = "family_photo", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_family_photo_user_idempotency", columnNames = {"users_id", "idempotency_key"})},
+@Table(
+        name = "family_photo",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_family_photo_user_idempotency",
+                        columnNames = {
+                                "users_id",
+                                "idempotency_key"
+                        }
+                ),
+                @UniqueConstraint(
+                        name = "uk_family_photo_image_key",
+                        columnNames = "image_key"
+                )
+        },
         indexes = {
-                @Index(name = "idx_family_photo_family_created", columnList = "family_id, created_at, family_photo_id"),
-                @Index(name = "idx_family_photo_family_user", columnList = "family_id, users_id")
-        })
+                @Index(
+                        name = "idx_family_photo_family_created",
+                        columnList = "family_id, created_at, family_photo_id"
+                ),
+                @Index(
+                        name = "idx_family_photo_family_user",
+                        columnList = "family_id, users_id"
+                )
+        }
+)
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor

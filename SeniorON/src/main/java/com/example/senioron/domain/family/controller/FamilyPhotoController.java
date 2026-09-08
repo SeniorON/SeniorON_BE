@@ -1,9 +1,12 @@
 package com.example.senioron.domain.family.controller;
 
 import com.example.senioron.domain.family.dto.request.FamilyPhotoCreateRequest;
+import com.example.senioron.domain.family.dto.request.FamilyPhotoUploadCompleteRequest;
+import com.example.senioron.domain.family.dto.request.FamilyPhotoUploadUrlRequest;
 import com.example.senioron.domain.family.dto.response.FamilyPhotoAlbumResponse;
 import com.example.senioron.domain.family.dto.response.FamilyPhotoItemResponse;
 import com.example.senioron.domain.family.dto.response.FamilyPhotoListResponse;
+import com.example.senioron.domain.family.dto.response.FamilyPhotoUploadUrlResponse;
 import com.example.senioron.domain.family.service.FamilyPhotoService;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.global.apiPayload.code.ResultCode;
@@ -37,6 +40,25 @@ public class FamilyPhotoController {
             @Valid @ModelAttribute FamilyPhotoCreateRequest request
     ) {
         return Response.ok(familyPhotoService.createPhoto(user, idempotencyKey.toString(), request));
+    }
+
+    @Operation(summary = "가족사진 업로드 URL 발급", description = "가족사진을 S3에 직접 업로드할 수 있는 Presigned PUT URL을 발급합니다.")
+    @PostMapping(value = "/upload-url", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public Response<FamilyPhotoUploadUrlResponse> createPhotoUploadUrl(
+            @AuthenticationPrincipal User user,
+            @Valid @RequestBody FamilyPhotoUploadUrlRequest request
+    ) {
+        return Response.ok(familyPhotoService.createPhotoUploadUrl(user, request));
+    }
+
+    @Operation(summary = "가족사진 업로드 완료", description = "S3에 직접 업로드한 가족사진을 검증하고 등록합니다.")
+    @PostMapping(value = "/complete", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public Response<FamilyPhotoItemResponse> completePhotoUpload(
+            @AuthenticationPrincipal User user,
+            @RequestHeader("Idempotency-Key") UUID idempotencyKey,
+            @Valid @RequestBody FamilyPhotoUploadCompleteRequest request
+    ) {
+        return Response.ok(familyPhotoService.completePhotoUpload(user, idempotencyKey.toString(), request));
     }
 
     @Operation(summary = "가족 사진 목록 조회", description = "현재 사용자가 속한 가족의 사진을 최신순으로 조회합니다. " + "uploaderUserId를 전달하면 해당 자녀의 사진만 조회합니다.")
