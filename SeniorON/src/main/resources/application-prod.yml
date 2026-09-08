@@ -22,10 +22,10 @@ spring:
 
     properties:
       hibernate:
-        format_sql: true
+        format_sql: false
         show_sql: false
         default_batch_fetch_size: 100
-        generate_statistics: true   # 추가
+        generate_statistics: false
 
 logging:
   level:
@@ -33,7 +33,7 @@ logging:
 
     org.hibernate.SQL: OFF
     org.hibernate.orm.jdbc.bind: OFF
-    org.hibernate.stat: OFF       # 추가
+    org.hibernate.stat: OFF
 
-    com.example.senioron: DEBUG
+    com.example.senioron: INFO
     org.springframework.web: INFO
