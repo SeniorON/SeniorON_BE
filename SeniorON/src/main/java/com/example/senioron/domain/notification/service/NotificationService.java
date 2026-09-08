@@ -45,6 +45,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 @Service
@@ -219,12 +220,11 @@ public class NotificationService {
         }
     }
 
-    //병렬발송 (일반 알림 적체와 무관하게 처리되도록 전용 풀 사용)
+    // 기기별 발송은 전용 풀에 위임하고, API는 수신자별 성공 여부가 확정될 때까지 기다린다.
     private NotificationDispatchResult dispatchSosInParallel(List<NotificationDispatchTarget> targets) {
         long timeoutSeconds = 5L;
         List<CompletableFuture<Boolean>> futures = targets.stream()
-                .map(target -> CompletableFuture.supplyAsync(
-                        () -> sendToAnyDevice(target), sosDispatchExecutor)
+                .map(target -> dispatchSosToDevices(target)
                         .completeOnTimeout(false, timeoutSeconds, TimeUnit.SECONDS))
                 .toList();
 
@@ -236,17 +236,46 @@ public class NotificationService {
         return new NotificationDispatchResult(targets.size(), (int) notifiedCount);
     }
 
+    private CompletableFuture<Boolean> dispatchSosToDevices(NotificationDispatchTarget target) {
+        if (target.deviceTokens().isEmpty()) {
+            return CompletableFuture.completedFuture(false);
+        }
+
+        CompletableFuture<Boolean> receiverResult = new CompletableFuture<>();
+        AtomicInteger remainingDevices = new AtomicInteger(target.deviceTokens().size());
+        for (String deviceToken : target.deviceTokens()) {
+            CompletableFuture.supplyAsync(() -> sendToDevice(target, deviceToken), sosDispatchExecutor)
+                    .whenComplete((sent, failure) -> {
+                        // 한 기기라도 FCM 접수에 성공하면 수신자는 성공이다.
+                        // 나머지 기기 발송은 응답 이후에도 계속 진행한다.
+                        if (Boolean.TRUE.equals(sent)) {
+                            receiverResult.complete(true);
+                        }
+                        // 먼저 끝난 기기가 실패했더라도 다른 기기의 결과를 기다린다.
+                        if (remainingDevices.decrementAndGet() == 0) {
+                            receiverResult.complete(false);
+                        }
+                    });
+        }
+        return receiverResult;
+    }
+
     private boolean sendToAnyDevice(NotificationDispatchTarget target) {
         boolean delivered = false;
         for (String deviceToken : target.deviceTokens()) {
-            try {
-                boolean sent = fcmSender.send(deviceToken, target.title(), target.body(), target.eventId());
-                delivered = delivered || sent;
-            } catch (Exception e) {
-                log.warn("FCM 발송 처리 중 예외 발생, receiverId={}", target.receiverId(), e);
-            }
+            boolean sent = sendToDevice(target, deviceToken);
+            delivered = delivered || sent;
         }
         return delivered;
+    }
+
+    private boolean sendToDevice(NotificationDispatchTarget target, String deviceToken) {
+        try {
+            return fcmSender.send(deviceToken, target.title(), target.body(), target.eventId());
+        } catch (Exception e) {
+            log.warn("FCM 발송 처리 중 예외 발생, receiverId={}", target.receiverId(), e);
+            return false;
+        }
     }
 
     private void countSosDispatch(String result) {
