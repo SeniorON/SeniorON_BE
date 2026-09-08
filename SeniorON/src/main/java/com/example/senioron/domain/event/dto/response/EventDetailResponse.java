@@ -8,15 +8,19 @@ import lombok.Getter;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 
 @Getter
 @Builder
 public class EventDetailResponse {
+    private static final ZoneId KOREA_ZONE_ID = ZoneId.of("Asia/Seoul");
+
     private Long eventId;
     private EventType eventType;
     private String message;
     private String senderName;
-    private LocalDateTime occurredAt;
+    private OffsetDateTime occurredAt;
 
     private String address;
     private BigDecimal latitude;
@@ -35,7 +39,7 @@ public class EventDetailResponse {
                 .eventType(event.getEventType())
                 .message(resolveMessage(event.getEventType(), event.getPhase(), event.getIsDangerous()))
                 .senderName(event.getTriggeredUser().getName())
-                .occurredAt(event.getCreatedAt())
+                .occurredAt(toOffsetDateTime(event.getCreatedAt()))
                 .address(event.getAddress())
                 .latitude(event.getLatitude())
                 .longitude(event.getLongitude())
@@ -46,6 +50,13 @@ public class EventDetailResponse {
                 .isDangerous(event.getIsDangerous())
                 .build();
     }
+
+    private static OffsetDateTime toOffsetDateTime(LocalDateTime occurredAt) {
+        return occurredAt == null
+                ? null
+                : occurredAt.atZone(KOREA_ZONE_ID).toOffsetDateTime();
+    }
+
     private static String resolveMessage(EventType eventType, OutingPhase phase, Boolean isDangerous) {
         return switch (eventType) {
             case SOS -> "도움이 필요해요";

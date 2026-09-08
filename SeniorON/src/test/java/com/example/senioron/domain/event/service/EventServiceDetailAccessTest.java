@@ -22,10 +22,13 @@ import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationContext;
+import org.springframework.test.util.ReflectionTestUtils;
 
 // 이벤트 상세조회 시 같은 가족이 아니면 EVENT_ACCESS_DENIED로 거부돼야 한다.
 class EventServiceDetailAccessTest {
@@ -115,5 +118,26 @@ class EventServiceDetailAccessTest {
         EventDetailResponse response = eventService.getEventDetail(familyMember, EVENT_ID);
 
         assertThat(response.getDeviceBattery()).isEqualTo(63);
+    }
+
+    @Test
+    void returnsOccurredAtWithSeoulOffset() {
+        Family family = Family.builder().familyId(1L).build();
+        User eventOwner = User.builder().usersId(1L).role(Role.PARENT).family(family).build();
+        User familyMember = User.builder().usersId(2L).role(Role.CHILD).family(family).build();
+        Event event = Event.builder()
+                .eventType(EventType.SOS)
+                .triggeredUser(eventOwner)
+                .build();
+        LocalDateTime occurredAt = LocalDateTime.of(2026, 9, 8, 14, 30, 25);
+        ReflectionTestUtils.setField(event, "createdAt", occurredAt);
+
+        given(eventRepository.findById(EVENT_ID)).willReturn(Optional.of(event));
+        given(userRepository.findById(familyMember.getUsersId())).willReturn(Optional.of(familyMember));
+
+        EventDetailResponse response = eventService.getEventDetail(familyMember, EVENT_ID);
+
+        assertThat(response.getOccurredAt())
+                .isEqualTo(occurredAt.atOffset(ZoneOffset.ofHours(9)));
     }
 }
