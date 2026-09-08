@@ -37,8 +37,9 @@ services:
     env_file:
       - .env
 
+    mem_limit: 1024m
     environment:
-      JAVA_TOOL_OPTIONS: "-Djava.net.preferIPv4Stack=true"
+      JAVA_TOOL_OPTIONS: "-Djava.net.preferIPv4Stack=true -Xms128m -Xmx256m -XX:+UseG1GC"
       SPRING_PROFILES_ACTIVE: prod
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
@@ -73,8 +74,9 @@ services:
     env_file:
       - .env
 
+    mem_limit: 1024m
     environment:
-      JAVA_TOOL_OPTIONS: "-Djava.net.preferIPv4Stack=true"
+      JAVA_TOOL_OPTIONS: "-Djava.net.preferIPv4Stack=true -Xms128m -Xmx256m -XX:+UseG1GC"
       SPRING_PROFILES_ACTIVE: prod
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
@@ -103,6 +105,7 @@ services:
   prometheus:
     image: prom/prometheus:latest
     restart: unless-stopped
+    mem_limit: 256m
 
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
@@ -115,19 +118,20 @@ services:
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
 
-  influxdb:
-    image: influxdb:1.8
-    restart: unless-stopped
-
-    expose:
-      - "8086"
-
-    environment:
-      INFLUXDB_DB: k6
-      INFLUXDB_HTTP_AUTH_ENABLED: "false"
-
-    volumes:
-      - influxdb-data:/var/lib/influxdb
+  # [메모리 절약] k6 부하 테스트 전용 DB (운영 배포 시 비활성화)
+  # influxdb:
+  #   image: influxdb:1.8
+  #   restart: unless-stopped
+  #
+  #   expose:
+  #     - "8086"
+  #
+  #   environment:
+  #     INFLUXDB_DB: k6
+  #     INFLUXDB_HTTP_AUTH_ENABLED: "false"
+  #
+  #   volumes:
+  #     - influxdb-data:/var/lib/influxdb
 
   grafana:
     image: grafana/grafana:latest
@@ -148,7 +152,7 @@ services:
       retries: 12
       start_period: 30s
 
-    mem_limit: 512m
+    mem_limit: 256m
 
     environment:
       GF_SERVER_ROOT_URL: https://senioron.site/grafana/
@@ -165,37 +169,37 @@ services:
     depends_on:
       prometheus:
         condition: service_started
-      influxdb:
-        condition: service_started
 
-  loki:
-    image: grafana/loki:2.9.8
-    command: -config.file=/etc/loki/config.yml
-
-    networks:
-      default:
-        aliases:
-          - loki
-
-    expose:
-      - "3100"
-
-    volumes:
-      - ./monitoring/loki/config.yml:/etc/loki/config.yml
-
-  promtail:
-    image: grafana/promtail:2.9.8
-
-    command: -config.file=/etc/promtail/config.yml
-
-    volumes:
-      - ./monitoring/promtail/config.yml:/etc/promtail/config.yml
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - /var/run/docker.sock:/var/run/docker.sock
+  # [메모리 절약] 로그 수집 스택 비활성화 (약 350MB+ 절약)
+  # loki:
+  #   image: grafana/loki:2.9.8
+  #   command: -config.file=/etc/loki/config.yml
+  #
+  #   networks:
+  #     default:
+  #       aliases:
+  #         - loki
+  #
+  #   expose:
+  #     - "3100"
+  #
+  #   volumes:
+  #     - ./monitoring/loki/config.yml:/etc/loki/config.yml
+  #
+  # promtail:
+  #   image: grafana/promtail:2.9.8
+  #
+  #   command: -config.file=/etc/promtail/config.yml
+  #
+  #   volumes:
+  #     - ./monitoring/promtail/config.yml:/etc/promtail/config.yml
+  #     - /var/lib/docker/containers:/var/lib/docker/containers:ro
+  #     - /var/run/docker.sock:/var/run/docker.sock
 
   node-exporter:
     image: prom/node-exporter:latest
     restart: unless-stopped
+    mem_limit: 64m
 
     expose:
       - "9100"
@@ -211,29 +215,31 @@ services:
       - '--path.sysfs=/host/sys'
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
 
-  cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.47.0
-    restart: unless-stopped
-
-    privileged: true
-
-    expose:
-      - "8080"
-
-    command:
-      - "--housekeeping_interval=30s"
-      - "--docker_only=true"
-
-    volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:ro
-      - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
-      - /dev/disk/:/dev/disk:ro
+  # [메모리 절약] cAdvisor 컨테이너 리소스 모니터링 비활성화 (약 200MB+ 절약)
+  # cadvisor:
+  #   image: gcr.io/cadvisor/cadvisor:v0.47.0
+  #   restart: unless-stopped
+  #
+  #   privileged: true
+  #
+  #   expose:
+  #     - "8080"
+  #
+  #   command:
+  #     - "--housekeeping_interval=30s"
+  #     - "--docker_only=true"
+  #
+  #   volumes:
+  #     - /:/rootfs:ro
+  #     - /var/run:/var/run:ro
+  #     - /sys:/sys:ro
+  #     - /var/lib/docker/:/var/lib/docker:ro
+  #     - /dev/disk/:/dev/disk:ro
 
   mysqld-exporter:
     image: prom/mysqld-exporter:latest
     restart: unless-stopped
+    mem_limit: 64m
 
     expose:
       - "9104"
@@ -254,4 +260,4 @@ services:
 
 volumes:
   grafana-data:
-  influxdb-data:
+  # influxdb-data:
