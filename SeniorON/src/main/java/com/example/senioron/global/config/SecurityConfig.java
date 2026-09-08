@@ -61,7 +61,7 @@ public class SecurityConfig {
                                 "/api/social-accounts/signup",
                                 "/api/social-accounts/login/kakao/callback",
                                 "/h2-console/**",
-                                "/actuator/**"
+                                "/actuator/health/readiness"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )
