@@ -40,6 +40,14 @@ public class FcmSender {
     // eventId가 있으면 data 페이로드에 같이 실어 보내, 푸시를 탭했을 때 프론트가
     // 알림 목록을 거치지 않고 바로 해당 이벤트 상세로 딥링크할 수 있게 한다.
     public boolean send(String fcmToken, String title, String body, Long eventId) {
+        return send(fcmToken, title, body, eventId, false);
+    }
+
+    public boolean sendHighPriority(String fcmToken, String title, String body, Long eventId) {
+        return send(fcmToken, title, body, eventId, true);
+    }
+
+    private boolean send(String fcmToken, String title, String body, Long eventId, boolean highPriority) {
         if (fcmToken == null || fcmToken.isBlank()) {
             countSend("skipped", "NO_TOKEN");
             log.warn("FCM 토큰이 비어있어 발송을 건너뜁니다.");
@@ -58,6 +66,13 @@ public class FcmSender {
                         .setTitle(title)
                         .setBody(body)
                         .build());
+
+        if (highPriority) {
+            // 긴급 알림은 수신 기기가 Doze 상태여도 즉시 전달을 시도한다.
+            messageBuilder.setAndroidConfig(AndroidConfig.builder()
+                    .setPriority(AndroidConfig.Priority.HIGH)
+                    .build());
+        }
 
         if (eventId != null) {
             messageBuilder.putData("eventId", String.valueOf(eventId));

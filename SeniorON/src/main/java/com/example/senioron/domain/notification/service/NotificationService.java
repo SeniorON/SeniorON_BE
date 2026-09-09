@@ -244,7 +244,7 @@ public class NotificationService {
         CompletableFuture<Boolean> receiverResult = new CompletableFuture<>();
         AtomicInteger remainingDevices = new AtomicInteger(target.deviceTokens().size());
         for (String deviceToken : target.deviceTokens()) {
-            CompletableFuture.supplyAsync(() -> sendToDevice(target, deviceToken), sosDispatchExecutor)
+            CompletableFuture.supplyAsync(() -> sendToDevice(target, deviceToken, true), sosDispatchExecutor)
                     .whenComplete((sent, failure) -> {
                         // 한 기기라도 FCM 접수에 성공하면 수신자는 성공이다.
                         // 나머지 기기 발송은 응답 이후에도 계속 진행한다.
@@ -270,7 +270,14 @@ public class NotificationService {
     }
 
     private boolean sendToDevice(NotificationDispatchTarget target, String deviceToken) {
+        return sendToDevice(target, deviceToken, false);
+    }
+
+    private boolean sendToDevice(NotificationDispatchTarget target, String deviceToken, boolean highPriority) {
         try {
+            if (highPriority) {
+                return fcmSender.sendHighPriority(deviceToken, target.title(), target.body(), target.eventId());
+            }
             return fcmSender.send(deviceToken, target.title(), target.body(), target.eventId());
         } catch (Exception e) {
             log.warn("FCM 발송 처리 중 예외 발생, receiverId={}", target.receiverId(), e);

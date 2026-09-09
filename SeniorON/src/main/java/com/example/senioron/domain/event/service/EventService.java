@@ -4,6 +4,7 @@ import com.example.senioron.domain.event.dto.request.InactivityRequest;
 import com.example.senioron.domain.event.dto.request.OutingReturnRequest;
 import com.example.senioron.domain.event.dto.request.RiskLinkRequest;
 import com.example.senioron.domain.event.dto.SosEventCreation;
+import com.example.senioron.domain.event.dto.SosAddressLookupRequested;
 import com.example.senioron.domain.event.dto.request.SosEventRequest;
 import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.event.dto.response.EventDetailResponse;
@@ -55,10 +56,9 @@ public class EventService {
      * SOS 이벤트가 중복 생성되고 자녀에게 중복 푸시가 가기 때문이다.
      */
     public SosEventResponse createSosEvent(User user, SosEventRequest req){
-        String address = geocodingClient.reverseGeocode(req.getLatitude(), req.getLongitude());
         EventService self = applicationContext.getBean(EventService.class);
 
-        SosEventCreation creation = self.saveSosEvent(address, user, req);
+        SosEventCreation creation = self.saveSosEvent(user, req);
         countSosEvent("success");
 
         // 커밋이 끝난 뒤 발송한다. 실패해도 이벤트는 이미 저장되어 있어 인앱 알림으로는 확인할 수 있다.
@@ -69,7 +69,7 @@ public class EventService {
     }
 
     @Transactional
-    public SosEventCreation saveSosEvent(String address, User user, SosEventRequest req){
+    public SosEventCreation saveSosEvent(User user, SosEventRequest req){
         Event event = Event.builder()
                 .user(user)
                 .triggeredUser(user)
@@ -77,12 +77,16 @@ public class EventService {
                 .eventType(EventType.SOS)
                 .latitude(req.getLatitude())
                 .longitude(req.getLongitude())
-                .address(address)
+                .address(SosAddressLookupService.PENDING_ADDRESS)
                 .build();
 
         Event savedEvent = eventRepository.save(event);
         List<NotificationDispatchTarget> dispatchTargets =
                 notificationService.prepareSosNotifications(savedEvent);
+
+        // 롤백 시 조회하지 않으며, 커밋 후 주소 조회 결과를 기다리지 않고 발송한다.
+        applicationContext.publishEvent(new SosAddressLookupRequested(
+                savedEvent.getEventId(), savedEvent.getLatitude(), savedEvent.getLongitude()));
 
         return new SosEventCreation(savedEvent, dispatchTargets);
     }

@@ -4,6 +4,7 @@ import com.example.senioron.domain.event.entity.Event;
 import com.example.senioron.domain.notification.dto.NotificationDispatchResult;
 import lombok.Builder;
 import lombok.Getter;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.math.BigDecimal;
 
@@ -14,6 +15,7 @@ public class SosEventResponse {
     private Long id;
     private BigDecimal latitude;
     private BigDecimal longitude;
+    @Schema(description = "SOS 접수 시 '주소 확인 중'. 비동기 조회 완료 후 이벤트 상세 API에서 주소 확인 가능")
     private String address;
     private Integer deviceBattery;
 
