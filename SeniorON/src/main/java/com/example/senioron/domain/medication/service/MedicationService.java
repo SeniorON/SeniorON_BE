@@ -1,5 +1,6 @@
 package com.example.senioron.domain.medication.service;
 
+import com.example.senioron.domain.home.service.HomeWebSocketService;
 import com.example.senioron.domain.medication.dto.request.MedicationCreateRequest;
 import com.example.senioron.domain.medication.dto.request.MedicationUpdateRequest;
 import com.example.senioron.domain.medication.dto.response.MedicationCreateResponse;
@@ -47,6 +48,7 @@ public class MedicationService {
     private final MedicationLogRepository medicationLogRepository;
     private final MedicationLogService medicationLogService;
     private final MedicationFamilyAuthorization medicationFamilyAuthorization;
+    private final HomeWebSocketService homeWebSocketService;
 
     @Transactional
     public MedicationCreateResponse createMedication(
@@ -175,6 +177,14 @@ public class MedicationService {
                 .createMedicationLogsForNextThirtyDays(
                         parentUser.getUsersId()
                 );
+
+        homeWebSocketService.notifyHomeUpdated(
+                parentUser.getUsersId()
+        );
+
+        homeWebSocketService.notifyHomeUpdated(
+                parentUser.getUsersId()
+        );
 
         List<Long> medicationIds =
                 savedMedications.stream()
@@ -404,6 +414,7 @@ public class MedicationService {
                         parentUser.getUsersId()
                 );
 
+
         log.info(
                 "약 수정 완료. requesterUserId: {}, parentUserId: {}, groupId: {}",
                 requesterUserId,
@@ -455,6 +466,10 @@ public class MedicationService {
                         deletedAt.toLocalDate(),
                         deletedAt.toLocalTime()
                 );
+
+        homeWebSocketService.notifyHomeUpdated(
+                parentUser.getUsersId()
+        );
 
         log.info(
                 "약 삭제 처리 완료. requesterUserId: {}, parentUserId: {}, groupId: {}",
