@@ -54,9 +54,6 @@ dependencies {
     
     // JSON Logging for Loki
     implementation 'net.logstash.logback:logstash-logback-encoder:7.4'
-
-    implementation platform('com.google.cloud:libraries-bom:26.83.0')
-    implementation 'com.google.cloud:google-cloud-texttospeech'
 }
 
 tasks.named('test') {
