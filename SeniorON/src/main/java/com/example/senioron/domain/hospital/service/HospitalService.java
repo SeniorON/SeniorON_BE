@@ -1,5 +1,6 @@
 package com.example.senioron.domain.hospital.service;
 
+import com.example.senioron.domain.home.service.HomeWebSocketService;
 import com.example.senioron.domain.hospital.dto.request.HospitalCreateRequest;
 import com.example.senioron.domain.hospital.dto.request.HospitalUpdateRequest;
 import com.example.senioron.domain.hospital.dto.response.HospitalCreateResponse;
@@ -41,6 +42,7 @@ public class HospitalService {
 
     private final HospitalRepository hospitalRepository;
     private final EntityManager entityManager;
+    private final HomeWebSocketService homeWebSocketService;
 
     @Transactional
     public HospitalCreateResponse createHospital(
@@ -99,6 +101,10 @@ public class HospitalService {
                 hospitalRepository.save(
                         hospital
                 );
+
+        homeWebSocketService.notifyHomeUpdated(
+                parentUser.getUsersId()
+        );
 
         return HospitalCreateResponse.builder()
                 .hospitalId(
@@ -201,6 +207,10 @@ public class HospitalService {
         hospitalRepository.delete(
                 hospital
         );
+
+        homeWebSocketService.notifyHomeUpdated(
+                parentUser.getUsersId()
+        );
     }
 
     @Transactional
@@ -247,6 +257,10 @@ public class HospitalService {
                 date,
                 time,
                 request.getReminderType()
+        );
+
+        homeWebSocketService.notifyHomeUpdated(
+                parentUser.getUsersId()
         );
     }
 
