@@ -1,9 +1,11 @@
 package com.example.senioron.domain.senior.controller;
 
 import com.example.senioron.domain.senior.dto.request.SeniorCreateRequest;
+import com.example.senioron.domain.senior.dto.request.SeniorParentLinkRequest;
 import com.example.senioron.domain.senior.dto.request.SeniorRelationUpdateRequest;
 import com.example.senioron.domain.senior.dto.response.ManagedSeniorResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorCreateResponse;
+import com.example.senioron.domain.senior.dto.response.SeniorParentLinkResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorRelationUpdateResponse;
 import com.example.senioron.domain.senior.service.SeniorService;
 import com.example.senioron.domain.user.entity.User;
@@ -32,6 +34,17 @@ public class SeniorController {
     ) {
         return Response.ok(
                 seniorService.getManagedSeniors(user)
+        );
+    }
+
+    @Operation(summary = "시니어 본인 프로필 연결", description = "현재 로그인한 부모 계정이 같은 가족에 등록된 시니어 프로필 중 본인을 선택해 연결합니다.")
+    @PatchMapping("/me")
+    public Response<SeniorParentLinkResponse> linkParentUser(
+            @AuthenticationPrincipal User user,
+            @Valid @RequestBody SeniorParentLinkRequest request
+    ) {
+        return Response.ok(
+                seniorService.linkParentUser(user, request)
         );
     }
 

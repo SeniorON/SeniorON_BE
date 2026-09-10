@@ -89,6 +89,10 @@ public enum ErrorCode implements BaseCode {
     // Senior Error
     CUSTOM_RELATION_REQUIRED(HttpStatus.BAD_REQUEST, "SENIOR4001", "직접 작성 관계를 입력해 주세요."),
     SENIOR_ALREADY_EXISTS(HttpStatus.CONFLICT, "SENIOR409", "이미 등록된 시니어 정보가 있습니다."),
+    SENIOR_PARENT_LINK_PARENT_ONLY(HttpStatus.FORBIDDEN, "SENIOR403_1", "부모 계정만 시니어 본인 프로필을 연결할 수 있습니다."),
+    SENIOR_NOT_IN_USER_FAMILY(HttpStatus.FORBIDDEN, "SENIOR403_2", "현재 가족에 등록된 시니어가 아닙니다."),
+    SENIOR_ALREADY_LINKED_TO_PARENT(HttpStatus.CONFLICT, "SENIOR409_1", "이미 다른 부모 계정과 연결된 시니어입니다."),
+    PARENT_USER_ALREADY_LINKED_TO_SENIOR(HttpStatus.CONFLICT, "SENIOR409_2", "이미 다른 시니어 프로필과 연결된 부모 계정입니다."),
 
     // Family Error
     FAMILY_NOT_FOUND(HttpStatus.NOT_FOUND, "FAMILY404", "가족 정보를 찾을 수 없습니다."),

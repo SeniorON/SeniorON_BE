@@ -54,6 +54,10 @@ public class Senior {
     @JoinColumn(name = "parent_user_id", unique = true)
     private User parentUser;
 
+    public void linkParentUser(User parentUser) {
+        this.parentUser = parentUser;
+    }
+
     public void updateProfile(
             String name,
             LocalDate birth,

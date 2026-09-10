@@ -3,15 +3,18 @@ package com.example.senioron.domain.senior.service;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.senior.dto.request.SeniorCreateRequest;
+import com.example.senioron.domain.senior.dto.request.SeniorParentLinkRequest;
 import com.example.senioron.domain.senior.dto.request.SeniorRelationUpdateRequest;
 import com.example.senioron.domain.senior.dto.response.ManagedSeniorResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorCreateResponse;
+import com.example.senioron.domain.senior.dto.response.SeniorParentLinkResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorRelationUpdateResponse;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
 import com.example.senioron.domain.senior.entity.UserSenior;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.senior.repository.UserSeniorRepository;
+import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
@@ -22,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -42,6 +46,42 @@ public class SeniorService {
                 .stream()
                 .map(ManagedSeniorResponse::from)
                 .toList();
+    }
+
+    @Transactional
+    public SeniorParentLinkResponse linkParentUser(
+            User principal,
+            SeniorParentLinkRequest request
+    ) {
+        if (principal == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
+        }
+
+        User parentUser = userRepository.findByIdForUpdate(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        if (parentUser.getRole() != Role.PARENT) {
+            throw new BusinessException(ErrorCode.SENIOR_PARENT_LINK_PARENT_ONLY);
+        }
+
+        if (parentUser.getFamily() == null) {
+            throw new BusinessException(ErrorCode.FAMILY_NOT_CONNECTED);
+        }
+
+        Senior senior = seniorRepository.findByIdForUpdate(request.seniorId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.SENIOR_NOT_FOUND));
+
+        validateParentUserSameFamily(parentUser, senior);
+        validateSeniorCanLinkParentUser(senior, parentUser);
+        validateParentUserCanLinkSenior(parentUser, senior);
+
+        senior.linkParentUser(parentUser);
+
+        try {
+            return SeniorParentLinkResponse.from(seniorRepository.saveAndFlush(senior));
+        } catch (DataIntegrityViolationException e) {
+            throw new BusinessException(ErrorCode.PARENT_USER_ALREADY_LINKED_TO_SENIOR);
+        }
     }
 
     /**
@@ -185,6 +225,40 @@ public class SeniorService {
                                 .getFamilyId()
                 )) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+    }
+
+    private void validateParentUserSameFamily(User parentUser, Senior senior) {
+        if (senior.getFamily() == null
+                || !Objects.equals(
+                parentUser.getFamily().getFamilyId(),
+                senior.getFamily().getFamilyId()
+        )) {
+            throw new BusinessException(ErrorCode.SENIOR_NOT_IN_USER_FAMILY);
+        }
+    }
+
+    private void validateSeniorCanLinkParentUser(Senior senior, User parentUser) {
+        if (senior.getParentUser() != null
+                && !Objects.equals(
+                senior.getParentUser().getUsersId(),
+                parentUser.getUsersId()
+        )) {
+            throw new BusinessException(ErrorCode.SENIOR_ALREADY_LINKED_TO_PARENT);
+        }
+    }
+
+    private void validateParentUserCanLinkSenior(User parentUser, Senior senior) {
+        if (senior.getParentUser() != null
+                && Objects.equals(
+                senior.getParentUser().getUsersId(),
+                parentUser.getUsersId()
+        )) {
+            return;
+        }
+
+        if (seniorRepository.existsByParentUser(parentUser)) {
+            throw new BusinessException(ErrorCode.PARENT_USER_ALREADY_LINKED_TO_SENIOR);
         }
     }
 }
