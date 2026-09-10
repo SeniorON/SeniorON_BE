@@ -47,10 +47,6 @@ public class SeniorService {
         Family lockedFamily = familyRepository.findByIdForUpdate(user.getFamily().getFamilyId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND));
 
-        if (seniorRepository.findFirstByFamily(lockedFamily).isPresent()) {
-            throw new BusinessException(ErrorCode.SENIOR_ALREADY_EXISTS);
-        }
-
         Senior senior = Senior.builder()
                 .name(request.name())
                 .birth(request.birth())

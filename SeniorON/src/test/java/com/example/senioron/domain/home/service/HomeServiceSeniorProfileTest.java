@@ -85,7 +85,9 @@ class HomeServiceSeniorProfileTest {
         User primaryChild = createChild(1L, family, ManagerType.PRIMARY);
         setCurrentUser(primaryChild);
         given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
-        given(seniorRepository.findFirstByFamily(family)).willReturn(Optional.empty());
+        given(userSeniorRepository.findFirstByUserAndSenior_FamilyOrderByUserSeniorIdAsc(primaryChild, family))
+                .willReturn(Optional.empty());
+        given(seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(family)).willReturn(Optional.empty());
         given(seniorRepository.saveAndFlush(any(Senior.class))).willAnswer(invocation -> invocation.getArgument(0));
         given(userSeniorRepository.findByUserAndSenior(any(User.class), any(Senior.class)))
                 .willReturn(Optional.empty());
@@ -111,7 +113,9 @@ class HomeServiceSeniorProfileTest {
         UserSenior subRelation = createUserSenior(subChild, senior, SeniorRelation.GRANDPARENT, null);
         setCurrentUser(subChild);
         given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
-        given(seniorRepository.findFirstByFamily(family)).willReturn(Optional.of(senior));
+        given(userSeniorRepository.findFirstByUserAndSenior_FamilyOrderByUserSeniorIdAsc(subChild, family))
+                .willReturn(Optional.of(subRelation));
+        given(seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(family)).willReturn(Optional.of(senior));
         given(userSeniorRepository.findByUserAndSenior(subChild, senior)).willReturn(Optional.of(subRelation));
         given(userSeniorRepository.save(any(UserSenior.class))).willAnswer(invocation -> invocation.getArgument(0));
 
@@ -138,7 +142,9 @@ class HomeServiceSeniorProfileTest {
         Senior otherFamilySenior = createSenior(10L, otherFamily, child);
         setCurrentUser(child);
         given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
-        given(seniorRepository.findFirstByFamily(family)).willReturn(Optional.of(otherFamilySenior));
+        given(userSeniorRepository.findFirstByUserAndSenior_FamilyOrderByUserSeniorIdAsc(child, family))
+                .willReturn(Optional.empty());
+        given(seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(family)).willReturn(Optional.of(otherFamilySenior));
         given(userSeniorRepository.findByUserAndSenior(child, otherFamilySenior)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> homeService.updateSeniorProfile(
@@ -156,7 +162,9 @@ class HomeServiceSeniorProfileTest {
         User primaryChild = createChild(1L, family, ManagerType.PRIMARY);
         setCurrentUser(primaryChild);
         given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
-        given(seniorRepository.findFirstByFamily(family)).willReturn(Optional.empty());
+        given(userSeniorRepository.findFirstByUserAndSenior_FamilyOrderByUserSeniorIdAsc(primaryChild, family))
+                .willReturn(Optional.empty());
+        given(seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(family)).willReturn(Optional.empty());
         given(seniorRepository.saveAndFlush(any(Senior.class)))
                 .willThrow(new DataIntegrityViolationException("duplicate family senior"));
 
@@ -190,7 +198,7 @@ class HomeServiceSeniorProfileTest {
 
         given(userRepository.findByFamilyAndUsersIdNotAndRole(family, 2L, Role.PARENT))
                 .willReturn(List.of(parent));
-        given(userSeniorRepository.findFirstByUserAndSenior_Family(subChild, family))
+        given(userSeniorRepository.findFirstByUserAndSenior_FamilyOrderByUserSeniorIdAsc(subChild, family))
                 .willReturn(Optional.of(subRelation));
         Device device = Device.builder()
                 .user(parent)
@@ -259,7 +267,7 @@ class HomeServiceSeniorProfileTest {
                 Role.PARENT
         )).willReturn(List.of(parent));
 
-        given(userSeniorRepository.findFirstByUserAndSenior_Family(
+        given(userSeniorRepository.findFirstByUserAndSenior_FamilyOrderByUserSeniorIdAsc(
                 primaryChild,
                 family
         )).willReturn(Optional.of(relation));
@@ -344,7 +352,7 @@ class HomeServiceSeniorProfileTest {
                 Role.PARENT
         )).willReturn(List.of(parent));
 
-        given(userSeniorRepository.findFirstByUserAndSenior_Family(
+        given(userSeniorRepository.findFirstByUserAndSenior_FamilyOrderByUserSeniorIdAsc(
                 primaryChild,
                 family
         )).willReturn(Optional.of(relation));

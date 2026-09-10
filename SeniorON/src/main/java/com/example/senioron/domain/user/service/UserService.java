@@ -255,10 +255,10 @@ public class UserService {
 
         if (hasFamily) {
             Optional<UserSenior> userSenior =
-                    userSeniorRepository.findFirstByUserAndSenior_Family(user, family);
+                    userSeniorRepository.findFirstByUserAndSenior_FamilyOrderByUserSeniorIdAsc(user, family);
             Optional<Senior> familySenior = userSenior
                     .map(UserSenior::getSenior)
-                    .or(() -> seniorRepository.findFirstByFamily(family));
+                    .or(() -> seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(family));
 
             seniorId = familySenior
                     .map(Senior::getSeniorId)

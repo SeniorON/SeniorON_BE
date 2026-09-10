@@ -333,7 +333,7 @@ public class DeviceService {
         }
 
         Senior senior = seniorRepository
-                .findFirstByFamily(currentUser.getFamily())
+                .findFirstByFamilyOrderBySeniorIdAsc(currentUser.getFamily())
                 .orElseThrow(() ->
                         new BusinessException(
                                 ErrorCode.SENIOR_NOT_FOUND

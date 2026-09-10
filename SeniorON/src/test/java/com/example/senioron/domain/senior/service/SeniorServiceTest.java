@@ -56,7 +56,6 @@ class SeniorServiceTest {
                 .relation(SeniorRelation.MOTHER)
                 .build();
         given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
-        given(seniorRepository.findFirstByFamily(family)).willReturn(Optional.empty());
         given(seniorRepository.saveAndFlush(any(Senior.class))).willReturn(savedSenior);
         given(userSeniorRepository.save(any(UserSenior.class))).willReturn(savedUserSenior);
 
@@ -71,17 +70,29 @@ class SeniorServiceTest {
     }
 
     @Test
-    void createSeniorThrowsExceptionWhenFamilyAlreadyHasSenior() {
+    void createSeniorAllowsMultipleSeniorsInSameFamily() {
         Family family = Family.builder().familyId(1L).build();
         User user = createChild(1L, family, ManagerType.PRIMARY);
+        Senior savedSenior = createSenior(11L, family, user);
+        UserSenior savedUserSenior = UserSenior.builder()
+                .userSeniorId(21L)
+                .user(user)
+                .senior(savedSenior)
+                .relation(SeniorRelation.FATHER)
+                .build();
         given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
-        given(seniorRepository.findFirstByFamily(family)).willReturn(Optional.of(createSenior(10L, family, user)));
+        given(seniorRepository.saveAndFlush(any(Senior.class))).willReturn(savedSenior);
+        given(userSeniorRepository.save(any(UserSenior.class))).willReturn(savedUserSenior);
 
-        assertThatThrownBy(() -> seniorService.createSenior(user, createRequest(SeniorRelation.MOTHER, null)))
-                .isInstanceOf(BusinessException.class)
-                .asInstanceOf(type(BusinessException.class))
-                .extracting(BusinessException::getCode)
-                .isEqualTo(ErrorCode.SENIOR_ALREADY_EXISTS);
+        SeniorCreateResponse response = seniorService.createSenior(
+                user,
+                createRequest(SeniorRelation.FATHER, null)
+        );
+
+        assertThat(response.seniorId()).isEqualTo(11L);
+        assertThat(response.relation()).isEqualTo(SeniorRelation.FATHER);
+        verify(seniorRepository).saveAndFlush(any(Senior.class));
+        verify(userSeniorRepository).save(any(UserSenior.class));
     }
 
     @Test
@@ -100,7 +111,6 @@ class SeniorServiceTest {
         Family family = Family.builder().familyId(1L).build();
         User user = createChild(1L, family, ManagerType.PRIMARY);
         given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
-        given(seniorRepository.findFirstByFamily(family)).willReturn(Optional.empty());
         given(seniorRepository.saveAndFlush(any(Senior.class)))
                 .willThrow(new DataIntegrityViolationException("duplicate family senior"));
 

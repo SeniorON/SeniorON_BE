@@ -14,5 +14,5 @@ public interface SeniorRepository extends JpaRepository<Senior, Long> {
 
     Optional<Senior> findFirstByRegisteredBy(User registeredBy);
 
-    Optional<Senior> findFirstByFamily(Family family);
+    Optional<Senior> findFirstByFamilyOrderBySeniorIdAsc(Family family);
 }

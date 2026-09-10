@@ -13,7 +13,7 @@ public interface UserSeniorRepository extends JpaRepository<UserSenior, Long> {
 
     Optional<UserSenior> findByUserAndSenior(User user, Senior senior);
 
-    Optional<UserSenior> findFirstByUserAndSenior_Family(User user, Family family);
+    Optional<UserSenior> findFirstByUserAndSenior_FamilyOrderByUserSeniorIdAsc(User user, Family family);
 
     void deleteAllBySenior(Senior senior);
 
