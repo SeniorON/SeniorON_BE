@@ -55,7 +55,7 @@ public class HomeService {
     private static final int MAX_BUTTON_COUNT = 18;
     private static final Set<String> REQUIRED_DEFAULT_BUTTONS = Set.of(
             "MEDICATION",
-            "COMPANION",
+            "SETTINGS",
             "PHOTO",
             "EMERGENCY"
     );
@@ -157,10 +157,10 @@ public class HomeService {
                 Home.createButton(
                         user,
                         6,
-                        "말벗",
+                        "설정",
                         null,
                         ActionType.DEFAULT,
-                        "COMPANION",
+                        "SETTINGS",
                         null
                 ),
                 Home.createButton(
