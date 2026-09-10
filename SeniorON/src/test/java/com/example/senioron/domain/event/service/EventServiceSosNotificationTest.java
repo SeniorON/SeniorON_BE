@@ -23,8 +23,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * SOS 알림 발송 결과가 실제 Spring 컨텍스트(DB 트랜잭션 커밋, MeterRegistry, FcmSender 빈)를
- * 통해 응답과 지표에 반영되는지 확인한다.
+ * SOS 이벤트가 FCM 결과를 기다리지 않고 응답하며, 비동기 발송 결과가 지표에 반영되는지 확인한다.
  * <p>
  * Firebase 서비스 계정 파일(gitignore 처리됨)이 로컬에 있으면 실제 Firebase Admin SDK가
  * 초기화되고, 없으면 초기화가 스킵된다({@code FirebaseConfig} 참고). 이 테스트가 쓰는
@@ -76,7 +75,6 @@ class EventServiceSosNotificationTest {
         SosEventResponse response = eventService.createSosEvent(senior, sosRequest());
 
         assertThat(response.getReceiverCount()).isEqualTo(0);
-        assertThat(response.getNotifiedCount()).isEqualTo(0);
         assertThat(counterValueOrZero("sos_event_total", "result", "success") - eventSuccessBefore)
                 .isEqualTo(1.0);
         assertThat(counterValueOrZero("sos_dispatch_total", "result", "no_receiver") - noReceiverBefore)
@@ -84,7 +82,7 @@ class EventServiceSosNotificationTest {
     }
 
     @Test
-    void sosWithChildButNoFirebase_returnsUndeliveredAndRecordsMetric() {
+    void sosWithChildButNoFirebase_returnsImmediatelyAndRecordsUndeliveredMetric() throws Exception {
         Family family = familyRepository.save(Family.builder()
                 .familyCode("SOS-TEST-" + System.nanoTime())
                 .build());
@@ -125,8 +123,7 @@ class EventServiceSosNotificationTest {
 
         // "dummy-fcm-token"은 형식 자체가 유효하지 않아, Firebase가 초기화됐든 안 됐든 발송은 항상 실패한다.
         assertThat(response.getReceiverCount()).isEqualTo(1);
-        assertThat(response.getNotifiedCount()).isEqualTo(0);
-
+        awaitCounterIncrease("sos_dispatch_total", "undelivered", undeliveredBefore);
         double undeliveredAfter = counterValueOrZero("sos_dispatch_total", "result", "undelivered");
         assertThat(undeliveredAfter - undeliveredBefore).isEqualTo(1.0);
 
@@ -134,8 +131,24 @@ class EventServiceSosNotificationTest {
         assertThat(eventSuccessAfter - eventSuccessBefore).isEqualTo(1.0);
 
         // failed/skipped/token_invalid 중 무엇이 늘어나든 "발송 안 됨"이라는 결론은 같다.
+        awaitNotDeliveredFcmSendCounterIncrease(notDeliveredBefore);
         double notDeliveredAfter = sumNotDeliveredFcmSendCounters();
         assertThat(notDeliveredAfter - notDeliveredBefore).isGreaterThanOrEqualTo(1.0);
+    }
+
+    private void awaitCounterIncrease(String name, String result, double before) throws InterruptedException {
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3);
+        while (System.nanoTime() < deadline
+                && counterValueOrZero(name, "result", result) <= before) {
+            Thread.sleep(10);
+        }
+    }
+
+    private void awaitNotDeliveredFcmSendCounterIncrease(double before) throws InterruptedException {
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(3);
+        while (System.nanoTime() < deadline && sumNotDeliveredFcmSendCounters() <= before) {
+            Thread.sleep(10);
+        }
     }
 
     private double sumNotDeliveredFcmSendCounters() {

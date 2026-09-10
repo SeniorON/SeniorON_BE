@@ -44,6 +44,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -111,8 +112,8 @@ public class NotificationService {
     }
 
     /**
-     * SOS 전용. 알림 저장까지만 하고 발송 대상을 돌려준다
-     * 발송은 호출부가 커밋 이후 {@link #dispatchSos}로 수행해, 그 결과를 응답에 담을 수 있게 한다.
+     * SOS 전용. 알림 저장까지만 하고 발송 대상을 돌려준다.
+     * 호출부는 커밋 이후 {@link #dispatchSosAsync}로 비동기 발송을 시작한다.
      */
     @Transactional
     public List<NotificationDispatchTarget> prepareSosNotifications(Event event) {
@@ -120,17 +121,37 @@ public class NotificationService {
     }
 
     /**
-     * SOS 알림을 동기 발송한다.
+     * SOS 알림 발송을 시작하고 즉시 반환한다. 수신자별 결과는 비동기로 집계해
+     * 로그와 {@code sos_dispatch_total} 메트릭에 기록한다.
      */
-    public NotificationDispatchResult dispatchSos(List<NotificationDispatchTarget> targets) {
+    public void dispatchSosAsync(List<NotificationDispatchTarget> targets) {
         if (targets.isEmpty()) {
             // 가족이나 자녀가 등록되지 않아 SOS를 알릴 대상 자체가 없는 경우.
             countSosDispatch("no_receiver");
             log.error("SOS 수신 대상이 없어 알림을 발송하지 못했습니다.");
-            return NotificationDispatchResult.noReceiver();
+            return;
         }
 
-        NotificationDispatchResult result = dispatchSosInParallel(targets);
+        List<CompletableFuture<Boolean>> futures = dispatchSosInParallel(targets);
+        CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new))
+                .whenComplete((ignored, failure) -> recordSosDispatchResult(targets.size(), futures, failure));
+    }
+
+    private void recordSosDispatchResult(
+            int receiverCount,
+            List<CompletableFuture<Boolean>> futures,
+            Throwable failure
+    ) {
+        if (failure != null) {
+            countSosDispatch("undelivered");
+            log.error("SOS 알림 비동기 결과 집계 중 예외가 발생했습니다. receiverCount={}", receiverCount, failure);
+            return;
+        }
+
+        int notifiedCount = (int) futures.stream()
+                .filter(future -> Boolean.TRUE.equals(future.getNow(false)))
+                .count();
+        NotificationDispatchResult result = new NotificationDispatchResult(receiverCount, notifiedCount);
 
         if (result.notifiedCount() == 0) {
             countSosDispatch("undelivered");
@@ -143,7 +164,6 @@ public class NotificationService {
             countSosDispatch("delivered");
         }
 
-        return result;
     }
 
     /**
@@ -220,20 +240,13 @@ public class NotificationService {
         }
     }
 
-    // 기기별 발송은 전용 풀에 위임하고, API는 수신자별 성공 여부가 확정될 때까지 기다린다.
-    private NotificationDispatchResult dispatchSosInParallel(List<NotificationDispatchTarget> targets) {
+    // 기기별 발송은 전용 풀에 위임하고, 호출자는 결과를 기다리지 않는다.
+    private List<CompletableFuture<Boolean>> dispatchSosInParallel(List<NotificationDispatchTarget> targets) {
         long timeoutSeconds = 5L;
-        List<CompletableFuture<Boolean>> futures = targets.stream()
+        return targets.stream()
                 .map(target -> dispatchSosToDevices(target)
                         .completeOnTimeout(false, timeoutSeconds, TimeUnit.SECONDS))
                 .toList();
-
-        long notifiedCount = futures.stream()
-                .map(CompletableFuture::join)
-                .filter(Boolean::booleanValue)
-                .count();
-
-        return new NotificationDispatchResult(targets.size(), (int) notifiedCount);
     }
 
     private CompletableFuture<Boolean> dispatchSosToDevices(NotificationDispatchTarget target) {
@@ -244,18 +257,25 @@ public class NotificationService {
         CompletableFuture<Boolean> receiverResult = new CompletableFuture<>();
         AtomicInteger remainingDevices = new AtomicInteger(target.deviceTokens().size());
         for (String deviceToken : target.deviceTokens()) {
-            CompletableFuture.supplyAsync(() -> sendToDevice(target, deviceToken, true), sosDispatchExecutor)
-                    .whenComplete((sent, failure) -> {
-                        // 한 기기라도 FCM 접수에 성공하면 수신자는 성공이다.
-                        // 나머지 기기 발송은 응답 이후에도 계속 진행한다.
-                        if (Boolean.TRUE.equals(sent)) {
-                            receiverResult.complete(true);
-                        }
-                        // 먼저 끝난 기기가 실패했더라도 다른 기기의 결과를 기다린다.
-                        if (remainingDevices.decrementAndGet() == 0) {
-                            receiverResult.complete(false);
-                        }
-                    });
+            try {
+                CompletableFuture.supplyAsync(() -> sendToDevice(target, deviceToken, true), sosDispatchExecutor)
+                        .whenComplete((sent, failure) -> {
+                            // 한 기기라도 FCM 접수에 성공하면 수신자는 성공이다.
+                            // 나머지 기기 발송은 결과 집계 이후에도 계속 진행한다.
+                            if (Boolean.TRUE.equals(sent)) {
+                                receiverResult.complete(true);
+                            }
+                            // 먼저 끝난 기기가 실패했더라도 다른 기기의 결과를 기다린다.
+                            if (remainingDevices.decrementAndGet() == 0) {
+                                receiverResult.complete(false);
+                            }
+                        });
+            } catch (RejectedExecutionException e) {
+                log.error("SOS 알림 발송 작업 등록 실패. receiverId={}", target.receiverId(), e);
+                if (remainingDevices.decrementAndGet() == 0) {
+                    receiverResult.complete(false);
+                }
+            }
         }
         return receiverResult;
     }

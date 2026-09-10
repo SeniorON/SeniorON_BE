@@ -9,11 +9,6 @@ public record NotificationDispatchResult(
         int receiverCount,
         int notifiedCount
 ) {
-
-    public static NotificationDispatchResult noReceiver() {
-        return new NotificationDispatchResult(0, 0);
-    }
-
     public boolean isFullyDelivered() {
         return receiverCount > 0 && notifiedCount == receiverCount;
     }

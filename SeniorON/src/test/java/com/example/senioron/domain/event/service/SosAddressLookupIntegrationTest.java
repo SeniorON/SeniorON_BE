@@ -122,8 +122,8 @@ class SosAddressLookupIntegrationTest {
         assertThat(response.getLatitude()).isEqualByComparingTo(LATITUDE);
         assertThat(response.getLongitude()).isEqualByComparingTo(LONGITUDE);
         assertThat(response.getReceiverCount()).isEqualTo(1);
-        assertThat(response.getNotifiedCount()).isEqualTo(1);
-        verify(fcmSender).sendHighPriority("child-token", "SOS 알림", "도움이 필요해요", response.getId());
+        await().atMost(Duration.ofSeconds(3)).untilAsserted(() ->
+                verify(fcmSender).sendHighPriority("child-token", "SOS 알림", "도움이 필요해요", response.getId()));
         assertThat(lookupHeldTransaction).isFalse();
         assertThat(eventWasCommitted).isTrue();
 
@@ -160,7 +160,6 @@ class SosAddressLookupIntegrationTest {
 
         var response = eventService.createSosEvent(senior, sosRequest());
 
-        assertThat(response.getNotifiedCount()).isEqualTo(1);
         await().atMost(Duration.ofSeconds(3)).untilAsserted(() -> {
             var saved = eventRepository.findById(response.getId()).orElseThrow();
             assertThat(saved.getAddress()).isEqualTo("위치정보를 확인할 수 없어요");
