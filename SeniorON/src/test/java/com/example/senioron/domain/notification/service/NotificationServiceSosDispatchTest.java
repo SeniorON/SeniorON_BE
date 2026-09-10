@@ -178,6 +178,82 @@ class NotificationServiceSosDispatchTest {
         return new NotificationDispatchTarget(receiverId, "SOS", "도움이 필요해요", 100L, List.of(tokens));
     }
 
+    @Test
+    void rejectsOverflowWithoutCallingFcmOnRequestThread() throws Exception {
+        CountDownLatch occupied = new CountDownLatch(8);
+        CountDownLatch release = new CountDownLatch(1);
+        given(fcmSender.sendHighPriority(anyString(), anyString(), anyString(), anyLong())).willAnswer(call -> {
+            occupied.countDown();
+            await(release);
+            return true;
+        });
+        try {
+            service.dispatchSosAsync(List.of(target(1L,
+                    IntStream.range(0, 8).mapToObj(i -> "active-" + i).toArray(String[]::new))));
+            assertThat(occupied.await(2, TimeUnit.SECONDS)).isTrue();
+            requestExecutor.submit(() -> service.dispatchSosAsync(List.of(target(2L,
+                    IntStream.range(0, 101).mapToObj(i -> "queued-" + i).toArray(String[]::new)))))
+                    .get(1, TimeUnit.SECONDS);
+            assertThat(sosPool().getQueue()).hasSize(100);
+            assertThat(meterRegistry.get("sos_device_dispatch_total").tag("result", "rejected").counter().count())
+                    .isEqualTo(1);
+            verify(fcmSender, times(8)).sendHighPriority(anyString(), anyString(), anyString(), anyLong());
+        } finally {
+            release.countDown();
+        }
+    }
+
+    @Test
+    void expiresQueuedTaskAndNeverSendsItAfterWorkersAreReleased() throws Exception {
+        CountDownLatch occupied = new CountDownLatch(8);
+        CountDownLatch release = new CountDownLatch(1);
+        // 발송 스레드 8개를 점유해 만료 대상이 반드시 큐에서 대기하도록 한다.
+        try {
+            for (int i = 0; i < 8; i++) sosPool().execute(() -> {
+                occupied.countDown();
+                try { await(release); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            });
+            assertThat(occupied.await(2, TimeUnit.SECONDS)).isTrue();
+            org.springframework.test.util.ReflectionTestUtils.setField(service, "sosMaxQueueWaitMillis", 100L);
+            service.dispatchSosAsync(List.of(target(1L, "expired-token")));
+            awaitDispatchCount("undelivered", 1, 2);
+            assertThat(sosPool().getQueue()).isEmpty();
+            assertThat(meterRegistry.get("sos_device_dispatch_total").tag("result", "expired").counter().count())
+                    .isEqualTo(1);
+            release.countDown();
+            service.shutdownDispatchExecutors();
+            verifyNoInteractions(fcmSender);
+        } finally {
+            release.countDown();
+        }
+    }
+
+    @Test
+    void runningSendIsNotClassifiedAsFailureAfterFiveSeconds() throws Exception {
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        given(fcmSender.sendHighPriority(anyString(), anyString(), anyString(), anyLong())).willAnswer(call -> {
+            started.countDown();
+            await(release);
+            return true;
+        });
+        try {
+            service.dispatchSosAsync(List.of(target(1L, "slow")));
+            assertThat(started.await(2, TimeUnit.SECONDS)).isTrue();
+            Thread.sleep(5200);
+            assertThat(counterOrZero("undelivered")).isZero();
+            release.countDown();
+            awaitDispatchCount("delivered", 1, 2);
+        } finally {
+            release.countDown();
+        }
+    }
+
+    private java.util.concurrent.ThreadPoolExecutor sosPool() {
+        return (java.util.concurrent.ThreadPoolExecutor)
+                org.springframework.test.util.ReflectionTestUtils.getField(service, "sosDispatchExecutor");
+    }
+
     private void awaitDispatchCount(String result, double expected, long timeoutSeconds) throws InterruptedException {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds);
         while (System.nanoTime() < deadline && counterOrZero(result) < expected) {
