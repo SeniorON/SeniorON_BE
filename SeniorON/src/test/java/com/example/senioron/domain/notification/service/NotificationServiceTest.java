@@ -31,6 +31,7 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -71,6 +72,12 @@ class NotificationServiceTest {
         // 알림 설정은 유저 개인이 아닌 그 가족의 시니어(parentA) 기준으로 저장된다.
         given(notificationSettingRepository.findById(PARENT_A_ID))
                 .willReturn(Optional.of(NotificationSetting.builder().user(parentA).build()));
+    }
+
+    @AfterEach
+    void tearDown() {
+        notificationService.shutdownDispatchExecutors();
+        meterRegistry.close();
     }
 
     // 부모가 여러 명이고, 그중 한 명의 기기라도 ONLINE이면 허용해야 한다 (나머지 하나가 방치된 기기여도).
