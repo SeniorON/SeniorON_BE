@@ -47,6 +47,13 @@ public class Senior {
     @JoinColumn(name = "registered_by_user_id", nullable = false)
     private User registeredBy;
 
+    /*
+     * 해당 시니어 본인의 실제 PARENT 계정
+     */
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_user_id", unique = true)
+    private User parentUser;
+
     public void updateProfile(
             String name,
             LocalDate birth,
