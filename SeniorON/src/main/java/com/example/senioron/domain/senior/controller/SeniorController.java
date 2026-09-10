@@ -2,6 +2,7 @@ package com.example.senioron.domain.senior.controller;
 
 import com.example.senioron.domain.senior.dto.request.SeniorCreateRequest;
 import com.example.senioron.domain.senior.dto.request.SeniorRelationUpdateRequest;
+import com.example.senioron.domain.senior.dto.response.ManagedSeniorResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorCreateResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorRelationUpdateResponse;
 import com.example.senioron.domain.senior.service.SeniorService;
@@ -14,6 +15,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @Tag(name = "시니어", description = "부모님 및 시니어 정보 관련 API")
 @RestController
 @RequestMapping("/api/seniors")
@@ -21,6 +24,16 @@ import org.springframework.web.bind.annotation.*;
 public class SeniorController {
 
     private final SeniorService seniorService;
+
+    @Operation(summary = "관리 가능한 시니어 목록 조회", description = "현재 로그인한 사용자가 UserSenior 관계로 관리 가능한 시니어 목록을 조회합니다.")
+    @GetMapping
+    public Response<List<ManagedSeniorResponse>> getManagedSeniors(
+            @AuthenticationPrincipal User user
+    ) {
+        return Response.ok(
+                seniorService.getManagedSeniors(user)
+        );
+    }
 
     @Operation(summary = "시니어 정보 등록", description = "현재 로그인한 사용자가 관리할 시니어 정보를 등록합니다.")
     @PostMapping

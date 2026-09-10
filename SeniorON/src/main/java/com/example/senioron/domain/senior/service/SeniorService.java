@@ -4,6 +4,7 @@ import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.senior.dto.request.SeniorCreateRequest;
 import com.example.senioron.domain.senior.dto.request.SeniorRelationUpdateRequest;
+import com.example.senioron.domain.senior.dto.response.ManagedSeniorResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorCreateResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorRelationUpdateResponse;
 import com.example.senioron.domain.senior.entity.Senior;
@@ -20,6 +21,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -29,6 +32,17 @@ public class SeniorService {
     private final UserSeniorRepository userSeniorRepository;
     private final UserRepository userRepository;
     private final FamilyRepository familyRepository;
+
+    public List<ManagedSeniorResponse> getManagedSeniors(User user) {
+        if (user == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
+        }
+
+        return userSeniorRepository.findAllByUserOrderByUserSeniorIdAsc(user)
+                .stream()
+                .map(ManagedSeniorResponse::from)
+                .toList();
+    }
 
     /**
      * 로그인한 사용자가 관리할 시니어 정보를 등록합니다.

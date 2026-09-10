@@ -25,6 +25,7 @@ import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -42,6 +43,47 @@ class SeniorServiceTest {
     @BeforeEach
     void setUp() {
         seniorService = new SeniorService(seniorRepository, userSeniorRepository, userRepository, familyRepository);
+    }
+
+    @Test
+    void getManagedSeniorsReturnsSeniorsLinkedByUserSenior() {
+        Family family = Family.builder().familyId(1L).build();
+        User user = createChild(1L, family, ManagerType.PRIMARY);
+        Senior grandmother = createSenior(10L, family, user);
+        Senior grandfather = createSenior(11L, family, user);
+        UserSenior grandmotherRelation = UserSenior.builder()
+                .userSeniorId(20L)
+                .user(user)
+                .senior(grandmother)
+                .relation(SeniorRelation.MOTHER)
+                .build();
+        UserSenior grandfatherRelation = UserSenior.builder()
+                .userSeniorId(21L)
+                .user(user)
+                .senior(grandfather)
+                .relation(SeniorRelation.OTHER)
+                .customRelation("할아버지")
+                .build();
+        given(userSeniorRepository.findAllByUserOrderByUserSeniorIdAsc(user))
+                .willReturn(List.of(grandmotherRelation, grandfatherRelation));
+
+        var response = seniorService.getManagedSeniors(user);
+
+        assertThat(response).hasSize(2);
+        assertThat(response.get(0).seniorId()).isEqualTo(10L);
+        assertThat(response.get(0).name()).isEqualTo("김영희");
+        assertThat(response.get(0).relation()).isEqualTo(SeniorRelation.MOTHER);
+        assertThat(response.get(1).seniorId()).isEqualTo(11L);
+        assertThat(response.get(1).customRelation()).isEqualTo("할아버지");
+    }
+
+    @Test
+    void getManagedSeniorsRejectsUnauthenticatedUser() {
+        assertThatThrownBy(() -> seniorService.getManagedSeniors(null))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.USER_NOT_AUTHENTICATED);
     }
 
     @Test
