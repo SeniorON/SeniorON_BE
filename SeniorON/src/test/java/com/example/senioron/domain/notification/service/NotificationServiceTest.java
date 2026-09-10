@@ -374,7 +374,7 @@ class NotificationServiceTest {
     @Test
     void dispatchSosSendsToMultipleReceiversInParallel() throws Exception {
         long perCallDelayMillis = 300;
-        given(fcmSender.send(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
+        given(fcmSender.sendHighPriority(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
                 org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyLong()))
                 .willAnswer(invocation -> {
                     Thread.sleep(perCallDelayMillis);
