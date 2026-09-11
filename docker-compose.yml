@@ -11,6 +11,7 @@ services:
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d
       - /etc/letsencrypt:/etc/letsencrypt
+      - /etc/nginx/.htpasswd:/etc/nginx/.htpasswd:ro
 
     depends_on:
       grafana:
