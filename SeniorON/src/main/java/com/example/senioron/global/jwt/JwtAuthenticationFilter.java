@@ -51,9 +51,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final Set<String> PUBLIC_PATH_PREFIXES = Set.of(
             "/swagger-ui/",
             "/v3/api-docs/",
-            "/h2-console/",
-            "/actuator/"
+            "/h2-console/"
     );
+
+    private static final String PUBLIC_READINESS_PATH =
+            "/actuator/health/readiness";
 
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
@@ -64,7 +66,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String path = request.getServletPath();
 
         return PUBLIC_PATHS.contains(path)
-                || PUBLIC_PATH_PREFIXES.stream().anyMatch(path::startsWith);
+                || PUBLIC_PATH_PREFIXES.stream().anyMatch(path::startsWith)
+                || PUBLIC_READINESS_PATH.equals(path);
     }
 
     @Override

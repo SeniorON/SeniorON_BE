@@ -68,6 +68,7 @@ cloud:
     region: ${AWS_REGION}
     s3:
       bucket: ${S3_BUCKET}
+
 firebase:
   service-account-path: ${FIREBASE_SERVICE_ACCOUNT_PATH:}
 
@@ -99,3 +100,7 @@ ai:
       max-tokens: ${ANTHROPIC_MAX_TOKENS:512}
       connect-timeout: 3s
       read-timeout: 30s
+
+app:
+  cors:
+    allowed-origins: http://localhost:3000
