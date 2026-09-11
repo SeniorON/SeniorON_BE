@@ -57,6 +57,10 @@ public enum ErrorCode implements BaseCode {
 
     // Email Error
     EMAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "EMAIL500", "이메일 발송에 실패했습니다."),
+    EMAIL_VERIFICATION_COOLDOWN(HttpStatus.TOO_MANY_REQUESTS, "EMAIL429_1", "이메일 인증 코드는 60초에 한 번만 발송할 수 있습니다."),
+    EMAIL_VERIFICATION_RATE_LIMIT(HttpStatus.TOO_MANY_REQUESTS, "EMAIL429_2", "10분 동안 이메일 인증 코드 발송 횟수를 초과했습니다."),
+    EMAIL_VERIFICATION_DAILY_LIMIT(HttpStatus.TOO_MANY_REQUESTS, "EMAIL429_3", "오늘 이메일 인증 코드 발송 횟수를 초과했습니다."),
+    EMAIL_VERIFICATION_IP_RATE_LIMIT(HttpStatus.TOO_MANY_REQUESTS, "EMAIL429_4", "현재 IP에서 이메일 인증 코드 발송 횟수를 초과했습니다."),
 
     // Device Error
     SENIOR_DEVICE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "DEVICE_403", "시니어 기기 정보 갱신 권한이 없습니다."),

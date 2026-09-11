@@ -68,6 +68,7 @@ public class UserService {
     private final InactivitySettingService inactivitySettingService;
     private final DeviceService deviceService;
     private final ApplicationEventPublisher eventPublisher;
+    private final EmailVerificationRateLimitService emailVerificationRateLimitService;
 
     // 아이디 중복 확인 서비스
     public LoginIdCheckResponse checkLoginId(String loginId) {
@@ -121,11 +122,14 @@ public class UserService {
     }
 
     public SignupEmailVerificationCodeSendResponse sendSignupEmailVerificationCode(
-            SignupEmailVerificationCodeSendRequest request
+            SignupEmailVerificationCodeSendRequest request,
+            String clientIp
     ) {
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
         }
+
+        emailVerificationRateLimitService.checkAndRecord(request.getEmail(), clientIp);
 
         LocalDateTime now = LocalDateTime.now();
         String verificationCode = generateVerificationCode();

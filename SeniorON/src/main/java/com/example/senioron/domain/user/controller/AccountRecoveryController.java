@@ -8,10 +8,12 @@ import com.example.senioron.domain.user.dto.response.LoginIdFindResponse;
 import com.example.senioron.domain.user.dto.response.PasswordResetResponse;
 import com.example.senioron.domain.user.dto.response.PasswordResetCodeSendResponse;
 import com.example.senioron.domain.user.dto.response.PasswordResetCodeVerifyResponse;
+import com.example.senioron.domain.user.service.ClientIpResolver;
 import com.example.senioron.domain.user.service.AccountRecoveryService;
 import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -27,6 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AccountRecoveryController {
 
     private final AccountRecoveryService accountRecoveryService;
+    private final ClientIpResolver clientIpResolver;
 
     @Operation(
             summary = "로그인 아이디 찾기",
@@ -45,9 +48,13 @@ public class AccountRecoveryController {
     )
     @PostMapping("/password/verification-code")
     public Response<PasswordResetCodeSendResponse> sendPasswordResetVerificationCode(
-            @Valid @RequestBody PasswordResetCodeSendRequest request
+            @Valid @RequestBody PasswordResetCodeSendRequest request,
+            HttpServletRequest httpServletRequest
     ) {
-        return Response.ok(accountRecoveryService.sendPasswordResetVerificationCode(request));
+        return Response.ok(accountRecoveryService.sendPasswordResetVerificationCode(
+                request,
+                clientIpResolver.resolve(httpServletRequest)
+        ));
     }
 
     @Operation(

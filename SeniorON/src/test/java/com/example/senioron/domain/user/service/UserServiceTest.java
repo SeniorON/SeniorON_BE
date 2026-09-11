@@ -73,6 +73,8 @@ class UserServiceTest {
     private final UserSeniorRepository userSeniorRepository = mock(UserSeniorRepository.class);
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
+    private final EmailVerificationRateLimitService emailVerificationRateLimitService =
+            mock(EmailVerificationRateLimitService.class);
     private final JwtUtil jwtUtil = new JwtUtil("12345678901234567890123456789012", 3600000L, 1209600000L);
     private final RefreshTokenService refreshTokenService = new RefreshTokenService(refreshTokenRepository, jwtUtil);
 
@@ -94,7 +96,8 @@ class UserServiceTest {
                 jwtUtil,
                 mock(InactivitySettingService.class),
                 mock(DeviceService.class),
-                eventPublisher
+                eventPublisher,
+                emailVerificationRateLimitService
         );
     }
 
@@ -502,6 +505,37 @@ class UserServiceTest {
     }
 
     @Test
+    void verifySignupEmailVerificationCodeRejectsPreviousCodeAfterReissueAndAcceptsLatestCode() {
+        SignupEmailVerificationCode savedCode = createVerificationCode(
+                passwordEncoder.encode("111111"),
+                LocalDateTime.now().minusMinutes(1),
+                LocalDateTime.now().plusMinutes(4)
+        );
+        savedCode.reissue(
+                passwordEncoder.encode("222222"),
+                LocalDateTime.now(),
+                LocalDateTime.now().plusMinutes(5)
+        );
+        given(userRepository.existsByEmail(EMAIL)).willReturn(false);
+        given(signupEmailVerificationCodeRepository.findByEmail(EMAIL)).willReturn(Optional.of(savedCode));
+
+        assertThatThrownBy(() -> userService.verifySignupEmailVerificationCode(
+                createVerifyRequest(EMAIL, "111111")
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.INVALID_SIGNUP_EMAIL_VERIFICATION_CODE);
+
+        SignupEmailVerificationCodeVerifyResponse response = userService.verifySignupEmailVerificationCode(
+                createVerifyRequest(EMAIL, "222222")
+        );
+
+        assertThat(response.getVerified()).isTrue();
+        assertThat(savedCode.isVerified()).isTrue();
+    }
+
+    @Test
     void sendSignupEmailVerificationCodeResetsVerifiedStateWhenReissued() {
         SignupEmailVerificationCode savedCode = createVerificationCode(
                 passwordEncoder.encode(VERIFICATION_CODE),
@@ -524,11 +558,12 @@ class UserServiceTest {
             return savedCode;
         });
 
-        userService.sendSignupEmailVerificationCode(createSendRequest(EMAIL));
+        userService.sendSignupEmailVerificationCode(createSendRequest(EMAIL), "127.0.0.1");
 
         assertThat(savedCode.isVerified()).isFalse();
         assertThat(savedCode.getVerifiedAt()).isNull();
         verify(eventPublisher).publishEvent(any(SignupEmailVerificationCodeSendEvent.class));
+        verify(emailVerificationRateLimitService).checkAndRecord(EMAIL, "127.0.0.1");
     }
 
     @Test
@@ -552,7 +587,7 @@ class UserServiceTest {
                 any(LocalDateTime.class)
         )).willReturn(savedCode);
 
-        userService.sendSignupEmailVerificationCode(createSendRequest(EMAIL));
+        userService.sendSignupEmailVerificationCode(createSendRequest(EMAIL), "127.0.0.1");
 
         verify(signupEmailVerificationCodeIssuer).reissueExisting(
                 anyString(),

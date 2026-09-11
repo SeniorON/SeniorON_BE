@@ -25,6 +25,8 @@ class AccountRecoveryServiceTest {
             mock(AccountRecoveryVerificationCodeRepository.class);
     private final PasswordEncoder passwordEncoder = mock(PasswordEncoder.class);
     private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
+    private final EmailVerificationRateLimitService emailVerificationRateLimitService =
+            mock(EmailVerificationRateLimitService.class);
 
     private AccountRecoveryService accountRecoveryService;
 
@@ -34,7 +36,8 @@ class AccountRecoveryServiceTest {
                 userRepository,
                 verificationCodeRepository,
                 passwordEncoder,
-                eventPublisher
+                eventPublisher,
+                emailVerificationRateLimitService
         );
     }
 
