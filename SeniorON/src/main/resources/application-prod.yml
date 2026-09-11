@@ -37,3 +37,12 @@ logging:
 
     com.example.senioron: INFO
     org.springframework.web: INFO
+
+management:
+  endpoint:
+    health:
+      show-details: never
+
+app:
+  cors:
+    allowed-origins: https://senioron.site
