@@ -4,7 +4,6 @@ import com.example.senioron.domain.home.dto.request.*;
 import com.example.senioron.domain.home.dto.response.*;
 import com.example.senioron.domain.device.dto.response.DeviceDetailResponse;
 import com.example.senioron.domain.home.service.HomeService;
-import com.example.senioron.domain.home.service.WeatherService;
 import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,14 +22,11 @@ import java.util.concurrent.TimeUnit;
 public class HomeController {
 
     private final HomeService homeService;
-    private final WeatherService weatherService;
 
     public HomeController(
-            HomeService homeService,
-            WeatherService weatherService
+            HomeService homeService
     ) {
         this.homeService = homeService;
-        this.weatherService = weatherService;
     }
 
     @Operation(
@@ -131,22 +127,5 @@ public class HomeController {
         Response<DeviceDetailResponse> response = Response.ok(homeService.getDeviceDetail());
         log.debug("[TIMING] HomeController.getDeviceDetail : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
         return response;
-    }
-
-    @Operation(
-            summary = "현재 날씨 조회",
-            description = "전달받은 위도와 경도를 기준으로 현재 기온과 날씨 상태를 조회"
-    )
-    @GetMapping("/weather")
-    public Response<WeatherResponse> getCurrentWeather(
-            @RequestParam double latitude,
-            @RequestParam double longitude
-    ) {
-
-        long start = System.nanoTime();
-        WeatherResponse response = weatherService.getCurrentWeather(latitude, longitude);
-        log.debug("[TIMING] HomeController.getCurrentWeather : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
-        return Response.ok(response);
-
     }
 }
