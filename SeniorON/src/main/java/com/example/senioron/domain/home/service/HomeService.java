@@ -481,8 +481,21 @@ public class HomeService {
                                 )
                         );
 
+        Optional<UserSenior> currentUserSeniorOptional =
+                userSeniorRepository
+                        .findFirstByUserAndSenior_FamilyOrderByUserSeniorIdAsc(
+                                currentUser,
+                                lockedFamily
+                        );
         Optional<Senior> familySeniorOptional =
-                seniorRepository.findFirstByFamily(lockedFamily);
+                currentUserSeniorOptional
+                        .map(UserSenior::getSenior)
+                        .or(() ->
+                                seniorRepository
+                                        .findFirstByFamilyOrderBySeniorIdAsc(
+                                                lockedFamily
+                                        )
+                        );
 
         Senior senior;
 
@@ -1229,7 +1242,7 @@ public class HomeService {
         }
 
         return userSeniorRepository
-                .findFirstByUserAndSenior_Family(
+                .findFirstByUserAndSenior_FamilyOrderByUserSeniorIdAsc(
                         child,
                         child.getFamily()
                 );
@@ -1244,7 +1257,7 @@ public class HomeService {
         }
 
         return seniorRepository
-                .findFirstByFamily(
+                .findFirstByFamilyOrderBySeniorIdAsc(
                         user.getFamily()
                 );
     }

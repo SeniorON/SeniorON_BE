@@ -356,8 +356,8 @@ class UserServiceTest {
         User user = createChild(1L, family, ManagerType.SUB);
         Senior senior = createSenior(123L, family, user);
         given(userRepository.findById(1L)).willReturn(Optional.of(user));
-        given(userSeniorRepository.findFirstByUserAndSenior_Family(user, family)).willReturn(Optional.empty());
-        given(seniorRepository.findFirstByFamily(family)).willReturn(Optional.of(senior));
+        given(userSeniorRepository.findFirstByUserAndSenior_FamilyOrderByUserSeniorIdAsc(user, family)).willReturn(Optional.empty());
+        given(seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(family)).willReturn(Optional.of(senior));
 
         OnboardingStatusResponse response = userService.getOnboardingStatus(user);
 
@@ -383,7 +383,7 @@ class UserServiceTest {
                 .relation(SeniorRelation.MOTHER)
                 .build();
         given(userRepository.findById(1L)).willReturn(Optional.of(user));
-        given(userSeniorRepository.findFirstByUserAndSenior_Family(user, family)).willReturn(Optional.of(userSenior));
+        given(userSeniorRepository.findFirstByUserAndSenior_FamilyOrderByUserSeniorIdAsc(user, family)).willReturn(Optional.of(userSenior));
 
         OnboardingStatusResponse response = userService.getOnboardingStatus(user);
 

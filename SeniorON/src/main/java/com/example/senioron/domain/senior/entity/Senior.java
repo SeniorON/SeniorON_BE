@@ -37,7 +37,7 @@ public class Senior {
     private Double longitude;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "family_id", nullable = false, unique = true)
+    @JoinColumn(name = "family_id", nullable = false)
     private Family family;
 
     /*
@@ -46,6 +46,17 @@ public class Senior {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "registered_by_user_id", nullable = false)
     private User registeredBy;
+
+    /*
+     * 해당 시니어 본인의 실제 PARENT 계정
+     */
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_user_id", unique = true)
+    private User parentUser;
+
+    public void linkParentUser(User parentUser) {
+        this.parentUser = parentUser;
+    }
 
     public void updateProfile(
             String name,
