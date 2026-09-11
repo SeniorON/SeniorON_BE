@@ -37,6 +37,7 @@ public class AccountRecoveryService {
     private final AccountRecoveryVerificationCodeRepository verificationCodeRepository;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
+    private final EmailVerificationRateLimitService emailVerificationRateLimitService;
 
     public LoginIdFindResponse findLoginId(LoginIdFindRequest request) {
         User user = userRepository.findByNameAndEmail(request.getName(), request.getEmail())
@@ -50,12 +51,15 @@ public class AccountRecoveryService {
 
     @Transactional
     public PasswordResetCodeSendResponse sendPasswordResetVerificationCode(
-            PasswordResetCodeSendRequest request
+            PasswordResetCodeSendRequest request,
+            String clientIp
     ) {
         User user = userRepository.findByNameAndLoginId(request.getName(), request.getLoginId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_RECOVERY_USER_NOT_FOUND));
         User lockedUser = userRepository.findByIdForUpdate(user.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_RECOVERY_USER_NOT_FOUND));
+
+        emailVerificationRateLimitService.checkAndRecord(lockedUser.getEmail(), clientIp);
 
         LocalDateTime now = LocalDateTime.now();
         verificationCodeRepository

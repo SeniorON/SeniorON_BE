@@ -99,7 +99,8 @@ class UserSettingsServiceTest {
                 jwtUtil,
                 org.mockito.Mockito.mock(InactivitySettingService.class),
                 org.mockito.Mockito.mock(com.example.senioron.domain.device.service.DeviceService.class),
-                org.mockito.Mockito.mock(org.springframework.context.ApplicationEventPublisher.class)
+                org.mockito.Mockito.mock(org.springframework.context.ApplicationEventPublisher.class),
+                org.mockito.Mockito.mock(EmailVerificationRateLimitService.class)
         );
 
         UserLoginResponse beforeChange = userService.login(createLoginRequest(CURRENT_PASSWORD));
