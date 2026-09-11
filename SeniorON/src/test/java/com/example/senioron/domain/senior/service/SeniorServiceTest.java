@@ -12,6 +12,7 @@ import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.senior.dto.request.SeniorCreateRequest;
 import com.example.senioron.domain.senior.dto.request.SeniorParentLinkRequest;
 import com.example.senioron.domain.senior.dto.request.SeniorRelationUpdateRequest;
+import com.example.senioron.domain.senior.dto.request.SeniorSelectionRequest;
 import com.example.senioron.domain.senior.dto.response.SeniorCreateResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorParentLinkResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorRelationUpdateResponse;
@@ -144,6 +145,113 @@ class SeniorServiceTest {
                 .asInstanceOf(type(BusinessException.class))
                 .extracting(BusinessException::getCode)
                 .isEqualTo(ErrorCode.FAMILY_NOT_CONNECTED);
+    }
+
+    @Test
+    void selectManagedSeniorCreatesUserSeniorForSeniorInSameFamily() {
+        Family family = Family.builder().familyId(1L).build();
+        User user = createChild(1L, family, ManagerType.SUB);
+        Senior senior = createSenior(10L, family, user);
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(user));
+        given(seniorRepository.findById(10L)).willReturn(Optional.of(senior));
+        given(userSeniorRepository.existsByUserAndSenior(user, senior)).willReturn(false);
+        given(userSeniorRepository.saveAndFlush(any(UserSenior.class)))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        SeniorRelationUpdateResponse response = seniorService.selectManagedSenior(
+                user,
+                new SeniorSelectionRequest(10L, SeniorRelation.MOTHER, null)
+        );
+
+        assertThat(response.seniorId()).isEqualTo(10L);
+        assertThat(response.relation()).isEqualTo(SeniorRelation.MOTHER);
+        verify(userSeniorRepository).saveAndFlush(any(UserSenior.class));
+    }
+
+    @Test
+    void selectManagedSeniorRejectsMissingSenior() {
+        Family family = Family.builder().familyId(1L).build();
+        User user = createChild(1L, family, ManagerType.SUB);
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(user));
+        given(seniorRepository.findById(999L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> seniorService.selectManagedSenior(
+                user,
+                new SeniorSelectionRequest(999L, SeniorRelation.MOTHER, null)
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_NOT_FOUND);
+    }
+
+    @Test
+    void selectManagedSeniorRejectsSeniorFromDifferentFamily() {
+        Family family = Family.builder().familyId(1L).build();
+        Family otherFamily = Family.builder().familyId(2L).build();
+        User user = createChild(1L, family, ManagerType.SUB);
+        Senior senior = createSenior(10L, otherFamily, user);
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(user));
+        given(seniorRepository.findById(10L)).willReturn(Optional.of(senior));
+
+        assertThatThrownBy(() -> seniorService.selectManagedSenior(
+                user,
+                new SeniorSelectionRequest(10L, SeniorRelation.MOTHER, null)
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.FORBIDDEN);
+    }
+
+    @Test
+    void selectManagedSeniorRejectsUserWithoutFamily() {
+        User user = createChild(1L, null, ManagerType.SUB);
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> seniorService.selectManagedSenior(
+                user,
+                new SeniorSelectionRequest(10L, SeniorRelation.MOTHER, null)
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.FAMILY_NOT_CONNECTED);
+    }
+
+    @Test
+    void selectManagedSeniorRejectsAlreadySelectedSenior() {
+        Family family = Family.builder().familyId(1L).build();
+        User user = createChild(1L, family, ManagerType.SUB);
+        Senior senior = createSenior(10L, family, user);
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(user));
+        given(seniorRepository.findById(10L)).willReturn(Optional.of(senior));
+        given(userSeniorRepository.existsByUserAndSenior(user, senior)).willReturn(true);
+
+        assertThatThrownBy(() -> seniorService.selectManagedSenior(
+                user,
+                new SeniorSelectionRequest(10L, SeniorRelation.MOTHER, null)
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.USER_SENIOR_ALREADY_EXISTS);
+    }
+
+    @Test
+    void selectManagedSeniorRequiresCustomRelationWhenOther() {
+        Family family = Family.builder().familyId(1L).build();
+        User user = createChild(1L, family, ManagerType.SUB);
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> seniorService.selectManagedSenior(
+                user,
+                new SeniorSelectionRequest(10L, SeniorRelation.OTHER, " ")
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.CUSTOM_RELATION_REQUIRED);
     }
 
     @Test

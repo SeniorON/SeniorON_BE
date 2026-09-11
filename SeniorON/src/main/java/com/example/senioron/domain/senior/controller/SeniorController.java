@@ -3,6 +3,7 @@ package com.example.senioron.domain.senior.controller;
 import com.example.senioron.domain.senior.dto.request.SeniorCreateRequest;
 import com.example.senioron.domain.senior.dto.request.SeniorParentLinkRequest;
 import com.example.senioron.domain.senior.dto.request.SeniorRelationUpdateRequest;
+import com.example.senioron.domain.senior.dto.request.SeniorSelectionRequest;
 import com.example.senioron.domain.senior.dto.response.ManagedSeniorResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorCreateResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorFamilyResponse;
@@ -35,6 +36,17 @@ public class SeniorController {
     ) {
         return Response.ok(
                 seniorService.getManagedSeniors(user)
+        );
+    }
+
+    @Operation(summary = "관리할 시니어 선택", description = "현재 로그인한 사용자가 같은 가족에 등록된 시니어 중 관리할 시니어를 선택하고 관계를 등록합니다.")
+    @PostMapping("/me")
+    public Response<SeniorRelationUpdateResponse> selectManagedSenior(
+            @AuthenticationPrincipal User user,
+            @Valid @RequestBody SeniorSelectionRequest request
+    ) {
+        return Response.ok(
+                seniorService.selectManagedSenior(user, request)
         );
     }
 

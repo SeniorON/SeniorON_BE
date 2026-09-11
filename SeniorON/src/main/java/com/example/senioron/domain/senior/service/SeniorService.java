@@ -5,6 +5,7 @@ import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.senior.dto.request.SeniorCreateRequest;
 import com.example.senioron.domain.senior.dto.request.SeniorParentLinkRequest;
 import com.example.senioron.domain.senior.dto.request.SeniorRelationUpdateRequest;
+import com.example.senioron.domain.senior.dto.request.SeniorSelectionRequest;
 import com.example.senioron.domain.senior.dto.response.ManagedSeniorResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorCreateResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorFamilyResponse;
@@ -65,6 +66,52 @@ public class SeniorService {
                 .stream()
                 .map(SeniorFamilyResponse::from)
                 .toList();
+    }
+
+    @Transactional
+    public SeniorRelationUpdateResponse selectManagedSenior(
+            User principal,
+            SeniorSelectionRequest request
+    ) {
+        if (principal == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
+        }
+
+        User user = userRepository.findByIdForUpdate(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        if (user.getFamily() == null) {
+            throw new BusinessException(ErrorCode.FAMILY_NOT_CONNECTED);
+        }
+
+        validateCustomRelation(request.relation(), request.customRelation());
+
+        Senior senior = seniorRepository.findById(request.seniorId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.SENIOR_NOT_FOUND));
+
+        validateSameFamily(user, senior);
+
+        if (userSeniorRepository.existsByUserAndSenior(user, senior)) {
+            throw new BusinessException(ErrorCode.USER_SENIOR_ALREADY_EXISTS);
+        }
+
+        UserSenior userSenior = UserSenior.builder()
+                .user(user)
+                .senior(senior)
+                .relation(request.relation())
+                .customRelation(resolveCustomRelation(
+                        request.relation(),
+                        request.customRelation()
+                ))
+                .build();
+
+        try {
+            return SeniorRelationUpdateResponse.from(
+                    userSeniorRepository.saveAndFlush(userSenior)
+            );
+        } catch (DataIntegrityViolationException e) {
+            throw new BusinessException(ErrorCode.USER_SENIOR_ALREADY_EXISTS);
+        }
     }
 
     @Transactional
