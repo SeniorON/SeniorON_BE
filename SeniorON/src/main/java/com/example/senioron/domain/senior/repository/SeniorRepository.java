@@ -20,6 +20,8 @@ public interface SeniorRepository extends JpaRepository<Senior, Long> {
 
     Optional<Senior> findFirstByFamilyOrderBySeniorIdAsc(Family family);
 
+    List<Senior> findAllByFamilyOrderBySeniorIdAsc(Family family);
+
     boolean existsByParentUser(User parentUser);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

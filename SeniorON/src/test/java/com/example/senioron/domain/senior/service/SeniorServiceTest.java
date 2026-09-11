@@ -89,6 +89,64 @@ class SeniorServiceTest {
     }
 
     @Test
+    void getFamilySeniorsReturnsAllSeniorsInUsersFamily() {
+        Family family = Family.builder().familyId(1L).build();
+        User user = createChild(1L, family, ManagerType.PRIMARY);
+        User parent = createParent(3L, family);
+        Senior grandmother = createSenior(10L, family, user);
+        Senior grandfather = Senior.builder()
+                .seniorId(11L)
+                .name("박영수")
+                .birth(LocalDate.of(1948, 2, 2))
+                .phoneNumber("01098765432")
+                .address("서울시")
+                .detailAddress("202호")
+                .latitude(37.1234)
+                .longitude(127.1234)
+                .family(family)
+                .registeredBy(user)
+                .parentUser(parent)
+                .build();
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(seniorRepository.findAllByFamilyOrderBySeniorIdAsc(family))
+                .willReturn(List.of(grandmother, grandfather));
+
+        var response = seniorService.getFamilySeniors(user);
+
+        assertThat(response).hasSize(2);
+        assertThat(response.get(0).seniorId()).isEqualTo(10L);
+        assertThat(response.get(0).parentLinked()).isFalse();
+        assertThat(response.get(1).seniorId()).isEqualTo(11L);
+        assertThat(response.get(1).name()).isEqualTo("박영수");
+        assertThat(response.get(1).parentLinked()).isTrue();
+    }
+
+    @Test
+    void getFamilySeniorsReturnsEmptyListWhenFamilyHasNoSeniors() {
+        Family family = Family.builder().familyId(1L).build();
+        User user = createChild(1L, family, ManagerType.PRIMARY);
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(seniorRepository.findAllByFamilyOrderBySeniorIdAsc(family))
+                .willReturn(List.of());
+
+        var response = seniorService.getFamilySeniors(user);
+
+        assertThat(response).isEmpty();
+    }
+
+    @Test
+    void getFamilySeniorsRejectsUserWithoutFamily() {
+        User user = createChild(1L, null, ManagerType.PRIMARY);
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> seniorService.getFamilySeniors(user))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.FAMILY_NOT_CONNECTED);
+    }
+
+    @Test
     void linkParentUserLinksParentAccountToSeniorInSameFamily() {
         Family family = Family.builder().familyId(1L).build();
         User parent = createParent(3L, family);

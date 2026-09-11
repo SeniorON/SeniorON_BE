@@ -7,6 +7,7 @@ import com.example.senioron.domain.senior.dto.request.SeniorParentLinkRequest;
 import com.example.senioron.domain.senior.dto.request.SeniorRelationUpdateRequest;
 import com.example.senioron.domain.senior.dto.response.ManagedSeniorResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorCreateResponse;
+import com.example.senioron.domain.senior.dto.response.SeniorFamilyResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorParentLinkResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorRelationUpdateResponse;
 import com.example.senioron.domain.senior.entity.Senior;
@@ -45,6 +46,24 @@ public class SeniorService {
         return userSeniorRepository.findAllByUserOrderByUserSeniorIdAsc(user)
                 .stream()
                 .map(ManagedSeniorResponse::from)
+                .toList();
+    }
+
+    public List<SeniorFamilyResponse> getFamilySeniors(User principal) {
+        if (principal == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
+        }
+
+        User user = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        if (user.getFamily() == null) {
+            throw new BusinessException(ErrorCode.FAMILY_NOT_CONNECTED);
+        }
+
+        return seniorRepository.findAllByFamilyOrderBySeniorIdAsc(user.getFamily())
+                .stream()
+                .map(SeniorFamilyResponse::from)
                 .toList();
     }
 

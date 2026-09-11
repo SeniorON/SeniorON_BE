@@ -5,6 +5,7 @@ import com.example.senioron.domain.senior.dto.request.SeniorParentLinkRequest;
 import com.example.senioron.domain.senior.dto.request.SeniorRelationUpdateRequest;
 import com.example.senioron.domain.senior.dto.response.ManagedSeniorResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorCreateResponse;
+import com.example.senioron.domain.senior.dto.response.SeniorFamilyResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorParentLinkResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorRelationUpdateResponse;
 import com.example.senioron.domain.senior.service.SeniorService;
@@ -27,13 +28,23 @@ public class SeniorController {
 
     private final SeniorService seniorService;
 
-    @Operation(summary = "관리 가능한 시니어 목록 조회", description = "현재 로그인한 사용자가 UserSenior 관계로 관리 가능한 시니어 목록을 조회합니다.")
-    @GetMapping
+    @Operation(summary = "내가 관리 중인 시니어", description = "현재 로그인한 사용자가 UserSenior 관계로 연결된 시니어 목록을 조회합니다.")
+    @GetMapping("/me")
     public Response<List<ManagedSeniorResponse>> getManagedSeniors(
             @AuthenticationPrincipal User user
     ) {
         return Response.ok(
                 seniorService.getManagedSeniors(user)
+        );
+    }
+
+    @Operation(summary = "우리 가족 시니어 목록 조회", description = "현재 로그인한 사용자가 속한 가족에 등록된 모든 시니어 목록을 조회합니다.")
+    @GetMapping("/family")
+    public Response<List<SeniorFamilyResponse>> getFamilySeniors(
+            @AuthenticationPrincipal User user
+    ) {
+        return Response.ok(
+                seniorService.getFamilySeniors(user)
         );
     }
 
