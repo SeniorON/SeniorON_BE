@@ -15,6 +15,9 @@ public interface UserSeniorRepository extends JpaRepository<UserSenior, Long> {
 
     Optional<UserSenior> findByUserAndSenior(User user, Senior senior);
 
+    @EntityGraph(attributePaths = {"senior", "senior.parentUser"})
+    Optional<UserSenior> findByUserAndSenior_SeniorId(User user, Long seniorId);
+
     Optional<UserSenior> findFirstByUserAndSenior_FamilyOrderByUserSeniorIdAsc(User user, Family family);
 
     @EntityGraph(attributePaths = "senior")

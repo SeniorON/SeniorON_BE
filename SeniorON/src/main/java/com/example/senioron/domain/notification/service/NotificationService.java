@@ -20,6 +20,8 @@ import com.example.senioron.domain.notification.entity.NotificationSettingType;
 import com.example.senioron.domain.notification.entity.NotificationType;
 import com.example.senioron.domain.notification.repository.NotificationRepository;
 import com.example.senioron.domain.notification.repository.NotificationSettingRepository;
+import com.example.senioron.domain.senior.entity.UserSenior;
+import com.example.senioron.domain.senior.repository.UserSeniorRepository;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
@@ -72,6 +74,7 @@ public class NotificationService {
     private final NotificationRepository notificationRepository;
     private final NotificationSettingRepository notificationSettingRepository;
     private final UserRepository userRepository;
+    private final UserSeniorRepository userSeniorRepository;
     private final DeviceRepository deviceRepository;
     private final FcmSender fcmSender;
     private final MeterRegistry meterRegistry;
@@ -211,9 +214,8 @@ public class NotificationService {
 
         NotificationType type = resolveType(event.getEventType());
 
-        // receivers는 전부 sender와 같은 가족의 자녀라 알림 설정을 공유하는 시니어가 동일하다.
-        // 수신자마다 반복 조회하지 않고 한 번만 확인한다.
-        if (!isEnabled(receivers.get(0), type)) {
+        // 같은 가족에 부모가 여러 명이어도 실제 이벤트 발신 부모의 설정을 적용한다.
+        if (!isEnabled(sender, type)) {
             return List.of();
         }
 
@@ -467,13 +469,12 @@ public class NotificationService {
     }
     //알람 탭 홈화면 조회
     @Transactional
-    public NotificationHomeListResponse getHomeSettings(Long userId) {
+    public NotificationHomeListResponse getHomeSettings(Long userId, Long seniorId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        User senior = resolveSeniorOwner(user)
-                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND));
-        NotificationSetting setting = notificationSettingRepository.findById(senior.getUsersId())
-                .orElseGet(() -> createDefaultSettingInternal(senior));
+        User parent = resolveManagedSeniorParent(user, seniorId);
+        NotificationSetting setting = notificationSettingRepository.findById(parent.getUsersId())
+                .orElseGet(() -> createDefaultSettingInternal(parent));
 
         // 타입별로 따로 조회하지 않고 한 번에 가져와서 자바에서 타입별 최신 1건만 뽑는다.
         // ORDER BY createdAt DESC라 각 타입에서 먼저 만나는 게 최신이다.
@@ -501,6 +502,7 @@ public class NotificationService {
     @Transactional
     public NotificationSettingResponse updateSetting(
             Long userId,
+            Long seniorId,
             NotificationSettingType type,
             Boolean enabled
     ){
@@ -511,27 +513,14 @@ public class NotificationService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        User senior;
-        if (user.getRole() == Role.PARENT) {
-            senior = user;
-        } else {
-            if (user.getFamily() == null) {
-                throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
-            }
-            List<User> parents = userRepository.findByFamilyAndUsersIdNotAndRole(
-                    user.getFamily(), user.getUsersId(), Role.PARENT);
-            if (parents.isEmpty()) {
-                throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
-            }
-            // 부모님 기기가 전부 오프라인이면(=연락 닿을 방법이 없으면) 변경을 차단 (fail-safe)
-            if (!isAnyDeviceOnline(findParentDeviceStatuses(parents))) {
-                throw new BusinessException(ErrorCode.PARENT_DEVICE_OFFLINE);
-            }
-            senior = parents.get(0);
+        User parent = resolveManagedSeniorParent(user, seniorId);
+        // 선택한 시니어의 부모님 기기가 전부 오프라인이면 변경을 차단한다 (fail-safe).
+        if (!isAnyDeviceOnline(findParentDeviceStatuses(List.of(parent)))) {
+            throw new BusinessException(ErrorCode.PARENT_DEVICE_OFFLINE);
         }
 
-        NotificationSetting setting = notificationSettingRepository.findById(senior.getUsersId())
-                .orElseGet(() -> createDefaultSettingInternal(senior));
+        NotificationSetting setting = notificationSettingRepository.findById(parent.getUsersId())
+                .orElseGet(() -> createDefaultSettingInternal(parent));
 
         switch (type) {
             case INACTIVITY -> setting.updateInactivityEnabled(enabled);
@@ -544,25 +533,31 @@ public class NotificationService {
 
     // 자녀가 부모님 기기의 온/오프라인 상태만 조회. 기기 중 하나라도 온라인이면 온라인으로 본다.
     @Transactional(readOnly = true)
-    public ParentDeviceStatusResponse getParentDeviceStatus(Long childUserId) {
+    public ParentDeviceStatusResponse getParentDeviceStatus(Long childUserId, Long seniorId) {
         User child = userRepository.findById(childUserId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        boolean online = isAnyDeviceOnline(findParentDeviceStatuses(child));
+        UserSenior userSenior = resolveManagedSenior(child, seniorId);
+        User parent = userSenior.getSenior().getParentUser();
+        boolean online = parent != null
+                && isAnyDeviceOnline(findParentDeviceStatuses(List.of(parent)));
 
         return ParentDeviceStatusResponse.builder()
                 .online(online)
                 .build();
     }
 
-    //매칭되는 모든 기기의 상태를 모아서 반환
-    private List<DeviceStatus> findParentDeviceStatuses(User child) {
-        if (child.getFamily() == null) {
-            return List.of();
+    private User resolveManagedSeniorParent(User user, Long seniorId) {
+        User parent = resolveManagedSenior(user, seniorId).getSenior().getParentUser();
+        if (parent == null) {
+            throw new BusinessException(ErrorCode.SENIOR_PARENT_USER_NOT_FOUND);
         }
-        List<User> parents = userRepository.findByFamilyAndUsersIdNotAndRole(
-                child.getFamily(), child.getUsersId(), Role.PARENT);
-        return findParentDeviceStatuses(parents);
+        return parent;
+    }
+
+    private UserSenior resolveManagedSenior(User user, Long seniorId) {
+        return userSeniorRepository.findByUserAndSenior_SeniorId(user, seniorId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED));
     }
 
     private List<DeviceStatus> findParentDeviceStatuses(List<User> parents) {

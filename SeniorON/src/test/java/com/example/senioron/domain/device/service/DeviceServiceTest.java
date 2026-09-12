@@ -5,11 +5,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.example.senioron.domain.device.entity.Device;
 import com.example.senioron.domain.device.entity.DeviceStatus;
 import com.example.senioron.domain.device.repository.DeviceRepository;
+import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.repository.FamilyRepository;
+import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.repository.UserRepository;
 import java.util.UUID;
+import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -31,6 +35,9 @@ class DeviceServiceTest {
 
     @Autowired
     private SeniorRepository seniorRepository;
+
+    @Autowired
+    private FamilyRepository familyRepository;
 
     private DeviceService deviceService;
 
@@ -86,7 +93,42 @@ class DeviceServiceTest {
         assertThat(deviceRepository.count()).isZero();
     }
 
+    @Test
+    void homeLocationUsesSeniorLinkedToCurrentParentInsteadOfFirstSeniorInFamily() {
+        Family family = familyRepository.saveAndFlush(Family.builder()
+                .familyCode("family-" + UUID.randomUUID()).build());
+        User child = saveUser("child-owner", Role.CHILD, family);
+        User currentParent = saveUser("current-parent", Role.PARENT, family);
+        User otherParent = saveUser("other-parent", Role.PARENT, family);
+
+        seniorRepository.saveAndFlush(senior("first-senior", family, child, otherParent, 37.1, 127.1));
+        seniorRepository.saveAndFlush(senior("linked-senior", family, child, currentParent, 37.2, 127.2));
+
+        var response = deviceService().getHomeLocation(currentParent);
+
+        assertThat(response.latitude()).isEqualTo(37.2);
+        assertThat(response.longitude()).isEqualTo(127.2);
+    }
+
+    private Senior senior(String name, Family family, User registeredBy, User parent,
+                          double latitude, double longitude) {
+        return Senior.builder()
+                .name(name)
+                .birth(LocalDate.of(1950, 1, 1))
+                .phoneNumber("01012345678")
+                .family(family)
+                .registeredBy(registeredBy)
+                .parentUser(parent)
+                .latitude(latitude)
+                .longitude(longitude)
+                .build();
+    }
+
     private User saveUser(String prefix, Role role) {
+        return saveUser(prefix, role, null);
+    }
+
+    private User saveUser(String prefix, Role role, Family family) {
         String unique = UUID.randomUUID().toString();
 
         return userRepository.saveAndFlush(
@@ -96,6 +138,7 @@ class DeviceServiceTest {
                         .password("encoded-password")
                         .name(prefix)
                         .role(role)
+                        .family(family)
                         .build()
         );
     }

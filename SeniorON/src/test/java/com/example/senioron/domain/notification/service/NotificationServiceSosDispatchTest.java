@@ -5,6 +5,7 @@ import com.example.senioron.domain.event.util.FcmSender;
 import com.example.senioron.domain.notification.dto.NotificationDispatchTarget;
 import com.example.senioron.domain.notification.repository.NotificationRepository;
 import com.example.senioron.domain.notification.repository.NotificationSettingRepository;
+import com.example.senioron.domain.senior.repository.UserSeniorRepository;
 import com.example.senioron.domain.user.repository.UserRepository;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.AfterEach;
@@ -35,7 +36,8 @@ class NotificationServiceSosDispatchTest {
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private final NotificationService service = new NotificationService(
             mock(NotificationRepository.class), mock(NotificationSettingRepository.class),
-            mock(UserRepository.class), mock(DeviceRepository.class), fcmSender, meterRegistry);
+            mock(UserRepository.class), mock(UserSeniorRepository.class), mock(DeviceRepository.class), fcmSender,
+            meterRegistry);
     private final ExecutorService requestExecutor = Executors.newSingleThreadExecutor();
 
     @AfterEach
