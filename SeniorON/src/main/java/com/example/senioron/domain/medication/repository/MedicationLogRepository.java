@@ -6,6 +6,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -15,18 +16,69 @@ import org.springframework.data.repository.query.Param;
 public interface MedicationLogRepository
         extends JpaRepository<MedicationLog, Long> {
 
-    @EntityGraph(attributePaths = "medication")
+    @EntityGraph(
+            attributePaths = {
+                    "user",
+                    "medication"
+            }
+    )
     List<MedicationLog>
     findByUserUsersIdAndPlannedDateOrderByPlannedTimeAsc(
             Long userId,
             LocalDate plannedDate
     );
 
-    @EntityGraph(attributePaths = "medication")
+    @EntityGraph(
+            attributePaths = {
+                    "user",
+                    "medication"
+            }
+    )
     List<MedicationLog>
     findByUserUsersIdAndPlannedDateAndIsTakenFalseOrderByPlannedTimeAsc(
             Long userId,
             LocalDate plannedDate
+    );
+
+    @EntityGraph(
+            attributePaths = {
+                    "medication"
+            }
+    )
+    @Query("""
+            SELECT medicationLog
+            FROM MedicationLog medicationLog
+            WHERE medicationLog.user.usersId = :userId
+              AND medicationLog.plannedDate >= :startDate
+              AND medicationLog.plannedDate < :endExclusiveDate
+            ORDER BY medicationLog.plannedDate ASC,
+                     medicationLog.plannedTime ASC
+            """)
+    List<MedicationLog> findByUserIdAndPlannedDateRange(
+            @Param("userId")
+            Long userId,
+
+            @Param("startDate")
+            LocalDate startDate,
+
+            @Param("endExclusiveDate")
+            LocalDate endExclusiveDate
+    );
+
+    @EntityGraph(
+            attributePaths = {
+                    "user",
+                    "medication"
+            }
+    )
+    @Query("""
+            SELECT medicationLog
+            FROM MedicationLog medicationLog
+            WHERE medicationLog.medicationLogId = :medicationLogId
+            """)
+    Optional<MedicationLog> findDetailedById(
+            @Param("medicationLogId")
+            Long medicationLogId
     );
 
     @EntityGraph(

@@ -89,6 +89,39 @@ public interface MedicationRepository
     @Query("""
             SELECT m
             FROM Medication m
+            WHERE m.user = :user
+              AND m.effectiveFrom < :rangeEndExclusive
+              AND (
+                    m.effectiveTo IS NULL
+                    OR m.effectiveTo > :rangeStart
+              )
+              AND m.scheduleStartDate < :endDateExclusive
+              AND (
+                    m.scheduleEndDate IS NULL
+                    OR m.scheduleEndDate >= :startDate
+              )
+            ORDER BY m.medicineTime ASC
+            """)
+    List<Medication> findEffectiveMedicationsForRange(
+            @Param("user")
+            User user,
+
+            @Param("rangeStart")
+            LocalDateTime rangeStart,
+
+            @Param("rangeEndExclusive")
+            LocalDateTime rangeEndExclusive,
+
+            @Param("startDate")
+            LocalDate startDate,
+
+            @Param("endDateExclusive")
+            LocalDate endDateExclusive
+    );
+
+    @Query("""
+            SELECT m
+            FROM Medication m
             JOIN FETCH m.user u
             WHERE m.effectiveFrom < :dayEndExclusive
               AND (
