@@ -29,6 +29,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
 import java.util.Objects;
@@ -56,10 +58,6 @@ public class EventService {
         EventService self = applicationContext.getBean(EventService.class);
 
         SosEventCreation creation = self.saveSosEvent(user, req);
-        countSosEvent("success");
-
-        // 커밋이 끝난 뒤 전용 풀에 발송을 맡기고 결과를 기다리지 않는다.
-        notificationService.dispatchSosAsync(creation.dispatchTargets());
 
         return SosEventResponse.of(creation.event(), creation.dispatchTargets().size());
     }
@@ -79,6 +77,15 @@ public class EventService {
         Event savedEvent = eventRepository.save(event);
         List<NotificationDispatchTarget> dispatchTargets =
                 notificationService.prepareSosNotifications(savedEvent);
+
+        // REQUIRED 전파로 외부 트랜잭션에 참여한 경우에도 실제 커밋 이후에만 발송한다.
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                countSosEvent("success");
+                notificationService.dispatchSosAsync(dispatchTargets);
+            }
+        });
 
         // 롤백 시 조회하지 않으며, 커밋 후 주소 조회 결과를 기다리지 않고 발송한다.
         applicationContext.publishEvent(new SosAddressLookupRequested(
