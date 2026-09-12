@@ -10,7 +10,6 @@ import com.example.senioron.domain.device.entity.DeviceStatus;
 import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.event.util.FcmSender;
 import com.example.senioron.domain.family.entity.Family;
-import com.example.senioron.domain.notification.dto.NotificationDispatchResult;
 import com.example.senioron.domain.notification.dto.NotificationDispatchTarget;
 import com.example.senioron.domain.notification.dto.response.NotificationHomeListResponse;
 import com.example.senioron.domain.notification.dto.response.NotificationHomeResponse;
@@ -32,6 +31,7 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -72,6 +72,12 @@ class NotificationServiceTest {
         // 알림 설정은 유저 개인이 아닌 그 가족의 시니어(parentA) 기준으로 저장된다.
         given(notificationSettingRepository.findById(PARENT_A_ID))
                 .willReturn(Optional.of(NotificationSetting.builder().user(parentA).build()));
+    }
+
+    @AfterEach
+    void tearDown() {
+        notificationService.shutdownDispatchExecutors();
+        meterRegistry.close();
     }
 
     // 부모가 여러 명이고, 그중 한 명의 기기라도 ONLINE이면 허용해야 한다 (나머지 하나가 방치된 기기여도).
@@ -372,7 +378,7 @@ class NotificationServiceTest {
 
     // "가장 느린 발송 1건" 수준에 그쳐야 한다 — 발송 1건에 300ms가 걸리는 상황을 흉내
     @Test
-    void dispatchSosSendsToMultipleReceiversInParallel() throws Exception {
+    void dispatchSosStartsMultipleReceiversWithoutWaiting() throws Exception {
         long perCallDelayMillis = 300;
         given(fcmSender.sendHighPriority(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
                 org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyLong()))
@@ -389,11 +395,12 @@ class NotificationServiceTest {
         );
 
         long startedAt = System.nanoTime();
-        NotificationDispatchResult result = notificationService.dispatchSos(targets);
+        notificationService.dispatchSosAsync(targets);
         long elapsedMillis = (System.nanoTime() - startedAt) / 1_000_000;
 
-        assertThat(result.receiverCount()).isEqualTo(4);
-        assertThat(result.notifiedCount()).isEqualTo(4);
-        assertThat(elapsedMillis).isLessThan(perCallDelayMillis * 3);
+        assertThat(elapsedMillis).isLessThan(perCallDelayMillis);
+        org.mockito.Mockito.verify(fcmSender, org.mockito.Mockito.timeout(2000).times(4))
+                .sendHighPriority(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
+                        org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyLong());
     }
 }

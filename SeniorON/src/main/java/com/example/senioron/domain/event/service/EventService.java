@@ -18,7 +18,6 @@ import com.example.senioron.domain.event.entity.RiskCheckResult;
 import com.example.senioron.domain.event.repository.EventRepository;
 import com.example.senioron.domain.event.util.GeocodingClient;
 import com.example.senioron.domain.event.util.SafeBrowsingClient;
-import com.example.senioron.domain.notification.dto.NotificationDispatchResult;
 import com.example.senioron.domain.notification.dto.NotificationDispatchTarget;
 import com.example.senioron.domain.notification.service.NotificationService;
 import com.example.senioron.domain.user.entity.User;
@@ -30,6 +29,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
 import java.util.Objects;
@@ -50,22 +51,15 @@ public class EventService {
     private final MeterRegistry meterRegistry;
 
     /**
-     * SOS는 긴급 알림, 발송 결과를 응답에 담음.
-     * 가족에게 전달되지 못했다면 앱이 직접 연락하도록 안내할 수 있어야 하기 때문.
-     * 단, 발송 실패로 HTTP 에러를 반환하지는 않는다. 시니어가 재시도하면
-     * SOS 이벤트가 중복 생성되고 자녀에게 중복 푸시가 가기 때문이다.
+     * SOS 이벤트와 인앱 알림을 먼저 커밋하고, FCM은 전용 풀에서 비동기로 발송한다.
+     * 푸시 실패는 API 실패로 바꾸지 않고 로그와 메트릭으로 관찰한다.
      */
     public SosEventResponse createSosEvent(User user, SosEventRequest req){
         EventService self = applicationContext.getBean(EventService.class);
 
         SosEventCreation creation = self.saveSosEvent(user, req);
-        countSosEvent("success");
 
-        // 커밋이 끝난 뒤 발송한다. 실패해도 이벤트는 이미 저장되어 있어 인앱 알림으로는 확인할 수 있다.
-        NotificationDispatchResult dispatchResult =
-                notificationService.dispatchSos(creation.dispatchTargets());
-
-        return SosEventResponse.of(creation.event(), dispatchResult);
+        return SosEventResponse.of(creation.event(), creation.dispatchTargets().size());
     }
 
     @Transactional
@@ -83,6 +77,15 @@ public class EventService {
         Event savedEvent = eventRepository.save(event);
         List<NotificationDispatchTarget> dispatchTargets =
                 notificationService.prepareSosNotifications(savedEvent);
+
+        // REQUIRED 전파로 외부 트랜잭션에 참여한 경우에도 실제 커밋 이후에만 발송한다.
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                countSosEvent("success");
+                notificationService.dispatchSosAsync(dispatchTargets);
+            }
+        });
 
         // 롤백 시 조회하지 않으며, 커밋 후 주소 조회 결과를 기다리지 않고 발송한다.
         applicationContext.publishEvent(new SosAddressLookupRequested(

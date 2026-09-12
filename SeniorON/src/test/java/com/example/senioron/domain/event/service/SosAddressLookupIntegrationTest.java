@@ -122,8 +122,8 @@ class SosAddressLookupIntegrationTest {
         assertThat(response.getLatitude()).isEqualByComparingTo(LATITUDE);
         assertThat(response.getLongitude()).isEqualByComparingTo(LONGITUDE);
         assertThat(response.getReceiverCount()).isEqualTo(1);
-        assertThat(response.getNotifiedCount()).isEqualTo(1);
-        verify(fcmSender).sendHighPriority("child-token", "SOS 알림", "도움이 필요해요", response.getId());
+        await().atMost(Duration.ofSeconds(3)).untilAsserted(() ->
+                verify(fcmSender).sendHighPriority("child-token", "SOS 알림", "도움이 필요해요", response.getId()));
         assertThat(lookupHeldTransaction).isFalse();
         assertThat(eventWasCommitted).isTrue();
 
@@ -141,16 +141,42 @@ class SosAddressLookupIntegrationTest {
     }
 
     @Test
-    void rolledBackSosDoesNotStartAddressLookup() {
+    void rolledBackOuterTransactionDoesNotStartAddressLookupOrPush() {
         transactionTemplate.executeWithoutResult(status -> {
-            eventService.saveSosEvent(senior, sosRequest());
-            verifyNoInteractions(geocodingClient);
+            eventService.createSosEvent(senior, sosRequest());
+            verifyNoInteractions(geocodingClient, fcmSender);
             status.setRollbackOnly();
         });
 
-        verifyNoInteractions(geocodingClient, fcmSender);
+        await().during(Duration.ofMillis(300)).atMost(Duration.ofSeconds(2))
+                .untilAsserted(() -> verifyNoInteractions(geocodingClient, fcmSender));
         assertThat(eventRepository.count()).isZero();
         assertThat(notificationRepository.count()).isZero();
+    }
+
+    @Test
+    void outerTransactionCommitsBeforePushAndSlowPushDoesNotBlockResponse() throws Exception {
+        CountDownLatch sendStarted = new CountDownLatch(1);
+        CountDownLatch releaseSend = new CountDownLatch(1);
+        AtomicBoolean committed = new AtomicBoolean();
+        given(fcmSender.sendHighPriority(anyString(), anyString(), anyString(), anyLong())).willAnswer(call -> {
+            committed.set(eventRepository.count() == 1 && notificationRepository.count() == 1);
+            sendStarted.countDown();
+            if (!releaseSend.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("FCM test latch timed out");
+            return true;
+        });
+        try {
+            var response = requestExecutor.submit(() -> transactionTemplate.execute(status -> {
+                var created = eventService.createSosEvent(senior, sosRequest());
+                verifyNoInteractions(geocodingClient, fcmSender);
+                return created;
+            }));
+            assertThat(response.get(2, TimeUnit.SECONDS).getReceiverCount()).isEqualTo(1);
+            assertThat(sendStarted.await(2, TimeUnit.SECONDS)).isTrue();
+            assertThat(committed).isTrue();
+        } finally {
+            releaseSend.countDown();
+        }
     }
 
     @Test
@@ -160,7 +186,6 @@ class SosAddressLookupIntegrationTest {
 
         var response = eventService.createSosEvent(senior, sosRequest());
 
-        assertThat(response.getNotifiedCount()).isEqualTo(1);
         await().atMost(Duration.ofSeconds(3)).untilAsserted(() -> {
             var saved = eventRepository.findById(response.getId()).orElseThrow();
             assertThat(saved.getAddress()).isEqualTo("위치정보를 확인할 수 없어요");

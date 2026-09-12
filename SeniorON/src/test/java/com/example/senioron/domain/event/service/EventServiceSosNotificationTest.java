@@ -23,16 +23,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * SOS 알림 발송 결과가 실제 Spring 컨텍스트(DB 트랜잭션 커밋, MeterRegistry, FcmSender 빈)를
- * 통해 응답과 지표에 반영되는지 확인한다.
- * <p>
- * Firebase 서비스 계정 파일(gitignore 처리됨)이 로컬에 있으면 실제 Firebase Admin SDK가
- * 초기화되고, 없으면 초기화가 스킵된다({@code FirebaseConfig} 참고). 이 테스트가 쓰는
- * 기기 토큰은 어느 쪽이든 실제 발송에 성공할 수 없는 값(형식 자체가 유효하지 않음)이라,
- * 환경에 따라 "초기화 안 됨(skipped)" 또는 "Firebase가 거부함(failed)" 중 하나로 갈리지만
- * 결과적으로 미전달(undelivered)이라는 결론은 두 환경 모두 동일하다.
- * 따라서 FCM 발송 성공 경로가 아니라, 두 가지 미전달 시나리오
- * (수신 대상 없음 / 발송 실패)가 응답과 지표에 정확히 반영되는지를 검증한다.
+ * 외부 트랜잭션이 아직 커밋되지 않은 동안 SOS 발송과 성공 지표가 발생하지 않는지 검증한다.
+ * 각 테스트의 트랜잭션은 기본적으로 롤백된다.
  */
 @SpringBootTest(properties = {
         "cloud.aws.region=ap-northeast-2",
@@ -63,7 +55,7 @@ class EventServiceSosNotificationTest {
     private EntityManager entityManager;
 
     @Test
-    void sosWithNoFamily_returnsZeroReceiverAndRecordsNoReceiverMetric() {
+    void sosWithNoFamilyDefersMetricsUntilCommit() {
         User senior = userRepository.save(User.builder()
                 .loginId("sos-no-family")
                 .name("독거시니어")
@@ -76,15 +68,14 @@ class EventServiceSosNotificationTest {
         SosEventResponse response = eventService.createSosEvent(senior, sosRequest());
 
         assertThat(response.getReceiverCount()).isEqualTo(0);
-        assertThat(response.getNotifiedCount()).isEqualTo(0);
         assertThat(counterValueOrZero("sos_event_total", "result", "success") - eventSuccessBefore)
-                .isEqualTo(1.0);
+                .isZero();
         assertThat(counterValueOrZero("sos_dispatch_total", "result", "no_receiver") - noReceiverBefore)
-                .isEqualTo(1.0);
+                .isZero();
     }
 
     @Test
-    void sosWithChildButNoFirebase_returnsUndeliveredAndRecordsMetric() {
+    void sosWithChildDoesNotDispatchBeforeOuterCommit() {
         Family family = familyRepository.save(Family.builder()
                 .familyCode("SOS-TEST-" + System.nanoTime())
                 .build());
@@ -119,23 +110,20 @@ class EventServiceSosNotificationTest {
 
         SosEventResponse response = eventService.createSosEvent(senior, sosRequest());
 
-        // 이벤트와 인앱 알림 레코드는 정상 저장된다 — 유실되는 건 푸시 채널뿐이다.
+        // 트랜잭션 내부에서 이벤트와 인앱 알림은 조회되지만 아직 커밋되지는 않았다.
         assertThat(response.getId()).isNotNull();
         assertThat(notificationRepository.findAll()).hasSize(1);
 
-        // "dummy-fcm-token"은 형식 자체가 유효하지 않아, Firebase가 초기화됐든 안 됐든 발송은 항상 실패한다.
+        // 기기 토큰이 있어도 외부 트랜잭션의 커밋 이전에는 발송하지 않는다.
         assertThat(response.getReceiverCount()).isEqualTo(1);
-        assertThat(response.getNotifiedCount()).isEqualTo(0);
-
         double undeliveredAfter = counterValueOrZero("sos_dispatch_total", "result", "undelivered");
-        assertThat(undeliveredAfter - undeliveredBefore).isEqualTo(1.0);
+        assertThat(undeliveredAfter - undeliveredBefore).isZero();
 
         double eventSuccessAfter = counterValueOrZero("sos_event_total", "result", "success");
-        assertThat(eventSuccessAfter - eventSuccessBefore).isEqualTo(1.0);
+        assertThat(eventSuccessAfter - eventSuccessBefore).isZero();
 
-        // failed/skipped/token_invalid 중 무엇이 늘어나든 "발송 안 됨"이라는 결론은 같다.
         double notDeliveredAfter = sumNotDeliveredFcmSendCounters();
-        assertThat(notDeliveredAfter - notDeliveredBefore).isGreaterThanOrEqualTo(1.0);
+        assertThat(notDeliveredAfter - notDeliveredBefore).isZero();
     }
 
     private double sumNotDeliveredFcmSendCounters() {

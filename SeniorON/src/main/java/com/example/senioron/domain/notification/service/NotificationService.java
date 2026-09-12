@@ -32,6 +32,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -44,7 +45,13 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -69,12 +76,25 @@ public class NotificationService {
     private final FcmSender fcmSender;
     private final MeterRegistry meterRegistry;
     // SOS는 일반 알림 발송 적체(backlog)에 영향받지 않도록 별도 풀에서 처리한다.
-    private final ExecutorService sosDispatchExecutor = Executors.newFixedThreadPool(SOS_DISPATCH_POOL_SIZE);
+    private final ThreadPoolExecutor sosDispatchExecutor = new ThreadPoolExecutor(
+            SOS_DISPATCH_POOL_SIZE, SOS_DISPATCH_POOL_SIZE, 0L, TimeUnit.MILLISECONDS,
+            new ArrayBlockingQueue<>(100), new ThreadPoolExecutor.AbortPolicy());
+    private final ScheduledThreadPoolExecutor sosExpiryExecutor = createExpiryExecutor();
+    @Value("${notification.sos.max-queue-wait-ms:30000}")
+    private long sosMaxQueueWaitMillis = 30000;
     private final ExecutorService generalDispatchExecutor = Executors.newFixedThreadPool(GENERAL_DISPATCH_POOL_SIZE);
+
+    private static ScheduledThreadPoolExecutor createExpiryExecutor() {
+        ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(1);
+        executor.setRemoveOnCancelPolicy(true);
+        executor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+        return executor;
+    }
 
     @PreDestroy
     void shutdownDispatchExecutors() {
         shutdownExecutor(sosDispatchExecutor);
+        shutdownExecutor(sosExpiryExecutor);
         shutdownExecutor(generalDispatchExecutor);
     }
 
@@ -82,11 +102,17 @@ public class NotificationService {
         executor.shutdown();
         try {
             if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
-                executor.shutdownNow();
+                cancelQueuedSosTasks(executor.shutdownNow());
             }
         } catch (InterruptedException e) {
-            executor.shutdownNow();
+            cancelQueuedSosTasks(executor.shutdownNow());
             Thread.currentThread().interrupt();
+        }
+    }
+
+    private void cancelQueuedSosTasks(List<Runnable> tasks) {
+        for (Runnable task : tasks) {
+            if (task instanceof SosDeviceTask sosTask) sosTask.stopWaiting("cancelled");
         }
     }
 
@@ -111,8 +137,8 @@ public class NotificationService {
     }
 
     /**
-     * SOS 전용. 알림 저장까지만 하고 발송 대상을 돌려준다
-     * 발송은 호출부가 커밋 이후 {@link #dispatchSos}로 수행해, 그 결과를 응답에 담을 수 있게 한다.
+     * SOS 전용. 알림 저장까지만 하고 발송 대상을 돌려준다.
+     * 호출부는 커밋 이후 {@link #dispatchSosAsync}로 비동기 발송을 시작한다.
      */
     @Transactional
     public List<NotificationDispatchTarget> prepareSosNotifications(Event event) {
@@ -120,17 +146,37 @@ public class NotificationService {
     }
 
     /**
-     * SOS 알림을 동기 발송한다.
+     * SOS 알림 발송을 시작하고 즉시 반환한다. 수신자별 결과는 비동기로 집계해
+     * 로그와 {@code sos_dispatch_total} 메트릭에 기록한다.
      */
-    public NotificationDispatchResult dispatchSos(List<NotificationDispatchTarget> targets) {
+    public void dispatchSosAsync(List<NotificationDispatchTarget> targets) {
         if (targets.isEmpty()) {
             // 가족이나 자녀가 등록되지 않아 SOS를 알릴 대상 자체가 없는 경우.
             countSosDispatch("no_receiver");
             log.error("SOS 수신 대상이 없어 알림을 발송하지 못했습니다.");
-            return NotificationDispatchResult.noReceiver();
+            return;
         }
 
-        NotificationDispatchResult result = dispatchSosInParallel(targets);
+        List<CompletableFuture<Boolean>> futures = dispatchSosInParallel(targets);
+        CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new))
+                .whenComplete((ignored, failure) -> recordSosDispatchResult(targets.size(), futures, failure));
+    }
+
+    private void recordSosDispatchResult(
+            int receiverCount,
+            List<CompletableFuture<Boolean>> futures,
+            Throwable failure
+    ) {
+        if (failure != null) {
+            countSosDispatch("undelivered");
+            log.error("SOS 알림 비동기 결과 집계 중 예외가 발생했습니다. receiverCount={}", receiverCount, failure);
+            return;
+        }
+
+        int notifiedCount = (int) futures.stream()
+                .filter(future -> Boolean.TRUE.equals(future.getNow(false)))
+                .count();
+        NotificationDispatchResult result = new NotificationDispatchResult(receiverCount, notifiedCount);
 
         if (result.notifiedCount() == 0) {
             countSosDispatch("undelivered");
@@ -143,7 +189,6 @@ public class NotificationService {
             countSosDispatch("delivered");
         }
 
-        return result;
     }
 
     /**
@@ -220,20 +265,11 @@ public class NotificationService {
         }
     }
 
-    // 기기별 발송은 전용 풀에 위임하고, API는 수신자별 성공 여부가 확정될 때까지 기다린다.
-    private NotificationDispatchResult dispatchSosInParallel(List<NotificationDispatchTarget> targets) {
-        long timeoutSeconds = 5L;
-        List<CompletableFuture<Boolean>> futures = targets.stream()
-                .map(target -> dispatchSosToDevices(target)
-                        .completeOnTimeout(false, timeoutSeconds, TimeUnit.SECONDS))
+    // 기기별 발송은 전용 풀에 위임하고, 호출자는 결과를 기다리지 않는다.
+    private List<CompletableFuture<Boolean>> dispatchSosInParallel(List<NotificationDispatchTarget> targets) {
+        return targets.stream()
+                .map(this::dispatchSosToDevices)
                 .toList();
-
-        long notifiedCount = futures.stream()
-                .map(CompletableFuture::join)
-                .filter(Boolean::booleanValue)
-                .count();
-
-        return new NotificationDispatchResult(targets.size(), (int) notifiedCount);
     }
 
     private CompletableFuture<Boolean> dispatchSosToDevices(NotificationDispatchTarget target) {
@@ -244,20 +280,69 @@ public class NotificationService {
         CompletableFuture<Boolean> receiverResult = new CompletableFuture<>();
         AtomicInteger remainingDevices = new AtomicInteger(target.deviceTokens().size());
         for (String deviceToken : target.deviceTokens()) {
-            CompletableFuture.supplyAsync(() -> sendToDevice(target, deviceToken, true), sosDispatchExecutor)
-                    .whenComplete((sent, failure) -> {
-                        // 한 기기라도 FCM 접수에 성공하면 수신자는 성공이다.
-                        // 나머지 기기 발송은 응답 이후에도 계속 진행한다.
-                        if (Boolean.TRUE.equals(sent)) {
-                            receiverResult.complete(true);
-                        }
-                        // 먼저 끝난 기기가 실패했더라도 다른 기기의 결과를 기다린다.
-                        if (remainingDevices.decrementAndGet() == 0) {
-                            receiverResult.complete(false);
-                        }
-                    });
+            SosDeviceTask task = new SosDeviceTask(target, deviceToken);
+            task.result.whenComplete((sent, failure) -> {
+                if (Boolean.TRUE.equals(sent)) receiverResult.complete(true);
+                if (remainingDevices.decrementAndGet() == 0) receiverResult.complete(false);
+            });
+            try {
+                sosDispatchExecutor.execute(task);
+                task.armExpiry();
+            } catch (RejectedExecutionException e) {
+                task.stopWaiting("rejected");
+            }
         }
         return receiverResult;
+    }
+
+    /** 대기 만료와 실행 시작 중 하나만 선점한다. 실행 중인 FCM 호출은 실제 결과를 집계한다. */
+    private final class SosDeviceTask implements Runnable {
+        private final NotificationDispatchTarget target;
+        private final String token;
+        private final long deadline = System.nanoTime()
+                + TimeUnit.MILLISECONDS.toNanos(Math.max(0, sosMaxQueueWaitMillis));
+        private final AtomicBoolean claimed = new AtomicBoolean();
+        private final CompletableFuture<Boolean> result = new CompletableFuture<>();
+        private volatile ScheduledFuture<?> expiry;
+
+        private SosDeviceTask(NotificationDispatchTarget target, String token) {
+            this.target = target;
+            this.token = token;
+        }
+
+        private void armExpiry() {
+            if (claimed.get()) return;
+            expiry = sosExpiryExecutor.schedule(() -> stopWaiting("expired"),
+                    Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
+            // 실행 시작이 타이머 등록보다 빨랐던 경우에도 타이머를 제거한다.
+            if (claimed.get()) expiry.cancel(false);
+        }
+
+        @Override
+        public void run() {
+            if (System.nanoTime() - deadline >= 0) {
+                stopWaiting("expired");
+                return;
+            }
+            if (!claimed.compareAndSet(false, true)) return;
+            cancelExpiry();
+            result.complete(sendToDevice(target, token, true));
+        }
+
+        private void stopWaiting(String reason) {
+            if (!claimed.compareAndSet(false, true)) return;
+            sosDispatchExecutor.remove(this);
+            cancelExpiry();
+            meterRegistry.counter("sos_device_dispatch_total", TAG_RESULT, reason).increment();
+            log.error("SOS 발송 대기 작업 종료. result={}, eventId={}, receiverId={}",
+                    reason, target.eventId(), target.receiverId());
+            result.complete(false);
+        }
+
+        private void cancelExpiry() {
+            ScheduledFuture<?> timer = expiry;
+            if (timer != null) timer.cancel(false);
+        }
     }
 
     private boolean sendToAnyDevice(NotificationDispatchTarget target) {
