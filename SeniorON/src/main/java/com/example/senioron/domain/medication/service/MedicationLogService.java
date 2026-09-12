@@ -30,6 +30,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -264,11 +265,11 @@ public class MedicationLogService {
                         )
                         .toList();
 
-        scheduledDates.forEach(date ->
-                createMissingMedicationLogs(
-                        parentUser,
-                        date
-                )
+        createMissingMedicationLogsForRange(
+                parentUser,
+                schedulableMedications,
+                monthStartDate,
+                monthEndExclusiveDate
         );
 
         return new MedicationMonthlyScheduleResponse(
@@ -305,7 +306,8 @@ public class MedicationLogService {
     }
 
     @Transactional
-    public MedicationCheckResponse checkNearestMedication(
+    public MedicationCheckResponse
+    checkNearestMedication(
             Long requesterUserId
     ) {
         User parentUser =
@@ -331,11 +333,6 @@ public class MedicationLogService {
         LocalTime currentTime =
                 now.toLocalTime();
 
-        createMissingMedicationLogs(
-                parentUser,
-                today
-        );
-
         List<MedicationLog> medicationLogs =
                 medicationLogRepository
                         .findByUserUsersIdAndPlannedDateOrderByPlannedTimeAsc(
@@ -343,32 +340,25 @@ public class MedicationLogService {
                                 today
                         );
 
+        if (medicationLogs.isEmpty()) {
+            createMissingMedicationLogs(
+                    parentUser,
+                    today
+            );
+
+            medicationLogs =
+                    medicationLogRepository
+                            .findByUserUsersIdAndPlannedDateOrderByPlannedTimeAsc(
+                                    parentUser.getUsersId(),
+                                    today
+                            );
+        }
+
         MedicationLog nearestMedicationLog =
-                deduplicateMedicationLogs(
-                        medicationLogs
+                findNearestUntakenMedicationLog(
+                        medicationLogs,
+                        currentTime
                 )
-                        .stream()
-                        .filter(medicationLog ->
-                                !Boolean.TRUE.equals(
-                                        medicationLog.getIsTaken()
-                                )
-                        )
-                        .filter(medicationLog ->
-                                !medicationLog
-                                        .getPlannedTime()
-                                        .isAfter(
-                                                currentTime
-                                        )
-                        )
-                        .max(
-                                Comparator
-                                        .comparing(
-                                                MedicationLog::getPlannedTime
-                                        )
-                                        .thenComparing(
-                                                MedicationLog::getMedicationLogId
-                                        )
-                        )
                         .orElseThrow(() ->
                                 new BusinessException(
                                         ErrorCode.MEDICATION_NOT_FOUND
@@ -400,7 +390,7 @@ public class MedicationLogService {
 
         MedicationLog medicationLog =
                 medicationLogRepository
-                        .findById(
+                        .findDetailedById(
                                 medicationLogId
                         )
                         .orElseThrow(() ->
@@ -438,6 +428,38 @@ public class MedicationLogService {
                 medicationLog,
                 now
         );
+    }
+
+    private Optional<MedicationLog>
+    findNearestUntakenMedicationLog(
+            List<MedicationLog> medicationLogs,
+            LocalTime currentTime
+    ) {
+        return deduplicateMedicationLogs(
+                medicationLogs
+        )
+                .stream()
+                .filter(medicationLog ->
+                        !Boolean.TRUE.equals(
+                                medicationLog.getIsTaken()
+                        )
+                )
+                .filter(medicationLog ->
+                        !medicationLog
+                                .getPlannedTime()
+                                .isAfter(
+                                        currentTime
+                                )
+                )
+                .max(
+                        Comparator
+                                .comparing(
+                                        MedicationLog::getPlannedTime
+                                )
+                                .thenComparing(
+                                        MedicationLog::getMedicationLogId
+                                )
+                );
     }
 
     private MedicationCheckResponse markMedicationAsTaken(
@@ -487,7 +509,7 @@ public class MedicationLogService {
 
         MedicationLog updatedMedicationLog =
                 medicationLogRepository
-                        .findById(
+                        .findDetailedById(
                                 medicationLogId
                         )
                         .orElseThrow(() ->
@@ -642,32 +664,49 @@ public class MedicationLogService {
                                 date
                         );
 
-        Map<Long, User> parentsById =
+        Map<Long, List<Medication>> medicationsByParentId =
                 medications.stream()
-                        .map(
-                                Medication::getUser
+                        .filter(medication ->
+                                medication.getUser() != null
                         )
-                        .filter(
-                                Objects::nonNull
-                        )
-                        .filter(user ->
-                                user.getRole() == Role.PARENT
+                        .filter(medication ->
+                                medication.getUser()
+                                        .getRole()
+                                        == Role.PARENT
                         )
                         .collect(
-                                Collectors.toMap(
-                                        User::getUsersId,
-                                        user -> user,
-                                        (existing, duplicate) ->
-                                                existing,
-                                        LinkedHashMap::new
+                                Collectors.groupingBy(
+                                        medication ->
+                                                medication.getUser()
+                                                        .getUsersId(),
+                                        LinkedHashMap::new,
+                                        Collectors.toList()
                                 )
                         );
 
-        for (User parentUser :
-                parentsById.values()) {
-            createMissingMedicationLogs(
+        for (List<Medication> parentMedications :
+                medicationsByParentId.values()) {
+
+            if (parentMedications.isEmpty()) {
+                continue;
+            }
+
+            User parentUser =
+                    parentMedications.get(0)
+                            .getUser();
+
+            List<Medication> schedulableMedications =
+                    parentMedications.stream()
+                            .filter(
+                                    this::hasScheduleAnchorOrWarn
+                            )
+                            .toList();
+
+            createMissingMedicationLogsForRange(
                     parentUser,
-                    date
+                    schedulableMedications,
+                    date,
+                    date.plusDays(1)
             );
         }
     }
@@ -677,36 +716,26 @@ public class MedicationLogService {
             LocalDate startDate,
             LocalDate endExclusiveDate
     ) {
-        startDate
-                .datesUntil(
-                        endExclusiveDate
-                )
-                .forEach(date ->
-                        createMissingMedicationLogs(
-                                parentUser,
-                                date
-                        )
-                );
-    }
+        if (!startDate.isBefore(
+                endExclusiveDate
+        )) {
+            return;
+        }
 
-    private void createMissingMedicationLogs(
-            User parentUser,
-            LocalDate date
-    ) {
-        LocalDateTime dayStart =
-                date.atStartOfDay();
+        LocalDateTime rangeStart =
+                startDate.atStartOfDay();
 
-        LocalDateTime dayEndExclusive =
-                date.plusDays(1)
-                        .atStartOfDay();
+        LocalDateTime rangeEndExclusive =
+                endExclusiveDate.atStartOfDay();
 
         List<Medication> medications =
                 medicationRepository
-                        .findEffectiveMedicationsForDate(
+                        .findEffectiveMedicationsForRange(
                                 parentUser,
-                                dayStart,
-                                dayEndExclusive,
-                                date
+                                rangeStart,
+                                rangeEndExclusive,
+                                startDate,
+                                endExclusiveDate
                         );
 
         List<Medication> schedulableMedications =
@@ -716,11 +745,36 @@ public class MedicationLogService {
                         )
                         .toList();
 
+        createMissingMedicationLogsForRange(
+                parentUser,
+                schedulableMedications,
+                startDate,
+                endExclusiveDate
+        );
+    }
+
+    private void createMissingMedicationLogsForRange(
+            User parentUser,
+            List<Medication> schedulableMedications,
+            LocalDate startDate,
+            LocalDate endExclusiveDate
+    ) {
+        if (!startDate.isBefore(
+                endExclusiveDate
+        )) {
+            return;
+        }
+
+        if (schedulableMedications.isEmpty()) {
+            return;
+        }
+
         List<MedicationLog> existingMedicationLogs =
                 medicationLogRepository
-                        .findByUserUsersIdAndPlannedDateOrderByPlannedTimeAsc(
+                        .findByUserIdAndPlannedDateRange(
                                 parentUser.getUsersId(),
-                                date
+                                startDate,
+                                endExclusiveDate
                         );
 
         Set<String> loggedScheduleKeys =
@@ -738,39 +792,45 @@ public class MedicationLogService {
                         );
 
         List<MedicationLog> newMedicationLogs =
-                schedulableMedications.stream()
-                        .filter(medication ->
-                                isScheduledForDate(
-                                        medication,
-                                        date
-                                )
+                startDate
+                        .datesUntil(
+                                endExclusiveDate
                         )
-                        .filter(medication ->
-                                loggedScheduleKeys.add(
-                                        createScheduleKey(
-                                                medication,
-                                                date
+                        .flatMap(date ->
+                                schedulableMedications.stream()
+                                        .filter(medication ->
+                                                isScheduledForDate(
+                                                        medication,
+                                                        date
+                                                )
                                         )
-                                )
-                        )
-                        .map(medication ->
-                                MedicationLog.builder()
-                                        .user(
-                                                parentUser
+                                        .filter(medication ->
+                                                loggedScheduleKeys.add(
+                                                        createScheduleKey(
+                                                                medication,
+                                                                date
+                                                        )
+                                                )
                                         )
-                                        .medication(
-                                                medication
+                                        .map(medication ->
+                                                MedicationLog.builder()
+                                                        .user(
+                                                                parentUser
+                                                        )
+                                                        .medication(
+                                                                medication
+                                                        )
+                                                        .plannedDate(
+                                                                date
+                                                        )
+                                                        .plannedTime(
+                                                                medication.getMedicineTime()
+                                                        )
+                                                        .isTaken(
+                                                                false
+                                                        )
+                                                        .build()
                                         )
-                                        .plannedDate(
-                                                date
-                                        )
-                                        .plannedTime(
-                                                medication.getMedicineTime()
-                                        )
-                                        .isTaken(
-                                                false
-                                        )
-                                        .build()
                         )
                         .toList();
 
@@ -780,12 +840,24 @@ public class MedicationLogService {
             );
 
             log.info(
-                    "복약 로그 생성 완료. parentUserId: {}, date: {}, count: {}",
+                    "복약 로그 범위 생성 완료. parentUserId: {}, startDate: {}, endExclusiveDate: {}, count: {}",
                     parentUser.getUsersId(),
-                    date,
+                    startDate,
+                    endExclusiveDate,
                     newMedicationLogs.size()
             );
         }
+    }
+
+    private void createMissingMedicationLogs(
+            User parentUser,
+            LocalDate date
+    ) {
+        createMedicationLogsForRange(
+                parentUser,
+                date,
+                date.plusDays(1)
+        );
     }
 
     private boolean hasScheduleAnchorOrWarn(
