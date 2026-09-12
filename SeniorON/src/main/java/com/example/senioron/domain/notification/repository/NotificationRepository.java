@@ -17,8 +17,17 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     @Query("""
     SELECT n FROM Notification n
     LEFT JOIN FETCH n.sendUser
-    LEFT JOIN FETCH n.event
+    LEFT JOIN FETCH n.event e
+    LEFT JOIN e.senior eventSenior
     WHERE n.receiverUser.usersId = :userId
+    AND (
+        eventSenior.seniorId = :seniorId
+        OR (eventSenior IS NULL AND EXISTS (
+            SELECT s.seniorId FROM Senior s
+            WHERE s.seniorId = :seniorId
+            AND s.parentUser = e.triggeredUser
+        ))
+    )
     AND n.notificationType IN :types
     AND n.isRead = false
     AND n.createdAt >= :threshold
@@ -26,13 +35,24 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     """)
     List<Notification> findLatestUnreadByTypes(
             @Param("userId") Long userId,
+            @Param("seniorId") Long seniorId,
             @Param("types") List<NotificationType> types,
             @Param("threshold") LocalDateTime threshold
     );
 
     @Query("""
     SELECT n FROM Notification n
+    JOIN n.event e
+    LEFT JOIN e.senior eventSenior
     WHERE n.receiverUser.usersId = :userId
+    AND (
+        eventSenior.seniorId = :seniorId
+        OR (eventSenior IS NULL AND EXISTS (
+            SELECT s.seniorId FROM Senior s
+            WHERE s.seniorId = :seniorId
+            AND s.parentUser = e.triggeredUser
+        ))
+    )
     AND n.notificationType = :type
     AND n.createdAt >= :thirtyDaysAgo
     AND (:cursor IS NULL OR n.notificationId < :cursor)
@@ -40,6 +60,7 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     """)
     List<Notification> findByTypeWithCursor(
             @Param("userId") Long userId,
+            @Param("seniorId") Long seniorId,
             @Param("type") NotificationType type,
             @Param("thirtyDaysAgo") LocalDateTime thirtyDaysAgo,
             @Param("cursor") Long cursor,
@@ -48,12 +69,23 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 
     @Query("""
     SELECT COUNT(n) FROM Notification n
+    JOIN n.event e
+    LEFT JOIN e.senior eventSenior
     WHERE n.receiverUser.usersId = :userId
+    AND (
+        eventSenior.seniorId = :seniorId
+        OR (eventSenior IS NULL AND EXISTS (
+            SELECT s.seniorId FROM Senior s
+            WHERE s.seniorId = :seniorId
+            AND s.parentUser = e.triggeredUser
+        ))
+    )
     AND n.notificationType = :type
     AND n.createdAt >= :thirtyDaysAgo
     """)
     long countByTypeWithin30Days(
             @Param("userId") Long userId,
+            @Param("seniorId") Long seniorId,
             @Param("type") NotificationType type,
             @Param("thirtyDaysAgo") LocalDateTime thirtyDaysAgo
     );

@@ -21,6 +21,7 @@ import com.example.senioron.domain.notification.entity.NotificationType;
 import com.example.senioron.domain.notification.repository.NotificationRepository;
 import com.example.senioron.domain.notification.repository.NotificationSettingRepository;
 import com.example.senioron.domain.senior.entity.UserSenior;
+import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.repository.UserSeniorRepository;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
@@ -205,7 +206,21 @@ public class NotificationService {
             return List.of();
         }
 
-        List<User> receivers = userRepository.findByFamilyAndUsersIdNotAndRole(sender.getFamily(), sender.getUsersId(), Role.CHILD);
+        Senior senior = event.getSenior();
+        List<User> receivers;
+        if (senior == null) {
+            // 부모-시니어 연결 전의 레거시 계정에서도 SOS가 유실되지 않도록 기존 가족 발송을 유지한다.
+            log.warn("이벤트에 연결된 시니어가 없어 가족 단위로 알림을 발송합니다. eventType={}, senderId={}",
+                    event.getEventType(), sender.getUsersId());
+            receivers = userRepository.findByFamilyAndUsersIdNotAndRole(
+                    sender.getFamily(), sender.getUsersId(), Role.CHILD);
+        } else {
+            receivers = userSeniorRepository
+                    .findAllBySeniorAndUser_RoleOrderByUserSeniorIdAsc(senior, Role.CHILD)
+                    .stream()
+                    .map(UserSenior::getUser)
+                    .toList();
+        }
         if (receivers.isEmpty()) {
             log.warn("수신 가능한 자녀가 없어 알림 대상이 없습니다. eventType={}, senderId={}",
                     event.getEventType(), sender.getUsersId());
@@ -472,7 +487,8 @@ public class NotificationService {
     public NotificationHomeListResponse getHomeSettings(Long userId, Long seniorId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        User parent = resolveManagedSeniorParent(user, seniorId);
+        UserSenior userSenior = resolveManagedSenior(user, seniorId);
+        User parent = resolveManagedSeniorParent(userSenior);
         NotificationSetting setting = notificationSettingRepository.findById(parent.getUsersId())
                 .orElseGet(() -> createDefaultSettingInternal(parent));
 
@@ -480,7 +496,7 @@ public class NotificationService {
         // ORDER BY createdAt DESC라 각 타입에서 먼저 만나는 게 최신이다.
         LocalDateTime threshold = LocalDateTime.now().minusDays(2);
         Map<NotificationType, Notification> latestByType = notificationRepository
-                .findLatestUnreadByTypes(userId, HOME_NOTIFICATION_TYPES, threshold)
+                .findLatestUnreadByTypes(userId, seniorId, HOME_NOTIFICATION_TYPES, threshold)
                 .stream()
                 .collect(Collectors.toMap(
                         Notification::getNotificationType,
@@ -513,7 +529,7 @@ public class NotificationService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        User parent = resolveManagedSeniorParent(user, seniorId);
+        User parent = resolveManagedSeniorParent(resolveManagedSenior(user, seniorId));
         // 선택한 시니어의 부모님 기기가 전부 오프라인이면 변경을 차단한다 (fail-safe).
         if (!isAnyDeviceOnline(findParentDeviceStatuses(List.of(parent)))) {
             throw new BusinessException(ErrorCode.PARENT_DEVICE_OFFLINE);
@@ -547,8 +563,8 @@ public class NotificationService {
                 .build();
     }
 
-    private User resolveManagedSeniorParent(User user, Long seniorId) {
-        User parent = resolveManagedSenior(user, seniorId).getSenior().getParentUser();
+    private User resolveManagedSeniorParent(UserSenior userSenior) {
+        User parent = userSenior.getSenior().getParentUser();
         if (parent == null) {
             throw new BusinessException(ErrorCode.SENIOR_PARENT_USER_NOT_FOUND);
         }
@@ -574,18 +590,23 @@ public class NotificationService {
     }
 
     @Transactional(readOnly = true)
-    public NotificationListResponse getNotificationList(Long userId, NotificationType type,Long cursor, int size) {
+    public NotificationListResponse getNotificationList(
+            Long userId, Long seniorId, NotificationType type, Long cursor, int size) {
         if (size < 1 || size > 50) {throw new BusinessException(ErrorCode.NOTIFICATION_SIZE_OUT_OF_RANGE);}
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        resolveManagedSenior(user, seniorId);
         LocalDateTime thirtyDaysLimit = LocalDateTime.now().minusDays(30);
         List<Notification> notifications = notificationRepository
-                .findByTypeWithCursor(userId, type, thirtyDaysLimit, cursor, PageRequest.of(0, size + 1));
+                .findByTypeWithCursor(
+                        userId, seniorId, type, thirtyDaysLimit, cursor, PageRequest.of(0, size + 1));
         boolean hasNext = notifications.size() > size;
         List<Notification> pageItems = hasNext ? notifications.subList(0, size) : notifications;
         Long nextCursor = hasNext ? pageItems.get(pageItems.size() - 1).getNotificationId() : null;
         // 첫 페이지에서만 전체 개수를 센다. 다음 페이지("더보기")마다 다시 세는 건 낭비라,
         // 프론트가 첫 응답에서 받은 값을 그대로 들고 있는다는 전제로 이후 페이지는 null을 내려준다.
         Long totalCount = cursor == null
-                ? notificationRepository.countByTypeWithin30Days(userId, type, thirtyDaysLimit)
+                ? notificationRepository.countByTypeWithin30Days(userId, seniorId, type, thirtyDaysLimit)
                 : null;
 
         List<NotificationListResponse.NotificationItem> items = pageItems.stream()

@@ -160,6 +160,41 @@ class NotificationServiceTest {
                 .riskLinkEnabled(enabled).outingReturnEnabled(enabled).build();
     }
 
+    @Test
+    void sendsOnlyToChildrenManagingTheTriggeredSenior() {
+        UserSenior childRelation = UserSenior.builder()
+                .user(child)
+                .senior(seniorA)
+                .relation(SeniorRelation.MOTHER)
+                .build();
+        given(userSeniorRepository.findAllBySeniorAndUser_RoleOrderByUserSeniorIdAsc(
+                seniorA, Role.CHILD)).willReturn(List.of(childRelation));
+        given(deviceRepository.findAllByUserIn(List.of(child))).willReturn(List.of());
+
+        Event event = Event.builder()
+                .eventId(100L)
+                .user(parentA)
+                .triggeredUser(parentA)
+                .senior(seniorA)
+                .eventType(EventType.INACTIVITY)
+                .build();
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            notificationService.createFormEvent(event);
+
+            verify(notificationRepository).saveAll(org.mockito.ArgumentMatchers.argThat(items -> {
+                var saved = new java.util.ArrayList<Notification>();
+                items.forEach(saved::add);
+                return saved.size() == 1 && saved.get(0).getReceiverUser() == child;
+            }));
+            verify(userRepository, never()).findByFamilyAndUsersIdNotAndRole(
+                    family, PARENT_A_ID, Role.CHILD);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
     // 다른 부모 계정의 상태와 무관하게 선택한 시니어의 부모 기기만 확인한다.
     @Test
     void allowsSettingChangeWhenSelectedSeniorParentHasOnlineDevice() {
@@ -378,6 +413,7 @@ class NotificationServiceTest {
         // 리포지토리는 ORDER BY createdAt DESC로 정렬된 결과를 준다 — 그 순서 그대로 스텁한다.
         given(notificationRepository.findLatestUnreadByTypes(
                 org.mockito.ArgumentMatchers.eq(CHILD_ID),
+                org.mockito.ArgumentMatchers.eq(SENIOR_A_ID),
                 org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any()))
                 .willReturn(List.of(newerInactivity, sosNotification, olderInactivity));
@@ -409,6 +445,7 @@ class NotificationServiceTest {
     void getNotificationListOnlyCountsTotalOnFirstPage() {
         given(notificationRepository.findByTypeWithCursor(
                 org.mockito.ArgumentMatchers.eq(CHILD_ID),
+                org.mockito.ArgumentMatchers.eq(SENIOR_A_ID),
                 org.mockito.ArgumentMatchers.eq(NotificationType.SOS),
                 org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any(),
@@ -416,31 +453,51 @@ class NotificationServiceTest {
                 .willReturn(List.of());
         given(notificationRepository.countByTypeWithin30Days(
                 org.mockito.ArgumentMatchers.eq(CHILD_ID),
+                org.mockito.ArgumentMatchers.eq(SENIOR_A_ID),
                 org.mockito.ArgumentMatchers.eq(NotificationType.SOS),
                 org.mockito.ArgumentMatchers.any()))
                 .willReturn(7L);
 
-        NotificationListResponse firstPage = notificationService.getNotificationList(CHILD_ID, NotificationType.SOS, null, 20);
-        NotificationListResponse secondPage = notificationService.getNotificationList(CHILD_ID, NotificationType.SOS, 100L, 20);
+        NotificationListResponse firstPage = notificationService.getNotificationList(
+                CHILD_ID, SENIOR_A_ID, NotificationType.SOS, null, 20);
+        NotificationListResponse secondPage = notificationService.getNotificationList(
+                CHILD_ID, SENIOR_A_ID, NotificationType.SOS, 100L, 20);
 
         assertThat(firstPage.getTotalCount()).isEqualTo(7L);
         assertThat(secondPage.getTotalCount()).isNull();
         org.mockito.Mockito.verify(notificationRepository, org.mockito.Mockito.times(1))
                 .countByTypeWithin30Days(
                         org.mockito.ArgumentMatchers.eq(CHILD_ID),
+                        org.mockito.ArgumentMatchers.eq(SENIOR_A_ID),
                         org.mockito.ArgumentMatchers.eq(NotificationType.SOS),
                         org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void rejectsNotificationListForUnmanagedSenior() {
+        given(userSeniorRepository.findByUserAndSenior_SeniorId(child, SENIOR_A_ID))
+                .willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> notificationService.getNotificationList(
+                CHILD_ID, SENIOR_A_ID, NotificationType.SOS, null, 20))
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED);
+
+        org.mockito.Mockito.verifyNoInteractions(notificationRepository);
     }
 
     // 조회 개수가 범위(1~50) 밖이면 구체적인 코드로 거부해야 한다.
     @Test
     void rejectsOutOfRangeSizeWithSpecificErrorCode() {
-        assertThatThrownBy(() -> notificationService.getNotificationList(CHILD_ID, NotificationType.SOS, null, 0))
+        assertThatThrownBy(() -> notificationService.getNotificationList(
+                CHILD_ID, SENIOR_A_ID, NotificationType.SOS, null, 0))
                 .asInstanceOf(type(BusinessException.class))
                 .extracting(BusinessException::getCode)
                 .isEqualTo(ErrorCode.NOTIFICATION_SIZE_OUT_OF_RANGE);
 
-        assertThatThrownBy(() -> notificationService.getNotificationList(CHILD_ID, NotificationType.SOS, null, 51))
+        assertThatThrownBy(() -> notificationService.getNotificationList(
+                CHILD_ID, SENIOR_A_ID, NotificationType.SOS, null, 51))
                 .asInstanceOf(type(BusinessException.class))
                 .extracting(BusinessException::getCode)
                 .isEqualTo(ErrorCode.NOTIFICATION_SIZE_OUT_OF_RANGE);

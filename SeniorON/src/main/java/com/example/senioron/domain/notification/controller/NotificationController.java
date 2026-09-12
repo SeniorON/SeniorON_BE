@@ -28,7 +28,7 @@ public class NotificationController {
 
     private final NotificationService notificationService;
 
-    @Operation(summary = "알림 설정 홈화면 조회", description = "SOS/무활동/위험사이트/외출·귀가 4가지 알림 설정의 현재 on-off 상태와 활성화된 개수를 조회합니다")
+    @Operation(summary = "알림 설정 홈화면 조회", description = "선택한 시니어의 SOS/무활동/위험사이트/외출·귀가 알림 설정과 최신 알림을 조회합니다")
     @GetMapping("/setting")
     public Response<NotificationHomeListResponse> getNotificationHome(
             @AuthenticationPrincipal User user,
@@ -66,16 +66,18 @@ public class NotificationController {
         return Response.ok(notificationService.updateSetting(user.getUsersId(), seniorId, type, req.getEnabled()));
     }
 
-    @Operation(summary = "알림 기록 조회", description = "SOS/무활동/위험사이트/외출·귀가 알림들의 내역을 조회합니다.")
+    @Operation(summary = "알림 기록 조회", description = "선택한 시니어의 SOS/무활동/위험사이트/외출·귀가 알림 내역을 조회합니다.")
     @GetMapping
     public Response<NotificationListResponse> getNotifications(
             @AuthenticationPrincipal User user,
+            @RequestParam Long seniorId,
             @RequestParam NotificationType type,
             @RequestParam(required = false) Long cursor,
             @RequestParam(defaultValue = "20") int size
 
             ){
-        return Response.ok(notificationService.getNotificationList(user.getUsersId(), type, cursor, size));
+        return Response.ok(notificationService.getNotificationList(
+                user.getUsersId(), seniorId, type, cursor, size));
     }
 
     @Operation(summary = "알림 읽음 처리", description = "본인이 받은 알림만 읽음 처리할 수 있습니다.")

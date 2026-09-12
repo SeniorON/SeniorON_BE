@@ -20,6 +20,8 @@ import com.example.senioron.domain.event.util.GeocodingClient;
 import com.example.senioron.domain.event.util.SafeBrowsingClient;
 import com.example.senioron.domain.notification.dto.NotificationDispatchTarget;
 import com.example.senioron.domain.notification.service.NotificationService;
+import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
@@ -47,6 +49,7 @@ public class EventService {
     private final SafeBrowsingClient safeBrowsingClient;
     private final ApplicationContext applicationContext;
     private final UserRepository userRepository;
+    private final SeniorRepository seniorRepository;
     private final DeviceRepository deviceRepository;
     private final MeterRegistry meterRegistry;
 
@@ -67,6 +70,7 @@ public class EventService {
         Event event = Event.builder()
                 .user(user)
                 .triggeredUser(user)
+                .senior(resolveSenior(user))
                 .deviceBattery(req.getDeviceBattery())
                 .eventType(EventType.SOS)
                 .latitude(req.getLatitude())
@@ -105,6 +109,7 @@ public class EventService {
         Event event = Event.builder()
                 .user(user)
                 .triggeredUser(user)
+                .senior(resolveSenior(user))
                 .deviceBattery(req.getDeviceBattery())
                 .eventType(EventType.INACTIVITY)
                 .latitude(req.getLatitude())
@@ -130,6 +135,7 @@ public class EventService {
         Event event = Event.builder()
                 .user(user)
                 .triggeredUser(user)
+                .senior(resolveSenior(user))
                 .eventType(EventType.OUTING_RETURN)
                 .phase(req.getPhase())
                 .latitude(req.getLatitude())
@@ -162,6 +168,7 @@ public class EventService {
         Event event = Event.builder()
                 .user(user)
                 .triggeredUser(user)
+                .senior(resolveSenior(user))
                 .eventType(EventType.RISK_LINK)
                 .linkUrl(req.getLinkUrl())
                 .isDangerous(isDangerous)
@@ -198,6 +205,10 @@ public class EventService {
                 || !Objects.equals(currentUser.getFamily().getFamilyId(), eventOwner.getFamily().getFamilyId())) {
             throw new BusinessException(ErrorCode.EVENT_ACCESS_DENIED);
         }
+    }
+
+    private Senior resolveSenior(User user) {
+        return seniorRepository.findByParentUser(user).orElse(null);
     }
 
     private void countSosEvent(String result) {
