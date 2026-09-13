@@ -13,9 +13,15 @@ import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.senior.entity.SeniorRelation;
+import com.example.senioron.domain.senior.entity.UserSenior;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
+import com.example.senioron.domain.senior.repository.UserSeniorRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.time.LocalDate;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -45,6 +51,12 @@ class HomeServiceInitialButtonsConcurrencyTest {
 
     @Autowired
     private DeviceRepository deviceRepository;
+
+    @Autowired
+    private SeniorRepository seniorRepository;
+
+    @Autowired
+    private UserSeniorRepository userSeniorRepository;
 
     @Test
     void concurrentFirstHomeRequestsCreateInitialButtonsOnlyOnce()
@@ -92,6 +104,26 @@ class HomeServiceInitialButtonsConcurrencyTest {
                         .role(Role.PARENT)
                         .build()
         );
+        Senior seniorProfile = seniorRepository.saveAndFlush(
+                Senior.builder()
+                        .name("테스트 시니어")
+                        .birth(LocalDate.of(1950, 1, 1))
+                        .phoneNumber("01012345678")
+                        .family(family)
+                        .registeredBy(child)
+                        .parentUser(senior)
+                        .build()
+        );
+
+        userSeniorRepository.saveAndFlush(
+                UserSenior.builder()
+                        .user(child)
+                        .senior(seniorProfile)
+                        .relation(SeniorRelation.MOTHER)
+                        .build()
+        );
+
+        Long seniorId = seniorProfile.getSeniorId();
 
         /*
          * 연결된 시니어 기기 생성
@@ -112,7 +144,7 @@ class HomeServiceInitialButtonsConcurrencyTest {
          * 테스트 시작 전에는 홈 버튼이 하나도 없어야 함
          */
         assertThat(
-                homeRepository.findAllByUserOrderByButtonOrderAsc(child)
+                homeRepository.findAllByUserOrderByButtonOrderAsc(senior)
         ).isEmpty();
 
 
@@ -145,7 +177,7 @@ class HomeServiceInitialButtonsConcurrencyTest {
 
                             setAuthentication(child);
 
-                            homeService.getHome();
+                            homeService.getHome(seniorId);
 
                         } catch (InterruptedException e) {
 
@@ -168,7 +200,7 @@ class HomeServiceInitialButtonsConcurrencyTest {
 
                             setAuthentication(child);
 
-                            homeService.getHome();
+                            homeService.getHome(seniorId);
 
                         } catch (InterruptedException e) {
 
@@ -211,7 +243,7 @@ class HomeServiceInitialButtonsConcurrencyTest {
          */
         List<Home> homes =
                 homeRepository.findAllByUserOrderByButtonOrderAsc(
-                        child
+                        senior
                 );
 
         assertThat(homes)

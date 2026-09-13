@@ -327,7 +327,7 @@ public class HomeService {
      * 자녀 홈 화면 조회
      */
     @Transactional
-    public HomeResponse getHome() {
+    public HomeResponse getHome(Long seniorId) {
 
         long methodStart = System.nanoTime();
         User currentUser = getCurrentUser();
@@ -339,25 +339,26 @@ public class HomeService {
             );
         }
 
-        User homeOwner = resolvePrimaryChild(currentUser);
+        UserSenior currentUserSeniorRelation =
+                getManagedSeniorRelation(
+                        currentUser,
+                        seniorId
+                );
 
-        Optional<User> seniorUser =
-                findSeniorUser(currentUser);
+        Senior seniorProfile =
+                currentUserSeniorRelation.getSenior();
 
-        Optional<UserSenior> currentUserSeniorRelation =
-                findUserSenior(currentUser);
-
-        Optional<Senior> seniorProfile =
-                currentUserSeniorRelation
-                        .map(UserSenior::getSenior)
-                        .or(() -> findFamilySenior(currentUser));
+        User seniorUser =
+                seniorProfile.getParentUser();
 
         long afterDeviceCheck = System.nanoTime();
         Optional<Device> latestDevice =
-                seniorUser.flatMap(user ->
-                        deviceRepository
-                                .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(user)
-                );
+                seniorUser == null
+                        ? Optional.empty()
+                        : deviceRepository
+                        .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
+                                seniorUser
+                        );
 
         boolean deviceDisconnected =
                 latestDevice
@@ -374,8 +375,8 @@ public class HomeService {
 
         List<Home> homes =
                 deviceDisconnected
-                        ? getDisconnectedPreviewButtons(homeOwner)
-                        : getOrCreateInitialHomeButtons(homeOwner);
+                        ? getDisconnectedPreviewButtons(currentUser)
+                        : getOrCreateInitialHomeButtons(seniorUser);
 
         List<HomeResponse.HomeButtonResponse> buttons =
                 homes.stream()
@@ -393,41 +394,27 @@ public class HomeService {
                         .toList();
 
         HomeResponse.SeniorProfileResponse seniorProfileResponse =
-                seniorProfile
-                        .map(senior ->
-                                createSeniorProfileResponse(
-                                        senior,
-                                        currentUserSeniorRelation
-                                                .filter(userSenior ->
-                                                        userSenior.getSenior()
-                                                                .getSeniorId()
-                                                                .equals(
-                                                                        senior.getSeniorId()
-                                                                )
-                                                )
-                                                .orElse(null)
-                                )
-                        )
-                        .orElseGet(
-                                HomeResponse.SeniorProfileResponse::empty
-                        );
+                createSeniorProfileResponse(
+                        seniorProfile,
+                        currentUserSeniorRelation
+                );
 
         FontSize fontSize =
                 deviceDisconnected
                         ? FontSize.MEDIUM
-                        : getFontSize(homeOwner);
+                        : getFontSize(seniorUser);
 
         HomeResponse.MusicCardResponse musicCard =
                 deviceDisconnected
                         ? HomeResponse.MusicCardResponse.empty()
-                        : getMusicCardResponse(homeOwner);
+                        : getMusicCardResponse(seniorUser);
 
         TodayScheduleResponse todaySchedule =
-                deviceDisconnected
+                deviceDisconnected || seniorUser == null
                         ? null
-                        : seniorUser
-                        .map(this::getTodayHospitalSchedule)
-                        .orElse(null);
+                        : getTodayHospitalSchedule(
+                        seniorUser
+                );
 
         log.debug("[TIMING] getHome total : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - methodStart));
         return new HomeResponse(
@@ -446,9 +433,9 @@ public class HomeService {
      */
     @Transactional
     public SeniorProfileUpdateResponse updateSeniorProfile(
+            Long seniorId,
             SeniorProfileUpdateRequest request
     ) {
-
         User currentUser = getCurrentUser();
 
         if (currentUser.getRole() != Role.CHILD) {
@@ -474,77 +461,31 @@ public class HomeService {
                         request.phoneNumber()
                 );
 
-        Family lockedFamily =
-                familyRepository.findByIdForUpdate(
-                                currentUser.getFamily()
-                                        .getFamilyId()
-                        )
-                        .orElseThrow(() ->
-                                new BusinessException(
-                                        ErrorCode.FAMILY_NOT_FOUND
-                                )
-                        );
-
-        Optional<UserSenior> currentUserSeniorOptional =
-                userSeniorRepository
-                        .findFirstByUserAndSenior_FamilyOrderByUserSeniorIdAsc(
-                                currentUser,
-                                lockedFamily
-                        );
-        Optional<Senior> familySeniorOptional =
-                currentUserSeniorOptional
-                        .map(UserSenior::getSenior)
-                        .or(() ->
-                                seniorRepository
-                                        .findFirstByFamilyOrderBySeniorIdAsc(
-                                                lockedFamily
-                                        )
-                        );
-
-        Senior senior;
-
-        if (familySeniorOptional.isEmpty()) {
-
-            senior = Senior.builder()
-                    .name(request.name())
-                    .birth(request.birth())
-                    .phoneNumber(normalizedPhoneNumber)
-                    .address(request.address())
-                    .detailAddress(request.detailAddress())
-                    .latitude(request.latitude())
-                    .longitude(request.longitude())
-                    .family(lockedFamily)
-                    .registeredBy(currentUser)
-                    .build();
-
-            senior =
-                    saveSeniorOrThrowAlreadyExists(
-                            senior
-                    );
-
-        } else {
-
-            senior =
-                    familySeniorOptional.get();
-
-            senior.updateProfile(
-                    request.name(),
-                    request.birth(),
-                    normalizedPhoneNumber,
-                    request.address(),
-                    request.detailAddress(),
-                    request.latitude(),
-                    request.longitude()
-            );
-        }
-
         UserSenior userSenior =
-                upsertUserSenior(
+                getManagedSeniorRelation(
                         currentUser,
-                        senior,
-                        request.relation(),
-                        resolvedCustomRelation
+                        seniorId
                 );
+
+        Senior senior =
+                userSenior.getSenior();
+
+        senior.updateProfile(
+                request.name(),
+                request.birth(),
+                normalizedPhoneNumber,
+                request.address(),
+                request.detailAddress(),
+                request.latitude(),
+                request.longitude()
+        );
+
+        userSenior.updateRelation(
+                request.relation(),
+                resolvedCustomRelation
+        );
+
+        userSeniorRepository.save(userSenior);
 
         return SeniorProfileUpdateResponse.from(
                 senior,
@@ -557,21 +498,33 @@ public class HomeService {
      */
     @Transactional
     public void saveButtons(
+            Long seniorId,
             HomeButtonSaveRequest request
     ) {
 
         long totalStart = System.nanoTime();
 
         User user = getCurrentUser();
-        validatePrimaryManager(user);
-        validateDeviceConnected(user);
 
-        User seniorUser = findSeniorUser(user)
-                .orElseThrow(() ->
-                        new BusinessException(
-                                ErrorCode.DEVICE_NOT_CONNECTED
-                        )
+        validatePrimaryManager(user);
+
+        UserSenior userSenior =
+                getManagedSeniorRelation(
+                        user,
+                        seniorId
                 );
+
+        Senior senior =
+                userSenior.getSenior();
+
+        User seniorUser =
+                getSeniorUser(
+                        senior
+                );
+
+        validateSeniorDeviceConnected(
+                seniorUser
+        );
 
         List<HomeButtonSaveRequest.ButtonRequest> buttonRequests =
                 request.getButtons();
@@ -605,7 +558,7 @@ public class HomeService {
         start = System.nanoTime();
 
         homeRepository.deleteAllByUser(
-                user
+                seniorUser
         );
         homeRepository.flush();
 
@@ -617,7 +570,7 @@ public class HomeService {
                 buttonRequests.stream()
                         .map(buttonRequest ->
                                 createHomeButton(
-                                        user,
+                                        seniorUser,
                                         buttonRequest
                                 )
                         )
@@ -637,10 +590,10 @@ public class HomeService {
 
         HomeSetting homeSetting =
                 homeSettingRepository
-                        .findByUser(user)
+                        .findByUser(seniorUser)
                         .orElseGet(() ->
                                 HomeSetting.builder()
-                                        .user(user)
+                                        .user(seniorUser)
                                         .fontSize(FontSize.MEDIUM)
                                         .build()
                         );
@@ -666,11 +619,28 @@ public class HomeService {
      * 추가 가능한 홈 버튼 옵션 조회
      */
     @Transactional(readOnly = true)
-    public List<ButtonOptionResponse> getButtonOptions() {
+    public List<ButtonOptionResponse> getButtonOptions(
+            Long seniorId
+    ) {
 
         User user = getCurrentUser();
+
         validatePrimaryManager(user);
-        validateDeviceConnected(user);
+
+        UserSenior userSenior =
+                getManagedSeniorRelation(
+                        user,
+                        seniorId
+                );
+
+        User seniorUser =
+                getSeniorUser(
+                        userSenior.getSenior()
+                );
+
+        validateSeniorDeviceConnected(
+                seniorUser
+        );
 
         return buttonOptionRepository
                 .findAll()
@@ -701,9 +671,6 @@ public class HomeService {
             );
         }
 
-        User primaryChild =
-                findPrimaryChild(parent);
-
         boolean deviceDisconnected =
                 deviceRepository
                         .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
@@ -714,8 +681,8 @@ public class HomeService {
 
         List<Home> homes =
                 deviceDisconnected
-                        ? createInitialHomeButtons(primaryChild)
-                        : getOrCreateInitialHomeButtons(primaryChild);
+                        ? createInitialHomeButtons(parent)
+                        : getOrCreateInitialHomeButtons(parent);
 
         List<SeniorHomeResponse.ButtonResponse> buttons =
                 homes.stream()
@@ -735,7 +702,7 @@ public class HomeService {
         FontSize fontSize =
                 deviceDisconnected
                         ? FontSize.MEDIUM
-                        : getFontSize(primaryChild);
+                        : getFontSize(parent);
 
         TodayScheduleResponse todaySchedule =
                 deviceDisconnected
@@ -745,7 +712,7 @@ public class HomeService {
         HomeResponse.MusicCardResponse musicCard =
                 deviceDisconnected
                         ? HomeResponse.MusicCardResponse.empty()
-                        : getMusicCardResponse(primaryChild);
+                        : getMusicCardResponse(parent);
 
         return new SeniorHomeResponse(
                 fontSize,
@@ -866,29 +833,47 @@ public class HomeService {
      * 오늘 병원 일정 상세 목록 조회
      */
     @Transactional(readOnly = true)
-    public List<TodayHospitalListResponse> getTodayHospitalSchedules() {
+    public List<TodayHospitalListResponse> getTodayHospitalSchedules(
+            Long seniorId
+    ) {
 
         long totalStart = System.nanoTime();
 
         User currentUser = getCurrentUser();
 
-        if (currentUser.getRole() != Role.PARENT) {
+        if (currentUser.getRole() != Role.CHILD) {
             throw new BusinessException(
-                    ErrorCode.SENIOR_HOME_ACCESS_DENIED
+                    ErrorCode.CHILD_HOME_ACCESS_DENIED
             );
         }
+
+        UserSenior userSenior =
+                getManagedSeniorRelation(
+                        currentUser,
+                        seniorId
+                );
+
+        Senior senior =
+                userSenior.getSenior();
+
+        User seniorUser =
+                getSeniorUser(
+                        senior
+                );
 
         long start = System.nanoTime();
 
         List<Hospital> hospitals =
                 findTodayHospitalSchedules(
-                        currentUser
+                        seniorUser
                 );
 
-        System.out.println("findTodayHospitalSchedules : "
-                + TimeUnit.NANOSECONDS.toMillis(
-                System.nanoTime() - start
-        ) + "ms");
+        log.debug(
+                "findTodayHospitalSchedules : {}ms",
+                TimeUnit.NANOSECONDS.toMillis(
+                        System.nanoTime() - start
+                )
+        );
 
         start = System.nanoTime();
 
@@ -897,15 +882,19 @@ public class HomeService {
                         .map(TodayHospitalListResponse::from)
                         .toList();
 
-        System.out.println("mapping Response : "
-                + TimeUnit.NANOSECONDS.toMillis(
-                System.nanoTime() - start
-        ) + "ms");
+        log.debug(
+                "mapping Response : {}ms",
+                TimeUnit.NANOSECONDS.toMillis(
+                        System.nanoTime() - start
+                )
+        );
 
-        System.out.println("getTodayHospitalSchedules TOTAL : "
-                + TimeUnit.NANOSECONDS.toMillis(
-                System.nanoTime() - totalStart
-        ) + "ms");
+        log.debug(
+                "getTodayHospitalSchedules TOTAL : {}ms",
+                TimeUnit.NANOSECONDS.toMillis(
+                        System.nanoTime() - totalStart
+                )
+        );
 
         return result;
     }
@@ -977,41 +966,40 @@ public class HomeService {
      */
     @Transactional
     public void updateFontSize(
+            Long seniorId,
             HomeFontSizeUpdateRequest request
     ) {
 
         long totalStart = System.nanoTime();
 
-        long s = System.nanoTime();
-        User user = getCurrentUser(); // SecurityContextHolder에서 꺼냄 (DB 없음)
-        System.out.println("getCurrentUser : "
-                + TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - s) + "ms");
+        User user = getCurrentUser();
 
-        s = System.nanoTime();
         validatePrimaryManager(user);
-        System.out.println("validatePrimaryManager : "
-                + TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - s) + "ms");
 
-        s = System.nanoTime();
-        validateDeviceConnected(user); // 내부: findSeniorUser() + deviceRepository 조회
-        System.out.println("validateDeviceConnected (DB 포함) : "
-                + TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - s) + "ms");
-
-        User seniorUser = findSeniorUser(user)
-                .orElseThrow(() ->
-                        new BusinessException(
-                                ErrorCode.DEVICE_NOT_CONNECTED
-                        )
+        UserSenior userSenior =
+                getManagedSeniorRelation(
+                        user,
+                        seniorId
                 );
+
+        Senior senior =
+                userSenior.getSenior();
+
+        User seniorUser =
+                getSeniorUser(senior);
+
+        validateSeniorDeviceConnected(
+                seniorUser
+        );
 
         long start = System.nanoTime();
 
         HomeSetting homeSetting =
                 homeSettingRepository
-                        .findByUser(user)
+                        .findByUser(seniorUser)
                         .orElseGet(() ->
                                 HomeSetting.builder()
-                                        .user(user)
+                                        .user(seniorUser)
                                         .fontSize(FontSize.MEDIUM)
                                         .build()
                         );
@@ -1512,6 +1500,25 @@ public class HomeService {
         }
     }
 
+    private void validateSeniorDeviceConnected(
+            User seniorUser
+    ) {
+
+        boolean disconnected =
+                deviceRepository
+                        .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
+                                seniorUser
+                        )
+                        .map(this::isDeviceDisconnected)
+                        .orElse(true);
+
+        if (disconnected) {
+            throw new BusinessException(
+                    ErrorCode.DEVICE_NOT_CONNECTED
+            );
+        }
+    }
+
     private void validatePrimaryManager(
             User user
     ) {
@@ -1524,6 +1531,44 @@ public class HomeService {
                     ErrorCode.HOME_SETTING_ACCESS_DENIED
             );
         }
+    }
+
+    private User getSeniorUser(
+            Senior senior
+    ) {
+
+        User seniorUser = senior.getParentUser();
+
+        if (seniorUser == null) {
+            throw new BusinessException(
+                    ErrorCode.DEVICE_NOT_CONNECTED
+            );
+        }
+
+        return seniorUser;
+    }
+
+    private UserSenior getManagedSeniorRelation(
+            User child,
+            Long seniorId
+    ) {
+
+        if (child.getRole() != Role.CHILD) {
+            throw new BusinessException(
+                    ErrorCode.CHILD_HOME_ACCESS_DENIED
+            );
+        }
+
+        return userSeniorRepository
+                .findByUserAndSenior_SeniorId(
+                        child,
+                        seniorId
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.FORBIDDEN
+                        )
+                );
     }
 
     private User getCurrentUser() {
