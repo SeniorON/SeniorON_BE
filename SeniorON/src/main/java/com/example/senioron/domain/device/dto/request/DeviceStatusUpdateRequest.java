@@ -16,6 +16,28 @@ public record DeviceStatusUpdateRequest(
         @NotNull
         @Min(0)
         @Max(100)
-        Integer batteryLevel
+        Integer batteryLevel,
+
+        @NotNull Boolean charging,
+
+        @NotNull Boolean deviceStatusSharingEnabled,
+
+        @NotNull
+        Boolean networkConnected,
+
+        @NotNull
+        Boolean defaultHomeEnabled,
+
+        @NotNull
+        Boolean locationPermissionGranted,
+
+        @NotNull
+        Boolean gpsEnabled,
+
+        @NotNull
+        Boolean notificationPermissionGranted,
+
+        @NotNull
+        Boolean appExecutionMaintained
 ) {
 }

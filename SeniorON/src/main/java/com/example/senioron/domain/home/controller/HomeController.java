@@ -121,11 +121,24 @@ public class HomeController {
             description = "자녀가 연결된 시니어 기기의 기기명, 연결 상태, 배터리 및 마지막 연결 시각을 조회"
     )
     @GetMapping("/device")
-    public Response<DeviceDetailResponse> getDeviceDetail() {
+    public Response<DeviceDetailResponse> getDeviceDetail(
+            @RequestParam Long seniorId
+    ) {
 
         long start = System.nanoTime();
-        Response<DeviceDetailResponse> response = Response.ok(homeService.getDeviceDetail());
-        log.debug("[TIMING] HomeController.getDeviceDetail : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
+
+        Response<DeviceDetailResponse> response =
+                Response.ok(
+                        homeService.getDeviceDetail(seniorId)
+                );
+
+        log.debug(
+                "[TIMING] HomeController.getDeviceDetail : {}ms",
+                TimeUnit.NANOSECONDS.toMillis(
+                        System.nanoTime() - start
+                )
+        );
+
         return response;
     }
 }

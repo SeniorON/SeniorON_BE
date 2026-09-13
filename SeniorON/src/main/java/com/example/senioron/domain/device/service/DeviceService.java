@@ -140,6 +140,14 @@ public class DeviceService {
                 request.deviceName(),
                 DeviceStatus.ONLINE,
                 request.batteryLevel(),
+                request.charging(),
+                request.deviceStatusSharingEnabled(),
+                request.networkConnected(),
+                request.defaultHomeEnabled(),
+                request.locationPermissionGranted(),
+                request.gpsEnabled(),
+                request.notificationPermissionGranted(),
+                request.appExecutionMaintained(),
                 LocalDateTime.now()
         );
 

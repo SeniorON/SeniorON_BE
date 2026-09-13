@@ -28,6 +28,8 @@ import com.example.senioron.domain.senior.repository.UserSeniorRepository;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.entity.RefreshToken;
+import com.example.senioron.domain.user.repository.RefreshTokenRepository;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
@@ -53,7 +55,8 @@ class HomeServiceSeniorProfileTest {
     private final HomeSettingRepository homeSettingRepository = org.mockito.Mockito.mock(HomeSettingRepository.class);
     private final FamilyRepository familyRepository = org.mockito.Mockito.mock(FamilyRepository.class);
 
-
+    private final RefreshTokenRepository refreshTokenRepository =
+            org.mockito.Mockito.mock(RefreshTokenRepository.class);
     private HomeService homeService;
     private final HomeWebSocketService homeWebSocketService =
             org.mockito.Mockito.mock(HomeWebSocketService.class);
@@ -70,6 +73,7 @@ class HomeServiceSeniorProfileTest {
                 userSeniorRepository,
                 homeSettingRepository,
                 familyRepository,
+                refreshTokenRepository,
                 homeWebSocketService
         );
     }
@@ -132,6 +136,290 @@ class HomeServiceSeniorProfileTest {
         assertThat(senior.getLongitude()).isEqualTo(126.9780);
         assertThat(response.latitude()).isEqualTo(37.5665);
         assertThat(response.longitude()).isEqualTo(126.9780);
+    }
+
+    @Test
+    void getDeviceDetailReturnsLoginExpiredWhenRefreshTokenIsExpired() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .build();
+
+        User child = createChild(
+                1L,
+                family,
+                ManagerType.PRIMARY
+        );
+
+        User parent = User.builder()
+                .usersId(3L)
+                .name("시니어")
+                .role(Role.PARENT)
+                .family(family)
+                .build();
+
+        Senior senior = Senior.builder()
+                .seniorId(10L)
+                .name("김영희")
+                .family(family)
+                .registeredBy(child)
+                .parentUser(parent)
+                .build();
+
+        UserSenior relation = createUserSenior(
+                child,
+                senior,
+                SeniorRelation.MOTHER,
+                null
+        );
+
+        Device device = Device.builder()
+                .user(parent)
+                .deviceIdentifier("device-1")
+                .deviceName("Galaxy S24")
+                .connectionStatus(DeviceStatus.ONLINE)
+                .batteryLevel(72)
+                .lastConnectedAt(LocalDateTime.now())
+                .build();
+
+        setCurrentUser(child);
+
+        given(userSeniorRepository
+                .findByUserAndSenior_SeniorId(
+                        child,
+                        10L
+                ))
+                .willReturn(Optional.of(relation));
+
+        given(deviceRepository
+                .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
+                        parent
+                ))
+                .willReturn(Optional.of(device));
+
+        RefreshToken refreshToken =
+                org.mockito.Mockito.mock(RefreshToken.class);
+
+        given(refreshTokenRepository
+                .findByUserAndDeviceIdentifier(
+                        parent,
+                        "device-1"
+                ))
+                .willReturn(Optional.of(refreshToken));
+
+        given(refreshToken.isExpired(
+                any(LocalDateTime.class)
+        ))
+                .willReturn(true);
+
+        var response =
+                homeService.getDeviceDetail(10L);
+
+        assertThat(response.connectionStatus())
+                .isEqualTo(DeviceStatus.LOGIN_EXPIRED);
+
+        assertThat(response.connected())
+                .isFalse();
+    }
+
+    @Test
+    void getDeviceDetailReturnsOnlineWithDeviceStatusFields() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .build();
+
+        User child = createChild(
+                1L,
+                family,
+                ManagerType.PRIMARY
+        );
+
+        User parent = User.builder()
+                .usersId(3L)
+                .name("시니어")
+                .role(Role.PARENT)
+                .family(family)
+                .build();
+
+        Senior senior = Senior.builder()
+                .seniorId(10L)
+                .name("김영희")
+                .family(family)
+                .registeredBy(child)
+                .parentUser(parent)
+                .build();
+
+        UserSenior relation = createUserSenior(
+                child,
+                senior,
+                SeniorRelation.MOTHER,
+                null
+        );
+
+        Device device = Device.builder()
+                .user(parent)
+                .deviceIdentifier("device-1")
+                .deviceName("Galaxy S24")
+                .connectionStatus(DeviceStatus.ONLINE)
+                .batteryLevel(72)
+                .charging(true)
+                .deviceStatusSharingEnabled(true)
+                .networkConnected(true)
+                .defaultHomeEnabled(true)
+                .locationPermissionGranted(true)
+                .gpsEnabled(false)
+                .notificationPermissionGranted(true)
+                .appExecutionMaintained(true)
+                .lastConnectedAt(LocalDateTime.now())
+                .build();
+
+        setCurrentUser(child);
+
+        given(userSeniorRepository
+                .findByUserAndSenior_SeniorId(
+                        child,
+                        10L
+                ))
+                .willReturn(Optional.of(relation));
+
+        given(deviceRepository
+                .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
+                        parent
+                ))
+                .willReturn(Optional.of(device));
+
+        RefreshToken refreshToken =
+                org.mockito.Mockito.mock(RefreshToken.class);
+
+        given(refreshTokenRepository
+                .findByUserAndDeviceIdentifier(
+                        parent,
+                        "device-1"
+                ))
+                .willReturn(Optional.of(refreshToken));
+
+        given(refreshToken.isExpired(
+                any(LocalDateTime.class)
+        ))
+                .willReturn(false);
+
+        var response =
+                homeService.getDeviceDetail(10L);
+
+        assertThat(response.connected())
+                .isTrue();
+
+        assertThat(response.connectionStatus())
+                .isEqualTo(DeviceStatus.ONLINE);
+
+        assertThat(response.batteryLevel())
+                .isEqualTo(72);
+
+        assertThat(response.charging())
+                .isTrue();
+
+        assertThat(response.deviceStatusSharingEnabled())
+                .isTrue();
+
+        assertThat(response.networkConnected())
+                .isTrue();
+
+        assertThat(response.defaultHomeEnabled())
+                .isTrue();
+
+        assertThat(response.locationPermissionGranted())
+                .isTrue();
+
+        assertThat(response.gpsEnabled())
+                .isFalse();
+
+        assertThat(response.notificationPermissionGranted())
+                .isTrue();
+
+        assertThat(response.appExecutionMaintained())
+                .isTrue();
+    }
+
+    @Test
+    void getDeviceDetailReturnsOfflineWhenLastConnectedAtIsOlderThan11Minutes() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .build();
+
+        User child = createChild(
+                1L,
+                family,
+                ManagerType.PRIMARY
+        );
+
+        User parent = User.builder()
+                .usersId(3L)
+                .name("시니어")
+                .role(Role.PARENT)
+                .family(family)
+                .build();
+
+        Senior senior = Senior.builder()
+                .seniorId(10L)
+                .name("김영희")
+                .family(family)
+                .registeredBy(child)
+                .parentUser(parent)
+                .build();
+
+        UserSenior relation = createUserSenior(
+                child,
+                senior,
+                SeniorRelation.MOTHER,
+                null
+        );
+
+        Device device = Device.builder()
+                .user(parent)
+                .deviceIdentifier("device-1")
+                .deviceName("Galaxy S24")
+                .connectionStatus(DeviceStatus.ONLINE)
+                .batteryLevel(72)
+                .lastConnectedAt(LocalDateTime.now().minusMinutes(12))
+                .build();
+
+        setCurrentUser(child);
+
+        given(userSeniorRepository
+                .findByUserAndSenior_SeniorId(
+                        child,
+                        10L
+                ))
+                .willReturn(Optional.of(relation));
+
+        given(deviceRepository
+                .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
+                        parent
+                ))
+                .willReturn(Optional.of(device));
+
+        RefreshToken refreshToken =
+                org.mockito.Mockito.mock(RefreshToken.class);
+
+        given(refreshTokenRepository
+                .findByUserAndDeviceIdentifier(
+                        parent,
+                        "device-1"
+                ))
+                .willReturn(Optional.of(refreshToken));
+
+        given(refreshToken.isExpired(
+                any(LocalDateTime.class)
+        ))
+                .willReturn(false);
+
+        var response =
+                homeService.getDeviceDetail(10L);
+
+        assertThat(response.connected())
+                .isFalse();
+
+        assertThat(response.connectionStatus())
+                .isEqualTo(DeviceStatus.OFFLINE);
     }
 
     @Test
