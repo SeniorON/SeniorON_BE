@@ -15,6 +15,7 @@ import com.example.senioron.domain.event.util.GeocodingClient;
 import com.example.senioron.domain.event.util.SafeBrowsingClient;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.notification.service.NotificationService;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
@@ -41,6 +42,7 @@ class EventServiceDetailAccessTest {
     private final SafeBrowsingClient safeBrowsingClient = org.mockito.Mockito.mock(SafeBrowsingClient.class);
     private final ApplicationContext applicationContext = org.mockito.Mockito.mock(ApplicationContext.class);
     private final UserRepository userRepository = org.mockito.Mockito.mock(UserRepository.class);
+    private final SeniorRepository seniorRepository = org.mockito.Mockito.mock(SeniorRepository.class);
     private final DeviceRepository deviceRepository = org.mockito.Mockito.mock(DeviceRepository.class);
     private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
@@ -50,7 +52,7 @@ class EventServiceDetailAccessTest {
     void setUp() {
         eventService = new EventService(
                 eventRepository, notificationService, geocodingClient, safeBrowsingClient,
-                applicationContext, userRepository, deviceRepository, meterRegistry);
+                applicationContext, userRepository, seniorRepository, deviceRepository, meterRegistry);
     }
 
     @Test

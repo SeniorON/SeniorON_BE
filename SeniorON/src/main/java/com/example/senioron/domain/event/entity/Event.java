@@ -1,6 +1,7 @@
 package com.example.senioron.domain.event.entity;
 
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.senior.entity.Senior;
 import jakarta.persistence.*;
 import lombok.*;
 import com.example.senioron.common.entity.BaseEntity;
@@ -27,6 +28,10 @@ public class Event extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "triggered_users_id")
     private User triggeredUser;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "senior_id")
+    private Senior senior;
 
     @Enumerated(EnumType.STRING)
     private EventType eventType;

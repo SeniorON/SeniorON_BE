@@ -68,6 +68,7 @@ class NotificationControllerValidationTest {
 
         mockMvc.perform(get("/api/notification")
                         .param("type", "SOS")
+                        .param("seniorId", "1")
                         .param("size", "0")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isBadRequest())
@@ -75,6 +76,7 @@ class NotificationControllerValidationTest {
 
         mockMvc.perform(get("/api/notification")
                         .param("type", "SOS")
+                        .param("seniorId", "1")
                         .param("size", "51")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isBadRequest())

@@ -10,12 +10,21 @@ import com.example.senioron.domain.event.dto.response.SosEventResponse;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.notification.repository.NotificationRepository;
+import com.example.senioron.domain.notification.dto.response.NotificationListResponse;
+import com.example.senioron.domain.notification.entity.NotificationType;
+import com.example.senioron.domain.notification.service.NotificationService;
+import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.senior.entity.SeniorRelation;
+import com.example.senioron.domain.senior.entity.UserSenior;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
+import com.example.senioron.domain.senior.repository.UserSeniorRepository;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -47,6 +56,15 @@ class EventServiceSosNotificationTest {
 
     @Autowired
     private NotificationRepository notificationRepository;
+
+    @Autowired
+    private NotificationService notificationService;
+
+    @Autowired
+    private SeniorRepository seniorRepository;
+
+    @Autowired
+    private UserSeniorRepository userSeniorRepository;
 
     @Autowired
     private MeterRegistry meterRegistry;
@@ -94,6 +112,27 @@ class EventServiceSosNotificationTest {
                 .family(family)
                 .build());
 
+        User unrelatedChild = userRepository.save(User.builder()
+                .loginId("sos-unrelated-child-" + System.nanoTime())
+                .name("다른 시니어 담당 자녀")
+                .role(Role.CHILD)
+                .family(family)
+                .build());
+
+        Senior seniorProfile = seniorRepository.save(Senior.builder()
+                .name("시니어")
+                .birth(LocalDate.of(1950, 1, 1))
+                .phoneNumber("01012345678")
+                .family(family)
+                .registeredBy(child)
+                .parentUser(senior)
+                .build());
+        userSeniorRepository.save(UserSenior.builder()
+                .user(child)
+                .senior(seniorProfile)
+                .relation(SeniorRelation.MOTHER)
+                .build());
+
         deviceRepository.save(Device.builder()
                 .user(child)
                 .deviceIdentifier("device-1")
@@ -113,6 +152,12 @@ class EventServiceSosNotificationTest {
         // 트랜잭션 내부에서 이벤트와 인앱 알림은 조회되지만 아직 커밋되지는 않았다.
         assertThat(response.getId()).isNotNull();
         assertThat(notificationRepository.findAll()).hasSize(1);
+        assertThat(notificationRepository.findAll().get(0).getReceiverUser().getUsersId())
+                .isEqualTo(child.getUsersId());
+        assertThat(notificationRepository.findAll().get(0).getEvent().getSenior().getSeniorId())
+                .isEqualTo(seniorProfile.getSeniorId());
+        assertThat(notificationRepository.findAll().get(0).getReceiverUser().getUsersId())
+                .isNotEqualTo(unrelatedChild.getUsersId());
 
         // 기기 토큰이 있어도 외부 트랜잭션의 커밋 이전에는 발송하지 않는다.
         assertThat(response.getReceiverCount()).isEqualTo(1);
@@ -124,6 +169,60 @@ class EventServiceSosNotificationTest {
 
         double notDeliveredAfter = sumNotDeliveredFcmSendCounters();
         assertThat(notDeliveredAfter - notDeliveredBefore).isZero();
+    }
+
+    @Test
+    void notificationListContainsOnlyEventsForSelectedSenior() {
+        Family family = familyRepository.save(Family.builder()
+                .familyCode("SOS-FILTER-" + System.nanoTime())
+                .build());
+        User child = saveUser("filter-child", "자녀", Role.CHILD, family);
+        User parentA = saveUser("filter-parent-a", "시니어A", Role.PARENT, family);
+        User parentB = saveUser("filter-parent-b", "시니어B", Role.PARENT, family);
+        Senior seniorA = saveSenior("시니어A", family, child, parentA, "01011111111");
+        Senior seniorB = saveSenior("시니어B", family, child, parentB, "01022222222");
+        linkManagedSenior(child, seniorA, SeniorRelation.MOTHER);
+        linkManagedSenior(child, seniorB, SeniorRelation.FATHER);
+        entityManager.flush();
+
+        SosEventResponse eventA = eventService.createSosEvent(parentA, sosRequest());
+        SosEventResponse eventB = eventService.createSosEvent(parentB, sosRequest());
+
+        NotificationListResponse response = notificationService.getNotificationList(
+                child.getUsersId(), seniorA.getSeniorId(), NotificationType.SOS, null, 20);
+
+        assertThat(response.getItems()).extracting(NotificationListResponse.NotificationItem::getEventId)
+                .containsExactly(eventA.getId())
+                .doesNotContain(eventB.getId());
+    }
+
+    private User saveUser(String loginIdPrefix, String name, Role role, Family family) {
+        return userRepository.save(User.builder()
+                .loginId(loginIdPrefix + "-" + System.nanoTime())
+                .name(name)
+                .role(role)
+                .family(family)
+                .build());
+    }
+
+    private Senior saveSenior(
+            String name, Family family, User registeredBy, User parentUser, String phoneNumber) {
+        return seniorRepository.save(Senior.builder()
+                .name(name)
+                .birth(LocalDate.of(1950, 1, 1))
+                .phoneNumber(phoneNumber)
+                .family(family)
+                .registeredBy(registeredBy)
+                .parentUser(parentUser)
+                .build());
+    }
+
+    private void linkManagedSenior(User user, Senior senior, SeniorRelation relation) {
+        userSeniorRepository.save(UserSenior.builder()
+                .user(user)
+                .senior(senior)
+                .relation(relation)
+                .build());
     }
 
     private double sumNotDeliveredFcmSendCounters() {

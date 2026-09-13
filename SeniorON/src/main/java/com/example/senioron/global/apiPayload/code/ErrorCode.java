@@ -94,6 +94,8 @@ public enum ErrorCode implements BaseCode {
     SENIOR_ALREADY_LINKED_TO_PARENT(HttpStatus.CONFLICT, "SENIOR409_1", "이미 다른 부모 계정과 연결된 시니어입니다."),
     PARENT_USER_ALREADY_LINKED_TO_SENIOR(HttpStatus.CONFLICT, "SENIOR409_2", "이미 다른 시니어 프로필과 연결된 부모 계정입니다."),
     USER_SENIOR_ALREADY_EXISTS(HttpStatus.CONFLICT, "SENIOR409_3", "이미 선택한 시니어입니다."),
+    SENIOR_MANAGEMENT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "SENIOR403_3", "선택한 시니어의 관리 권한이 없습니다."),
+    SENIOR_PARENT_USER_NOT_FOUND(HttpStatus.NOT_FOUND, "SENIOR404_1", "선택한 시니어와 연결된 부모 계정을 찾을 수 없습니다."),
 
     // Family Error
     FAMILY_NOT_FOUND(HttpStatus.NOT_FOUND, "FAMILY404", "가족 정보를 찾을 수 없습니다."),
