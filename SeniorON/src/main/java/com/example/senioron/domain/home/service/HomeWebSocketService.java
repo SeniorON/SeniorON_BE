@@ -13,14 +13,40 @@ public class HomeWebSocketService {
     private final SimpMessagingTemplate messagingTemplate;
 
     public void notifyHomeUpdated(Long seniorId) {
+        notifyAfterCommit(
+                seniorId,
+                "HOME_UPDATED"
+        );
+    }
 
+    public void notifyScheduleUpdated(Long seniorId) {
+        notifyAfterCommit(
+                seniorId,
+                "SCHEDULE_UPDATED"
+        );
+    }
+
+    public void notifyMedicationUpdated(Long seniorId) {
+        notifyAfterCommit(
+                seniorId,
+                "MEDICATION_UPDATED"
+        );
+    }
+
+    private void notifyAfterCommit(
+            Long seniorId,
+            String message
+    ) {
         if (TransactionSynchronizationManager.isActualTransactionActive()) {
 
             TransactionSynchronizationManager.registerSynchronization(
                     new TransactionSynchronization() {
                         @Override
                         public void afterCommit() {
-                            sendHomeUpdated(seniorId);
+                            sendUpdated(
+                                    seniorId,
+                                    message
+                            );
                         }
                     }
             );
@@ -28,13 +54,19 @@ public class HomeWebSocketService {
             return;
         }
 
-        sendHomeUpdated(seniorId);
+        sendUpdated(
+                seniorId,
+                message
+        );
     }
 
-    private void sendHomeUpdated(Long seniorId) {
+    private void sendUpdated(
+            Long seniorId,
+            String message
+    ) {
         messagingTemplate.convertAndSend(
                 "/topic/senior/" + seniorId + "/home",
-                "HOME_UPDATED"
+                message
         );
     }
 }
