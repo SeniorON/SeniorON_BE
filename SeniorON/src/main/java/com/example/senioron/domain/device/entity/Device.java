@@ -40,6 +40,22 @@ public class Device extends BaseEntity {
 
     private Integer batteryLevel;
 
+    private Boolean charging;
+
+    private Boolean deviceStatusSharingEnabled;
+
+    private Boolean networkConnected;
+
+    private Boolean defaultHomeEnabled;
+
+    private Boolean locationPermissionGranted;
+
+    private Boolean gpsEnabled;
+
+    private Boolean notificationPermissionGranted;
+
+    private Boolean appExecutionMaintained;
+
     private LocalDateTime lastConnectedAt;
 
     private Double latitude;
@@ -70,11 +86,27 @@ public class Device extends BaseEntity {
             String deviceName,
             DeviceStatus connectionStatus,
             Integer batteryLevel,
+            Boolean charging,
+            Boolean deviceStatusSharingEnabled,
+            Boolean networkConnected,
+            Boolean defaultHomeEnabled,
+            Boolean locationPermissionGranted,
+            Boolean gpsEnabled,
+            Boolean notificationPermissionGranted,
+            Boolean appExecutionMaintained,
             LocalDateTime lastConnectedAt
     ) {
         this.deviceName = deviceName;
         this.connectionStatus = connectionStatus;
         this.batteryLevel = batteryLevel;
+        this.charging = charging;
+        this.deviceStatusSharingEnabled = deviceStatusSharingEnabled;
+        this.networkConnected = networkConnected;
+        this.defaultHomeEnabled = defaultHomeEnabled;
+        this.locationPermissionGranted = locationPermissionGranted;
+        this.gpsEnabled = gpsEnabled;
+        this.notificationPermissionGranted = notificationPermissionGranted;
+        this.appExecutionMaintained = appExecutionMaintained;
         this.lastConnectedAt = lastConnectedAt;
     }
 

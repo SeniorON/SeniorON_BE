@@ -29,6 +29,7 @@ import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.domain.user.repository.RefreshTokenRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -69,6 +70,7 @@ public class HomeService {
     private final UserSeniorRepository userSeniorRepository;
     private final HomeSettingRepository homeSettingRepository;
     private final FamilyRepository familyRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
     private static final long DEVICE_OFFLINE_THRESHOLD_MINUTES = 11;
     private final HomeWebSocketService homeWebSocketService;
 
@@ -305,6 +307,7 @@ public class HomeService {
             UserSeniorRepository userSeniorRepository,
             HomeSettingRepository homeSettingRepository,
             FamilyRepository familyRepository,
+            RefreshTokenRepository refreshTokenRepository,
             HomeWebSocketService homeWebSocketService
     ) {
         this.homeRepository = homeRepository;
@@ -316,6 +319,7 @@ public class HomeService {
         this.userSeniorRepository = userSeniorRepository;
         this.homeSettingRepository = homeSettingRepository;
         this.familyRepository = familyRepository;
+        this.refreshTokenRepository = refreshTokenRepository;
         this.homeWebSocketService = homeWebSocketService;
     }
 
@@ -755,7 +759,7 @@ public class HomeService {
      * 시니어 기기 연결 상태 상세 조회
      */
     @Transactional(readOnly = true)
-    public DeviceDetailResponse getDeviceDetail() {
+    public DeviceDetailResponse getDeviceDetail(Long seniorId) {
 
         User currentUser = getCurrentUser();
 
@@ -765,16 +769,28 @@ public class HomeService {
             );
         }
 
-        Optional<User> seniorUser =
-                findSeniorUser(currentUser);
+        UserSenior userSenior = userSeniorRepository
+                .findByUserAndSenior_SeniorId(
+                        currentUser,
+                        seniorId
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.FORBIDDEN
+                        )
+                );
 
-        if (seniorUser.isEmpty()) {
+        Senior senior = userSenior.getSenior();
+
+        User seniorUser = senior.getParentUser();
+
+        if (seniorUser == null) {
             return DeviceDetailResponse.disconnected();
         }
 
         return deviceRepository
                 .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
-                        seniorUser.get()
+                        seniorUser
                 )
                 .map(device -> {
 
@@ -782,6 +798,36 @@ public class HomeService {
                             == DeviceStatus.DISCONNECTED) {
 
                         return DeviceDetailResponse.disconnected();
+                    }
+
+                    boolean loginExpired =
+                            refreshTokenRepository
+                                    .findByUserAndDeviceIdentifier(
+                                            seniorUser,
+                                            device.getDeviceIdentifier()
+                                    )
+                                    .map(refreshToken ->
+                                            refreshToken.isExpired(LocalDateTime.now())
+                                    )
+                                    .orElse(true);
+
+                    if (loginExpired) {
+                        return new DeviceDetailResponse(
+                                device.getDeviceName(),
+                                false,
+                                DeviceStatus.LOGIN_EXPIRED,
+                                null,   // batteryLevel
+                                null,   // charging
+                                null,   // deviceStatusSharingEnabled
+                                null,   // networkConnected
+                                null,   // defaultHomeEnabled
+                                null,   // locationPermissionGranted
+                                null,   // gpsEnabled
+                                null,   // notificationPermissionGranted
+                                null,   // appExecutionMaintained
+                                device.getLastConnectedAt(),
+                                device.getLastLocationUpdatedAt()
+                        );
                     }
 
                     boolean connected =
@@ -799,9 +845,16 @@ public class HomeService {
                             connected,
                             currentStatus,
                             device.getBatteryLevel(),
-                            connected,
+                            device.getCharging(),
+                            device.getDeviceStatusSharingEnabled(),
+                            device.getNetworkConnected(),
+                            device.getDefaultHomeEnabled(),
+                            device.getLocationPermissionGranted(),
+                            device.getGpsEnabled(),
+                            device.getNotificationPermissionGranted(),
+                            device.getAppExecutionMaintained(),
                             device.getLastConnectedAt(),
-                            null
+                            device.getLastLocationUpdatedAt()
                     );
                 })
                 .orElseGet(

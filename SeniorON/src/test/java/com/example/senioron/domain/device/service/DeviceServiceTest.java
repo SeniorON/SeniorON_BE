@@ -12,6 +12,8 @@ import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.domain.device.dto.request.DeviceStatusUpdateRequest;
+import com.example.senioron.domain.user.entity.ManagerType;
 import java.util.UUID;
 import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
@@ -62,6 +64,53 @@ class DeviceServiceTest {
         assertThat(device.getDeviceToken()).isNull();
         assertThat(device.getConnectionStatus()).isEqualTo(DeviceStatus.DISCONNECTED);
     }
+
+    @Test
+    void updateDeviceStatusSavesAllDeviceStatusFields() {
+        Family family = familyRepository.saveAndFlush(
+                Family.builder()
+                        .familyCode("family-" + UUID.randomUUID())
+                        .build()
+        );
+
+        User parent = saveUser("parent", Role.PARENT, family);
+
+        DeviceStatusUpdateRequest request =
+                new DeviceStatusUpdateRequest(
+                        DEVICE_IDENTIFIER,
+                        "Galaxy S24",
+                        72,
+                        true,   // charging
+                        true,   // deviceStatusSharingEnabled
+                        true,   // networkConnected
+                        true,   // defaultHomeEnabled
+                        true,   // locationPermissionGranted
+                        false,  // gpsEnabled
+                        true,   // notificationPermissionGranted
+                        true    // appExecutionMaintained
+                );
+
+        deviceService().updateDeviceStatus(parent, request);
+
+        Device device = deviceRepository
+                .findByDeviceIdentifier(DEVICE_IDENTIFIER)
+                .orElseThrow();
+
+        assertThat(device.getDeviceName()).isEqualTo("Galaxy S24");
+        assertThat(device.getConnectionStatus()).isEqualTo(DeviceStatus.ONLINE);
+        assertThat(device.getBatteryLevel()).isEqualTo(72);
+        assertThat(device.getCharging()).isTrue();
+        assertThat(device.getDeviceStatusSharingEnabled()).isTrue();
+        assertThat(device.getNetworkConnected()).isTrue();
+        assertThat(device.getDefaultHomeEnabled()).isTrue();
+        assertThat(device.getLocationPermissionGranted()).isTrue();
+        assertThat(device.getGpsEnabled()).isFalse();
+        assertThat(device.getNotificationPermissionGranted()).isTrue();
+        assertThat(device.getAppExecutionMaintained()).isTrue();
+        assertThat(device.getLastConnectedAt()).isNotNull();
+    }
+
+
 
     // 기기 A에서 부모 로그인 → 로그아웃 → 같은 기기 A에서 자녀 로그인.
     // 기기 row와 토큰 소유자는 자녀 계정으로 변경되지만,
