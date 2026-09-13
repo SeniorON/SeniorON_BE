@@ -1,5 +1,6 @@
 package com.example.senioron.domain.medication.service;
 
+import com.example.senioron.domain.home.service.HomeWebSocketService;
 import com.example.senioron.domain.medication.dto.response.MedicationCheckResponse;
 import com.example.senioron.domain.medication.dto.response.MedicationMonthlyScheduleResponse;
 import com.example.senioron.domain.medication.dto.response.MedicationScheduleResponse;
@@ -58,9 +59,9 @@ public class MedicationLogService {
     private final MedicationRepository medicationRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final MedicationFamilyAuthorization medicationFamilyAuthorization;
+    private final HomeWebSocketService homeWebSocketService;
 
-    public List<MedicationScheduleResponse>
-    getOwnDailyMedicationSchedules(
+    public List<MedicationScheduleResponse> getOwnDailyMedicationSchedules(
             Long requesterUserId,
             LocalDate date
     ) {
@@ -82,8 +83,7 @@ public class MedicationLogService {
         );
     }
 
-    public List<MedicationScheduleResponse>
-    getParentDailyMedicationSchedules(
+    public List<MedicationScheduleResponse> getParentDailyMedicationSchedules(
             Long requesterUserId,
             Long parentUserId,
             LocalDate date
@@ -113,8 +113,7 @@ public class MedicationLogService {
     }
 
     @Transactional
-    public MedicationMonthlyScheduleResponse
-    getParentMonthlyMedicationSchedules(
+    public MedicationMonthlyScheduleResponse getParentMonthlyMedicationSchedules(
             Long requesterUserId,
             Long parentUserId,
             Integer year,
@@ -145,8 +144,7 @@ public class MedicationLogService {
         );
     }
 
-    private List<MedicationScheduleResponse>
-    getDailyMedicationSchedules(
+    private List<MedicationScheduleResponse> getDailyMedicationSchedules(
             User parentUser,
             LocalDate date
     ) {
@@ -174,11 +172,13 @@ public class MedicationLogService {
                                         medicationLog.getMedicationLogId()
                                 )
                                 .medicineName(
-                                        medicationLog.getMedication()
+                                        medicationLog
+                                                .getMedication()
                                                 .getMedicineName()
                                 )
                                 .ingredientName(
-                                        medicationLog.getMedication()
+                                        medicationLog
+                                                .getMedication()
                                                 .getIngredientName()
                                 )
                                 .plannedDate(
@@ -189,7 +189,8 @@ public class MedicationLogService {
                                 )
                                 .takenTime(
                                         medicationLog.getTakenAt() != null
-                                                ? medicationLog.getTakenAt()
+                                                ? medicationLog
+                                                .getTakenAt()
                                                 .toLocalTime()
                                                 : null
                                 )
@@ -207,8 +208,7 @@ public class MedicationLogService {
                 .toList();
     }
 
-    private MedicationMonthlyScheduleResponse
-    getMonthlyMedicationSchedules(
+    private MedicationMonthlyScheduleResponse getMonthlyMedicationSchedules(
             User parentUser,
             Integer year,
             Integer month
@@ -223,7 +223,8 @@ public class MedicationLogService {
                 yearMonth.atDay(1);
 
         LocalDate monthEndExclusiveDate =
-                yearMonth.plusMonths(1)
+                yearMonth
+                        .plusMonths(1)
                         .atDay(1);
 
         LocalDateTime monthStart =
@@ -306,8 +307,7 @@ public class MedicationLogService {
     }
 
     @Transactional
-    public MedicationCheckResponse
-    checkNearestMedication(
+    public MedicationCheckResponse checkNearestMedication(
             Long requesterUserId
     ) {
         User parentUser =
@@ -400,8 +400,7 @@ public class MedicationLogService {
                         );
 
         if (!Objects.equals(
-                medicationLog.getUser()
-                        .getUsersId(),
+                medicationLog.getUser().getUsersId(),
                 parentUser.getUsersId()
         )) {
             throw new BusinessException(
@@ -430,8 +429,7 @@ public class MedicationLogService {
         );
     }
 
-    private Optional<MedicationLog>
-    findNearestUntakenMedicationLog(
+    private Optional<MedicationLog> findNearestUntakenMedicationLog(
             List<MedicationLog> medicationLogs,
             LocalTime currentTime
     ) {
@@ -475,18 +473,21 @@ public class MedicationLogService {
         }
 
         Long userId =
-                medicationLog.getUser()
+                medicationLog
+                        .getUser()
                         .getUsersId();
 
         String userName =
-                medicationLog.getUser()
+                medicationLog
+                        .getUser()
                         .getName();
 
         Long medicationLogId =
                 medicationLog.getMedicationLogId();
 
         String medicineName =
-                medicationLog.getMedication()
+                medicationLog
+                        .getMedication()
                         .getMedicineName();
 
         int updatedRows =
@@ -505,6 +506,11 @@ public class MedicationLogService {
                             medicineName
                     )
             );
+
+            homeWebSocketService
+                    .notifyMedicationUpdated(
+                            userId
+                    );
         }
 
         MedicationLog updatedMedicationLog =
@@ -565,6 +571,7 @@ public class MedicationLogService {
 
     @Transactional
     public void createMedicationLogsForNextThirtyDaysForAllMedicationOwners() {
+
         LocalDate startDate =
                 LocalDate.now(
                         KOREA_ZONE_ID
@@ -617,6 +624,7 @@ public class MedicationLogService {
 
     @Transactional
     public void createTodayMedicationLogsForAllMedicationOwners() {
+
         LocalDate today =
                 LocalDate.now(
                         KOREA_ZONE_ID
@@ -670,14 +678,16 @@ public class MedicationLogService {
                                 medication.getUser() != null
                         )
                         .filter(medication ->
-                                medication.getUser()
+                                medication
+                                        .getUser()
                                         .getRole()
                                         == Role.PARENT
                         )
                         .collect(
                                 Collectors.groupingBy(
                                         medication ->
-                                                medication.getUser()
+                                                medication
+                                                        .getUser()
                                                         .getUsersId(),
                                         LinkedHashMap::new,
                                         Collectors.toList()
@@ -692,7 +702,8 @@ public class MedicationLogService {
             }
 
             User parentUser =
-                    parentMedications.get(0)
+                    parentMedications
+                            .get(0)
                             .getUser();
 
             List<Medication> schedulableMedications =
@@ -824,7 +835,8 @@ public class MedicationLogService {
                                                                 date
                                                         )
                                                         .plannedTime(
-                                                                medication.getMedicineTime()
+                                                                medication
+                                                                        .getMedicineTime()
                                                         )
                                                         .isTaken(
                                                                 false
@@ -871,7 +883,8 @@ public class MedicationLogService {
         Long userId =
                 medication.getUser() == null
                         ? null
-                        : medication.getUser()
+                        : medication
+                        .getUser()
                         .getUsersId();
 
         log.warn(
@@ -892,6 +905,7 @@ public class MedicationLogService {
 
         for (MedicationLog medicationLog :
                 medicationLogs) {
+
             String scheduleKey =
                     createScheduleKey(
                             medicationLog.getMedication(),
@@ -967,11 +981,15 @@ public class MedicationLogService {
         String medicationIdentifier;
 
         if (medication.getMedicationGroupId() != null
-                && !medication.getMedicationGroupId()
+                && !medication
+                .getMedicationGroupId()
                 .isBlank()) {
+
             medicationIdentifier =
                     medication.getMedicationGroupId();
+
         } else {
+
             medicationIdentifier =
                     String.valueOf(
                             medication.getMedication_id()
@@ -1112,7 +1130,8 @@ public class MedicationLogService {
         }
 
         if (medication.getEffectiveFrom() != null) {
-            return medication.getEffectiveFrom()
+            return medication
+                    .getEffectiveFrom()
                     .toLocalDate();
         }
 

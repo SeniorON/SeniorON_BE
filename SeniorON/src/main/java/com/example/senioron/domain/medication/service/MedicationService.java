@@ -108,8 +108,7 @@ public class MedicationService {
                         : null;
 
         String medicationGroupId =
-                UUID.randomUUID()
-                        .toString();
+                UUID.randomUUID().toString();
 
         LocalDateTime effectiveFrom =
                 LocalDateTime.now(
@@ -120,9 +119,7 @@ public class MedicationService {
                 medicineTimes.stream()
                         .map(medicineTime ->
                                 Medication.builder()
-                                        .user(
-                                                parentUser
-                                        )
+                                        .user(parentUser)
                                         .medicineName(
                                                 request.getMedicineName()
                                         )
@@ -178,13 +175,10 @@ public class MedicationService {
                         parentUser.getUsersId()
                 );
 
-        homeWebSocketService.notifyHomeUpdated(
-                parentUser.getUsersId()
-        );
-
-        homeWebSocketService.notifyHomeUpdated(
-                parentUser.getUsersId()
-        );
+        homeWebSocketService
+                .notifyMedicationUpdated(
+                        parentUser.getUsersId()
+                );
 
         List<Long> medicationIds =
                 savedMedications.stream()
@@ -357,9 +351,7 @@ public class MedicationService {
                 medicineTimes.stream()
                         .map(medicineTime ->
                                 Medication.builder()
-                                        .user(
-                                                parentUser
-                                        )
+                                        .user(parentUser)
                                         .medicineName(
                                                 request.getMedicineName()
                                         )
@@ -414,6 +406,10 @@ public class MedicationService {
                         parentUser.getUsersId()
                 );
 
+        homeWebSocketService
+                .notifyMedicationUpdated(
+                        parentUser.getUsersId()
+                );
 
         log.info(
                 "약 수정 완료. requesterUserId: {}, parentUserId: {}, groupId: {}",
@@ -467,9 +463,10 @@ public class MedicationService {
                         deletedAt.toLocalTime()
                 );
 
-        homeWebSocketService.notifyHomeUpdated(
-                parentUser.getUsersId()
-        );
+        homeWebSocketService
+                .notifyMedicationUpdated(
+                        parentUser.getUsersId()
+                );
 
         log.info(
                 "약 삭제 처리 완료. requesterUserId: {}, parentUserId: {}, groupId: {}",
@@ -583,7 +580,8 @@ public class MedicationService {
                 .endDate(
                         representative.getScheduleEndDate() == null
                                 ? null
-                                : representative.getScheduleEndDate()
+                                : representative
+                                .getScheduleEndDate()
                                 .toString()
                 )
                 .build();
@@ -604,8 +602,7 @@ public class MedicationService {
             Medication medication
     ) {
         if (medication.getMedicationGroupId() != null
-                && !medication.getMedicationGroupId()
-                .isBlank()) {
+                && !medication.getMedicationGroupId().isBlank()) {
             return medication.getMedicationGroupId();
         }
 
