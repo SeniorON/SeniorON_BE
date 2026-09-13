@@ -31,13 +31,22 @@ public class HomeController {
 
     @Operation(
             summary = "홈 메인 조회",
-            description = "로그인한 사용자의 홈 메인 화면 정보 조회"
+            description = "자녀가 선택한 시니어의 홈 메인 화면 정보를 조회"
     )
     @GetMapping
-    public Response<HomeResponse> getHome() {
+    public Response<HomeResponse> getHome(
+            @RequestParam Long seniorId
+    ) {
         long start = System.nanoTime();
-        Response<HomeResponse> response = Response.ok(homeService.getHome());
-        log.debug("[TIMING] HomeController.getHome : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
+
+        Response<HomeResponse> response =
+                Response.ok(homeService.getHome(seniorId));
+
+        log.debug(
+                "[TIMING] HomeController.getHome : {}ms",
+                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)
+        );
+
         return response;
     }
 
@@ -46,10 +55,21 @@ public class HomeController {
             description = "사용자가 홈 화면에 추가할 수 있는 버튼 옵션 목록 조회"
     )
     @GetMapping("/button-options")
-    public Response<List<ButtonOptionResponse>> getButtonOptions() {
+    public Response<List<ButtonOptionResponse>> getButtonOptions(
+            @RequestParam Long seniorId
+    ) {
         long start = System.nanoTime();
-        Response<List<ButtonOptionResponse>> response = Response.ok(homeService.getButtonOptions());
-        log.debug("[TIMING] HomeController.getButtonOptions : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
+
+        Response<List<ButtonOptionResponse>> response =
+                Response.ok(
+                        homeService.getButtonOptions(seniorId)
+                );
+
+        log.debug(
+                "[TIMING] HomeController.getButtonOptions : {}ms",
+                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)
+        );
+
         return response;
     }
     @Operation(
@@ -69,11 +89,18 @@ public class HomeController {
     )
     @PatchMapping("/font-size")
     public Response<Void> updateFontSize(
+            @RequestParam Long seniorId,
             @Valid @RequestBody HomeFontSizeUpdateRequest request
     ) {
         long start = System.nanoTime();
-        homeService.updateFontSize(request);
-        log.debug("[TIMING] HomeController.updateFontSize : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
+
+        homeService.updateFontSize(seniorId, request);
+
+        log.debug(
+                "[TIMING] HomeController.updateFontSize : {}ms",
+                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)
+        );
+
         return Response.ok();
     }
 
@@ -83,11 +110,24 @@ public class HomeController {
     )
     @PatchMapping("/senior-profile")
     public Response<SeniorProfileUpdateResponse> updateSeniorProfile(
+            @RequestParam Long seniorId,
             @Valid @RequestBody SeniorProfileUpdateRequest request
     ) {
         long start = System.nanoTime();
-        Response<SeniorProfileUpdateResponse> response = Response.ok(homeService.updateSeniorProfile(request));
-        log.debug("[TIMING] HomeController.updateSeniorProfile : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
+
+        Response<SeniorProfileUpdateResponse> response =
+                Response.ok(
+                        homeService.updateSeniorProfile(
+                                seniorId,
+                                request
+                        )
+                );
+
+        log.debug(
+                "[TIMING] HomeController.updateSeniorProfile : {}ms",
+                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)
+        );
+
         return response;
     }
     @Operation(
@@ -96,24 +136,45 @@ public class HomeController {
     )
     @PutMapping("/buttons")
     public Response<Void> saveButtons(
+            @RequestParam Long seniorId,
             @Valid @RequestBody HomeButtonSaveRequest request
     ) {
         long start = System.nanoTime();
-        homeService.saveButtons(request);
-        log.debug("[TIMING] HomeController.saveButtons : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
+
+        homeService.saveButtons(
+                seniorId,
+                request
+        );
+
+        log.debug(
+                "[TIMING] HomeController.saveButtons : {}ms",
+                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)
+        );
+
         return Response.ok();
     }
     @Operation(
             summary = "오늘 병원 일정 상세 목록 조회",
-            description = "시니어가 가족 내 주담당자와 보조담당자가 등록한 오늘 병원 일정을 시간순으로 조회"
+            description = "자녀가 선택한 시니어의 오늘 병원 일정을 시간순으로 조회"
     )
     @GetMapping("/hospitals/today")
     public Response<List<TodayHospitalListResponse>>
-    getTodayHospitalSchedules() {
+    getTodayHospitalSchedules(
+            @RequestParam Long seniorId
+    ) {
 
         long start = System.nanoTime();
-        Response<List<TodayHospitalListResponse>> response = Response.ok(homeService.getTodayHospitalSchedules());
-        log.debug("[TIMING] HomeController.getTodayHospitalSchedules : {}ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
+
+        Response<List<TodayHospitalListResponse>> response =
+                Response.ok(
+                        homeService.getTodayHospitalSchedules(seniorId)
+                );
+
+        log.debug(
+                "[TIMING] HomeController.getTodayHospitalSchedules : {}ms",
+                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)
+        );
+
         return response;
     }
     @Operation(

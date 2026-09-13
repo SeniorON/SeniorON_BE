@@ -31,6 +31,11 @@ import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.entity.RefreshToken;
 import com.example.senioron.domain.user.repository.RefreshTokenRepository;
 import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.domain.home.dto.request.HomeFontSizeUpdateRequest;
+import com.example.senioron.domain.home.entity.FontSize;
+import com.example.senioron.domain.home.entity.HomeSetting;
+import com.example.senioron.domain.home.dto.request.HomeButtonSaveRequest;
+import com.example.senioron.domain.home.entity.ActionType;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import java.time.LocalDate;
@@ -81,61 +86,6 @@ class HomeServiceSeniorProfileTest {
     @AfterEach
     void tearDown() {
         SecurityContextHolder.clearContext();
-    }
-
-    @Test
-    void updateSeniorProfileCreatesFamilySeniorAndUserSenior() {
-        Family family = Family.builder().familyId(1L).build();
-        User primaryChild = createChild(1L, family, ManagerType.PRIMARY);
-        setCurrentUser(primaryChild);
-        given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
-        given(userSeniorRepository.findFirstByUserAndSenior_FamilyOrderByUserSeniorIdAsc(primaryChild, family))
-                .willReturn(Optional.empty());
-        given(seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(family)).willReturn(Optional.empty());
-        given(seniorRepository.saveAndFlush(any(Senior.class))).willAnswer(invocation -> invocation.getArgument(0));
-        given(userSeniorRepository.findByUserAndSenior(any(User.class), any(Senior.class)))
-                .willReturn(Optional.empty());
-        given(userSeniorRepository.save(any(UserSenior.class))).willAnswer(invocation -> invocation.getArgument(0));
-
-        SeniorProfileUpdateResponse response = homeService.updateSeniorProfile(
-                createRequest("김영희", SeniorRelation.MOTHER, null)
-        );
-
-        assertThat(response.name()).isEqualTo("김영희");
-        assertThat(response.relation()).isEqualTo(SeniorRelation.MOTHER);
-        assertThat(response.latitude()).isEqualTo(37.5665);
-        assertThat(response.longitude()).isEqualTo(126.9780);
-    }
-
-    @Test
-    void updateSeniorProfileUpdatesOnlyCurrentUsersRelation() {
-        Family family = Family.builder().familyId(1L).build();
-        User primaryChild = createChild(1L, family, ManagerType.PRIMARY);
-        User subChild = createChild(2L, family, ManagerType.SUB);
-        Senior senior = createSenior(10L, family, primaryChild);
-        UserSenior primaryRelation = createUserSenior(primaryChild, senior, SeniorRelation.MOTHER, null);
-        UserSenior subRelation = createUserSenior(subChild, senior, SeniorRelation.GRANDPARENT, null);
-        setCurrentUser(subChild);
-        given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
-        given(userSeniorRepository.findFirstByUserAndSenior_FamilyOrderByUserSeniorIdAsc(subChild, family))
-                .willReturn(Optional.of(subRelation));
-        given(seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(family)).willReturn(Optional.of(senior));
-        given(userSeniorRepository.findByUserAndSenior(subChild, senior)).willReturn(Optional.of(subRelation));
-        given(userSeniorRepository.save(any(UserSenior.class))).willAnswer(invocation -> invocation.getArgument(0));
-
-        SeniorProfileUpdateResponse response = homeService.updateSeniorProfile(
-                createRequest("김영자", SeniorRelation.OTHER, "외할머니")
-        );
-
-        assertThat(response.name()).isEqualTo("김영자");
-        assertThat(response.relation()).isEqualTo(SeniorRelation.OTHER);
-        assertThat(subRelation.getCustomRelation()).isEqualTo("외할머니");
-        assertThat(primaryRelation.getRelation()).isEqualTo(SeniorRelation.MOTHER);
-        assertThat(senior.getName()).isEqualTo("김영자");
-        assertThat(senior.getLatitude()).isEqualTo(37.5665);
-        assertThat(senior.getLongitude()).isEqualTo(126.9780);
-        assertThat(response.latitude()).isEqualTo(37.5665);
-        assertThat(response.longitude()).isEqualTo(126.9780);
     }
 
     @Test
@@ -423,60 +373,23 @@ class HomeServiceSeniorProfileTest {
     }
 
     @Test
-    void updateSeniorProfileRejectsSeniorFromDifferentFamily() {
-        Family family = Family.builder().familyId(1L).build();
-        Family otherFamily = Family.builder().familyId(2L).build();
-        User child = createChild(1L, family, ManagerType.PRIMARY);
-        Senior otherFamilySenior = createSenior(10L, otherFamily, child);
-        setCurrentUser(child);
-        given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
-        given(userSeniorRepository.findFirstByUserAndSenior_FamilyOrderByUserSeniorIdAsc(child, family))
-                .willReturn(Optional.empty());
-        given(seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(family)).willReturn(Optional.of(otherFamilySenior));
-        given(userSeniorRepository.findByUserAndSenior(child, otherFamilySenior)).willReturn(Optional.empty());
-
-        assertThatThrownBy(() -> homeService.updateSeniorProfile(
-                createRequest("김영희", SeniorRelation.MOTHER, null)
-        ))
-                .isInstanceOf(BusinessException.class)
-                .asInstanceOf(type(BusinessException.class))
-                .extracting(BusinessException::getCode)
-                .isEqualTo(ErrorCode.FORBIDDEN);
-    }
-
-    @Test
-    void updateSeniorProfileConvertsUniqueViolationToSeniorAlreadyExists() {
-        Family family = Family.builder().familyId(1L).build();
-        User primaryChild = createChild(1L, family, ManagerType.PRIMARY);
-        setCurrentUser(primaryChild);
-        given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
-        given(userSeniorRepository.findFirstByUserAndSenior_FamilyOrderByUserSeniorIdAsc(primaryChild, family))
-                .willReturn(Optional.empty());
-        given(seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(family)).willReturn(Optional.empty());
-        given(seniorRepository.saveAndFlush(any(Senior.class)))
-                .willThrow(new DataIntegrityViolationException("duplicate family senior"));
-
-        assertThatThrownBy(() -> homeService.updateSeniorProfile(
-                createRequest("김영희", SeniorRelation.MOTHER, null)
-        ))
-                .isInstanceOf(BusinessException.class)
-                .asInstanceOf(type(BusinessException.class))
-                .extracting(BusinessException::getCode)
-                .isEqualTo(ErrorCode.SENIOR_ALREADY_EXISTS);
-    }
-
-    @Test
     void getHomeReturnsCurrentUsersSeniorRelation() {
-        Family family = Family.builder().familyId(1L).build();
-        User subChild = createChild(2L, family, ManagerType.SUB);
-        User primaryChild = createChild(1L, family, ManagerType.PRIMARY);
-        Senior senior = createSenior(10L, family, primaryChild);
-        UserSenior subRelation = createUserSenior(subChild, senior, SeniorRelation.GRANDPARENT, null);
-        setCurrentUser(subChild);
-        given(userRepository.findByFamilyAndUsersIdNotAndRole(family, 2L, Role.CHILD))
-                .willReturn(List.of(primaryChild));
-        given(userRepository.findByIdForUpdate(1L))
-                .willReturn(Optional.of(primaryChild));
+        Family family = Family.builder()
+                .familyId(1L)
+                .build();
+
+        User subChild = createChild(
+                2L,
+                family,
+                ManagerType.SUB
+        );
+
+        User primaryChild = createChild(
+                1L,
+                family,
+                ManagerType.PRIMARY
+        );
+
         User parent = User.builder()
                 .usersId(3L)
                 .name("시니어")
@@ -484,10 +397,29 @@ class HomeServiceSeniorProfileTest {
                 .family(family)
                 .build();
 
-        given(userRepository.findByFamilyAndUsersIdNotAndRole(family, 2L, Role.PARENT))
-                .willReturn(List.of(parent));
-        given(userSeniorRepository.findFirstByUserAndSenior_FamilyOrderByUserSeniorIdAsc(subChild, family))
+        Senior senior = createSenior(
+                10L,
+                family,
+                primaryChild,
+                parent
+        );
+
+        UserSenior subRelation = createUserSenior(
+                subChild,
+                senior,
+                SeniorRelation.GRANDPARENT,
+                null
+        );
+
+        setCurrentUser(subChild);
+
+        given(userSeniorRepository
+                .findByUserAndSenior_SeniorId(
+                        subChild,
+                        10L
+                ))
                 .willReturn(Optional.of(subRelation));
+
         Device device = Device.builder()
                 .user(parent)
                 .deviceIdentifier("device-1")
@@ -497,17 +429,39 @@ class HomeServiceSeniorProfileTest {
                 .lastConnectedAt(LocalDateTime.now())
                 .build();
 
-        given(deviceRepository.findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(parent))
+        given(deviceRepository
+                .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
+                        parent
+                ))
                 .willReturn(Optional.of(device));
-        given(homeRepository.findAllByUserOrderByButtonOrderAsc(primaryChild)).willReturn(List.of());
-        given(homeSettingRepository.findByUser(primaryChild)).willReturn(Optional.empty());
 
-        HomeResponse response = homeService.getHome();
+        given(userRepository.findByIdForUpdate(3L))
+                .willReturn(Optional.of(parent));
 
-        assertThat(response.getSeniorProfile().getName()).isEqualTo("김영희");
-        assertThat(response.getSeniorProfile().getRelation()).isEqualTo("GRANDPARENT");
+        given(homeRepository
+                .findAllByUserOrderByButtonOrderAsc(parent))
+                .willReturn(List.of());
 
-        assertThat(response.getConnection().getConnected()).isTrue();
+        given(homeRepository.saveAll(any()))
+                .willAnswer(invocation ->
+                        invocation.getArgument(0)
+                );
+
+        given(homeSettingRepository.findByUser(parent))
+                .willReturn(Optional.empty());
+
+        HomeResponse response =
+                homeService.getHome(10L);
+
+        assertThat(response.getSeniorProfile().getName())
+                .isEqualTo("김영희");
+
+        assertThat(response.getSeniorProfile().getRelation())
+                .isEqualTo("GRANDPARENT");
+
+        assertThat(response.getConnection().getConnected())
+                .isTrue();
+
         assertThat(response.getConnection().getConnectionStatus())
                 .isEqualTo(DeviceStatus.ONLINE);
     }
@@ -525,11 +479,19 @@ class HomeServiceSeniorProfileTest {
                         ManagerType.PRIMARY
                 );
 
+        User parent = User.builder()
+                .usersId(3L)
+                .name("시니어")
+                .role(Role.PARENT)
+                .family(family)
+                .build();
+
         Senior senior =
                 createSenior(
                         10L,
                         family,
-                        primaryChild
+                        primaryChild,
+                        parent
                 );
 
         UserSenior relation =
@@ -540,25 +502,14 @@ class HomeServiceSeniorProfileTest {
                         null
                 );
 
-        User parent = User.builder()
-                .usersId(3L)
-                .name("시니어")
-                .role(Role.PARENT)
-                .family(family)
-                .build();
-
         setCurrentUser(primaryChild);
 
-        given(userRepository.findByFamilyAndUsersIdNotAndRole(
-                family,
-                1L,
-                Role.PARENT
-        )).willReturn(List.of(parent));
-
-        given(userSeniorRepository.findFirstByUserAndSenior_FamilyOrderByUserSeniorIdAsc(
-                primaryChild,
-                family
-        )).willReturn(Optional.of(relation));
+        given(userSeniorRepository
+                .findByUserAndSenior_SeniorId(
+                        primaryChild,
+                        10L
+                ))
+                .willReturn(Optional.of(relation));
 
         Device device = Device.builder()
                 .user(parent)
@@ -570,11 +521,13 @@ class HomeServiceSeniorProfileTest {
                 .build();
 
         given(deviceRepository
-                .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(parent))
+                .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
+                        parent
+                ))
                 .willReturn(Optional.of(device));
 
         HomeResponse response =
-                homeService.getHome();
+                homeService.getHome(10L);
 
         assertThat(response.getSeniorProfile().getName())
                 .isEqualTo("김영희");
@@ -591,7 +544,8 @@ class HomeServiceSeniorProfileTest {
         assertThat(response.getSeniorProfile().getDetailAddress())
                 .isEqualTo("101호");
 
-        assertThat(response.getConnection().getConnected()).isFalse();
+        assertThat(response.getConnection().getConnected())
+                .isFalse();
 
         assertThat(response.getConnection().getConnectionStatus())
                 .isEqualTo(DeviceStatus.DISCONNECTED);
@@ -610,11 +564,19 @@ class HomeServiceSeniorProfileTest {
                         ManagerType.PRIMARY
                 );
 
+        User parent = User.builder()
+                .usersId(3L)
+                .name("시니어")
+                .role(Role.PARENT)
+                .family(family)
+                .build();
+
         Senior senior =
                 createSenior(
                         10L,
                         family,
-                        primaryChild
+                        primaryChild,
+                        parent
                 );
 
         UserSenior relation =
@@ -625,25 +587,14 @@ class HomeServiceSeniorProfileTest {
                         null
                 );
 
-        User parent = User.builder()
-                .usersId(3L)
-                .name("시니어")
-                .role(Role.PARENT)
-                .family(family)
-                .build();
-
         setCurrentUser(primaryChild);
 
-        given(userRepository.findByFamilyAndUsersIdNotAndRole(
-                family,
-                1L,
-                Role.PARENT
-        )).willReturn(List.of(parent));
-
-        given(userSeniorRepository.findFirstByUserAndSenior_FamilyOrderByUserSeniorIdAsc(
-                primaryChild,
-                family
-        )).willReturn(Optional.of(relation));
+        given(userSeniorRepository
+                .findByUserAndSenior_SeniorId(
+                        primaryChild,
+                        10L
+                ))
+                .willReturn(Optional.of(relation));
 
         Device device = Device.builder()
                 .user(parent)
@@ -651,21 +602,613 @@ class HomeServiceSeniorProfileTest {
                 .deviceName("Galaxy S24")
                 .connectionStatus(DeviceStatus.ONLINE)
                 .batteryLevel(72)
-                .lastConnectedAt(LocalDateTime.now().minusMinutes(12))
+                .lastConnectedAt(
+                        LocalDateTime.now()
+                                .minusMinutes(12)
+                )
                 .build();
 
         given(deviceRepository
-                .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(parent))
+                .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
+                        parent
+                ))
                 .willReturn(Optional.of(device));
 
         HomeResponse response =
-                homeService.getHome();
+                homeService.getHome(10L);
 
         assertThat(response.getConnection().getConnected())
                 .isFalse();
 
         assertThat(response.getConnection().getConnectionStatus())
                 .isEqualTo(DeviceStatus.OFFLINE);
+    }
+
+    @Test
+    void updateSeniorProfileUpdatesSelectedSeniorOnly() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .build();
+
+        User child = createChild(
+                1L,
+                family,
+                ManagerType.PRIMARY
+        );
+
+        Senior firstSenior = createSenior(
+                10L,
+                family,
+                child
+        );
+
+        Senior secondSenior = createSenior(
+                20L,
+                family,
+                child
+        );
+
+        UserSenior secondRelation = createUserSenior(
+                child,
+                secondSenior,
+                SeniorRelation.GRANDPARENT,
+                null
+        );
+
+        setCurrentUser(child);
+
+        given(userSeniorRepository
+                .findByUserAndSenior_SeniorId(
+                        child,
+                        20L
+                ))
+                .willReturn(Optional.of(secondRelation));
+
+        given(userSeniorRepository.save(any(UserSenior.class)))
+                .willAnswer(invocation ->
+                        invocation.getArgument(0)
+                );
+
+        SeniorProfileUpdateResponse response =
+                homeService.updateSeniorProfile(
+                        20L,
+                        createRequest(
+                                "선택 시니어",
+                                SeniorRelation.OTHER,
+                                "외할머니"
+                        )
+                );
+
+        assertThat(firstSenior.getName())
+                .isEqualTo("김영희");
+
+        assertThat(secondSenior.getName())
+                .isEqualTo("선택 시니어");
+
+        assertThat(secondRelation.getRelation())
+                .isEqualTo(SeniorRelation.OTHER);
+
+        assertThat(secondRelation.getCustomRelation())
+                .isEqualTo("외할머니");
+
+        assertThat(response.name())
+                .isEqualTo("선택 시니어");
+    }
+
+    @Test
+    void updateSeniorProfileRejectsUnmanagedSeniorId() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .build();
+
+        User child = createChild(
+                1L,
+                family,
+                ManagerType.PRIMARY
+        );
+
+        setCurrentUser(child);
+
+        given(userSeniorRepository
+                .findByUserAndSenior_SeniorId(
+                        child,
+                        999L
+                ))
+                .willReturn(Optional.empty());
+
+        assertThatThrownBy(() ->
+                homeService.updateSeniorProfile(
+                        999L,
+                        createRequest(
+                                "접근 불가 시니어",
+                                SeniorRelation.MOTHER,
+                                null
+                        )
+                )
+        )
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.FORBIDDEN);
+    }
+
+    @Test
+    void getHomeReturnsOnlySelectedSeniorData() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .build();
+
+        User child = createChild(
+                1L,
+                family,
+                ManagerType.PRIMARY
+        );
+
+        User firstParent = User.builder()
+                .usersId(3L)
+                .name("첫 번째 시니어 계정")
+                .role(Role.PARENT)
+                .family(family)
+                .build();
+
+        User secondParent = User.builder()
+                .usersId(4L)
+                .name("두 번째 시니어 계정")
+                .role(Role.PARENT)
+                .family(family)
+                .build();
+
+        Senior firstSenior = createSenior(
+                10L,
+                family,
+                child,
+                firstParent
+        );
+
+        Senior secondSenior = createSenior(
+                20L,
+                family,
+                child,
+                secondParent
+        );
+
+        secondSenior.updateProfile(
+                "두 번째 시니어",
+                LocalDate.of(1960, 2, 2),
+                "01099998888",
+                "부산시",
+                "202호",
+                35.1796,
+                129.0756
+        );
+
+        UserSenior firstRelation = createUserSenior(
+                child,
+                firstSenior,
+                SeniorRelation.MOTHER,
+                null
+        );
+
+        UserSenior secondRelation = createUserSenior(
+                child,
+                secondSenior,
+                SeniorRelation.GRANDPARENT,
+                null
+        );
+
+        setCurrentUser(child);
+
+        given(userSeniorRepository
+                .findByUserAndSenior_SeniorId(child, 20L))
+                .willReturn(Optional.of(secondRelation));
+
+        Device secondDevice = Device.builder()
+                .user(secondParent)
+                .deviceIdentifier("device-2")
+                .deviceName("Galaxy S24")
+                .connectionStatus(DeviceStatus.DISCONNECTED)
+                .batteryLevel(80)
+                .lastConnectedAt(LocalDateTime.now())
+                .build();
+
+        given(deviceRepository
+                .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(secondParent))
+                .willReturn(Optional.of(secondDevice));
+
+        HomeResponse response = homeService.getHome(20L);
+
+        assertThat(response.getSeniorProfile().getName())
+                .isEqualTo("두 번째 시니어");
+
+        assertThat(response.getSeniorProfile().getRelation())
+                .isEqualTo("GRANDPARENT");
+
+        assertThat(response.getSeniorProfile().getBirth())
+                .isEqualTo(LocalDate.of(1960, 2, 2));
+
+        assertThat(response.getSeniorProfile().getAddress())
+                .isEqualTo("부산시");
+
+        assertThat(response.getSeniorProfile().getName())
+                .isNotEqualTo(firstSenior.getName());
+
+        assertThat(response.getSeniorProfile().getRelation())
+                .isNotEqualTo(firstRelation.getRelation().name());
+    }
+
+    @Test
+    void updateFontSizeUpdatesOnlySelectedSeniorSetting() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .build();
+
+        User child = createChild(
+                1L,
+                family,
+                ManagerType.PRIMARY
+        );
+
+        User firstParent = User.builder()
+                .usersId(3L)
+                .name("첫 번째 시니어")
+                .role(Role.PARENT)
+                .family(family)
+                .build();
+
+        User secondParent = User.builder()
+                .usersId(4L)
+                .name("두 번째 시니어")
+                .role(Role.PARENT)
+                .family(family)
+                .build();
+
+        Senior firstSenior = createSenior(
+                10L,
+                family,
+                child,
+                firstParent
+        );
+
+        Senior secondSenior = createSenior(
+                20L,
+                family,
+                child,
+                secondParent
+        );
+
+        UserSenior secondRelation = createUserSenior(
+                child,
+                secondSenior,
+                SeniorRelation.GRANDPARENT,
+                null
+        );
+
+        HomeSetting firstSetting = HomeSetting.builder()
+                .user(firstParent)
+                .fontSize(FontSize.MEDIUM)
+                .build();
+
+        HomeSetting secondSetting = HomeSetting.builder()
+                .user(secondParent)
+                .fontSize(FontSize.MEDIUM)
+                .build();
+
+        HomeFontSizeUpdateRequest request =
+                org.mockito.Mockito.mock(HomeFontSizeUpdateRequest.class);
+
+        given(request.getFontSize())
+                .willReturn(FontSize.LARGE);
+
+        setCurrentUser(child);
+
+        given(userSeniorRepository
+                .findByUserAndSenior_SeniorId(
+                        child,
+                        20L
+                ))
+                .willReturn(Optional.of(secondRelation));
+
+        Device secondDevice = Device.builder()
+                .user(secondParent)
+                .deviceIdentifier("device-2")
+                .deviceName("Galaxy S24")
+                .connectionStatus(DeviceStatus.ONLINE)
+                .batteryLevel(80)
+                .lastConnectedAt(LocalDateTime.now())
+                .build();
+
+        given(deviceRepository
+                .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
+                        secondParent
+                ))
+                .willReturn(Optional.of(secondDevice));
+
+        given(homeSettingRepository.findByUser(secondParent))
+                .willReturn(Optional.of(secondSetting));
+
+        given(homeSettingRepository.save(any(HomeSetting.class)))
+                .willAnswer(invocation ->
+                        invocation.getArgument(0)
+                );
+
+        homeService.updateFontSize(
+                20L,
+                request
+        );
+
+        assertThat(firstSetting.getFontSize())
+                .isEqualTo(FontSize.MEDIUM);
+
+        assertThat(secondSetting.getFontSize())
+                .isEqualTo(FontSize.LARGE);
+    }
+
+    @Test
+    void saveButtonsUpdatesOnlySelectedSeniorHome() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .build();
+
+        User child = createChild(
+                1L,
+                family,
+                ManagerType.PRIMARY
+        );
+
+        User firstParent = User.builder()
+                .usersId(3L)
+                .name("첫 번째 시니어")
+                .role(Role.PARENT)
+                .family(family)
+                .build();
+
+        User secondParent = User.builder()
+                .usersId(4L)
+                .name("두 번째 시니어")
+                .role(Role.PARENT)
+                .family(family)
+                .build();
+
+        Senior firstSenior = createSenior(
+                10L,
+                family,
+                child,
+                firstParent
+        );
+
+        Senior secondSenior = createSenior(
+                20L,
+                family,
+                child,
+                secondParent
+        );
+
+        UserSenior secondRelation = createUserSenior(
+                child,
+                secondSenior,
+                SeniorRelation.GRANDPARENT,
+                null
+        );
+
+        setCurrentUser(child);
+
+        given(userSeniorRepository
+                .findByUserAndSenior_SeniorId(
+                        child,
+                        20L
+                ))
+                .willReturn(Optional.of(secondRelation));
+
+        Device secondDevice = Device.builder()
+                .user(secondParent)
+                .deviceIdentifier("device-2")
+                .deviceName("Galaxy S24")
+                .connectionStatus(DeviceStatus.ONLINE)
+                .batteryLevel(80)
+                .lastConnectedAt(LocalDateTime.now())
+                .build();
+
+        given(deviceRepository
+                .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
+                        secondParent
+                ))
+                .willReturn(Optional.of(secondDevice));
+
+        given(homeSettingRepository.findByUser(secondParent))
+                .willReturn(Optional.empty());
+
+        List<HomeButtonSaveRequest.ButtonRequest> buttons = List.of(
+                new HomeButtonSaveRequest.ButtonRequest(
+                        1,
+                        "전화",
+                        ActionType.DEFAULT,
+                        "PHONE",
+                        null
+                ),
+                new HomeButtonSaveRequest.ButtonRequest(
+                        2,
+                        "메시지",
+                        ActionType.DEFAULT,
+                        "MESSAGE",
+                        null
+                ),
+                new HomeButtonSaveRequest.ButtonRequest(
+                        3,
+                        "카메라",
+                        ActionType.DEFAULT,
+                        "CAMERA",
+                        null
+                ),
+                new HomeButtonSaveRequest.ButtonRequest(
+                        4,
+                        "사진",
+                        ActionType.DEFAULT,
+                        "PHOTO",
+                        null
+                ),
+                new HomeButtonSaveRequest.ButtonRequest(
+                        5,
+                        "설정",
+                        ActionType.DEFAULT,
+                        "SETTINGS",
+                        null
+                ),
+                new HomeButtonSaveRequest.ButtonRequest(
+                        6,
+                        "복약",
+                        ActionType.DEFAULT,
+                        "MEDICATION",
+                        null
+                ),
+                new HomeButtonSaveRequest.ButtonRequest(
+                        7,
+                        "긴급알림",
+                        ActionType.DEFAULT,
+                        "EMERGENCY",
+                        null
+                ),
+                new HomeButtonSaveRequest.ButtonRequest(
+                        8,
+                        "유튜브",
+                        ActionType.APP,
+                        "YOUTUBE",
+                        "com.google.android.youtube"
+                )
+        );
+
+        HomeButtonSaveRequest request =
+                new HomeButtonSaveRequest(
+                        null,
+                        buttons
+                );
+
+        homeService.saveButtons(
+                20L,
+                request
+        );
+
+        org.mockito.Mockito.verify(homeRepository)
+                .deleteAllByUser(secondParent);
+
+        org.mockito.Mockito.verify(homeRepository)
+                .saveAllAndFlush(any());
+
+        org.mockito.Mockito.verify(homeSettingRepository)
+                .findByUser(secondParent);
+
+        org.mockito.Mockito.verify(homeWebSocketService)
+                .notifyHomeUpdated(4L);
+
+        org.mockito.Mockito.verify(
+                homeRepository,
+                org.mockito.Mockito.never()
+        ).deleteAllByUser(firstParent);
+
+        org.mockito.Mockito.verify(
+                homeSettingRepository,
+                org.mockito.Mockito.never()
+        ).findByUser(firstParent);
+
+        assertThat(firstSenior.getSeniorId())
+                .isEqualTo(10L);
+
+        assertThat(secondSenior.getSeniorId())
+                .isEqualTo(20L);
+    }
+
+    @Test
+    void getTodayHospitalSchedulesUsesOnlySelectedSenior() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .build();
+
+        User child = createChild(
+                1L,
+                family,
+                ManagerType.PRIMARY
+        );
+
+        User firstParent = User.builder()
+                .usersId(3L)
+                .name("첫 번째 시니어")
+                .role(Role.PARENT)
+                .family(family)
+                .build();
+
+        User secondParent = User.builder()
+                .usersId(4L)
+                .name("두 번째 시니어")
+                .role(Role.PARENT)
+                .family(family)
+                .build();
+
+        Senior firstSenior = createSenior(
+                10L,
+                family,
+                child,
+                firstParent
+        );
+
+        Senior secondSenior = createSenior(
+                20L,
+                family,
+                child,
+                secondParent
+        );
+
+        UserSenior secondRelation = createUserSenior(
+                child,
+                secondSenior,
+                SeniorRelation.GRANDPARENT,
+                null
+        );
+
+        setCurrentUser(child);
+
+        given(userSeniorRepository
+                .findByUserAndSenior_SeniorId(
+                        child,
+                        20L
+                ))
+                .willReturn(Optional.of(secondRelation));
+
+        LocalDate today = LocalDate.now();
+
+        given(hospitalRepository
+                .findByUserAndScheduleDateBetweenOrderByScheduleDateAscScheduleTimeAsc(
+                        secondParent,
+                        today,
+                        today
+                ))
+                .willReturn(List.of());
+
+        var response =
+                homeService.getTodayHospitalSchedules(20L);
+
+        assertThat(response)
+                .isEmpty();
+
+        org.mockito.Mockito.verify(hospitalRepository)
+                .findByUserAndScheduleDateBetweenOrderByScheduleDateAscScheduleTimeAsc(
+                        secondParent,
+                        today,
+                        today
+                );
+
+        org.mockito.Mockito.verify(
+                hospitalRepository,
+                org.mockito.Mockito.never()
+        ).findByUserAndScheduleDateBetweenOrderByScheduleDateAscScheduleTimeAsc(
+                firstParent,
+                today,
+                today
+        );
+
+        assertThat(firstSenior.getSeniorId())
+                .isEqualTo(10L);
+
+        assertThat(secondSenior.getSeniorId())
+                .isEqualTo(20L);
     }
 
     private SeniorProfileUpdateRequest createRequest(
@@ -698,6 +1241,26 @@ class HomeServiceSeniorProfileTest {
                 .longitude(129.0756)
                 .family(family)
                 .registeredBy(registeredBy)
+                .build();
+    }
+    private Senior createSenior(
+            Long seniorId,
+            Family family,
+            User registeredBy,
+            User parentUser
+    ) {
+        return Senior.builder()
+                .seniorId(seniorId)
+                .name("김영희")
+                .birth(LocalDate.of(1950, 1, 1))
+                .phoneNumber("01012345678")
+                .address("서울시")
+                .detailAddress("101호")
+                .latitude(35.1796)
+                .longitude(129.0756)
+                .family(family)
+                .registeredBy(registeredBy)
+                .parentUser(parentUser)
                 .build();
     }
 
