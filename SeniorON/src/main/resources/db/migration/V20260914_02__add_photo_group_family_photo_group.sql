@@ -23,34 +23,105 @@ CREATE TABLE IF NOT EXISTS photo_group_family (
             REFERENCES photo_group (photo_group_id)
 );
 
-SET @family_photo_without_family_count := (
-    SELECT COUNT(*)
-    FROM family_photo
-    WHERE family_id IS NULL
+CREATE TEMPORARY TABLE tmp_abort_family_photo_null_family_id (
+    id TINYINT NOT NULL,
+    PRIMARY KEY (id)
 );
 
-SET @family_photo_without_family_sql := IF(
-    @family_photo_without_family_count = 0,
-    'SELECT 1',
-    'SIGNAL SQLSTATE ''45000'' SET MESSAGE_TEXT = ''Cannot migrate family_photo rows with NULL family_id to photo_group_id automatically. Resolve those rows before running this migration.'''
+INSERT INTO tmp_abort_family_photo_null_family_id (id)
+VALUES (1);
+
+INSERT INTO tmp_abort_family_photo_null_family_id (id)
+SELECT 1
+FROM family_photo
+WHERE family_id IS NULL
+LIMIT 1;
+
+CREATE TEMPORARY TABLE tmp_abort_family_photo_orphan_family_id (
+    id TINYINT NOT NULL,
+    PRIMARY KEY (id)
 );
 
-PREPARE family_photo_without_family_stmt
-    FROM @family_photo_without_family_sql;
-EXECUTE family_photo_without_family_stmt;
-DEALLOCATE PREPARE family_photo_without_family_stmt;
+INSERT INTO tmp_abort_family_photo_orphan_family_id (id)
+VALUES (1);
+
+INSERT INTO tmp_abort_family_photo_orphan_family_id (id)
+SELECT 1
+FROM family_photo fp
+LEFT JOIN family f
+    ON f.family_id = fp.family_id
+WHERE fp.family_id IS NOT NULL
+  AND f.family_id IS NULL
+LIMIT 1;
+
+CREATE TEMPORARY TABLE tmp_family_default_photo_group_map (
+    family_id BIGINT NOT NULL,
+    photo_group_id BIGINT NOT NULL,
+    PRIMARY KEY (family_id)
+);
+
+INSERT INTO tmp_family_default_photo_group_map (family_id, photo_group_id)
+SELECT
+    f.family_id,
+    MIN(pgf.photo_group_id)
+FROM family f
+JOIN photo_group_family pgf
+    ON pgf.family_id = f.family_id
+GROUP BY f.family_id;
+
+CREATE TEMPORARY TABLE tmp_family_without_photo_group (
+    seq BIGINT NOT NULL AUTO_INCREMENT,
+    family_id BIGINT NOT NULL,
+    photo_group_id BIGINT NULL,
+    PRIMARY KEY (seq),
+    UNIQUE KEY uk_tmp_family_without_photo_group_family (family_id)
+);
+
+INSERT INTO tmp_family_without_photo_group (family_id)
+SELECT f.family_id
+FROM family f
+LEFT JOIN tmp_family_default_photo_group_map map
+    ON map.family_id = f.family_id
+WHERE map.family_id IS NULL
+ORDER BY f.family_id;
 
 INSERT INTO photo_group (name, created_at, updated_at)
 SELECT
-    CONCAT('Family ', f.family_id),
+    CONCAT('Family ', family_id),
     CURRENT_TIMESTAMP(6),
     CURRENT_TIMESTAMP(6)
-FROM family f
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM photo_group_family pgf
-    WHERE pgf.family_id = f.family_id
+FROM tmp_family_without_photo_group
+ORDER BY seq;
+
+SET @first_default_photo_group_id := LAST_INSERT_ID();
+
+UPDATE tmp_family_without_photo_group
+SET photo_group_id =
+        @first_default_photo_group_id
+        + ((seq - 1) * @@auto_increment_increment);
+
+CREATE TEMPORARY TABLE tmp_abort_photo_group_mapping_missing (
+    id TINYINT NOT NULL,
+    PRIMARY KEY (id)
 );
+
+INSERT INTO tmp_abort_photo_group_mapping_missing (id)
+VALUES (1);
+
+INSERT INTO tmp_abort_photo_group_mapping_missing (id)
+SELECT 1
+FROM tmp_family_without_photo_group tmp
+LEFT JOIN photo_group pg
+    ON pg.photo_group_id = tmp.photo_group_id
+WHERE tmp.photo_group_id IS NULL
+   OR pg.photo_group_id IS NULL
+LIMIT 1;
+
+INSERT INTO tmp_family_default_photo_group_map (family_id, photo_group_id)
+SELECT
+    family_id,
+    photo_group_id
+FROM tmp_family_without_photo_group;
 
 INSERT INTO photo_group_family (
     family_id,
@@ -59,18 +130,16 @@ INSERT INTO photo_group_family (
     updated_at
 )
 SELECT
-    f.family_id,
-    pg.photo_group_id,
+    map.family_id,
+    map.photo_group_id,
     CURRENT_TIMESTAMP(6),
     CURRENT_TIMESTAMP(6)
-FROM family f
-JOIN photo_group pg
-    ON pg.name = CONCAT('Family ', f.family_id)
+FROM tmp_family_default_photo_group_map map
 WHERE NOT EXISTS (
     SELECT 1
     FROM photo_group_family pgf
-    WHERE pgf.family_id = f.family_id
-      AND pgf.photo_group_id = pg.photo_group_id
+    WHERE pgf.family_id = map.family_id
+      AND pgf.photo_group_id = map.photo_group_id
 );
 
 SET @family_photo_photo_group_id_exists := (
@@ -93,10 +162,24 @@ EXECUTE add_family_photo_photo_group_id_stmt;
 DEALLOCATE PREPARE add_family_photo_photo_group_id_stmt;
 
 UPDATE family_photo fp
-JOIN photo_group_family pgf
-    ON pgf.family_id = fp.family_id
-SET fp.photo_group_id = pgf.photo_group_id
+JOIN tmp_family_default_photo_group_map map
+    ON map.family_id = fp.family_id
+SET fp.photo_group_id = map.photo_group_id
 WHERE fp.photo_group_id IS NULL;
+
+CREATE TEMPORARY TABLE tmp_abort_family_photo_unmapped_photo_group (
+    id TINYINT NOT NULL,
+    PRIMARY KEY (id)
+);
+
+INSERT INTO tmp_abort_family_photo_unmapped_photo_group (id)
+VALUES (1);
+
+INSERT INTO tmp_abort_family_photo_unmapped_photo_group (id)
+SELECT 1
+FROM family_photo
+WHERE photo_group_id IS NULL
+LIMIT 1;
 
 ALTER TABLE family_photo
     MODIFY photo_group_id BIGINT NOT NULL;
