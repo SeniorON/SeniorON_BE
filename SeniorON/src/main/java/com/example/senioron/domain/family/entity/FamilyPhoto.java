@@ -25,12 +25,12 @@ import java.time.*;
         },
         indexes = {
                 @Index(
-                        name = "idx_family_photo_family_created",
-                        columnList = "family_id, created_at, family_photo_id"
+                        name = "idx_family_photo_group_created",
+                        columnList = "photo_group_id, created_at, family_photo_id"
                 ),
                 @Index(
-                        name = "idx_family_photo_family_user",
-                        columnList = "family_id, users_id"
+                        name = "idx_family_photo_group_user",
+                        columnList = "photo_group_id, users_id"
                 )
         }
 )
@@ -46,8 +46,8 @@ public class FamilyPhoto extends BaseEntity {
     private Long familyPhotoId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "family_id")
-    private Family family;
+    @JoinColumn(name = "photo_group_id", nullable = false)
+    private PhotoGroup photoGroup;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "users_id")

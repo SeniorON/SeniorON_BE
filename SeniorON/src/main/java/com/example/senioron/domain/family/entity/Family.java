@@ -28,6 +28,10 @@ public class Family extends BaseEntity {
     @Builder.Default
     private List<FamilyMember> familyMembers = new ArrayList<>();
 
+    @OneToMany(mappedBy = "family")
+    @Builder.Default
+    private List<PhotoGroupFamily> photoGroupFamilies = new ArrayList<>();
+
     @OneToOne(mappedBy = "family", fetch = FetchType.LAZY)
     private Senior senior;
 }

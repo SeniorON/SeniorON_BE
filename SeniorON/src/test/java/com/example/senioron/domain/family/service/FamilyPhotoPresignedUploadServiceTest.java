@@ -6,6 +6,8 @@ import com.example.senioron.domain.family.dto.response.FamilyPhotoItemResponse;
 import com.example.senioron.domain.family.dto.response.FamilyPhotoUploadUrlResponse;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
+import com.example.senioron.domain.family.entity.PhotoGroup;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
@@ -56,6 +58,8 @@ class FamilyPhotoPresignedUploadServiceTest {
 
     private final FamilyPhotoPersistenceService persistenceService =
             mock(FamilyPhotoPersistenceService.class);
+    private final FamilyMemberRepository familyMemberRepository =
+            mock(FamilyMemberRepository.class);
 
     private FamilyPhotoService familyPhotoService;
 
@@ -66,7 +70,8 @@ class FamilyPhotoPresignedUploadServiceTest {
                 userRepository,
                 s3Service,
                 permissionService,
-                persistenceService
+                persistenceService,
+                familyMemberRepository
         );
     }
 
@@ -235,6 +240,7 @@ class FamilyPhotoPresignedUploadServiceTest {
     @Test
     void completesUploadedPhoto() {
         Family family = createFamily();
+        PhotoGroup photoGroup = createPhotoGroup();
         User child = createChild(family);
         String idempotencyKey =
                 "ee3641b6-7f46-4ca7-a666-17b008f6f486";
@@ -242,7 +248,7 @@ class FamilyPhotoPresignedUploadServiceTest {
                 createCompleteRequest("오늘 찍은 사진");
         FamilyPhoto savedPhoto = FamilyPhoto.builder()
                 .familyPhotoId(21L)
-                .family(family)
+                .photoGroup(photoGroup)
                 .user(child)
                 .imageKey(IMAGE_KEY)
                 .description(request.getDescription())
@@ -299,6 +305,7 @@ class FamilyPhotoPresignedUploadServiceTest {
     @Test
     void rejectsCompletionWhenUploadedObjectDoesNotExist() {
         Family family = createFamily();
+        PhotoGroup photoGroup = createPhotoGroup();
         User child = createChild(family);
         String idempotencyKey =
                 "98aec4cc-a658-43cd-830c-495e55c7147e";
@@ -381,6 +388,7 @@ class FamilyPhotoPresignedUploadServiceTest {
     @Test
     void returnsExistingPhotoForRepeatedIdempotencyKey() {
         Family family = createFamily();
+        PhotoGroup photoGroup = createPhotoGroup();
         User child = createChild(family);
         String idempotencyKey =
                 "02249e31-bc8b-4204-a846-ddd840ab09c6";
@@ -388,7 +396,7 @@ class FamilyPhotoPresignedUploadServiceTest {
                 createCompleteRequest("재요청 사진");
         FamilyPhoto existingPhoto = FamilyPhoto.builder()
                 .familyPhotoId(22L)
-                .family(family)
+                .photoGroup(photoGroup)
                 .user(child)
                 .imageKey(IMAGE_KEY)
                 .description("처음 저장된 설명")
@@ -425,6 +433,13 @@ class FamilyPhotoPresignedUploadServiceTest {
         return Family.builder()
                 .familyId(FAMILY_ID)
                 .familyCode("TEST01")
+                .build();
+    }
+
+    private PhotoGroup createPhotoGroup() {
+        return PhotoGroup.builder()
+                .id(30L)
+                .name("Family " + FAMILY_ID)
                 .build();
     }
 
