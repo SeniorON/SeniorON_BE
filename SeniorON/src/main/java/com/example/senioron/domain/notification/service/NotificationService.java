@@ -7,6 +7,8 @@ import com.example.senioron.domain.event.entity.Event;
 import com.example.senioron.domain.event.entity.EventType;
 import com.example.senioron.domain.event.entity.OutingPhase;
 import com.example.senioron.domain.event.util.FcmSender;
+import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.notification.dto.NotificationDispatchResult;
 import com.example.senioron.domain.notification.dto.NotificationDispatchTarget;
 import com.example.senioron.domain.notification.dto.response.NotificationHomeListResponse;
@@ -75,6 +77,7 @@ public class NotificationService {
     private final NotificationSettingRepository notificationSettingRepository;
     private final UserRepository userRepository;
     private final SeniorRepository seniorRepository;
+    private final FamilyMemberRepository familyMemberRepository;
     private final DeviceRepository deviceRepository;
     private final FcmSender fcmSender;
     private final MeterRegistry meterRegistry;
@@ -571,13 +574,15 @@ public class NotificationService {
         Senior senior = seniorRepository.findById(seniorId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SENIOR_NOT_FOUND));
 
-        if (user.getFamily() == null
-                || senior.getFamily() == null
-                || !user.getFamily().getFamilyId().equals(senior.getFamily().getFamilyId())) {
+        if (senior.getFamily() == null || !isMemberOfFamily(user, senior.getFamily())) {
             throw new BusinessException(ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED);
         }
 
         return senior;
+    }
+
+    private boolean isMemberOfFamily(User user, Family family) {
+        return familyMemberRepository.existsByUserAndFamily(user, family);
     }
 
     private List<DeviceStatus> findParentDeviceStatuses(List<User> parents) {

@@ -13,6 +13,7 @@ import com.example.senioron.domain.event.entity.Event;
 import com.example.senioron.domain.event.entity.EventType;
 import com.example.senioron.domain.event.util.FcmSender;
 import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.notification.dto.response.ParentDeviceStatusResponse;
 import com.example.senioron.domain.notification.entity.Notification;
 import com.example.senioron.domain.notification.entity.NotificationSetting;
@@ -50,6 +51,8 @@ class NotificationServiceTest {
             org.mockito.Mockito.mock(UserRepository.class);
     private final SeniorRepository seniorRepository =
             org.mockito.Mockito.mock(SeniorRepository.class);
+    private final FamilyMemberRepository familyMemberRepository =
+            org.mockito.Mockito.mock(FamilyMemberRepository.class);
     private final DeviceRepository deviceRepository =
             org.mockito.Mockito.mock(DeviceRepository.class);
     private final FcmSender fcmSender =
@@ -69,6 +72,7 @@ class NotificationServiceTest {
                 notificationSettingRepository,
                 userRepository,
                 seniorRepository,
+                familyMemberRepository,
                 deviceRepository,
                 fcmSender,
                 meterRegistry
@@ -94,6 +98,7 @@ class NotificationServiceTest {
 
         given(userRepository.findById(CHILD_ID)).willReturn(Optional.of(child));
         given(seniorRepository.findById(SENIOR_ID)).willReturn(Optional.of(senior));
+        given(familyMemberRepository.existsByUserAndFamily(child, family)).willReturn(true);
         given(notificationSettingRepository.findById(PARENT_ID))
                 .willReturn(Optional.of(NotificationSetting.builder()
                         .user(parent)

@@ -16,13 +16,19 @@ import com.example.senioron.domain.event.repository.EventRepository;
 import com.example.senioron.domain.event.util.FcmSender;
 import com.example.senioron.domain.event.util.GeocodingClient;
 import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyMember;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.notification.repository.NotificationRepository;
+import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
+import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -57,6 +63,8 @@ class SosAddressLookupIntegrationTest {
     @Autowired private NotificationRepository notificationRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private FamilyRepository familyRepository;
+    @Autowired private FamilyMemberRepository familyMemberRepository;
+    @Autowired private SeniorRepository seniorRepository;
     @Autowired private DeviceRepository deviceRepository;
     @Autowired private TransactionTemplate transactionTemplate;
     @Autowired @Qualifier("sosAddressExecutor") private ThreadPoolTaskExecutor addressExecutor;
@@ -76,6 +84,24 @@ class SosAddressLookupIntegrationTest {
                     .loginId("address-parent").name("부모님").role(Role.PARENT).family(family).build());
             User child = userRepository.save(User.builder()
                     .loginId("address-child").name("자녀").role(Role.CHILD).family(family).build());
+            familyMemberRepository.save(FamilyMember.builder()
+                    .user(parent)
+                    .family(family)
+                    .managerType(ManagerType.NONE)
+                    .build());
+            familyMemberRepository.save(FamilyMember.builder()
+                    .user(child)
+                    .family(family)
+                    .managerType(ManagerType.PRIMARY)
+                    .build());
+            seniorRepository.save(Senior.builder()
+                    .name("부모님")
+                    .birth(LocalDate.of(1950, 1, 1))
+                    .phoneNumber("01012345678")
+                    .family(family)
+                    .registeredBy(child)
+                    .parentUser(parent)
+                    .build());
             deviceRepository.save(Device.builder().user(child).deviceIdentifier("address-device")
                     .deviceToken("child-token").connectionStatus(DeviceStatus.ONLINE).build());
             return parent;
@@ -94,6 +120,8 @@ class SosAddressLookupIntegrationTest {
             notificationRepository.deleteAllInBatch();
             eventRepository.deleteAllInBatch();
             deviceRepository.deleteAllInBatch();
+            seniorRepository.deleteAllInBatch();
+            familyMemberRepository.deleteAllInBatch();
             userRepository.deleteAllInBatch();
             familyRepository.deleteAllInBatch();
         });

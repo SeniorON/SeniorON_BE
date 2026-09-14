@@ -6,6 +6,8 @@ import com.example.senioron.domain.device.entity.Device;
 import com.example.senioron.domain.device.entity.DeviceStatus;
 import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyMember;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.user.entity.Role;
@@ -40,6 +42,9 @@ class DeviceServiceTest {
 
     @Autowired
     private FamilyRepository familyRepository;
+
+    @Autowired
+    private FamilyMemberRepository familyMemberRepository;
 
     private DeviceService deviceService;
 
@@ -146,11 +151,13 @@ class DeviceServiceTest {
     void homeLocationUsesSeniorLinkedToCurrentParentInsteadOfFirstSeniorInFamily() {
         Family family = familyRepository.saveAndFlush(Family.builder()
                 .seniorCode("family-" + UUID.randomUUID()).build());
+        Family otherFamily = familyRepository.saveAndFlush(Family.builder()
+                .seniorCode("family-" + UUID.randomUUID()).build());
         User child = saveUser("child-owner", Role.CHILD, family);
         User currentParent = saveUser("current-parent", Role.PARENT, family);
-        User otherParent = saveUser("other-parent", Role.PARENT, family);
+        User otherParent = saveUser("other-parent", Role.PARENT, otherFamily);
 
-        seniorRepository.saveAndFlush(senior("first-senior", family, child, otherParent, 37.1, 127.1));
+        seniorRepository.saveAndFlush(senior("first-senior", otherFamily, child, otherParent, 37.1, 127.1));
         seniorRepository.saveAndFlush(senior("linked-senior", family, child, currentParent, 37.2, 127.2));
 
         var response = deviceService().getHomeLocation(currentParent);
@@ -180,7 +187,7 @@ class DeviceServiceTest {
     private User saveUser(String prefix, Role role, Family family) {
         String unique = UUID.randomUUID().toString();
 
-        return userRepository.saveAndFlush(
+        User user = userRepository.saveAndFlush(
                 User.builder()
                         .loginId(prefix + "-" + unique)
                         .email(prefix + "-" + unique + "@test.com")
@@ -190,5 +197,18 @@ class DeviceServiceTest {
                         .family(family)
                         .build()
         );
+
+        if (family != null) {
+            familyMemberRepository.saveAndFlush(
+                    FamilyMember.builder()
+                            .user(user)
+                            .family(family)
+                            .managerType(role == Role.CHILD ? ManagerType.PRIMARY : ManagerType.NONE)
+                            .build()
+            );
+            user.updateFamily(family);
+        }
+
+        return user;
     }
 }
