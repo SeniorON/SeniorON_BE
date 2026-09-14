@@ -1,5 +1,7 @@
-package com.example.senioron.domain.senior.entity;
+package com.example.senioron.domain.family.entity;
 
+import com.example.senioron.common.entity.BaseEntity;
+import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -25,34 +27,32 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @Builder
 @Table(
-        name = "user_seniors",
+        name = "family_member",
         uniqueConstraints = @UniqueConstraint(
-                name = "uk_user_senior",
-                columnNames = {"users_id", "senior_id"}
+                name = "uk_family_member_user_family",
+                columnNames = {"users_id", "family_id"}
         )
 )
-public class UserSenior {
+public class FamilyMember extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long userSeniorId;
+    @Column(name = "family_member_id")
+    private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "users_id", nullable = false)
     private User user;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "senior_id", nullable = false)
-    private Senior senior;
+    @JoinColumn(name = "family_id", nullable = false)
+    private Family family;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private SeniorRelation relation;
+    private ManagerType managerType;
 
-    private String customRelation;
-
-    public void updateRelation(SeniorRelation relation, String customRelation) {
-        this.relation = relation;
-        this.customRelation = customRelation;
+    public void updateManagerType(ManagerType managerType) {
+        this.managerType = managerType;
     }
 }

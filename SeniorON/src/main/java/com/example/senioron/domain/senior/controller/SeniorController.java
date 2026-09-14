@@ -29,7 +29,7 @@ public class SeniorController {
 
     private final SeniorService seniorService;
 
-    @Operation(summary = "내가 관리 중인 시니어", description = "현재 로그인한 사용자가 UserSenior 관계로 연결된 시니어 목록을 조회합니다.")
+    @Operation(summary = "내가 관리 중인 시니어", description = "현재 로그인한 사용자의 가족 멤버십으로 연결된 시니어 목록을 조회합니다.")
     @GetMapping("/me")
     public Response<List<ManagedSeniorResponse>> getManagedSeniors(
             @AuthenticationPrincipal User user

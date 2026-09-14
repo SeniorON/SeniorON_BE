@@ -10,15 +10,14 @@ import com.example.senioron.domain.user.dto.request.UserWithdrawalRequest;
 import com.example.senioron.domain.user.dto.response.*;
 import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
-import com.example.senioron.domain.senior.entity.UserSenior;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.entity.RefreshToken;
 import com.example.senioron.domain.user.entity.SignupEmailVerificationCode;
 import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.inactivity.service.InactivitySettingService;
-import com.example.senioron.domain.senior.repository.UserSeniorRepository;
 import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.User;
@@ -62,7 +61,7 @@ public class UserService {
     private final RefreshTokenService refreshTokenService;
     private final DeviceRepository deviceRepository;
     private final SeniorRepository seniorRepository;
-    private final UserSeniorRepository userSeniorRepository;
+    private final FamilyMemberRepository familyMemberRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final InactivitySettingService inactivitySettingService;
@@ -258,19 +257,13 @@ public class UserService {
         SeniorRelation relation = null;
 
         if (hasFamily) {
-            Optional<UserSenior> userSenior =
-                    userSeniorRepository.findFirstByUserAndSenior_FamilyOrderByUserSeniorIdAsc(user, family);
-            Optional<Senior> familySenior = userSenior
-                    .map(UserSenior::getSenior)
-                    .or(() -> seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(family));
+            Optional<Senior> familySenior =
+                    seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(family);
 
             seniorId = familySenior
                     .map(Senior::getSeniorId)
                     .orElse(null);
             seniorProfileCompleted = familySenior.isPresent();
-            relation = userSenior
-                    .map(UserSenior::getRelation)
-                    .orElse(null);
         }
 
         boolean onboardingCompleted =
@@ -352,7 +345,7 @@ public class UserService {
         refreshTokenRepository.deleteAllByUser(user);
         deviceRepository.deleteAllByUser(user);
         socialAccountRepository.deleteAllByUser(user);
-        userSeniorRepository.deleteAllByUser(user);
+        familyMemberRepository.deleteAllByUser(user);
 
         anonymizeAndWithdraw(user);
     }

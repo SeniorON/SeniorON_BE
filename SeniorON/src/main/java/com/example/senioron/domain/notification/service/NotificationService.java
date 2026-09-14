@@ -20,9 +20,8 @@ import com.example.senioron.domain.notification.entity.NotificationSettingType;
 import com.example.senioron.domain.notification.entity.NotificationType;
 import com.example.senioron.domain.notification.repository.NotificationRepository;
 import com.example.senioron.domain.notification.repository.NotificationSettingRepository;
-import com.example.senioron.domain.senior.entity.UserSenior;
 import com.example.senioron.domain.senior.entity.Senior;
-import com.example.senioron.domain.senior.repository.UserSeniorRepository;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
@@ -75,7 +74,7 @@ public class NotificationService {
     private final NotificationRepository notificationRepository;
     private final NotificationSettingRepository notificationSettingRepository;
     private final UserRepository userRepository;
-    private final UserSeniorRepository userSeniorRepository;
+    private final SeniorRepository seniorRepository;
     private final DeviceRepository deviceRepository;
     private final FcmSender fcmSender;
     private final MeterRegistry meterRegistry;
@@ -215,11 +214,8 @@ public class NotificationService {
             receivers = userRepository.findByFamilyAndUsersIdNotAndRole(
                     sender.getFamily(), sender.getUsersId(), Role.CHILD);
         } else {
-            receivers = userSeniorRepository
-                    .findAllBySeniorAndUser_RoleOrderByUserSeniorIdAsc(senior, Role.CHILD)
-                    .stream()
-                    .map(UserSenior::getUser)
-                    .toList();
+            receivers = userRepository.findByFamilyAndUsersIdNotAndRole(
+                    senior.getFamily(), sender.getUsersId(), Role.CHILD);
         }
         if (receivers.isEmpty()) {
             log.warn("수신 가능한 자녀가 없어 알림 대상이 없습니다. eventType={}, senderId={}",
@@ -487,8 +483,8 @@ public class NotificationService {
     public NotificationHomeListResponse getHomeSettings(Long userId, Long seniorId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        UserSenior userSenior = resolveManagedSenior(user, seniorId);
-        User parent = resolveManagedSeniorParent(userSenior);
+        Senior senior = resolveManagedSenior(user, seniorId);
+        User parent = resolveManagedSeniorParent(senior);
         NotificationSetting setting = notificationSettingRepository.findById(parent.getUsersId())
                 .orElseGet(() -> createDefaultSettingInternal(parent));
 
@@ -553,8 +549,8 @@ public class NotificationService {
         User child = userRepository.findById(childUserId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        UserSenior userSenior = resolveManagedSenior(child, seniorId);
-        User parent = userSenior.getSenior().getParentUser();
+        Senior senior = resolveManagedSenior(child, seniorId);
+        User parent = senior.getParentUser();
         boolean online = parent != null
                 && isAnyDeviceOnline(findParentDeviceStatuses(List.of(parent)));
 
@@ -563,17 +559,25 @@ public class NotificationService {
                 .build();
     }
 
-    private User resolveManagedSeniorParent(UserSenior userSenior) {
-        User parent = userSenior.getSenior().getParentUser();
+    private User resolveManagedSeniorParent(Senior senior) {
+        User parent = senior.getParentUser();
         if (parent == null) {
             throw new BusinessException(ErrorCode.SENIOR_PARENT_USER_NOT_FOUND);
         }
         return parent;
     }
 
-    private UserSenior resolveManagedSenior(User user, Long seniorId) {
-        return userSeniorRepository.findByUserAndSenior_SeniorId(user, seniorId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED));
+    private Senior resolveManagedSenior(User user, Long seniorId) {
+        Senior senior = seniorRepository.findById(seniorId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SENIOR_NOT_FOUND));
+
+        if (user.getFamily() == null
+                || senior.getFamily() == null
+                || !user.getFamily().getFamilyId().equals(senior.getFamily().getFamilyId())) {
+            throw new BusinessException(ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED);
+        }
+
+        return senior;
     }
 
     private List<DeviceStatus> findParentDeviceStatuses(List<User> parents) {

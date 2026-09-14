@@ -1,6 +1,7 @@
 package com.example.senioron.domain.senior.service;
 
 import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.senior.dto.request.SeniorCreateRequest;
 import com.example.senioron.domain.senior.dto.request.SeniorParentLinkRequest;
@@ -13,9 +14,7 @@ import com.example.senioron.domain.senior.dto.response.SeniorParentLinkResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorRelationUpdateResponse;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
-import com.example.senioron.domain.senior.entity.UserSenior;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
-import com.example.senioron.domain.senior.repository.UserSeniorRepository;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
@@ -28,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -35,7 +35,6 @@ import java.util.Objects;
 public class SeniorService {
 
     private final SeniorRepository seniorRepository;
-    private final UserSeniorRepository userSeniorRepository;
     private final UserRepository userRepository;
     private final FamilyRepository familyRepository;
 
@@ -44,8 +43,14 @@ public class SeniorService {
             throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
         }
 
-        return userSeniorRepository.findAllByUserOrderByUserSeniorIdAsc(user)
+        User foundUser = userRepository.findByIdWithFamily(user.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        return foundUser.getFamilyMembers()
                 .stream()
+                .map(FamilyMember::getFamily)
+                .map(seniorRepository::findFirstByFamilyOrderBySeniorIdAsc)
+                .flatMap(Optional::stream)
                 .map(ManagedSeniorResponse::from)
                 .toList();
     }
@@ -91,27 +96,11 @@ public class SeniorService {
 
         validateSameFamily(user, senior);
 
-        if (userSeniorRepository.existsByUserAndSenior(user, senior)) {
-            throw new BusinessException(ErrorCode.USER_SENIOR_ALREADY_EXISTS);
-        }
-
-        UserSenior userSenior = UserSenior.builder()
-                .user(user)
-                .senior(senior)
-                .relation(request.relation())
-                .customRelation(resolveCustomRelation(
-                        request.relation(),
-                        request.customRelation()
-                ))
-                .build();
-
-        try {
-            return SeniorRelationUpdateResponse.from(
-                    userSeniorRepository.saveAndFlush(userSenior)
-            );
-        } catch (DataIntegrityViolationException e) {
-            throw new BusinessException(ErrorCode.USER_SENIOR_ALREADY_EXISTS);
-        }
+        return SeniorRelationUpdateResponse.from(
+                senior.getSeniorId(),
+                request.relation(),
+                resolveCustomRelation(request.relation(), request.customRelation())
+        );
     }
 
     @Transactional
@@ -180,16 +169,11 @@ public class SeniorService {
                 .build();
 
         Senior savedSenior = saveSeniorOrThrowAlreadyExists(senior);
-        UserSenior userSenior = userSeniorRepository.save(
-                UserSenior.builder()
-                        .user(user)
-                        .senior(savedSenior)
-                        .relation(request.relation())
-                        .customRelation(resolveCustomRelation(request))
-                        .build()
+        return SeniorCreateResponse.from(
+                savedSenior,
+                request.relation(),
+                resolveCustomRelation(request)
         );
-
-        return SeniorCreateResponse.from(savedSenior, userSenior);
     }
 
     private Senior saveSeniorOrThrowAlreadyExists(Senior senior) {
@@ -226,18 +210,10 @@ public class SeniorService {
                         request.customRelation()
                 );
 
-        UserSenior userSenior = userSeniorRepository.findByUserAndSenior(lockedUser, senior)
-                .orElseGet(() -> UserSenior.builder()
-                        .user(lockedUser)
-                        .senior(senior)
-                        .relation(request.relation())
-                        .customRelation(resolvedCustomRelation)
-                        .build());
-
-        userSenior.updateRelation(request.relation(), resolvedCustomRelation);
-
         return SeniorRelationUpdateResponse.from(
-                userSeniorRepository.save(userSenior)
+                senior.getSeniorId(),
+                request.relation(),
+                resolvedCustomRelation
         );
     }
 

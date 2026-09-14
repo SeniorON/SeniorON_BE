@@ -36,8 +36,8 @@ public class Senior {
 
     private Double longitude;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "family_id", nullable = false)
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "family_id", nullable = false, unique = true)
     private Family family;
 
     /*

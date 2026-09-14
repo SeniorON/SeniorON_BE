@@ -1,9 +1,12 @@
 package com.example.senioron.domain.family.entity;
 
+import com.example.senioron.domain.senior.entity.Senior;
 import jakarta.persistence.*;
-import java.time.*;
 import lombok.*;
 import com.example.senioron.common.entity.BaseEntity;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "family")
@@ -19,4 +22,12 @@ public class Family extends BaseEntity {
     private Long familyId;
 
     @Column(unique = true)
-    private String familyCode;}
+    private String familyCode;
+
+    @OneToMany(mappedBy = "family")
+    @Builder.Default
+    private List<FamilyMember> familyMembers = new ArrayList<>();
+
+    @OneToOne(mappedBy = "family", fetch = FetchType.LAZY)
+    private Senior senior;
+}

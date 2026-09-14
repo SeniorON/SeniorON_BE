@@ -2,16 +2,18 @@ package com.example.senioron.domain.user.entity;
 
 import com.example.senioron.common.entity.BaseEntity;
 import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyMember;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 
 @Entity
-@Table(name = "users", indexes = {
-        @Index(name = "idx_users_family_role", columnList = "family_id, role")
-})
+@Table(name = "users")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
@@ -23,8 +25,11 @@ public class User extends BaseEntity {
     @Column(name = "users_id")
     private Long usersId;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "family_id")
+    @OneToMany(mappedBy = "user")
+    @Builder.Default
+    private List<FamilyMember> familyMembers = new ArrayList<>();
+
+    @Transient
     private Family family;
 
     @Column(unique = true)
@@ -46,7 +51,7 @@ public class User extends BaseEntity {
     @Enumerated(EnumType.STRING)
     private Role role;
 
-    @Enumerated(EnumType.STRING)
+    @Transient
     private ManagerType managerType;
 
     @Enumerated(EnumType.STRING)
@@ -86,6 +91,29 @@ public class User extends BaseEntity {
     public void removeFromFamily() {
         this.family = null;
         this.managerType = null;
+        this.familyMembers.clear();
+    }
+
+    public Family getFamily() {
+        if (family != null) {
+            return family;
+        }
+
+        return familyMembers.stream()
+                .min(Comparator.comparing(FamilyMember::getId))
+                .map(FamilyMember::getFamily)
+                .orElse(null);
+    }
+
+    public ManagerType getManagerType() {
+        if (managerType != null) {
+            return managerType;
+        }
+
+        return familyMembers.stream()
+                .min(Comparator.comparing(FamilyMember::getId))
+                .map(FamilyMember::getManagerType)
+                .orElse(null);
     }
 
     public void updateName(String name) {
