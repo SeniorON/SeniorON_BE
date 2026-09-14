@@ -3,7 +3,8 @@ package com.example.senioron.domain.home.service;
 import com.example.senioron.domain.device.entity.DeviceStatus;
 import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.device.entity.Device;
-import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyMember;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.home.dto.request.HomeButtonSaveRequest;
 import com.example.senioron.domain.home.dto.request.HomeFontSizeUpdateRequest;
@@ -67,6 +68,7 @@ public class HomeService {
     private final SeniorRepository seniorRepository;
     private final HomeSettingRepository homeSettingRepository;
     private final FamilyRepository familyRepository;
+    private final FamilyMemberRepository familyMemberRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private static final long DEVICE_OFFLINE_THRESHOLD_MINUTES = 11;
     private final HomeWebSocketService homeWebSocketService;
@@ -303,6 +305,7 @@ public class HomeService {
             SeniorRepository seniorRepository,
             HomeSettingRepository homeSettingRepository,
             FamilyRepository familyRepository,
+            FamilyMemberRepository familyMemberRepository,
             RefreshTokenRepository refreshTokenRepository,
             HomeWebSocketService homeWebSocketService
     ) {
@@ -314,6 +317,7 @@ public class HomeService {
         this.seniorRepository = seniorRepository;
         this.homeSettingRepository = homeSettingRepository;
         this.familyRepository = familyRepository;
+        this.familyMemberRepository = familyMemberRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.homeWebSocketService = homeWebSocketService;
     }
@@ -436,12 +440,6 @@ public class HomeService {
             );
         }
 
-        if (currentUser.getFamily() == null) {
-            throw new BusinessException(
-                    ErrorCode.FAMILY_NOT_CONNECTED
-            );
-        }
-
         String resolvedCustomRelation =
                 resolveCustomRelation(
                         request.relation(),
@@ -489,13 +487,13 @@ public class HomeService {
 
         User user = getCurrentUser();
 
-        validatePrimaryManager(user);
-
         Senior senior =
-                getManagedSenior(
-                        user,
-                        seniorId
-                );
+                getManagedSenior(user, seniorId);
+
+        validatePrimaryManager(
+                user,
+                senior
+        );
 
         User seniorUser =
                 getSeniorUser(
@@ -605,13 +603,13 @@ public class HomeService {
 
         User user = getCurrentUser();
 
-        validatePrimaryManager(user);
-
         Senior senior =
-                getManagedSenior(
-                        user,
-                        seniorId
-                );
+                getManagedSenior(user, seniorId);
+
+        validatePrimaryManager(
+                user,
+                senior
+        );
 
         User seniorUser =
                 getSeniorUser(
@@ -940,13 +938,13 @@ public class HomeService {
 
         User user = getCurrentUser();
 
-        validatePrimaryManager(user);
-
         Senior senior =
-                getManagedSenior(
-                        user,
-                        seniorId
-                );
+                getManagedSenior(user, seniorId);
+
+        validatePrimaryManager(
+                user,
+                senior
+        );
 
         User seniorUser =
                 getSeniorUser(senior);
@@ -1173,84 +1171,6 @@ public class HomeService {
         );
     }
 
-    private User resolvePrimaryChild(
-            User currentUser
-    ) {
-
-        if (currentUser.getManagerType()
-                == ManagerType.PRIMARY) {
-
-            return currentUser;
-        }
-
-        return findPrimaryChild(currentUser);
-    }
-
-    private User findPrimaryChild(
-            User currentUser
-    ) {
-
-        if (currentUser.getFamily() == null) {
-            throw new BusinessException(
-                    ErrorCode.FAMILY_NOT_CONNECTED
-            );
-        }
-
-        List<User> children =
-                userRepository
-                        .findByFamilyAndUsersIdNotAndRole(
-                                currentUser.getFamily(),
-                                currentUser.getUsersId(),
-                                Role.CHILD
-                        );
-
-        return children.stream()
-                .filter(child ->
-                        child.getManagerType()
-                                == ManagerType.PRIMARY
-                )
-                .findFirst()
-                .orElseThrow(() ->
-                        new BusinessException(
-                                ErrorCode.PRIMARY_MANAGER_NOT_FOUND
-                        )
-                );
-    }
-
-    private Optional<User> findSeniorUser(
-            User currentUser
-    ) {
-
-        if (currentUser.getFamily() == null) {
-            return Optional.empty();
-        }
-
-        List<User> seniors =
-                userRepository
-                        .findByFamilyAndUsersIdNotAndRole(
-                                currentUser.getFamily(),
-                                currentUser.getUsersId(),
-                                Role.PARENT
-                        );
-
-        return seniors.stream()
-                .findFirst();
-    }
-
-    private Optional<Senior> findFamilySenior(
-            User user
-    ) {
-
-        if (user.getFamily() == null) {
-            return Optional.empty();
-        }
-
-        return seniorRepository
-                .findFirstByFamilyOrderBySeniorIdAsc(
-                        user.getFamily()
-                );
-    }
-
     private HomeResponse.ConnectionResponse createConnectionResponse(
             Optional<Device> latestDevice
     ) {
@@ -1362,43 +1282,27 @@ public class HomeService {
         }
     }
 
-    private void validateSameFamily(
+    private FamilyMember getFamilyMember(
             User user,
             Senior senior
     ) {
 
-        if (user.getFamily() == null
-                || senior.getFamily() == null
-                || !user.getFamily()
-                .getFamilyId()
-                .equals(
-                        senior.getFamily()
-                                .getFamilyId()
-                )) {
-
+        if (senior.getFamily() == null) {
             throw new BusinessException(
                     ErrorCode.FORBIDDEN
             );
         }
-    }
 
-    private void validateDeviceConnected(
-            User child
-    ) {
-        if (child.getFamily() == null) {
-            throw new BusinessException(
-                    ErrorCode.FAMILY_NOT_CONNECTED
-            );
-        }
-
-        Optional<User> seniorUser =
-                findSeniorUser(child);
-
-        if (isDeviceDisconnected(seniorUser)) {
-            throw new BusinessException(
-                    ErrorCode.DEVICE_NOT_CONNECTED
-            );
-        }
+        return familyMemberRepository
+                .findByUserAndFamily(
+                        user,
+                        senior.getFamily()
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.FORBIDDEN
+                        )
+                );
     }
 
     private void validateSeniorDeviceConnected(
@@ -1421,11 +1325,20 @@ public class HomeService {
     }
 
     private void validatePrimaryManager(
-            User user
+            User user,
+            Senior senior
     ) {
 
-        if (user.getRole() != Role.CHILD
-                || user.getManagerType()
+        if (user.getRole() != Role.CHILD) {
+            throw new BusinessException(
+                    ErrorCode.HOME_SETTING_ACCESS_DENIED
+            );
+        }
+
+        FamilyMember familyMember =
+                getFamilyMember(user, senior);
+
+        if (familyMember.getManagerType()
                 != ManagerType.PRIMARY) {
 
             throw new BusinessException(
@@ -1468,7 +1381,7 @@ public class HomeService {
                         )
                 );
 
-        validateSameFamily(child, senior);
+        getFamilyMember(child, senior);
 
         return senior;
     }
