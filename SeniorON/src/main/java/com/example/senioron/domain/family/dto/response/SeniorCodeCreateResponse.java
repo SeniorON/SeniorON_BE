@@ -5,10 +5,10 @@ import lombok.Getter;
 
 @Getter
 @Builder
-public class FamilyCodeCreateResponse {
+public class SeniorCodeCreateResponse {
 
     private Long familyId;
 
-    private String familyCode;
+    private String seniorCode;
 
 }

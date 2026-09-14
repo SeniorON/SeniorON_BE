@@ -69,7 +69,7 @@ class DeviceServiceTest {
     void updateDeviceStatusSavesAllDeviceStatusFields() {
         Family family = familyRepository.saveAndFlush(
                 Family.builder()
-                        .familyCode("family-" + UUID.randomUUID())
+                        .seniorCode("family-" + UUID.randomUUID())
                         .build()
         );
 
@@ -145,7 +145,7 @@ class DeviceServiceTest {
     @Test
     void homeLocationUsesSeniorLinkedToCurrentParentInsteadOfFirstSeniorInFamily() {
         Family family = familyRepository.saveAndFlush(Family.builder()
-                .familyCode("family-" + UUID.randomUUID()).build());
+                .seniorCode("family-" + UUID.randomUUID()).build());
         User child = saveUser("child-owner", Role.CHILD, family);
         User currentParent = saveUser("current-parent", Role.PARENT, family);
         User otherParent = saveUser("other-parent", Role.PARENT, family);

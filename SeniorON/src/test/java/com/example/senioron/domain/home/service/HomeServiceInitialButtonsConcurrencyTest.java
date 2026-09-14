@@ -68,7 +68,7 @@ class HomeServiceInitialButtonsConcurrencyTest {
          */
         Family family = familyRepository.saveAndFlush(
                 Family.builder()
-                        .familyCode("CONCURRENCY-TEST-FAMILY")
+                        .seniorCode("CONCURRENCY-TEST-FAMILY")
                         .build()
         );
 

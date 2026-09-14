@@ -21,8 +21,8 @@ public class Family extends BaseEntity {
     @Column(name="family_id")
     private Long familyId;
 
-    @Column(unique = true)
-    private String familyCode;
+    @Column(name = "senior_code", unique = true)
+    private String seniorCode;
 
     @OneToMany(mappedBy = "family")
     @Builder.Default

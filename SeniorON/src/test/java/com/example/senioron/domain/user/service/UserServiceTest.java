@@ -353,7 +353,7 @@ class UserServiceTest {
     void getOnboardingStatusReturnsSeniorWithoutCompletionWhenRelationIsMissing() {
         Family family = Family.builder()
                 .familyId(1L)
-                .familyCode("ABC123")
+                .seniorCode("ABC123")
                 .build();
         User user = createChild(1L, family, ManagerType.SUB);
         Senior senior = createSenior(123L, family, user);
@@ -374,7 +374,7 @@ class UserServiceTest {
     void getOnboardingStatusReturnsCompletedStateWhenRequiredValuesExist() {
         Family family = Family.builder()
                 .familyId(1L)
-                .familyCode("ABC123")
+                .seniorCode("ABC123")
                 .build();
         User user = createChild(1L, family, ManagerType.PRIMARY);
         Senior senior = createSenior(123L, family, user);

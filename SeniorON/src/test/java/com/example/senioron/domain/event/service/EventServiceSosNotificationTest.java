@@ -95,10 +95,10 @@ class EventServiceSosNotificationTest {
     @Test
     void sosWithChildDoesNotDispatchBeforeOuterCommit() {
         Family family = familyRepository.save(Family.builder()
-                .familyCode("SOS-TEST-" + System.nanoTime())
+                .seniorCode("SOS-TEST-" + System.nanoTime())
                 .build());
         Family unrelatedFamily = familyRepository.save(Family.builder()
-                .familyCode("SOS-UNRELATED-" + System.nanoTime())
+                .seniorCode("SOS-UNRELATED-" + System.nanoTime())
                 .build());
 
         User senior = userRepository.save(User.builder()
@@ -171,10 +171,10 @@ class EventServiceSosNotificationTest {
     @Test
     void notificationListContainsOnlyEventsForSelectedSenior() {
         Family familyA = familyRepository.save(Family.builder()
-                .familyCode("SOS-FILTER-" + System.nanoTime())
+                .seniorCode("SOS-FILTER-" + System.nanoTime())
                 .build());
         Family familyB = familyRepository.save(Family.builder()
-                .familyCode("SOS-FILTER-B-" + System.nanoTime())
+                .seniorCode("SOS-FILTER-B-" + System.nanoTime())
                 .build());
         User child = saveUser("filter-child", "자녀", Role.CHILD);
         User parentA = saveUser("filter-parent-a", "시니어A", Role.PARENT);

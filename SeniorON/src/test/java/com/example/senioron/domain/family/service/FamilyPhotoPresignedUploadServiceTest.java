@@ -79,7 +79,7 @@ class FamilyPhotoPresignedUploadServiceTest {
     void createsPresignedUploadUrlForChild() {
         Family family = Family.builder()
                 .familyId(FAMILY_ID)
-                .familyCode("TEST01")
+                .seniorCode("TEST01")
                 .build();
 
         User child = User.builder()
@@ -140,7 +140,7 @@ class FamilyPhotoPresignedUploadServiceTest {
     void rejectsPresignedUploadUrlForParent() {
         Family family = Family.builder()
                 .familyId(FAMILY_ID)
-                .familyCode("TEST01")
+                .seniorCode("TEST01")
                 .build();
 
         User parent = User.builder()
@@ -180,7 +180,7 @@ class FamilyPhotoPresignedUploadServiceTest {
     void rejectsImageKeyOwnedByAnotherUser() {
         Family family = Family.builder()
                 .familyId(FAMILY_ID)
-                .familyCode("TEST01")
+                .seniorCode("TEST01")
                 .build();
 
         User child = User.builder()
@@ -432,7 +432,7 @@ class FamilyPhotoPresignedUploadServiceTest {
     private Family createFamily() {
         return Family.builder()
                 .familyId(FAMILY_ID)
-                .familyCode("TEST01")
+                .seniorCode("TEST01")
                 .build();
     }
 

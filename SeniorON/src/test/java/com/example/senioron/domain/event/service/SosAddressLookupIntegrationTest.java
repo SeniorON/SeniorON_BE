@@ -71,7 +71,7 @@ class SosAddressLookupIntegrationTest {
     @BeforeEach
     void setUp() {
         senior = transactionTemplate.execute(status -> {
-            Family family = familyRepository.save(Family.builder().familyCode("SOS-ADDRESS").build());
+            Family family = familyRepository.save(Family.builder().seniorCode("SOS-ADDRESS").build());
             User parent = userRepository.save(User.builder()
                     .loginId("address-parent").name("부모님").role(Role.PARENT).family(family).build());
             User child = userRepository.save(User.builder()

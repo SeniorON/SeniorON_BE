@@ -52,7 +52,7 @@ class UserWithdrawalRepositoryTest {
     @Test
     void withdrawnUserKeepsRowButReleasesUniqueIdentifiersAndRelationships() {
         Family family = familyRepository.saveAndFlush(Family.builder()
-                .familyCode("ABCD-1234")
+                .seniorCode("ABCD-1234")
                 .build());
         User user = userRepository.saveAndFlush(createUser("old-login", "old@example.com", family));
         familyMemberRepository.saveAndFlush(FamilyMember.builder()

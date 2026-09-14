@@ -46,21 +46,21 @@ public class FamilyService {
     private static final int RECENT_UPLOADER_COUNT = 3;
     private static final int RECENT_PHOTO_COUNT = 4;
 
-    // 가족 생성 및 공유코드 발급 서비스
-    public FamilyCodeCreateResponse createFamily(User principal) {
+    // 가족 생성 및 시니어 코드 발급 서비스
+    public SeniorCodeCreateResponse createFamily(User principal) {
         User user = userRepository.findById(principal.getUsersId())
                 .orElseThrow(() ->
                         new BusinessException(ErrorCode.USER_NOT_FOUND)
                 );
 
         if (user.getRole() != Role.CHILD) {
-            throw new BusinessException(ErrorCode.FAMILY_CODE_CREATE_PARENT_FORBIDDEN);
+            throw new BusinessException(ErrorCode.SENIOR_CODE_CREATE_PARENT_FORBIDDEN);
         }
 
-        String familyCode = generateUniqueFamilyCode();
+        String seniorCode = generateUniqueSeniorCode();
 
         Family family = Family.builder()
-                .familyCode(familyCode)
+                .seniorCode(seniorCode)
                 .build();
 
         Family savedFamily = familyRepository.save(family);
@@ -68,25 +68,25 @@ public class FamilyService {
         createFamilyMember(user, savedFamily, ManagerType.PRIMARY);
         createDefaultPhotoGroup(savedFamily);
 
-        return FamilyCodeCreateResponse.builder()
+        return SeniorCodeCreateResponse.builder()
                 .familyId(savedFamily.getFamilyId())
-                .familyCode(savedFamily.getFamilyCode())
+                .seniorCode(savedFamily.getSeniorCode())
                 .build();
     }
 
-    // 중복되지 않는 가족 공유코드 생성
-    private String generateUniqueFamilyCode() {
+    // 중복되지 않는 시니어 코드 생성
+    private String generateUniqueSeniorCode() {
         String code;
 
         do {
-            code = generateFamilyCode();
-        } while (familyRepository.existsByFamilyCode(code));
+            code = generateSeniorCode();
+        } while (familyRepository.existsBySeniorCode(code));
 
         return code;
     }
 
-    // 랜덤 가족 공유코드 생성
-    private String generateFamilyCode() {
+    // 랜덤 시니어 코드 생성
+    private String generateSeniorCode() {
         String raw = UUID.randomUUID()
                 .toString()
                 .replace("-", "")
@@ -96,7 +96,7 @@ public class FamilyService {
         return raw.substring(0, 4) + "-" + raw.substring(4, 8);
     }
 
-    // 공유코드로 가족 참여 메소드
+    // 시니어 코드로 가족 참여 메소드
     public FamilyJoinResponse joinFamily(
             User principal,
             FamilyJoinRequest request
@@ -106,9 +106,9 @@ public class FamilyService {
                         new BusinessException(ErrorCode.USER_NOT_FOUND)
                 );
 
-        Family family = familyRepository.findByFamilyCode(request.getFamilyCode())
+        Family family = familyRepository.findBySeniorCode(request.getSeniorCode())
                 .orElseThrow(() ->
-                        new BusinessException(ErrorCode.INVALID_FAMILY_CODE)
+                        new BusinessException(ErrorCode.INVALID_SENIOR_CODE)
                 );
 
         ManagerType managerType;
@@ -126,7 +126,7 @@ public class FamilyService {
 
         return FamilyJoinResponse.builder()
                 .familyId(family.getFamilyId())
-                .familyCode(family.getFamilyCode())
+                .seniorCode(family.getSeniorCode())
                 .build();
     }
 
@@ -337,7 +337,7 @@ public class FamilyService {
     }
 
     @Transactional(readOnly = true)
-    public FamilyCodeResponse getFamilyCode(User principal) {
+    public SeniorCodeResponse getSeniorCode(User principal) {
         User user = userRepository.findById(principal.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
@@ -349,8 +349,8 @@ public class FamilyService {
 
         long familyMemberCount = familyMemberRepository.countByFamily(family);
 
-        return FamilyCodeResponse.builder()
-                .familyCode(family.getFamilyCode())
+        return SeniorCodeResponse.builder()
+                .seniorCode(family.getSeniorCode())
                 .familyMemberCount(familyMemberCount)
                 .build();
     }

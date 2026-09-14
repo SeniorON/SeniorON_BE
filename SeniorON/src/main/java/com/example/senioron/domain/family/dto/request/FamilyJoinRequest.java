@@ -9,5 +9,5 @@ import lombok.NoArgsConstructor;
 public class FamilyJoinRequest {
 
     @NotBlank
-    private String familyCode;
+    private String seniorCode;
 }
