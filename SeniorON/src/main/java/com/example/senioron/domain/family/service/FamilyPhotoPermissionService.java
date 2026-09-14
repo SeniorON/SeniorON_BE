@@ -1,14 +1,19 @@
 package com.example.senioron.domain.family.service;
 
 import com.example.senioron.domain.family.entity.FamilyPhoto;
+import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.User;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.Objects;
 
 @Service
+@RequiredArgsConstructor
 public class FamilyPhotoPermissionService {
+
+    private final PhotoGroupFamilyRepository photoGroupFamilyRepository;
 
     public boolean canDelete(
             FamilyPhoto photo,
@@ -21,9 +26,9 @@ public class FamilyPhotoPermissionService {
 
         boolean uploaderStillInFamily =
                 photo.getUser().getFamily() != null
-                        && Objects.equals(
-                        photo.getUser().getFamily().getFamilyId(),
-                        photo.getFamily().getFamilyId()
+                        && photoGroupFamilyRepository.existsByFamilyAndPhotoGroup(
+                        photo.getUser().getFamily(),
+                        photo.getPhotoGroup()
                 );
 
         boolean isPrimaryManager =

@@ -13,12 +13,11 @@ import static org.mockito.Mockito.verify;
 import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.inactivity.service.InactivitySettingService;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
-import com.example.senioron.domain.senior.entity.UserSenior;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
-import com.example.senioron.domain.senior.repository.UserSeniorRepository;
 import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeSendRequest;
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeVerifyRequest;
@@ -70,7 +69,7 @@ class UserServiceTest {
     private final SocialAccountRepository socialAccountRepository = mock(SocialAccountRepository.class);
     private final DeviceRepository deviceRepository = mock(DeviceRepository.class);
     private final SeniorRepository seniorRepository = mock(SeniorRepository.class);
-    private final UserSeniorRepository userSeniorRepository = mock(UserSeniorRepository.class);
+    private final FamilyMemberRepository familyMemberRepository = mock(FamilyMemberRepository.class);
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
     private final EmailVerificationRateLimitService emailVerificationRateLimitService =
@@ -91,7 +90,7 @@ class UserServiceTest {
                 refreshTokenService,
                 deviceRepository,
                 seniorRepository,
-                userSeniorRepository,
+                familyMemberRepository,
                 passwordEncoder,
                 jwtUtil,
                 mock(InactivitySettingService.class),
@@ -256,7 +255,7 @@ class UserServiceTest {
         verify(refreshTokenRepository).deleteAllByUser(user);
         verify(deviceRepository).deleteAllByUser(user);
         verify(socialAccountRepository).deleteAllByUser(user);
-        verify(userSeniorRepository).deleteAllByUser(user);
+        verify(familyMemberRepository).deleteAllByUser(user);
     }
 
     @Test
@@ -275,7 +274,7 @@ class UserServiceTest {
         verify(refreshTokenRepository, never()).deleteAllByUser(any(User.class));
         verify(deviceRepository, never()).deleteAllByUser(any(User.class));
         verify(socialAccountRepository, never()).deleteAllByUser(any(User.class));
-        verify(userSeniorRepository, never()).deleteAllByUser(any(User.class));
+        verify(familyMemberRepository, never()).deleteAllByUser(any(User.class));
     }
 
     @Test
@@ -298,7 +297,7 @@ class UserServiceTest {
         verify(refreshTokenRepository, never()).deleteAllByUser(any(User.class));
         verify(deviceRepository, never()).deleteAllByUser(any(User.class));
         verify(socialAccountRepository, never()).deleteAllByUser(any(User.class));
-        verify(userSeniorRepository, never()).deleteAllByUser(any(User.class));
+        verify(familyMemberRepository, never()).deleteAllByUser(any(User.class));
     }
 
     @Test
@@ -354,12 +353,11 @@ class UserServiceTest {
     void getOnboardingStatusReturnsSeniorWithoutCompletionWhenRelationIsMissing() {
         Family family = Family.builder()
                 .familyId(1L)
-                .familyCode("ABC123")
+                .seniorCode("ABC123")
                 .build();
         User user = createChild(1L, family, ManagerType.SUB);
         Senior senior = createSenior(123L, family, user);
         given(userRepository.findById(1L)).willReturn(Optional.of(user));
-        given(userSeniorRepository.findFirstByUserAndSenior_FamilyOrderByUserSeniorIdAsc(user, family)).willReturn(Optional.empty());
         given(seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(family)).willReturn(Optional.of(senior));
 
         OnboardingStatusResponse response = userService.getOnboardingStatus(user);
@@ -376,17 +374,12 @@ class UserServiceTest {
     void getOnboardingStatusReturnsCompletedStateWhenRequiredValuesExist() {
         Family family = Family.builder()
                 .familyId(1L)
-                .familyCode("ABC123")
+                .seniorCode("ABC123")
                 .build();
         User user = createChild(1L, family, ManagerType.PRIMARY);
         Senior senior = createSenior(123L, family, user);
-        UserSenior userSenior = UserSenior.builder()
-                .user(user)
-                .senior(senior)
-                .relation(SeniorRelation.MOTHER)
-                .build();
         given(userRepository.findById(1L)).willReturn(Optional.of(user));
-        given(userSeniorRepository.findFirstByUserAndSenior_FamilyOrderByUserSeniorIdAsc(user, family)).willReturn(Optional.of(userSenior));
+        given(seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(family)).willReturn(Optional.of(senior));
 
         OnboardingStatusResponse response = userService.getOnboardingStatus(user);
 
@@ -394,8 +387,8 @@ class UserServiceTest {
         assertThat(response.getManagerType()).isEqualTo(ManagerType.PRIMARY);
         assertThat(response.getSeniorId()).isEqualTo(123L);
         assertThat(response.isSeniorProfileCompleted()).isTrue();
-        assertThat(response.getRelation()).isEqualTo(SeniorRelation.MOTHER);
-        assertThat(response.isOnboardingCompleted()).isTrue();
+        assertThat(response.getRelation()).isNull();
+        assertThat(response.isOnboardingCompleted()).isFalse();
     }
 
     @Test

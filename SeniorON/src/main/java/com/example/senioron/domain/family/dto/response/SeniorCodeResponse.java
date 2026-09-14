@@ -5,9 +5,9 @@ import lombok.Getter;
 
 @Getter
 @Builder
-public class FamilyCodeResponse {
+public class SeniorCodeResponse {
 
-    private String familyCode;
+    private String seniorCode;
     private long familyMemberCount;
 
 }

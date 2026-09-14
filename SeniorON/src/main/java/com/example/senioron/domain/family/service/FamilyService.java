@@ -4,10 +4,15 @@ import com.example.senioron.domain.family.dto.request.FamilyJoinRequest;
 import com.example.senioron.domain.family.dto.request.FamilyPrimaryManagerUpdateRequest;
 import com.example.senioron.domain.family.dto.response.*;
 import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
+import com.example.senioron.domain.family.entity.PhotoGroup;
+import com.example.senioron.domain.family.entity.PhotoGroupFamily;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
-import com.example.senioron.domain.senior.repository.UserSeniorRepository;
+import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
+import com.example.senioron.domain.family.repository.PhotoGroupRepository;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
@@ -33,53 +38,55 @@ public class FamilyService {
     private final S3Service s3Service;
     private final FamilyPhotoRepository familyPhotoRepository;
     private final FamilyPhotoPermissionService familyPhotoPermissionService;
-    private final UserSeniorRepository userSeniorRepository;
+    private final FamilyMemberRepository familyMemberRepository;
+    private final PhotoGroupRepository photoGroupRepository;
+    private final PhotoGroupFamilyRepository photoGroupFamilyRepository;
     private final DeviceService deviceService;
 
     private static final int RECENT_UPLOADER_COUNT = 3;
     private static final int RECENT_PHOTO_COUNT = 4;
 
-    // 가족 생성 및 공유코드 발급 서비스
-    public FamilyCodeCreateResponse createFamily(User principal) {
+    // 가족 생성 및 시니어 코드 발급 서비스
+    public SeniorCodeCreateResponse createFamily(User principal) {
         User user = userRepository.findById(principal.getUsersId())
                 .orElseThrow(() ->
                         new BusinessException(ErrorCode.USER_NOT_FOUND)
                 );
 
         if (user.getRole() != Role.CHILD) {
-            throw new BusinessException(ErrorCode.FAMILY_CODE_CREATE_PARENT_FORBIDDEN);
+            throw new BusinessException(ErrorCode.SENIOR_CODE_CREATE_PARENT_FORBIDDEN);
         }
 
-        String familyCode = generateUniqueFamilyCode();
+        String seniorCode = generateUniqueSeniorCode();
 
         Family family = Family.builder()
-                .familyCode(familyCode)
+                .seniorCode(seniorCode)
                 .build();
 
         Family savedFamily = familyRepository.save(family);
 
-        user.updateFamily(savedFamily);
-        user.updateManagerType(ManagerType.PRIMARY);
+        createFamilyMember(user, savedFamily, ManagerType.PRIMARY);
+        createDefaultPhotoGroup(savedFamily);
 
-        return FamilyCodeCreateResponse.builder()
+        return SeniorCodeCreateResponse.builder()
                 .familyId(savedFamily.getFamilyId())
-                .familyCode(savedFamily.getFamilyCode())
+                .seniorCode(savedFamily.getSeniorCode())
                 .build();
     }
 
-    // 중복되지 않는 가족 공유코드 생성
-    private String generateUniqueFamilyCode() {
+    // 중복되지 않는 시니어 코드 생성
+    private String generateUniqueSeniorCode() {
         String code;
 
         do {
-            code = generateFamilyCode();
-        } while (familyRepository.existsByFamilyCode(code));
+            code = generateSeniorCode();
+        } while (familyRepository.existsBySeniorCode(code));
 
         return code;
     }
 
-    // 랜덤 가족 공유코드 생성
-    private String generateFamilyCode() {
+    // 랜덤 시니어 코드 생성
+    private String generateSeniorCode() {
         String raw = UUID.randomUUID()
                 .toString()
                 .replace("-", "")
@@ -89,7 +96,7 @@ public class FamilyService {
         return raw.substring(0, 4) + "-" + raw.substring(4, 8);
     }
 
-    // 공유코드로 가족 참여 메소드
+    // 시니어 코드로 가족 참여 메소드
     public FamilyJoinResponse joinFamily(
             User principal,
             FamilyJoinRequest request
@@ -99,23 +106,27 @@ public class FamilyService {
                         new BusinessException(ErrorCode.USER_NOT_FOUND)
                 );
 
-        Family family = familyRepository.findByFamilyCode(request.getFamilyCode())
+        Family family = familyRepository.findBySeniorCode(request.getSeniorCode())
                 .orElseThrow(() ->
-                        new BusinessException(ErrorCode.INVALID_FAMILY_CODE)
+                        new BusinessException(ErrorCode.INVALID_SENIOR_CODE)
                 );
 
-        user.updateFamily(family);
+        ManagerType managerType;
         if (user.getRole() == Role.CHILD) {
-            user.updateManagerType(ManagerType.SUB);
+            managerType = ManagerType.SUB;
         } else if (user.getRole() == Role.PARENT) {
-            user.updateManagerType(ManagerType.NONE);
+            managerType = ManagerType.NONE;
 
             deviceService.reconnectDevice(user);
+        } else {
+            managerType = ManagerType.NONE;
         }
+
+        createFamilyMember(user, family, managerType);
 
         return FamilyJoinResponse.builder()
                 .familyId(family.getFamilyId())
-                .familyCode(family.getFamilyCode())
+                .seniorCode(family.getSeniorCode())
                 .build();
     }
 
@@ -128,10 +139,10 @@ public class FamilyService {
             throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
         }
 
-        return userRepository.findAllByFamily(family).stream()
+        return familyMemberRepository.findAllByFamilyOrderByIdAsc(family).stream()
                 // 계정 주인만 맨 앞 정렬
                 .sorted(Comparator.comparing(
-                        member -> !Objects.equals(member.getUsersId(),user.getUsersId())
+                        member -> !Objects.equals(member.getUser().getUsersId(),user.getUsersId())
                 ))
                 .map(member -> toFamilyMemberResponse(member, user))
                 .toList();
@@ -153,7 +164,11 @@ public class FamilyService {
             throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
         }
 
-        if(currentUser.getManagerType() != ManagerType.PRIMARY){
+        FamilyMember currentMember = familyMemberRepository
+                .findByUserAndFamilyForUpdate(currentUser, family)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND));
+
+        if(currentMember.getManagerType() != ManagerType.PRIMARY){
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
 
@@ -161,9 +176,9 @@ public class FamilyService {
         User targetUser = userRepository.findByIdForUpdate(request.getTargetUserId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        if(targetUser.getFamily() == null || !Objects.equals(family.getFamilyId(), targetUser.getFamily().getFamilyId())) {
-            throw new BusinessException(ErrorCode.FORBIDDEN);
-        }
+        FamilyMember targetMember = familyMemberRepository
+                .findByUserAndFamilyForUpdate(targetUser, family)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FORBIDDEN));
 
         if (targetUser.getRole() != Role.CHILD) {
             throw new BusinessException(ErrorCode.PRIMARY_MANAGER_MUST_BE_CHILD);
@@ -174,13 +189,13 @@ public class FamilyService {
             throw new BusinessException(ErrorCode.CANNOT_CHANGE_PRIMARY_TO_SELF);
         }
 
-        currentUser.updateManagerType(ManagerType.SUB);
-        targetUser.updateManagerType(ManagerType.PRIMARY);
+        currentMember.updateManagerType(ManagerType.SUB);
+        targetMember.updateManagerType(ManagerType.PRIMARY);
 
         return FamilyPrimaryManagerUpdateResponse.builder()
                 .usersId((targetUser.getUsersId()))
                 .name(targetUser.getName())
-                .managerType(targetUser.getManagerType())
+                .managerType(targetMember.getManagerType())
                 .build();
     }
 
@@ -198,7 +213,11 @@ public class FamilyService {
         }
 
         // 주 담당자만 가족 구성원을 제외할 수 있음
-        if (currentUser.getManagerType() != ManagerType.PRIMARY) {
+        FamilyMember currentMember = familyMemberRepository
+                .findByUserAndFamilyForUpdate(currentUser, family)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND));
+
+        if (currentMember.getManagerType() != ManagerType.PRIMARY) {
             throw new BusinessException(ErrorCode.FAMILY_MEMBER_REMOVE_FORBIDDEN);
         }
 
@@ -207,7 +226,7 @@ public class FamilyService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         // 대상자가 요청자와 같은 가족인지 확인
-        if (targetUser.getFamily() == null || !Objects.equals(family.getFamilyId(), targetUser.getFamily().getFamilyId())) {
+        if (!familyMemberRepository.existsByUserAndFamily(targetUser, family)) {
             throw new BusinessException(ErrorCode.FAMILY_MEMBER_NOT_FOUND);
         }
 
@@ -215,23 +234,23 @@ public class FamilyService {
             throw new BusinessException(ErrorCode.CANNOT_REMOVE_SELF);
         }
 
-        userSeniorRepository.deleteAllByUser(targetUser);
-
-        targetUser.removeFromFamily();
+        familyMemberRepository.deleteByUserAndFamily(targetUser, family);
     }
 
     private FamilyMemberResponse toFamilyMemberResponse(
-            User member,
+            FamilyMember familyMember,
             User currentUser
     ) {
+        User member = familyMember.getUser();
+
         return FamilyMemberResponse.builder()
                 .usersId(member.getUsersId())
                 .name(member.getName())
                 .role(member.getRole())
-                .managerType(member.getManagerType())
+                .managerType(familyMember.getManagerType())
                 .canBecomePrimary(
                         member.getRole() == Role.CHILD
-                        && member.getManagerType() != ManagerType.PRIMARY
+                        && familyMember.getManagerType() != ManagerType.PRIMARY
                 )
                 .profileImageUrl(
                         s3Service.getFileUrl(member.getProfileImageKey())
@@ -267,7 +286,8 @@ public class FamilyService {
         }
 
         // 가족 구성원 조회
-        List<User> familyMembers = userRepository.findAllByFamily(family);
+        List<FamilyMember> familyMembers = familyMemberRepository
+                .findAllByFamilyOrderByIdAsc(family);
 
         // 최신 가족 사진 4개 조회
         List<FamilyPhoto> recentPhotoEntities =
@@ -286,7 +306,7 @@ public class FamilyService {
         // 가족 구성원 응답 생성
         List<FamilyMemberResponse> members = familyMembers.stream()
                 .sorted(Comparator.comparing(member -> !Objects.equals(
-                                member.getUsersId(),
+                                member.getUser().getUsersId(),
                                 user.getUsersId()
                         )
                 ))
@@ -317,7 +337,7 @@ public class FamilyService {
     }
 
     @Transactional(readOnly = true)
-    public FamilyCodeResponse getFamilyCode(User principal) {
+    public SeniorCodeResponse getSeniorCode(User principal) {
         User user = userRepository.findById(principal.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
@@ -327,11 +347,44 @@ public class FamilyService {
             throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
         }
 
-        long familyMemberCount = userRepository.countByFamily(family);
+        long familyMemberCount = familyMemberRepository.countByFamily(family);
 
-        return FamilyCodeResponse.builder()
-                .familyCode(family.getFamilyCode())
+        return SeniorCodeResponse.builder()
+                .seniorCode(family.getSeniorCode())
                 .familyMemberCount(familyMemberCount)
                 .build();
+    }
+
+    private void createFamilyMember(
+            User user,
+            Family family,
+            ManagerType managerType
+    ) {
+        if (familyMemberRepository.existsByUserAndFamily(user, family)) {
+            return;
+        }
+
+        familyMemberRepository.save(
+                FamilyMember.builder()
+                        .user(user)
+                        .family(family)
+                        .managerType(managerType)
+                        .build()
+        );
+    }
+
+    private void createDefaultPhotoGroup(Family family) {
+        PhotoGroup photoGroup = photoGroupRepository.save(
+                PhotoGroup.builder()
+                        .name("Family " + family.getFamilyId())
+                        .build()
+        );
+
+        photoGroupFamilyRepository.save(
+                PhotoGroupFamily.builder()
+                        .family(family)
+                        .photoGroup(photoGroup)
+                        .build()
+        );
     }
 }

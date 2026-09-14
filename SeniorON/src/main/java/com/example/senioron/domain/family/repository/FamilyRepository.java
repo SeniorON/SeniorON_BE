@@ -11,9 +11,9 @@ import java.util.Optional;
 
 public interface FamilyRepository extends JpaRepository<Family, Long> {
 
-    boolean existsByFamilyCode(String familyCode);
+    boolean existsBySeniorCode(String seniorCode);
 
-    Optional<Family> findByFamilyCode(String familyCode);
+    Optional<Family> findBySeniorCode(String seniorCode);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT f FROM Family f WHERE f.familyId = :familyId")

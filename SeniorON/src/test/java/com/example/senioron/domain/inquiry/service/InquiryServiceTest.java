@@ -113,7 +113,7 @@ class InquiryServiceTest {
         User currentUser = saveUser("current");
         Inquiry inquiry = saveInquiry(
                 currentUser,
-                "가족 코드를 잃어버렸어요",
+                "시니어 코드를 잃어버렸어요",
                 InquiryStatus.COMPLETED,
                 LocalDateTime.of(2026, 8, 7, 18, 30)
         );
@@ -123,7 +123,7 @@ class InquiryServiceTest {
                 .build());
         InquiryAnswer answer = InquiryAnswer.builder()
                 .inquiry(inquiry)
-                .content("가족코드는 앱의 설정 > 내 계정에서 다시 확인할 수 있습니다.")
+                .content("시니어 코드는 앱의 설정 > 내 계정에서 다시 확인할 수 있습니다.")
                 .createdAt(LocalDateTime.of(2026, 8, 7, 19, 15))
                 .build();
         entityManager.persist(answer);
@@ -139,7 +139,7 @@ class InquiryServiceTest {
         );
 
         assertThat(response.getInquiryId()).isEqualTo(inquiry.getInquiryId());
-        assertThat(response.getTitle()).isEqualTo("가족 코드를 잃어버렸어요");
+        assertThat(response.getTitle()).isEqualTo("시니어 코드를 잃어버렸어요");
         assertThat(response.getContent()).isEqualTo("content");
         assertThat(response.getStatus()).isEqualTo(InquiryStatus.COMPLETED);
         assertThat(response.getCreatedAt()).isEqualTo(LocalDateTime.of(2026, 8, 7, 18, 30));
@@ -147,7 +147,7 @@ class InquiryServiceTest {
         assertThat(response.getAnswers()).hasSize(1);
         assertThat(response.getAnswers().get(0).getAnswerId()).isEqualTo(answer.getInquiryAnswerId());
         assertThat(response.getAnswers().get(0).getContent())
-                .isEqualTo("가족코드는 앱의 설정 > 내 계정에서 다시 확인할 수 있습니다.");
+                .isEqualTo("시니어 코드는 앱의 설정 > 내 계정에서 다시 확인할 수 있습니다.");
         assertThat(response.getAnswers().get(0).getCreatedAt())
                 .isEqualTo(LocalDateTime.of(2026, 8, 7, 19, 15));
     }

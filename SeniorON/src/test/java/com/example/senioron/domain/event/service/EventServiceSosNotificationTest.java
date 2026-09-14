@@ -8,16 +8,16 @@ import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.event.dto.request.SosEventRequest;
 import com.example.senioron.domain.event.dto.response.SosEventResponse;
 import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyMember;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.notification.repository.NotificationRepository;
 import com.example.senioron.domain.notification.dto.response.NotificationListResponse;
 import com.example.senioron.domain.notification.entity.NotificationType;
 import com.example.senioron.domain.notification.service.NotificationService;
 import com.example.senioron.domain.senior.entity.Senior;
-import com.example.senioron.domain.senior.entity.SeniorRelation;
-import com.example.senioron.domain.senior.entity.UserSenior;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
-import com.example.senioron.domain.senior.repository.UserSeniorRepository;
+import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
@@ -64,7 +64,7 @@ class EventServiceSosNotificationTest {
     private SeniorRepository seniorRepository;
 
     @Autowired
-    private UserSeniorRepository userSeniorRepository;
+    private FamilyMemberRepository familyMemberRepository;
 
     @Autowired
     private MeterRegistry meterRegistry;
@@ -95,29 +95,32 @@ class EventServiceSosNotificationTest {
     @Test
     void sosWithChildDoesNotDispatchBeforeOuterCommit() {
         Family family = familyRepository.save(Family.builder()
-                .familyCode("SOS-TEST-" + System.nanoTime())
+                .seniorCode("SOS-TEST-" + System.nanoTime())
+                .build());
+        Family unrelatedFamily = familyRepository.save(Family.builder()
+                .seniorCode("SOS-UNRELATED-" + System.nanoTime())
                 .build());
 
         User senior = userRepository.save(User.builder()
                 .loginId("sos-parent-" + System.nanoTime())
                 .name("시니어")
                 .role(Role.PARENT)
-                .family(family)
                 .build());
+        addFamilyMember(senior, family, ManagerType.NONE);
 
         User child = userRepository.save(User.builder()
                 .loginId("sos-child-" + System.nanoTime())
                 .name("자녀")
                 .role(Role.CHILD)
-                .family(family)
                 .build());
+        addFamilyMember(child, family, ManagerType.PRIMARY);
 
         User unrelatedChild = userRepository.save(User.builder()
                 .loginId("sos-unrelated-child-" + System.nanoTime())
                 .name("다른 시니어 담당 자녀")
                 .role(Role.CHILD)
-                .family(family)
                 .build());
+        addFamilyMember(unrelatedChild, unrelatedFamily, ManagerType.PRIMARY);
 
         Senior seniorProfile = seniorRepository.save(Senior.builder()
                 .name("시니어")
@@ -127,12 +130,6 @@ class EventServiceSosNotificationTest {
                 .registeredBy(child)
                 .parentUser(senior)
                 .build());
-        userSeniorRepository.save(UserSenior.builder()
-                .user(child)
-                .senior(seniorProfile)
-                .relation(SeniorRelation.MOTHER)
-                .build());
-
         deviceRepository.save(Device.builder()
                 .user(child)
                 .deviceIdentifier("device-1")
@@ -173,16 +170,21 @@ class EventServiceSosNotificationTest {
 
     @Test
     void notificationListContainsOnlyEventsForSelectedSenior() {
-        Family family = familyRepository.save(Family.builder()
-                .familyCode("SOS-FILTER-" + System.nanoTime())
+        Family familyA = familyRepository.save(Family.builder()
+                .seniorCode("SOS-FILTER-" + System.nanoTime())
                 .build());
-        User child = saveUser("filter-child", "자녀", Role.CHILD, family);
-        User parentA = saveUser("filter-parent-a", "시니어A", Role.PARENT, family);
-        User parentB = saveUser("filter-parent-b", "시니어B", Role.PARENT, family);
-        Senior seniorA = saveSenior("시니어A", family, child, parentA, "01011111111");
-        Senior seniorB = saveSenior("시니어B", family, child, parentB, "01022222222");
-        linkManagedSenior(child, seniorA, SeniorRelation.MOTHER);
-        linkManagedSenior(child, seniorB, SeniorRelation.FATHER);
+        Family familyB = familyRepository.save(Family.builder()
+                .seniorCode("SOS-FILTER-B-" + System.nanoTime())
+                .build());
+        User child = saveUser("filter-child", "자녀", Role.CHILD);
+        User parentA = saveUser("filter-parent-a", "시니어A", Role.PARENT);
+        User parentB = saveUser("filter-parent-b", "시니어B", Role.PARENT);
+        addFamilyMember(child, familyA, ManagerType.PRIMARY);
+        addFamilyMember(child, familyB, ManagerType.PRIMARY);
+        addFamilyMember(parentA, familyA, ManagerType.NONE);
+        addFamilyMember(parentB, familyB, ManagerType.NONE);
+        Senior seniorA = saveSenior("시니어A", familyA, child, parentA, "01011111111");
+        Senior seniorB = saveSenior("시니어B", familyB, child, parentB, "01022222222");
         entityManager.flush();
 
         SosEventResponse eventA = eventService.createSosEvent(parentA, sosRequest());
@@ -196,12 +198,11 @@ class EventServiceSosNotificationTest {
                 .doesNotContain(eventB.getId());
     }
 
-    private User saveUser(String loginIdPrefix, String name, Role role, Family family) {
+    private User saveUser(String loginIdPrefix, String name, Role role) {
         return userRepository.save(User.builder()
                 .loginId(loginIdPrefix + "-" + System.nanoTime())
                 .name(name)
                 .role(role)
-                .family(family)
                 .build());
     }
 
@@ -217,12 +218,14 @@ class EventServiceSosNotificationTest {
                 .build());
     }
 
-    private void linkManagedSenior(User user, Senior senior, SeniorRelation relation) {
-        userSeniorRepository.save(UserSenior.builder()
+    private void addFamilyMember(User user, Family family, ManagerType managerType) {
+        familyMemberRepository.save(FamilyMember.builder()
                 .user(user)
-                .senior(senior)
-                .relation(relation)
+                .family(family)
+                .managerType(managerType)
                 .build());
+        user.updateFamily(family);
+        user.updateManagerType(managerType);
     }
 
     private double sumNotDeliveredFcmSendCounters() {

@@ -15,7 +15,13 @@ import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, Long> {
 
-    long countByFamily(Family family);
+    @Query("""
+            SELECT COUNT(u)
+            FROM User u
+            JOIN u.familyMembers fm
+            WHERE fm.family = :family
+            """)
+    long countByFamily(@Param("family") Family family);
 
     boolean existsByLoginId(String loginId);
 
@@ -31,16 +37,31 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT u FROM User u WHERE u.usersId = :usersId")
     Optional<User> findByIdForUpdate(@Param("usersId") Long usersId);
 
-    List<User> findAllByFamily(Family family);
+    @Query("""
+            SELECT u
+            FROM User u
+            JOIN u.familyMembers fm
+            WHERE fm.family = :family
+            ORDER BY u.usersId ASC
+            """)
+    List<User> findAllByFamily(@Param("family") Family family);
 
-    @Query("SELECT u FROM User u WHERE u.family = :family AND u.usersId != :excludeUserId AND u.role = :role ORDER BY u.usersId ASC")
+    @Query("""
+            SELECT u
+            FROM User u
+            JOIN u.familyMembers fm
+            WHERE fm.family = :family
+              AND u.usersId != :excludeUserId
+              AND u.role = :role
+            ORDER BY u.usersId ASC
+            """)
     List<User> findByFamilyAndUsersIdNotAndRole(
             @Param("family")Family family,
             @Param("excludeUserId")Long excludeUserId,
             @Param("role")Role role);
 
 
-    @EntityGraph(attributePaths = {"family"})
+    @EntityGraph(attributePaths = {"familyMembers", "familyMembers.family"})
     @Query("SELECT u FROM User u WHERE u.usersId = :usersId")
     Optional<User> findByIdWithFamily(@Param("usersId") Long usersId);
 }

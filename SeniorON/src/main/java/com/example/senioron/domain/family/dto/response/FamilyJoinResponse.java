@@ -8,5 +8,5 @@ import lombok.Getter;
 public class FamilyJoinResponse {
 
     private Long familyId;
-    private String familyCode;
+    private String seniorCode;
 }

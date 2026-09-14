@@ -22,9 +22,7 @@ import com.example.senioron.domain.hospital.entity.Hospital;
 import com.example.senioron.domain.hospital.repository.HospitalRepository;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
-import com.example.senioron.domain.senior.entity.UserSenior;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
-import com.example.senioron.domain.senior.repository.UserSeniorRepository;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
@@ -67,7 +65,6 @@ public class HomeService {
     private final HospitalRepository hospitalRepository;
     private final DeviceRepository deviceRepository;
     private final SeniorRepository seniorRepository;
-    private final UserSeniorRepository userSeniorRepository;
     private final HomeSettingRepository homeSettingRepository;
     private final FamilyRepository familyRepository;
     private final RefreshTokenRepository refreshTokenRepository;
@@ -304,7 +301,6 @@ public class HomeService {
             HospitalRepository hospitalRepository,
             DeviceRepository deviceRepository,
             SeniorRepository seniorRepository,
-            UserSeniorRepository userSeniorRepository,
             HomeSettingRepository homeSettingRepository,
             FamilyRepository familyRepository,
             RefreshTokenRepository refreshTokenRepository,
@@ -316,7 +312,6 @@ public class HomeService {
         this.hospitalRepository = hospitalRepository;
         this.deviceRepository = deviceRepository;
         this.seniorRepository = seniorRepository;
-        this.userSeniorRepository = userSeniorRepository;
         this.homeSettingRepository = homeSettingRepository;
         this.familyRepository = familyRepository;
         this.refreshTokenRepository = refreshTokenRepository;
@@ -339,14 +334,11 @@ public class HomeService {
             );
         }
 
-        UserSenior currentUserSeniorRelation =
-                getManagedSeniorRelation(
+        Senior seniorProfile =
+                getManagedSenior(
                         currentUser,
                         seniorId
                 );
-
-        Senior seniorProfile =
-                currentUserSeniorRelation.getSenior();
 
         User seniorUser =
                 seniorProfile.getParentUser();
@@ -396,7 +388,7 @@ public class HomeService {
         HomeResponse.SeniorProfileResponse seniorProfileResponse =
                 createSeniorProfileResponse(
                         seniorProfile,
-                        currentUserSeniorRelation
+                        null
                 );
 
         FontSize fontSize =
@@ -461,14 +453,11 @@ public class HomeService {
                         request.phoneNumber()
                 );
 
-        UserSenior userSenior =
-                getManagedSeniorRelation(
+        Senior senior =
+                getManagedSenior(
                         currentUser,
                         seniorId
                 );
-
-        Senior senior =
-                userSenior.getSenior();
 
         senior.updateProfile(
                 request.name(),
@@ -480,16 +469,10 @@ public class HomeService {
                 request.longitude()
         );
 
-        userSenior.updateRelation(
-                request.relation(),
-                resolvedCustomRelation
-        );
-
-        userSeniorRepository.save(userSenior);
-
         return SeniorProfileUpdateResponse.from(
                 senior,
-                userSenior
+                request.relation(),
+                resolvedCustomRelation
         );
     }
 
@@ -508,14 +491,11 @@ public class HomeService {
 
         validatePrimaryManager(user);
 
-        UserSenior userSenior =
-                getManagedSeniorRelation(
+        Senior senior =
+                getManagedSenior(
                         user,
                         seniorId
                 );
-
-        Senior senior =
-                userSenior.getSenior();
 
         User seniorUser =
                 getSeniorUser(
@@ -627,15 +607,15 @@ public class HomeService {
 
         validatePrimaryManager(user);
 
-        UserSenior userSenior =
-                getManagedSeniorRelation(
+        Senior senior =
+                getManagedSenior(
                         user,
                         seniorId
                 );
 
         User seniorUser =
                 getSeniorUser(
-                        userSenior.getSenior()
+                        senior
                 );
 
         validateSeniorDeviceConnected(
@@ -736,18 +716,7 @@ public class HomeService {
             );
         }
 
-        UserSenior userSenior = userSeniorRepository
-                .findByUserAndSenior_SeniorId(
-                        currentUser,
-                        seniorId
-                )
-                .orElseThrow(() ->
-                        new BusinessException(
-                                ErrorCode.FORBIDDEN
-                        )
-                );
-
-        Senior senior = userSenior.getSenior();
+        Senior senior = getManagedSenior(currentUser, seniorId);
 
         User seniorUser = senior.getParentUser();
 
@@ -847,14 +816,11 @@ public class HomeService {
             );
         }
 
-        UserSenior userSenior =
-                getManagedSeniorRelation(
+        Senior senior =
+                getManagedSenior(
                         currentUser,
                         seniorId
                 );
-
-        Senior senior =
-                userSenior.getSenior();
 
         User seniorUser =
                 getSeniorUser(
@@ -976,14 +942,11 @@ public class HomeService {
 
         validatePrimaryManager(user);
 
-        UserSenior userSenior =
-                getManagedSeniorRelation(
+        Senior senior =
+                getManagedSenior(
                         user,
                         seniorId
                 );
-
-        Senior senior =
-                userSenior.getSenior();
 
         User seniorUser =
                 getSeniorUser(senior);
@@ -1274,21 +1237,6 @@ public class HomeService {
                 .findFirst();
     }
 
-    private Optional<UserSenior> findUserSenior(
-            User child
-    ) {
-
-        if (child.getFamily() == null) {
-            return Optional.empty();
-        }
-
-        return userSeniorRepository
-                .findFirstByUserAndSenior_FamilyOrderByUserSeniorIdAsc(
-                        child,
-                        child.getFamily()
-                );
-    }
-
     private Optional<Senior> findFamilySenior(
             User user
     ) {
@@ -1344,7 +1292,7 @@ public class HomeService {
     private HomeResponse.SeniorProfileResponse
     createSeniorProfileResponse(
             Senior senior,
-            UserSenior userSenior
+            String relation
     ) {
 
         LocalDate birth =
@@ -1361,31 +1309,13 @@ public class HomeService {
         return new HomeResponse.SeniorProfileResponse(
                 senior.getSeniorId(),
                 senior.getName(),
-                resolveRelation(userSenior),
+                relation,
                 birth,
                 age,
                 senior.getAddress(),
                 senior.getDetailAddress(),
                 senior.getPhoneNumber()
         );
-    }
-
-    private String resolveRelation(
-            UserSenior userSenior
-    ) {
-
-        if (userSenior == null
-                || userSenior.getRelation() == null) {
-            return null;
-        }
-
-        if (userSenior.getRelation()
-                == SeniorRelation.OTHER) {
-
-            return userSenior.getCustomRelation();
-        }
-
-        return userSenior.getRelation().name();
     }
 
     private String resolveCustomRelation(
@@ -1430,35 +1360,6 @@ public class HomeService {
                     ErrorCode.SENIOR_ALREADY_EXISTS
             );
         }
-    }
-
-    private UserSenior upsertUserSenior(
-            User user,
-            Senior senior,
-            SeniorRelation relation,
-            String customRelation
-    ) {
-
-        validateSameFamily(user, senior);
-
-        UserSenior userSenior =
-                userSeniorRepository
-                        .findByUserAndSenior(user, senior)
-                        .orElseGet(() ->
-                                UserSenior.builder()
-                                        .user(user)
-                                        .senior(senior)
-                                        .relation(relation)
-                                        .customRelation(customRelation)
-                                        .build()
-                        );
-
-        userSenior.updateRelation(
-                relation,
-                customRelation
-        );
-
-        return userSeniorRepository.save(userSenior);
     }
 
     private void validateSameFamily(
@@ -1548,7 +1449,7 @@ public class HomeService {
         return seniorUser;
     }
 
-    private UserSenior getManagedSeniorRelation(
+    private Senior getManagedSenior(
             User child,
             Long seniorId
     ) {
@@ -1559,16 +1460,17 @@ public class HomeService {
             );
         }
 
-        return userSeniorRepository
-                .findByUserAndSenior_SeniorId(
-                        child,
-                        seniorId
-                )
+        Senior senior = seniorRepository
+                .findById(seniorId)
                 .orElseThrow(() ->
                         new BusinessException(
-                                ErrorCode.FORBIDDEN
+                                ErrorCode.SENIOR_NOT_FOUND
                         )
                 );
+
+        validateSameFamily(child, senior);
+
+        return senior;
     }
 
     private User getCurrentUser() {

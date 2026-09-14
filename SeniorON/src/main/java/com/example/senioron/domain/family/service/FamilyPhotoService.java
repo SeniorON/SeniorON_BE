@@ -10,6 +10,7 @@ import com.example.senioron.domain.family.dto.response.FamilyPhotoListResponse;
 import com.example.senioron.domain.family.dto.response.FamilyPhotoUploadUrlResponse;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.family.repository.projection.FamilyPhotoAlbumCountProjection;
 import com.example.senioron.domain.user.entity.Role;
@@ -33,7 +34,6 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -48,6 +48,7 @@ public class FamilyPhotoService {
     private final S3Service s3Service;
     private final FamilyPhotoPermissionService familyPhotoPermissionService;
     private final FamilyPhotoPersistenceService photoPersistenceService;
+    private final FamilyMemberRepository familyMemberRepository;
 
     private static final int NEW_PHOTO_WINDOW_HOURS = 24;
     private static final long MAX_FAMILY_PHOTO_SIZE = 10L * 1024 * 1024;
@@ -439,13 +440,8 @@ public class FamilyPhotoService {
         User uploader = userRepository.findById(uploaderUserId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_MEMBER_NOT_FOUND));
 
-        boolean sameFamily = uploader.getFamily() != null
-                && Objects.equals(
-                uploader.getFamily().getFamilyId(),
-                family.getFamilyId()
-        );
-
-        if (!sameFamily || uploader.getRole() != Role.CHILD) {
+        if (!familyMemberRepository.existsByUserAndFamily(uploader, family)
+                || uploader.getRole() != Role.CHILD) {
             throw new BusinessException(ErrorCode.FAMILY_MEMBER_NOT_FOUND);
         }
 
