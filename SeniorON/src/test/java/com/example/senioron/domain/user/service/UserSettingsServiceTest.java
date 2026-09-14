@@ -94,7 +94,7 @@ class UserSettingsServiceTest {
                 new RefreshTokenService(refreshTokenRepository, jwtUtil),
                 org.mockito.Mockito.mock(com.example.senioron.domain.device.repository.DeviceRepository.class),
                 org.mockito.Mockito.mock(com.example.senioron.domain.senior.repository.SeniorRepository.class),
-                org.mockito.Mockito.mock(com.example.senioron.domain.senior.repository.UserSeniorRepository.class),
+                org.mockito.Mockito.mock(com.example.senioron.domain.family.repository.FamilyMemberRepository.class),
                 passwordEncoder,
                 jwtUtil,
                 org.mockito.Mockito.mock(InactivitySettingService.class),

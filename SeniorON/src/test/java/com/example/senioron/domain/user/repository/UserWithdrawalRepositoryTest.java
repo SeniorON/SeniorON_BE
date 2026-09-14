@@ -6,12 +6,11 @@ import com.example.senioron.domain.device.entity.Device;
 import com.example.senioron.domain.device.entity.DeviceStatus;
 import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyMember;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.senior.entity.Senior;
-import com.example.senioron.domain.senior.entity.SeniorRelation;
-import com.example.senioron.domain.senior.entity.UserSenior;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
-import com.example.senioron.domain.senior.repository.UserSeniorRepository;
 import com.example.senioron.domain.socialaccount.entity.LoginProvider;
 import com.example.senioron.domain.socialaccount.entity.SocialAccount;
 import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
@@ -42,7 +41,7 @@ class UserWithdrawalRepositoryTest {
     private SocialAccountRepository socialAccountRepository;
 
     @Autowired
-    private UserSeniorRepository userSeniorRepository;
+    private FamilyMemberRepository familyMemberRepository;
 
     @Autowired
     private FamilyRepository familyRepository;
@@ -56,6 +55,11 @@ class UserWithdrawalRepositoryTest {
                 .familyCode("ABCD-1234")
                 .build());
         User user = userRepository.saveAndFlush(createUser("old-login", "old@example.com", family));
+        familyMemberRepository.saveAndFlush(FamilyMember.builder()
+                .user(user)
+                .family(family)
+                .managerType(ManagerType.SUB)
+                .build());
         Senior senior = seniorRepository.saveAndFlush(Senior.builder()
                 .name("시니어")
                 .birth(LocalDate.of(1940, 1, 1))
@@ -79,16 +83,10 @@ class UserWithdrawalRepositoryTest {
                 .provider(LoginProvider.GOOGLE)
                 .providerId("google-provider-id")
                 .build());
-        userSeniorRepository.saveAndFlush(UserSenior.builder()
-                .user(user)
-                .senior(senior)
-                .relation(SeniorRelation.MOTHER)
-                .build());
-
         refreshTokenRepository.deleteAllByUser(user);
         deviceRepository.deleteAllByUser(user);
         socialAccountRepository.deleteAllByUser(user);
-        userSeniorRepository.deleteAllByUser(user);
+        familyMemberRepository.deleteAllByUser(user);
         user.withdraw(
                 "withdrawn_" + user.getUsersId() + "_test",
                 "withdrawn_" + user.getUsersId() + "_test@deleted.local",
@@ -104,7 +102,7 @@ class UserWithdrawalRepositoryTest {
         assertThat(refreshTokenRepository.count()).isZero();
         assertThat(deviceRepository.count()).isZero();
         assertThat(socialAccountRepository.count()).isZero();
-        assertThat(userSeniorRepository.count()).isZero();
+        assertThat(familyMemberRepository.count()).isZero();
         assertThat(familyRepository.findById(family.getFamilyId())).isPresent();
         assertThat(seniorRepository.findById(senior.getSeniorId())).isPresent();
 

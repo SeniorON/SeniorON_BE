@@ -6,6 +6,8 @@ import com.example.senioron.domain.device.entity.Device;
 import com.example.senioron.domain.device.entity.DeviceStatus;
 import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyMember;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.home.entity.Home;
 import com.example.senioron.domain.home.repository.HomeRepository;
@@ -14,10 +16,7 @@ import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.domain.senior.entity.Senior;
-import com.example.senioron.domain.senior.entity.SeniorRelation;
-import com.example.senioron.domain.senior.entity.UserSenior;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
-import com.example.senioron.domain.senior.repository.UserSeniorRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -56,7 +55,7 @@ class HomeServiceInitialButtonsConcurrencyTest {
     private SeniorRepository seniorRepository;
 
     @Autowired
-    private UserSeniorRepository userSeniorRepository;
+    private FamilyMemberRepository familyMemberRepository;
 
     @Test
     void concurrentFirstHomeRequestsCreateInitialButtonsOnlyOnce()
@@ -78,15 +77,22 @@ class HomeServiceInitialButtonsConcurrencyTest {
          */
         User child = userRepository.saveAndFlush(
                 User.builder()
-                        .family(family)
                         .loginId("concurrency-child")
                         .email("concurrency-child@test.com")
                         .password("test")
                         .name("테스트 자녀")
                         .role(Role.CHILD)
+                        .build()
+        );
+        familyMemberRepository.saveAndFlush(
+                FamilyMember.builder()
+                        .user(child)
+                        .family(family)
                         .managerType(ManagerType.PRIMARY)
                         .build()
         );
+        child.updateFamily(family);
+        child.updateManagerType(ManagerType.PRIMARY);
 
         /*
          * 연결된 시니어 계정
@@ -96,7 +102,6 @@ class HomeServiceInitialButtonsConcurrencyTest {
          */
         User senior = userRepository.saveAndFlush(
                 User.builder()
-                        .family(family)
                         .loginId("concurrency-senior")
                         .email("concurrency-senior@test.com")
                         .password("test")
@@ -104,6 +109,15 @@ class HomeServiceInitialButtonsConcurrencyTest {
                         .role(Role.PARENT)
                         .build()
         );
+        familyMemberRepository.saveAndFlush(
+                FamilyMember.builder()
+                        .user(senior)
+                        .family(family)
+                        .managerType(ManagerType.NONE)
+                        .build()
+        );
+        senior.updateFamily(family);
+        senior.updateManagerType(ManagerType.NONE);
         Senior seniorProfile = seniorRepository.saveAndFlush(
                 Senior.builder()
                         .name("테스트 시니어")
@@ -112,14 +126,6 @@ class HomeServiceInitialButtonsConcurrencyTest {
                         .family(family)
                         .registeredBy(child)
                         .parentUser(senior)
-                        .build()
-        );
-
-        userSeniorRepository.saveAndFlush(
-                UserSenior.builder()
-                        .user(child)
-                        .senior(seniorProfile)
-                        .relation(SeniorRelation.MOTHER)
                         .build()
         );
 
