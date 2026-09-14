@@ -52,7 +52,8 @@ class DeviceServiceTest {
         if (deviceService == null) {
             deviceService = new DeviceService(
                     deviceRepository,
-                    seniorRepository
+                    seniorRepository,
+                    familyMemberRepository
             );
         }
         return deviceService;

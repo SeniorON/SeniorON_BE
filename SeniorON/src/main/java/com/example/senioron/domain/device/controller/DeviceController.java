@@ -69,17 +69,21 @@ public class DeviceController {
 
     @Operation(
             summary = "시니어 최근 위치 조회",
-            description = "자녀가 같은 가족에 연결된 시니어의 최근 위치를 조회"
+            description = "자녀가 seniorId로 선택한 시니어의 최근 위치를 조회"
     )
     @GetMapping("/location")
     public ResponseEntity<DeviceLocationResponse> getLatestLocation(
+            @RequestParam Long seniorId,
             Authentication authentication
     ) {
         User currentUser =
                 (User) authentication.getPrincipal();
 
         return ResponseEntity.ok(
-                deviceService.getLatestLocation(currentUser)
+                deviceService.getLatestLocation(
+                        currentUser,
+                        seniorId
+                )
         );
     }
     @Operation(
@@ -119,17 +123,21 @@ public class DeviceController {
 
     @Operation(
             summary = "시니어 기기 연결 해제",
-            description = "주담당자 또는 보조담당자가 같은 가족의 시니어 기기 연결을 해제"
+            description = "주담당자 또는 보조담당자가 seniorId로 선택한 시니어 기기 연결을 해제"
     )
 
     @DeleteMapping("/connection")
     public ResponseEntity<Void> disconnectDevice(
+            @RequestParam Long seniorId,
             Authentication authentication
     ) {
         User currentUser =
                 (User) authentication.getPrincipal();
 
-        deviceService.disconnectDevice(currentUser);
+        deviceService.disconnectDevice(
+                currentUser,
+                seniorId
+        );
 
         return ResponseEntity.noContent().build();
     }

@@ -7,6 +7,8 @@ import static org.mockito.BDDMockito.given;
 
 import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyMember;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.home.dto.request.SeniorProfileUpdateRequest;
 import com.example.senioron.domain.home.repository.ButtonOptionRepository;
@@ -56,6 +58,10 @@ class HomeServiceSeniorProfileTest {
 
     private HomeService homeService;
 
+
+    private final FamilyMemberRepository familyMemberRepository =
+            org.mockito.Mockito.mock(FamilyMemberRepository.class);
+
     @BeforeEach
     void setUp() {
         homeService = new HomeService(
@@ -67,6 +73,7 @@ class HomeServiceSeniorProfileTest {
                 seniorRepository,
                 homeSettingRepository,
                 familyRepository,
+                familyMemberRepository,
                 refreshTokenRepository,
                 homeWebSocketService
         );
@@ -80,7 +87,7 @@ class HomeServiceSeniorProfileTest {
     @Test
     void updateSeniorProfileUsesFamilySeniorRelationship() {
         Family family = Family.builder().familyId(1L).build();
-        User child = createChild(1L, family, ManagerType.PRIMARY);
+        User child = createChild(1L);
         Senior senior = Senior.builder()
                 .seniorId(10L)
                 .name("김영희")
@@ -91,7 +98,18 @@ class HomeServiceSeniorProfileTest {
                 .build();
 
         setCurrentUser(child);
-        given(seniorRepository.findById(10L)).willReturn(Optional.of(senior));
+
+        given(seniorRepository.findById(10L))
+                .willReturn(Optional.of(senior));
+
+        FamilyMember familyMember = FamilyMember.builder()
+                .user(child)
+                .family(family)
+                .managerType(ManagerType.PRIMARY)
+                .build();
+
+        given(familyMemberRepository.findByUserAndFamily(child, family))
+                .willReturn(Optional.of(familyMember));
 
         var response = homeService.updateSeniorProfile(
                 10L,
@@ -117,9 +135,8 @@ class HomeServiceSeniorProfileTest {
 
     @Test
     void updateSeniorProfileRejectsSeniorFromDifferentFamily() {
-        Family family = Family.builder().familyId(1L).build();
         Family otherFamily = Family.builder().familyId(2L).build();
-        User child = createChild(1L, family, ManagerType.PRIMARY);
+        User child = createChild(1L);
         Senior senior = Senior.builder()
                 .seniorId(10L)
                 .name("김영희")
@@ -130,7 +147,12 @@ class HomeServiceSeniorProfileTest {
                 .build();
 
         setCurrentUser(child);
-        given(seniorRepository.findById(10L)).willReturn(Optional.of(senior));
+
+        given(seniorRepository.findById(10L))
+                .willReturn(Optional.of(senior));
+
+        given(familyMemberRepository.findByUserAndFamily(child, otherFamily))
+                .willReturn(Optional.empty());
 
         assertThatThrownBy(() -> homeService.updateSeniorProfile(
                 10L,
@@ -152,17 +174,11 @@ class HomeServiceSeniorProfileTest {
                 .isEqualTo(ErrorCode.FORBIDDEN);
     }
 
-    private User createChild(
-            Long usersId,
-            Family family,
-            ManagerType managerType
-    ) {
+    private User createChild(Long usersId) {
         return User.builder()
                 .usersId(usersId)
-                .name("자녀")
+                .name("...")
                 .role(Role.CHILD)
-                .managerType(managerType)
-                .family(family)
                 .build();
     }
 
