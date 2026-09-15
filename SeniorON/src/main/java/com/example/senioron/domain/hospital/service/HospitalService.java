@@ -477,8 +477,10 @@ public class HospitalService {
         boolean belongsToSameFamily =
                 parentUser.getFamily() != null
                         && Objects.equals(
-                        requester.getFamily().getFamilyId(),
-                        parentUser.getFamily().getFamilyId()
+                        requester.getFamily()
+                                .getFamilyId(),
+                        parentUser.getFamily()
+                                .getFamilyId()
                 );
 
         if (!belongsToSameFamily) {
@@ -543,7 +545,8 @@ public class HospitalService {
             User parentUser
     ) {
         if (!Objects.equals(
-                hospital.getUser().getUsersId(),
+                hospital.getUser()
+                        .getUsersId(),
                 parentUser.getUsersId()
         )) {
             throw new BusinessException(
