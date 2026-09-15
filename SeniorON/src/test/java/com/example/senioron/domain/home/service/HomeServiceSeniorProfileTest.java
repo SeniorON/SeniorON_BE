@@ -114,9 +114,10 @@ class HomeServiceSeniorProfileTest {
         var response = homeService.updateSeniorProfile(
                 10L,
                 new SeniorProfileUpdateRequest(
+                        10L,
                         "박영희",
                         SeniorRelation.OTHER,
-                        "외할머니",
+                        "친할머니",
                         LocalDate.of(1951, 2, 3),
                         "010-9999-8888",
                         "서울시",
@@ -129,7 +130,7 @@ class HomeServiceSeniorProfileTest {
         assertThat(response.seniorId()).isEqualTo(10L);
         assertThat(response.name()).isEqualTo("박영희");
         assertThat(response.relation()).isEqualTo(SeniorRelation.OTHER);
-        assertThat(response.customRelation()).isEqualTo("외할머니");
+        assertThat(response.customRelation()).isEqualTo("친할머니");
         assertThat(senior.getPhoneNumber()).isEqualTo("01099998888");
     }
 
@@ -157,6 +158,7 @@ class HomeServiceSeniorProfileTest {
         assertThatThrownBy(() -> homeService.updateSeniorProfile(
                 10L,
                 new SeniorProfileUpdateRequest(
+                        10L,
                         "박영희",
                         SeniorRelation.MOTHER,
                         null,

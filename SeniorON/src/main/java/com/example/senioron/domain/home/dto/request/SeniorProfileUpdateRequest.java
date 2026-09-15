@@ -3,6 +3,7 @@ package com.example.senioron.domain.home.dto.request;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
 import com.example.senioron.global.validation.CoordinatePairRequest;
 import com.example.senioron.global.validation.ValidCoordinatePair;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
@@ -14,6 +15,10 @@ import java.time.LocalDate;
 
 @ValidCoordinatePair
 public record SeniorProfileUpdateRequest(
+
+        @NotNull
+        @JsonProperty("senior_id")
+        Long seniorId,
 
         @NotBlank(message = "이름을 입력해 주세요.")
         String name,
