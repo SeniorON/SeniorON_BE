@@ -20,8 +20,8 @@ public record ManagedSeniorResponse(
                         ? null
                         : senior.getParentUser().getUsersId(),
                 senior.getName(),
-                null,
-                null
+                senior.getRelation(),
+                senior.getCustomRelation()
         );
     }
 }

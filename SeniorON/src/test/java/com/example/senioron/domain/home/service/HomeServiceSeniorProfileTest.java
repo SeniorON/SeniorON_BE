@@ -130,6 +130,8 @@ class HomeServiceSeniorProfileTest {
         assertThat(response.name()).isEqualTo("박영희");
         assertThat(response.relation()).isEqualTo(SeniorRelation.OTHER);
         assertThat(response.customRelation()).isEqualTo("외할머니");
+        assertThat(senior.getRelation()).isEqualTo(SeniorRelation.OTHER);
+        assertThat(senior.getCustomRelation()).isEqualTo("외할머니");
         assertThat(senior.getPhoneNumber()).isEqualTo("01099998888");
     }
 

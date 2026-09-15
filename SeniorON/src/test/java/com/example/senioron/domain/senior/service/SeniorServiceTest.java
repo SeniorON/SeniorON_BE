@@ -69,7 +69,7 @@ class SeniorServiceTest {
         assertThat(response.get(0).familyId()).isEqualTo(1L);
         assertThat(response.get(0).parentUserId()).isNull();
         assertThat(response.get(0).name()).isEqualTo("김영희");
-        assertThat(response.get(0).relation()).isNull();
+        assertThat(response.get(0).relation()).isEqualTo(SeniorRelation.MOTHER);
         assertThat(response.get(0).customRelation()).isNull();
     }
 
@@ -173,6 +173,7 @@ class SeniorServiceTest {
 
         assertThat(response.seniorId()).isEqualTo(10L);
         assertThat(response.relation()).isEqualTo(SeniorRelation.GRANDPARENT);
+        assertThat(senior.getRelation()).isEqualTo(SeniorRelation.GRANDPARENT);
     }
 
     private SeniorCreateRequest createRequest(
@@ -201,6 +202,7 @@ class SeniorServiceTest {
         return Senior.builder()
                 .seniorId(seniorId)
                 .name("김영희")
+                .relation(SeniorRelation.MOTHER)
                 .birth(LocalDate.of(1950, 1, 1))
                 .phoneNumber("01012345678")
                 .address("서울시")

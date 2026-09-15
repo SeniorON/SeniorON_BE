@@ -89,6 +89,8 @@ public class SeniorService {
 
         Senior senior = Senior.builder()
                 .name(request.name())
+                .relation(request.relation())
+                .customRelation(resolveCustomRelation(request))
                 .birth(request.birth())
                 .phoneNumber(normalizePhoneNumber(request.phoneNumber()))
                 .address(request.address())
@@ -100,11 +102,7 @@ public class SeniorService {
                 .build();
 
         Senior savedSenior = saveSeniorOrThrowAlreadyExists(senior);
-        return SeniorCreateResponse.from(
-                savedSenior,
-                request.relation(),
-                resolveCustomRelation(request)
-        );
+        return SeniorCreateResponse.from(savedSenior);
     }
 
     private Senior saveSeniorOrThrowAlreadyExists(Senior senior) {
@@ -137,11 +135,9 @@ public class SeniorService {
                         request.customRelation()
                 );
 
-        return SeniorRelationUpdateResponse.from(
-                senior.getSeniorId(),
-                request.relation(),
-                resolvedCustomRelation
-        );
+        senior.updateRelation(request.relation(), resolvedCustomRelation);
+
+        return SeniorRelationUpdateResponse.from(senior);
     }
 
     /**

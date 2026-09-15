@@ -264,6 +264,9 @@ public class UserService {
                     .map(Senior::getSeniorId)
                     .orElse(null);
             seniorProfileCompleted = familySenior.isPresent();
+            relation = familySenior
+                    .map(Senior::getRelation)
+                    .orElse(null);
         }
 
         boolean onboardingCompleted =

@@ -378,6 +378,7 @@ class UserServiceTest {
                 .build();
         User user = createChild(1L, family, ManagerType.PRIMARY);
         Senior senior = createSenior(123L, family, user);
+        senior.updateRelation(SeniorRelation.MOTHER, null);
         given(userRepository.findById(1L)).willReturn(Optional.of(user));
         given(seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(family)).willReturn(Optional.of(senior));
 
@@ -387,8 +388,8 @@ class UserServiceTest {
         assertThat(response.getManagerType()).isEqualTo(ManagerType.PRIMARY);
         assertThat(response.getSeniorId()).isEqualTo(123L);
         assertThat(response.isSeniorProfileCompleted()).isTrue();
-        assertThat(response.getRelation()).isNull();
-        assertThat(response.isOnboardingCompleted()).isFalse();
+        assertThat(response.getRelation()).isEqualTo(SeniorRelation.MOTHER);
+        assertThat(response.isOnboardingCompleted()).isTrue();
     }
 
     @Test

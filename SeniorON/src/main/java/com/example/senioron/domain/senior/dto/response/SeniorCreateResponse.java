@@ -19,15 +19,13 @@ public record SeniorCreateResponse(
 ) {
 
     public static SeniorCreateResponse from(
-            Senior senior,
-            SeniorRelation relation,
-            String customRelation
+            Senior senior
     ) {
         return new SeniorCreateResponse(
                 senior.getSeniorId(),
                 senior.getName(),
-                relation,
-                customRelation,
+                senior.getRelation(),
+                senior.getCustomRelation(),
                 senior.getBirth(),
                 senior.getPhoneNumber(),
                 senior.getAddress(),
