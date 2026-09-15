@@ -1,5 +1,7 @@
 package com.example.senioron.domain.medication.support;
 
+import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
@@ -14,6 +16,7 @@ import org.springframework.stereotype.Component;
 public class MedicationFamilyAuthorization {
 
     private final UserRepository userRepository;
+    private final SeniorRepository seniorRepository;
     private final EntityManager entityManager;
 
     public User getUserOrThrow(
@@ -28,6 +31,49 @@ public class MedicationFamilyAuthorization {
                                 ErrorCode.USER_NOT_FOUND
                         )
                 );
+    }
+
+    public Senior getSeniorOrThrow(
+            Long seniorId
+    ) {
+        return seniorRepository
+                .findById(
+                        seniorId
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.SENIOR_NOT_FOUND
+                        )
+                );
+    }
+
+    public User getParentUserOrThrow(
+            Senior senior
+    ) {
+        User parentUser =
+                senior.getParentUser();
+
+        if (parentUser == null
+                || parentUser.getRole() != Role.PARENT) {
+            throw new BusinessException(
+                    ErrorCode.SENIOR_PARENT_USER_NOT_FOUND
+            );
+        }
+
+        return parentUser;
+    }
+
+    public User getParentUserBySeniorIdOrThrow(
+            Long seniorId
+    ) {
+        Senior senior =
+                getSeniorOrThrow(
+                        seniorId
+                );
+
+        return getParentUserOrThrow(
+                senior
+        );
     }
 
     public void validateChild(
@@ -57,6 +103,42 @@ public class MedicationFamilyAuthorization {
         if (familyCount == 0) {
             throw new BusinessException(
                     ErrorCode.FAMILY_NOT_FOUND
+            );
+        }
+    }
+
+    public void validateChildAccessToSenior(
+            User requester,
+            Senior senior
+    ) {
+        validateChild(
+                requester
+        );
+
+        Long familyMemberCount =
+                entityManager.createQuery(
+                                """
+                                SELECT COUNT(familyMember)
+                                FROM FamilyMember familyMember
+                                WHERE familyMember.user.usersId = :requesterUserId
+                                  AND familyMember.family.familyId = :familyId
+                                """,
+                                Long.class
+                        )
+                        .setParameter(
+                                "requesterUserId",
+                                requester.getUsersId()
+                        )
+                        .setParameter(
+                                "familyId",
+                                senior.getFamily()
+                                        .getFamilyId()
+                        )
+                        .getSingleResult();
+
+        if (familyMemberCount == 0) {
+            throw new BusinessException(
+                    ErrorCode.SENIOR_NOT_IN_USER_FAMILY
             );
         }
     }

@@ -12,6 +12,7 @@ import com.example.senioron.domain.medication.repository.MedicationLogRepository
 import com.example.senioron.domain.medication.repository.MedicationRepository;
 import com.example.senioron.domain.medication.support.MedicationFamilyAuthorization;
 import com.example.senioron.domain.medication.support.MedicationWeekdayUtils;
+import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
@@ -53,13 +54,13 @@ public class MedicationService {
     @Transactional
     public MedicationCreateResponse createMedication(
             Long requesterUserId,
-            Long parentUserId,
+            Long seniorId,
             MedicationCreateRequest request
     ) {
         User parentUser =
                 getWritableParentOrThrow(
                         requesterUserId,
-                        parentUserId
+                        seniorId
                 );
 
         List<LocalTime> medicineTimes =
@@ -198,9 +199,10 @@ public class MedicationService {
                         .toList();
 
         log.info(
-                "약 등록 완료. requesterUserId: {}, parentUserId: {}, groupId: {}",
+                "약 등록 완료. requesterUserId: {}, seniorId: {}, parentUserId: {}, groupId: {}",
                 requesterUserId,
-                parentUserId,
+                seniorId,
+                parentUser.getUsersId(),
                 medicationGroupId
         );
 
@@ -226,12 +228,12 @@ public class MedicationService {
 
     public List<MedicationReadResponse> getMedications(
             Long requesterUserId,
-            Long parentUserId
+            Long seniorId
     ) {
         User parentUser =
                 getReadableParentOrThrow(
                         requesterUserId,
-                        parentUserId
+                        seniorId
                 );
 
         List<Medication> medications =
@@ -261,13 +263,13 @@ public class MedicationService {
     @Transactional
     public void updateMedication(
             Long requesterUserId,
-            Long parentUserId,
+            Long seniorId,
             MedicationUpdateRequest request
     ) {
         User parentUser =
                 getWritableParentOrThrow(
                         requesterUserId,
-                        parentUserId
+                        seniorId
                 );
 
         List<Medication> existingMedications =
@@ -412,9 +414,10 @@ public class MedicationService {
                 );
 
         log.info(
-                "약 수정 완료. requesterUserId: {}, parentUserId: {}, groupId: {}",
+                "약 수정 완료. requesterUserId: {}, seniorId: {}, parentUserId: {}, groupId: {}",
                 requesterUserId,
-                parentUserId,
+                seniorId,
+                parentUser.getUsersId(),
                 request.getMedicationGroupId()
         );
     }
@@ -422,13 +425,13 @@ public class MedicationService {
     @Transactional
     public void deleteMedicationGroup(
             Long requesterUserId,
-            Long parentUserId,
+            Long seniorId,
             String medicationGroupId
     ) {
         User parentUser =
                 getWritableParentOrThrow(
                         requesterUserId,
-                        parentUserId
+                        seniorId
                 );
 
         List<Medication> medications =
@@ -469,9 +472,10 @@ public class MedicationService {
                 );
 
         log.info(
-                "약 삭제 처리 완료. requesterUserId: {}, parentUserId: {}, groupId: {}",
+                "약 삭제 처리 완료. requesterUserId: {}, seniorId: {}, parentUserId: {}, groupId: {}",
                 requesterUserId,
-                parentUserId,
+                seniorId,
+                parentUser.getUsersId(),
                 medicationGroupId
         );
     }
@@ -875,7 +879,7 @@ public class MedicationService {
 
     private User getReadableParentOrThrow(
             Long requesterUserId,
-            Long parentUserId
+            Long seniorId
     ) {
         User requester =
                 medicationFamilyAuthorization
@@ -883,34 +887,43 @@ public class MedicationService {
                                 requesterUserId
                         );
 
+        Senior senior =
+                medicationFamilyAuthorization
+                        .getSeniorOrThrow(
+                                seniorId
+                        );
+
+        User parentUser =
+                medicationFamilyAuthorization
+                        .getParentUserOrThrow(
+                                senior
+                        );
+
         if (requester.getRole() == Role.PARENT) {
             if (!Objects.equals(
                     requester.getUsersId(),
-                    parentUserId
+                    parentUser.getUsersId()
             )) {
                 throw new BusinessException(
                         ErrorCode.FORBIDDEN
                 );
             }
 
-            return requester;
+            return parentUser;
         }
 
         medicationFamilyAuthorization
-                .validateChild(
-                        requester
+                .validateChildAccessToSenior(
+                        requester,
+                        senior
                 );
 
-        return medicationFamilyAuthorization
-                .getSameFamilyParentOrThrow(
-                        requester,
-                        parentUserId
-                );
+        return parentUser;
     }
 
     private User getWritableParentOrThrow(
             Long requesterUserId,
-            Long parentUserId
+            Long seniorId
     ) {
         User requester =
                 medicationFamilyAuthorization
@@ -918,15 +931,21 @@ public class MedicationService {
                                 requesterUserId
                         );
 
+        Senior senior =
+                medicationFamilyAuthorization
+                        .getSeniorOrThrow(
+                                seniorId
+                        );
+
         medicationFamilyAuthorization
-                .validateChild(
-                        requester
+                .validateChildAccessToSenior(
+                        requester,
+                        senior
                 );
 
         return medicationFamilyAuthorization
-                .getSameFamilyParentOrThrow(
-                        requester,
-                        parentUserId
+                .getParentUserOrThrow(
+                        senior
                 );
     }
 }

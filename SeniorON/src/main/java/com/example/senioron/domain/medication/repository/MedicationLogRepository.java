@@ -84,7 +84,6 @@ public interface MedicationLogRepository
     @EntityGraph(
             attributePaths = {
                     "user",
-                    "user.family",
                     "medication"
             }
     )

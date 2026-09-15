@@ -88,8 +88,7 @@ public interface HospitalRepository
 
     @EntityGraph(
             attributePaths = {
-                    "user",
-                    "user.family"
+                    "user"
             }
     )
     @Query("""

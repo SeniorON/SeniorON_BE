@@ -109,16 +109,16 @@ public class MedicationLogController {
     }
 
     @GetMapping(
-            "/medications/parents/{parentUserId}/schedules"
+            "/medications/seniors/{seniorId}/schedules"
     )
     @Operation(
-            summary = "부모 일일 복약 일정 조회 API",
-            description = "자녀 사용자가 같은 가족에 속한 부모님의 특정 날짜 복약 일정과 복용 상태를 조회합니다."
+            summary = "시니어 일일 복약 일정 조회 API",
+            description = "자녀 사용자가 같은 가족에 속한 시니어의 특정 날짜 복약 일정과 복용 상태를 조회합니다."
     )
     @ApiResponses(value = {
             @ApiResponse(
                     responseCode = "200",
-                    description = "부모 복약 일정 조회 성공"
+                    description = "시니어 복약 일정 조회 성공"
             ),
             @ApiResponse(
                     responseCode = "400",
@@ -131,7 +131,7 @@ public class MedicationLogController {
             ),
             @ApiResponse(
                     responseCode = "403",
-                    description = "자녀 사용자가 아니어서 조회 권한이 없음",
+                    description = "자녀 사용자가 아니거나 해당 시니어의 복약 일정 조회 권한이 없음",
                     content = @Content(
                             schema = @Schema(
                                     implementation = Response.class
@@ -140,7 +140,7 @@ public class MedicationLogController {
             ),
             @ApiResponse(
                     responseCode = "404",
-                    description = "부모 또는 가족 구성원을 찾을 수 없음",
+                    description = "시니어, 연결된 부모 계정 또는 가족 구성원을 찾을 수 없음",
                     content = @Content(
                             schema = @Schema(
                                     implementation = Response.class
@@ -155,12 +155,12 @@ public class MedicationLogController {
             User user,
 
             @Parameter(
-                    description = "조회 대상 부모 사용자 ID",
-                    example = "2",
+                    description = "조회 대상 시니어 ID",
+                    example = "1",
                     required = true
             )
-            @PathVariable("parentUserId")
-            Long parentUserId,
+            @PathVariable("seniorId")
+            Long seniorId,
 
             @Parameter(
                     description = "조회할 날짜",
@@ -180,7 +180,7 @@ public class MedicationLogController {
                 medicationLogService
                         .getParentDailyMedicationSchedules(
                                 user.getUsersId(),
-                                parentUserId,
+                                seniorId,
                                 date
                         );
 
@@ -191,16 +191,16 @@ public class MedicationLogController {
     }
 
     @GetMapping(
-            "/medications/parents/{parentUserId}/schedules/monthly"
+            "/medications/seniors/{seniorId}/schedules/monthly"
     )
     @Operation(
-            summary = "부모 월별 복약 일정 조회 API",
-            description = "자녀 사용자가 같은 가족에 속한 부모님의 특정 연도와 월에 복약 일정이 존재하는 날짜 목록을 조회합니다."
+            summary = "시니어 월별 복약 일정 조회 API",
+            description = "자녀 사용자가 같은 가족에 속한 시니어의 특정 연도와 월에 복약 일정이 존재하는 날짜 목록을 조회합니다."
     )
     @ApiResponses(value = {
             @ApiResponse(
                     responseCode = "200",
-                    description = "부모 월별 복약 일정 조회 성공"
+                    description = "시니어 월별 복약 일정 조회 성공"
             ),
             @ApiResponse(
                     responseCode = "400",
@@ -213,7 +213,7 @@ public class MedicationLogController {
             ),
             @ApiResponse(
                     responseCode = "403",
-                    description = "자녀 사용자가 아니어서 조회 권한이 없음",
+                    description = "자녀 사용자가 아니거나 해당 시니어의 복약 일정 조회 권한이 없음",
                     content = @Content(
                             schema = @Schema(
                                     implementation = Response.class
@@ -222,7 +222,7 @@ public class MedicationLogController {
             ),
             @ApiResponse(
                     responseCode = "404",
-                    description = "부모 또는 같은 가족 구성원을 찾을 수 없음",
+                    description = "시니어, 연결된 부모 계정 또는 가족 구성원을 찾을 수 없음",
                     content = @Content(
                             schema = @Schema(
                                     implementation = Response.class
@@ -237,12 +237,12 @@ public class MedicationLogController {
             User user,
 
             @Parameter(
-                    description = "조회 대상 부모 사용자 ID",
+                    description = "조회 대상 시니어 ID",
                     required = true,
-                    example = "2"
+                    example = "1"
             )
-            @PathVariable("parentUserId")
-            Long parentUserId,
+            @PathVariable("seniorId")
+            Long seniorId,
 
             @Parameter(
                     description = "조회 연도",
@@ -272,7 +272,7 @@ public class MedicationLogController {
                 medicationLogService
                         .getParentMonthlyMedicationSchedules(
                                 user.getUsersId(),
-                                parentUserId,
+                                seniorId,
                                 year,
                                 month
                         );
