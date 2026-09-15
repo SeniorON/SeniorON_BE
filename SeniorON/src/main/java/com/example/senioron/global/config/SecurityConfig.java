@@ -44,6 +44,11 @@ public class SecurityConfig {
                 )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        // 시니어 재로그인 요청 생성은 JWT 없이 호출 가능
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/seniors/relogin-requests"
+                        ).permitAll()
                         .requestMatchers(
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",
@@ -58,7 +63,6 @@ public class SecurityConfig {
                                 "/api/users/account-recovery/password/verification-code",
                                 "/api/users/account-recovery/password/verification-code/verify",
                                 "/api/users/account-recovery/password",
-                                "/api/seniors/relogin-requests",
                                 "/api/social-accounts/login/kakao",
                                 "/api/social-accounts/login/google",
                                 "/api/social-accounts/signup",

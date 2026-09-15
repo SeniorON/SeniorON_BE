@@ -1,6 +1,7 @@
 package com.example.senioron.domain.senior.repository;
 
 import com.example.senioron.domain.device.entity.Device;
+import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorReloginRequest;
 import com.example.senioron.domain.senior.entity.SeniorReloginRequestStatus;
@@ -34,5 +35,10 @@ public interface SeniorReloginRequestRepository extends JpaRepository<SeniorRelo
             """)
     Optional<SeniorReloginRequest> findByIdForUpdate(
             @Param("requestId") Long requestId
+    );
+
+    List<SeniorReloginRequest> findAllBySeniorFamilyAndStatusOrderByCreatedAtDesc(
+            Family family,
+            SeniorReloginRequestStatus status
     );
 }

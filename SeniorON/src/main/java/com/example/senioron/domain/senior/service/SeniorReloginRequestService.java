@@ -7,6 +7,7 @@ import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.senior.dto.request.SeniorReloginRequestCreateRequest;
 import com.example.senioron.domain.senior.dto.response.SeniorReloginRequestApproveResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorReloginRequestCreateResponse;
+import com.example.senioron.domain.senior.dto.response.SeniorReloginRequestListResponse;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorReloginRequest;
 import com.example.senioron.domain.senior.entity.SeniorReloginRequestStatus;
@@ -18,6 +19,7 @@ import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -141,5 +143,29 @@ public class SeniorReloginRequestService {
         return parentUser != null
                 && deviceUser != null
                 && Objects.equals(parentUser.getUsersId(), deviceUser.getUsersId());
+    }
+
+    @Transactional(readOnly = true)
+    public List<SeniorReloginRequestListResponse> getPendingRequests(User principal) {
+        User child = getAuthenticatedUser(principal);
+
+        if (child.getRole() != Role.CHILD) {
+            throw new BusinessException(ErrorCode.SENIOR_RELOGIN_REQUEST_ACCESS_DENIED);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+
+        return familyMemberRepository.findAllByUser(child).stream()
+                .flatMap(familyMember ->
+                        seniorReloginRequestRepository
+                                .findAllBySeniorFamilyAndStatusOrderByCreatedAtDesc(
+                                        familyMember.getFamily(),
+                                        SeniorReloginRequestStatus.PENDING
+                                )
+                                .stream()
+                )
+                .filter(request -> !request.isExpired(now))
+                .map(SeniorReloginRequestListResponse::from)
+                .toList();
     }
 }
