@@ -195,16 +195,9 @@ public class HospitalNotificationScheduler {
 
         Map<Long, List<DeviceTarget>>
                 childDevicesByFamilyId =
-                new LinkedHashMap<>();
-
-        for (Long familyId : targetFamilyIds) {
-            childDevicesByFamilyId.put(
-                    familyId,
-                    findChildDeviceTargetsByFamilyId(
-                            familyId
-                    )
-            );
-        }
+                findChildDeviceTargetsByFamilyIds(
+                        targetFamilyIds
+                );
 
         List<HospitalReminderNotification>
                 notifications =
@@ -313,24 +306,32 @@ public class HospitalNotificationScheduler {
         return familyIdsByUserId;
     }
 
-    private List<DeviceTarget> findChildDeviceTargetsByFamilyId(
-            Long familyId
+    private Map<Long, List<DeviceTarget>> findChildDeviceTargetsByFamilyIds(
+            List<Long> familyIds
     ) {
-        List<Device> childDevices =
+        Map<Long, List<DeviceTarget>> devicesByFamilyId =
+                new LinkedHashMap<>();
+
+        if (familyIds.isEmpty()) {
+            return devicesByFamilyId;
+        }
+
+        List<Object[]> rows =
                 entityManager.createQuery(
                                 """
-                                SELECT DISTINCT device
+                                SELECT DISTINCT familyMember.family.familyId,
+                                                device
                                 FROM Device device
                                 JOIN device.user childUser
                                 JOIN childUser.familyMembers familyMember
-                                WHERE familyMember.family.familyId = :familyId
+                                WHERE familyMember.family.familyId IN :familyIds
                                 AND childUser.role = :role
                                 """,
-                                Device.class
+                                Object[].class
                         )
                         .setParameter(
-                                "familyId",
-                                familyId
+                                "familyIds",
+                                familyIds
                         )
                         .setParameter(
                                 "role",
@@ -338,9 +339,28 @@ public class HospitalNotificationScheduler {
                         )
                         .getResultList();
 
-        return toDeviceTargets(
-                childDevices
-        );
+        for (Object[] row : rows) {
+            Long familyId =
+                    (Long) row[0];
+
+            Device device =
+                    (Device) row[1];
+
+            devicesByFamilyId
+                    .computeIfAbsent(
+                            familyId,
+                            ignored ->
+                                    new ArrayList<>()
+                    )
+                    .add(
+                            new DeviceTarget(
+                                    device.getDeviceId(),
+                                    device.getDeviceToken()
+                            )
+                    );
+        }
+
+        return devicesByFamilyId;
     }
 
     private HospitalReminderNotification createNotification(
@@ -595,19 +615,6 @@ public class HospitalNotificationScheduler {
         }
 
         return devicesByUserId;
-    }
-
-    private List<DeviceTarget> toDeviceTargets(
-            List<Device> devices
-    ) {
-        return devices.stream()
-                .map(device ->
-                        new DeviceTarget(
-                                device.getDeviceId(),
-                                device.getDeviceToken()
-                        )
-                )
-                .toList();
     }
 
     private void executeTransaction(
