@@ -54,4 +54,19 @@ public interface FamilyMemberRepository extends JpaRepository<FamilyMember, Long
             @Param("excludeUserId") Long excludeUserId,
             @Param("role") Role role
     );
+
+    @EntityGraph(attributePaths = {"user"})
+    @Query("""
+            SELECT fm
+            FROM FamilyMember fm
+            JOIN fm.family f
+            JOIN f.senior s
+            WHERE s.seniorId = :seniorId
+              AND fm.user.role = :role
+            ORDER BY fm.user.usersId ASC
+            """)
+    List<FamilyMember> findAllBySeniorIdAndUserRole(
+            @Param("seniorId") Long seniorId,
+            @Param("role") Role role
+    );
 }

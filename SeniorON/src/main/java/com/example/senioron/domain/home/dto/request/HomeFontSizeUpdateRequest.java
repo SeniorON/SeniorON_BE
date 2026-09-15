@@ -9,6 +9,10 @@ import lombok.Getter;
 public class HomeFontSizeUpdateRequest {
 
     @NotNull
+    @JsonProperty("senior_id")
+    private Long seniorId;
+
+    @NotNull
     @JsonProperty("font_size")
     private FontSize fontSize;
 }
