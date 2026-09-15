@@ -63,6 +63,71 @@ class JwtAuthenticationFilterTest {
         verify(filterChain).doFilter(request, response);
     }
 
+    @Test
+    void authenticatesSeniorReloginRequestListGet() throws Exception {
+        JwtUtil jwtUtil = spy(new JwtUtil(JWT_SECRET, 3600000L, 1209600000L));
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(
+                jwtUtil,
+                userRepository,
+                securityErrorResponseWriter
+        );
+        User user = createUser();
+        String token = jwtUtil.createAccessToken(user);
+
+        given(userRepository.findById(user.getUsersId())).willReturn(Optional.of(user));
+
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/seniors/relogin-requests");
+        request.addHeader("Authorization", "Bearer " + token);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain filterChain = mock(FilterChain.class);
+
+        filter.doFilter(request, response, filterChain);
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        assertThat(authentication).isNotNull();
+        assertThat(authentication.getPrincipal()).isSameAs(user);
+        verify(jwtUtil, times(1)).parseClaims(token);
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    void skipsOnlySeniorReloginRequestCreatePostWithoutToken() throws Exception {
+        JwtUtil jwtUtil = spy(new JwtUtil(JWT_SECRET, 3600000L, 1209600000L));
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(
+                jwtUtil,
+                userRepository,
+                securityErrorResponseWriter
+        );
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/seniors/relogin-requests");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain filterChain = mock(FilterChain.class);
+
+        filter.doFilter(request, response, filterChain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(jwtUtil, times(0)).parseClaims(org.mockito.ArgumentMatchers.anyString());
+        verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    void skipsOnlySeniorReloginReactivatePostWithoutToken() throws Exception {
+        JwtUtil jwtUtil = spy(new JwtUtil(JWT_SECRET, 3600000L, 1209600000L));
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(
+                jwtUtil,
+                userRepository,
+                securityErrorResponseWriter
+        );
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/seniors/relogin-requests/1/reactivate");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain filterChain = mock(FilterChain.class);
+
+        filter.doFilter(request, response, filterChain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(jwtUtil, times(0)).parseClaims(org.mockito.ArgumentMatchers.anyString());
+        verify(filterChain).doFilter(request, response);
+    }
+
     private User createUser() {
         return User.builder()
                 .usersId(1L)
