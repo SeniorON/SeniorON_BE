@@ -13,6 +13,7 @@ import com.example.senioron.domain.event.entity.Event;
 import com.example.senioron.domain.event.entity.EventType;
 import com.example.senioron.domain.event.util.FcmSender;
 import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.notification.dto.response.ParentDeviceStatusResponse;
 import com.example.senioron.domain.notification.entity.Notification;
@@ -23,6 +24,7 @@ import com.example.senioron.domain.notification.repository.NotificationRepositor
 import com.example.senioron.domain.notification.repository.NotificationSettingRepository;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
+import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
@@ -113,11 +115,12 @@ class NotificationServiceTest {
 
     @Test
     void eventWithSeniorSendsToChildrenInSeniorFamily() {
-        given(userRepository.findByFamilyAndUsersIdNotAndRole(
-                family,
-                PARENT_ID,
-                Role.CHILD
-        )).willReturn(List.of(child));
+        given(familyMemberRepository.findAllBySeniorIdAndUserRole(SENIOR_ID, Role.CHILD))
+                .willReturn(List.of(FamilyMember.builder()
+                        .user(child)
+                        .family(family)
+                        .managerType(ManagerType.NONE)
+                        .build()));
         given(deviceRepository.findAllByUserIn(List.of(child))).willReturn(List.of());
 
         Event event = Event.builder()
@@ -143,6 +146,66 @@ class NotificationServiceTest {
         } finally {
             TransactionSynchronizationManager.clearSynchronization();
         }
+    }
+
+    @Test
+    void eventSendsToAllChildrenRegardlessOfManagerType() {
+        User primary = User.builder().usersId(3L).role(Role.CHILD).build();
+        User sub = User.builder().usersId(4L).role(Role.CHILD).build();
+        User none = User.builder().usersId(5L).role(Role.CHILD).build();
+        List<User> receivers = List.of(primary, sub, none);
+
+        given(familyMemberRepository.findAllBySeniorIdAndUserRole(SENIOR_ID, Role.CHILD))
+                .willReturn(List.of(
+                        familyMember(primary, ManagerType.PRIMARY),
+                        familyMember(sub, ManagerType.SUB),
+                        familyMember(none, ManagerType.NONE)
+                ));
+        given(deviceRepository.findAllByUserIn(receivers)).willReturn(List.of(
+                Device.builder().user(primary).deviceToken("primary-token").build(),
+                Device.builder().user(sub).deviceToken("sub-token").build(),
+                Device.builder().user(none).deviceToken("none-token").build()
+        ));
+
+        Event event = Event.builder()
+                .eventId(101L)
+                .user(parent)
+                .triggeredUser(parent)
+                .senior(senior)
+                .eventType(EventType.SOS)
+                .build();
+
+        List<com.example.senioron.domain.notification.dto.NotificationDispatchTarget> targets =
+                notificationService.prepareSosNotifications(event);
+
+        assertThat(targets).extracting(
+                        com.example.senioron.domain.notification.dto.NotificationDispatchTarget::receiverId)
+                .containsExactly(3L, 4L, 5L);
+        assertThat(targets).extracting(
+                        com.example.senioron.domain.notification.dto.NotificationDispatchTarget::deviceTokens)
+                .containsExactly(
+                        List.of("primary-token"),
+                        List.of("sub-token"),
+                        List.of("none-token")
+                );
+        verify(notificationRepository).saveAll(
+                org.mockito.ArgumentMatchers.argThat(items -> {
+                    var saved = new java.util.ArrayList<Notification>();
+                    items.forEach(saved::add);
+                    return saved.size() == 3;
+                })
+        );
+    }
+
+    private FamilyMember familyMember(
+            User user,
+            ManagerType managerType
+    ) {
+        return FamilyMember.builder()
+                .user(user)
+                .family(family)
+                .managerType(managerType)
+                .build();
     }
 
     @Test
