@@ -5,11 +5,9 @@ import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.senior.dto.request.SeniorCreateRequest;
-import com.example.senioron.domain.senior.dto.request.SeniorRelationUpdateRequest;
 import com.example.senioron.domain.senior.dto.response.ManagedSeniorResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorCreateResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorFamilyResponse;
-import com.example.senioron.domain.senior.dto.response.SeniorRelationUpdateResponse;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
@@ -111,33 +109,6 @@ public class SeniorService {
         } catch (DataIntegrityViolationException e) {
             throw new BusinessException(ErrorCode.SENIOR_ALREADY_EXISTS);
         }
-    }
-
-    @Transactional
-    public SeniorRelationUpdateResponse updateSeniorRelation(
-            User user,
-            Long seniorId,
-            SeniorRelationUpdateRequest request
-    ) {
-        User lockedUser = userRepository.findByIdForUpdate(user.getUsersId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-
-        validateCustomRelation(request.relation(), request.customRelation());
-
-        Senior senior = seniorRepository.findById(seniorId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.SENIOR_NOT_FOUND));
-
-        validateSameFamily(lockedUser, senior);
-
-        String resolvedCustomRelation =
-                resolveCustomRelation(
-                        request.relation(),
-                        request.customRelation()
-                );
-
-        senior.updateRelation(request.relation(), resolvedCustomRelation);
-
-        return SeniorRelationUpdateResponse.from(senior);
     }
 
     /**

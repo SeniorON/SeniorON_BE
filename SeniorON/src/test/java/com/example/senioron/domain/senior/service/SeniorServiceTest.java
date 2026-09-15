@@ -12,7 +12,6 @@ import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.senior.dto.request.SeniorCreateRequest;
-import com.example.senioron.domain.senior.dto.request.SeniorRelationUpdateRequest;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
@@ -153,27 +152,6 @@ class SeniorServiceTest {
                 .asInstanceOf(type(BusinessException.class))
                 .extracting(BusinessException::getCode)
                 .isEqualTo(ErrorCode.SENIOR_ALREADY_EXISTS);
-    }
-
-    @Test
-    void updateSeniorRelationValidatesSameFamilyAndReturnsRequestedRelation() {
-        Family family = Family.builder().familyId(1L).build();
-        User user = createChild(2L, family, ManagerType.SUB);
-        Senior senior = createSenior(10L, family, user);
-
-        given(userRepository.findByIdForUpdate(2L)).willReturn(Optional.of(user));
-        given(seniorRepository.findById(10L)).willReturn(Optional.of(senior));
-        given(familyMemberRepository.existsByUserAndFamily(user, family)).willReturn(true);
-
-        var response = seniorService.updateSeniorRelation(
-                user,
-                10L,
-                new SeniorRelationUpdateRequest(SeniorRelation.GRANDPARENT, null)
-        );
-
-        assertThat(response.seniorId()).isEqualTo(10L);
-        assertThat(response.relation()).isEqualTo(SeniorRelation.GRANDPARENT);
-        assertThat(senior.getRelation()).isEqualTo(SeniorRelation.GRANDPARENT);
     }
 
     private SeniorCreateRequest createRequest(
