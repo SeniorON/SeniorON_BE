@@ -19,8 +19,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.Set;
 import java.util.Collections;
+import java.util.Set;
 
 @Slf4j
 @Component
@@ -42,7 +42,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             "/api/users/account-recovery/password/verification-code",
             "/api/users/account-recovery/password/verification-code/verify",
             "/api/users/account-recovery/password",
-            "/api/seniors/relogin-requests",
             "/api/social-accounts/login/kakao",
             "/api/social-accounts/login/google",
             "/api/social-accounts/signup",
@@ -65,10 +64,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getServletPath();
+        String method = request.getMethod();
 
         return PUBLIC_PATHS.contains(path)
+                || isPublicSeniorReloginPost(method, path)
                 || PUBLIC_PATH_PREFIXES.stream().anyMatch(path::startsWith)
                 || PUBLIC_READINESS_PATH.equals(path);
+    }
+
+    private boolean isPublicSeniorReloginPost(String method, String path) {
+        return "POST".equals(method)
+                && ("/api/seniors/relogin-requests".equals(path)
+                || path.matches("^/api/seniors/relogin-requests/[^/]+/reactivate$"));
     }
 
     @Override

@@ -103,6 +103,7 @@ public enum ErrorCode implements BaseCode {
     SENIOR_RELOGIN_REQUEST_NOT_PENDING(HttpStatus.CONFLICT, "SENIOR409_4", "승인 가능한 대기 상태의 재로그인 요청이 아닙니다."),
     SENIOR_RELOGIN_REQUEST_EXPIRED(HttpStatus.BAD_REQUEST, "SENIOR4002", "재로그인 요청이 만료되었습니다."),
     SENIOR_RELOGIN_REQUEST_DEVICE_MISMATCH(HttpStatus.CONFLICT, "SENIOR409_5", "재로그인 요청의 기기 정보가 시니어와 일치하지 않습니다."),
+    SENIOR_RELOGIN_REQUEST_NOT_APPROVED(HttpStatus.CONFLICT, "SENIOR409_6", "재활성화 가능한 승인 상태의 재로그인 요청이 아닙니다."),
 
     // Family Error
     FAMILY_NOT_FOUND(HttpStatus.NOT_FOUND, "FAMILY404", "가족 정보를 찾을 수 없습니다."),

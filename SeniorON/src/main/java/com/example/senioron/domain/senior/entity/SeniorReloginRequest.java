@@ -72,4 +72,8 @@ public class SeniorReloginRequest extends BaseEntity {
     public void expire() {
         this.status = SeniorReloginRequestStatus.EXPIRED;
     }
+
+    public void use() {
+        this.status = SeniorReloginRequestStatus.USED;
+    }
 }

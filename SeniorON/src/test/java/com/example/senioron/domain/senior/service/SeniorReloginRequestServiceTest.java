@@ -12,6 +12,7 @@ import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
+import com.example.senioron.domain.senior.dto.request.SeniorReloginReactivateRequest;
 import com.example.senioron.domain.senior.dto.request.SeniorReloginRequestCreateRequest;
 import com.example.senioron.domain.senior.dto.response.SeniorReloginRequestApproveResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorReloginRequestCreateResponse;
@@ -24,10 +25,13 @@ import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.RefreshToken;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.dto.response.TokenRefreshResponse;
 import com.example.senioron.domain.user.repository.RefreshTokenRepository;
 import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.domain.user.service.RefreshTokenService;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
+import com.example.senioron.global.jwt.JwtUtil;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -65,6 +69,8 @@ class SeniorReloginRequestServiceTest {
 
     private DeviceService deviceService;
     private SeniorReloginRequestService seniorReloginRequestService;
+    private RefreshTokenService refreshTokenService;
+    private JwtUtil jwtUtil;
 
     @Test
     void createSucceedsForRegisteredSeniorDeviceWithValidDeviceAuthToken() {
@@ -307,6 +313,215 @@ class SeniorReloginRequestServiceTest {
                 .isEqualTo(ErrorCode.SENIOR_RELOGIN_REQUEST_DEVICE_MISMATCH);
     }
 
+    @Test
+    void reactivateSucceedsForApprovedRequestWithMatchingSeniorDeviceCredential() {
+        SeniorDeviceFixture fixture = saveSeniorDeviceFixture("device-1");
+        SeniorReloginRequest request = saveReloginRequest(
+                fixture.senior(),
+                fixture.device(),
+                SeniorReloginRequestStatus.APPROVED,
+                LocalDateTime.now().plusMinutes(5)
+        );
+
+        TokenRefreshResponse response = service().reactivate(
+                request.getSeniorReloginRequestId(),
+                reactivateRequest(fixture.deviceIdentifier(), fixture.deviceAuthToken())
+        );
+
+        assertThat(response.getAccessToken()).isNotBlank();
+        assertThat(response.getRefreshToken()).isNotBlank();
+        assertThat(jwtUtil().getUsersId(response.getAccessToken())).isEqualTo(fixture.parent().getUsersId());
+        assertThat(refreshTokenRepository.findByUserAndDeviceIdentifier(fixture.parent(), fixture.deviceIdentifier()))
+                .hasValueSatisfying(refreshToken -> {
+                    assertThat(refreshToken.isRevoked()).isFalse();
+                    assertThat(refreshToken.getTokenHash()).isEqualTo(refreshTokenService().hashToken(response.getRefreshToken()));
+                    assertThat(refreshToken.getExpiresAt()).isAfter(LocalDateTime.now().plusDays(13));
+                });
+        assertThat(seniorReloginRequestRepository.findById(request.getSeniorReloginRequestId()))
+                .hasValueSatisfying(used ->
+                        assertThat(used.getStatus()).isEqualTo(SeniorReloginRequestStatus.USED)
+                );
+    }
+
+    @Test
+    void reactivateFailsWhenRequestDoesNotExist() {
+        SeniorDeviceFixture fixture = saveSeniorDeviceFixture("device-1");
+
+        assertThatThrownBy(() -> service().reactivate(
+                999_999L,
+                reactivateRequest(fixture.deviceIdentifier(), fixture.deviceAuthToken())
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_RELOGIN_REQUEST_NOT_FOUND);
+
+        assertThat(refreshTokenRepository.count()).isZero();
+    }
+
+    @Test
+    void reactivateFailsForPendingRequest() {
+        assertReactivateFailsForStatus(SeniorReloginRequestStatus.PENDING);
+    }
+
+    @Test
+    void reactivateFailsForRejectedRequest() {
+        assertReactivateFailsForStatus(SeniorReloginRequestStatus.REJECTED);
+    }
+
+    @Test
+    void reactivateFailsForExpiredRequest() {
+        assertReactivateFailsForStatus(SeniorReloginRequestStatus.EXPIRED);
+    }
+
+    @Test
+    void reactivateFailsForUsedRequest() {
+        assertReactivateFailsForStatus(SeniorReloginRequestStatus.USED);
+    }
+
+    @Test
+    void reactivateFailsAndExpiresApprovedRequestWhenExpired() {
+        SeniorDeviceFixture fixture = saveSeniorDeviceFixture("device-1");
+        SeniorReloginRequest request = saveReloginRequest(
+                fixture.senior(),
+                fixture.device(),
+                SeniorReloginRequestStatus.APPROVED,
+                LocalDateTime.now().minusSeconds(1)
+        );
+
+        assertThatThrownBy(() -> service().reactivate(
+                request.getSeniorReloginRequestId(),
+                reactivateRequest(fixture.deviceIdentifier(), fixture.deviceAuthToken())
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_RELOGIN_REQUEST_EXPIRED);
+
+        assertThat(refreshTokenRepository.count()).isZero();
+        assertThat(seniorReloginRequestRepository.findById(request.getSeniorReloginRequestId()))
+                .hasValueSatisfying(expired ->
+                        assertThat(expired.getStatus()).isEqualTo(SeniorReloginRequestStatus.EXPIRED)
+                );
+    }
+
+    @Test
+    void reactivateFailsWhenDeviceIdentifierDoesNotExist() {
+        SeniorDeviceFixture fixture = saveSeniorDeviceFixture("device-1");
+        SeniorReloginRequest request = saveReloginRequest(
+                fixture.senior(),
+                fixture.device(),
+                SeniorReloginRequestStatus.APPROVED,
+                LocalDateTime.now().plusMinutes(5)
+        );
+
+        assertThatThrownBy(() -> service().reactivate(
+                request.getSeniorReloginRequestId(),
+                reactivateRequest("missing-device", fixture.deviceAuthToken())
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.INVALID_DEVICE_CREDENTIAL);
+
+        assertThat(refreshTokenRepository.count()).isZero();
+    }
+
+    @Test
+    void reactivateFailsWhenDeviceAuthTokenIsWrong() {
+        SeniorDeviceFixture fixture = saveSeniorDeviceFixture("device-1");
+        SeniorReloginRequest request = saveReloginRequest(
+                fixture.senior(),
+                fixture.device(),
+                SeniorReloginRequestStatus.APPROVED,
+                LocalDateTime.now().plusMinutes(5)
+        );
+
+        assertThatThrownBy(() -> service().reactivate(
+                request.getSeniorReloginRequestId(),
+                reactivateRequest(fixture.deviceIdentifier(), "wrong-token")
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.INVALID_DEVICE_CREDENTIAL);
+
+        assertThat(refreshTokenRepository.count()).isZero();
+    }
+
+    @Test
+    void reactivateFailsWhenAnotherDeviceCredentialIsUsed() {
+        SeniorDeviceFixture deviceA = saveSeniorDeviceFixture("device-A");
+        SeniorDeviceFixture deviceB = saveSeniorDeviceFixture("device-B");
+        SeniorReloginRequest request = saveReloginRequest(
+                deviceA.senior(),
+                deviceA.device(),
+                SeniorReloginRequestStatus.APPROVED,
+                LocalDateTime.now().plusMinutes(5)
+        );
+
+        assertThatThrownBy(() -> service().reactivate(
+                request.getSeniorReloginRequestId(),
+                reactivateRequest(deviceB.deviceIdentifier(), deviceB.deviceAuthToken())
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_RELOGIN_REQUEST_DEVICE_MISMATCH);
+
+        assertThat(refreshTokenRepository.count()).isZero();
+    }
+
+    @Test
+    void reactivateFailsWhenDeviceUserDoesNotMatchSeniorParentUser() {
+        SeniorDeviceFixture seniorA = saveSeniorDeviceFixture("device-A");
+        SeniorDeviceFixture seniorB = saveSeniorDeviceFixture("device-B");
+        SeniorReloginRequest request = saveReloginRequest(
+                seniorA.senior(),
+                seniorB.device(),
+                SeniorReloginRequestStatus.APPROVED,
+                LocalDateTime.now().plusMinutes(5)
+        );
+
+        assertThatThrownBy(() -> service().reactivate(
+                request.getSeniorReloginRequestId(),
+                reactivateRequest(seniorB.deviceIdentifier(), seniorB.deviceAuthToken())
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_RELOGIN_REQUEST_DEVICE_MISMATCH);
+
+        assertThat(refreshTokenRepository.count()).isZero();
+    }
+
+    @Test
+    void reactivateCannotReuseUsedRequest() {
+        SeniorDeviceFixture fixture = saveSeniorDeviceFixture("device-1");
+        SeniorReloginRequest request = saveReloginRequest(
+                fixture.senior(),
+                fixture.device(),
+                SeniorReloginRequestStatus.APPROVED,
+                LocalDateTime.now().plusMinutes(5)
+        );
+
+        service().reactivate(
+                request.getSeniorReloginRequestId(),
+                reactivateRequest(fixture.deviceIdentifier(), fixture.deviceAuthToken())
+        );
+
+        assertThatThrownBy(() -> service().reactivate(
+                request.getSeniorReloginRequestId(),
+                reactivateRequest(fixture.deviceIdentifier(), fixture.deviceAuthToken())
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_RELOGIN_REQUEST_NOT_APPROVED);
+
+        assertThat(refreshTokenRepository.count()).isEqualTo(1L);
+    }
+
     private SeniorReloginRequestService service() {
         if (seniorReloginRequestService == null) {
             seniorReloginRequestService = new SeniorReloginRequestService(
@@ -315,7 +530,9 @@ class SeniorReloginRequestServiceTest {
                     seniorRepository,
                     seniorReloginRequestRepository,
                     familyMemberRepository,
-                    userRepository
+                    userRepository,
+                    jwtUtil(),
+                    refreshTokenService()
             );
         }
         return seniorReloginRequestService;
@@ -333,8 +550,30 @@ class SeniorReloginRequestServiceTest {
         return deviceService;
     }
 
+    private RefreshTokenService refreshTokenService() {
+        if (refreshTokenService == null) {
+            refreshTokenService = new RefreshTokenService(refreshTokenRepository, jwtUtil());
+        }
+        return refreshTokenService;
+    }
+
+    private JwtUtil jwtUtil() {
+        if (jwtUtil == null) {
+            jwtUtil = new JwtUtil(
+                    "01234567890123456789012345678901",
+                    3_600_000L,
+                    1_209_600_000L
+            );
+        }
+        return jwtUtil;
+    }
+
     private SeniorReloginRequestCreateRequest createRequest(String deviceIdentifier, String deviceAuthToken) {
         return new SeniorReloginRequestCreateRequest(deviceIdentifier, deviceAuthToken);
+    }
+
+    private SeniorReloginReactivateRequest reactivateRequest(String deviceIdentifier, String deviceAuthToken) {
+        return new SeniorReloginReactivateRequest(deviceIdentifier, deviceAuthToken);
     }
 
     private SeniorDeviceFixture saveSeniorDeviceFixture(String deviceIdentifier) {
@@ -386,6 +625,27 @@ class SeniorReloginRequestServiceTest {
                 .asInstanceOf(type(BusinessException.class))
                 .extracting(BusinessException::getCode)
                 .isEqualTo(ErrorCode.SENIOR_RELOGIN_REQUEST_NOT_PENDING);
+    }
+
+    private void assertReactivateFailsForStatus(SeniorReloginRequestStatus status) {
+        SeniorDeviceFixture fixture = saveSeniorDeviceFixture("device-" + status);
+        SeniorReloginRequest request = saveReloginRequest(
+                fixture.senior(),
+                fixture.device(),
+                status,
+                LocalDateTime.now().plusMinutes(5)
+        );
+
+        assertThatThrownBy(() -> service().reactivate(
+                request.getSeniorReloginRequestId(),
+                reactivateRequest(fixture.deviceIdentifier(), fixture.deviceAuthToken())
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_RELOGIN_REQUEST_NOT_APPROVED);
+
+        assertThat(refreshTokenRepository.count()).isZero();
     }
 
     private void saveFamilyMember(User user, Family family, ManagerType managerType) {

@@ -50,6 +50,10 @@ public class SecurityConfig {
                                 "/api/seniors/relogin-requests"
                         ).permitAll()
                         .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/seniors/relogin-requests/*/reactivate"
+                        ).permitAll()
+                        .requestMatchers(
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",
                                 "/swagger-ui.html",

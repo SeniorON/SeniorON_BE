@@ -4,6 +4,7 @@ import com.example.senioron.domain.device.entity.Device;
 import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
+import com.example.senioron.domain.senior.dto.request.SeniorReloginReactivateRequest;
 import com.example.senioron.domain.senior.dto.request.SeniorReloginRequestCreateRequest;
 import com.example.senioron.domain.senior.dto.response.SeniorReloginRequestApproveResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorReloginRequestCreateResponse;
@@ -15,9 +16,13 @@ import com.example.senioron.domain.senior.repository.SeniorReloginRequestReposit
 import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.entity.UserStatus;
+import com.example.senioron.domain.user.dto.response.TokenRefreshResponse;
 import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.domain.user.service.RefreshTokenService;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
+import com.example.senioron.global.jwt.JwtUtil;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
@@ -39,6 +44,8 @@ public class SeniorReloginRequestService {
     private final SeniorReloginRequestRepository seniorReloginRequestRepository;
     private final FamilyMemberRepository familyMemberRepository;
     private final UserRepository userRepository;
+    private final JwtUtil jwtUtil;
+    private final RefreshTokenService refreshTokenService;
 
     public SeniorReloginRequestCreateResponse create(SeniorReloginRequestCreateRequest request) {
         if (!deviceService.verifyDeviceCredential(request.deviceIdentifier(), request.deviceAuthToken())) {
@@ -82,6 +89,29 @@ public class SeniorReloginRequestService {
         request.approve(now.plusMinutes(APPROVED_REQUEST_EXPIRATION_MINUTES));
 
         return SeniorReloginRequestApproveResponse.from(request);
+    }
+
+    public TokenRefreshResponse reactivate(Long requestId, SeniorReloginReactivateRequest request) {
+        SeniorReloginRequest reloginRequest = seniorReloginRequestRepository.findByIdForUpdate(requestId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SENIOR_RELOGIN_REQUEST_NOT_FOUND));
+
+        LocalDateTime now = LocalDateTime.now();
+        validateReactivatable(reloginRequest, now);
+        Device verifiedDevice = getVerifiedDevice(request.deviceIdentifier(), request.deviceAuthToken());
+        validateApprovedDevice(reloginRequest, verifiedDevice);
+
+        User parentUser = reloginRequest.getSenior().getParentUser();
+        validateActiveUser(parentUser);
+
+        String accessToken = jwtUtil.createAccessToken(parentUser);
+        String refreshToken = jwtUtil.createRefreshToken(parentUser);
+        refreshTokenService.saveOrRotate(parentUser, request.deviceIdentifier(), refreshToken);
+        reloginRequest.use();
+
+        return TokenRefreshResponse.builder()
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .build();
     }
 
     private SeniorReloginRequest findReusablePendingRequest(Senior senior, Device device, LocalDateTime now) {
@@ -134,6 +164,50 @@ public class SeniorReloginRequestService {
 
         if (!isSeniorDevice(request)) {
             throw new BusinessException(ErrorCode.SENIOR_RELOGIN_REQUEST_DEVICE_MISMATCH);
+        }
+    }
+
+    private void validateReactivatable(SeniorReloginRequest request, LocalDateTime now) {
+        if (request.getStatus() != SeniorReloginRequestStatus.APPROVED) {
+            throw new BusinessException(ErrorCode.SENIOR_RELOGIN_REQUEST_NOT_APPROVED);
+        }
+
+        if (request.isExpired(now)) {
+            request.expire();
+            throw new BusinessException(ErrorCode.SENIOR_RELOGIN_REQUEST_EXPIRED);
+        }
+    }
+
+    private Device getVerifiedDevice(String deviceIdentifier, String deviceAuthToken) {
+        if (!deviceService.verifyDeviceCredential(deviceIdentifier, deviceAuthToken)) {
+            throw new BusinessException(ErrorCode.INVALID_DEVICE_CREDENTIAL);
+        }
+
+        Device device = deviceRepository.findByDeviceIdentifier(deviceIdentifier)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_DEVICE_CREDENTIAL));
+
+        if (device.getUser() == null) {
+            throw new BusinessException(ErrorCode.INVALID_DEVICE_CREDENTIAL);
+        }
+
+        return device;
+    }
+
+    private void validateApprovedDevice(SeniorReloginRequest request, Device verifiedDevice) {
+        User parentUser = request.getSenior().getParentUser();
+        User deviceUser = verifiedDevice.getUser();
+
+        if (parentUser == null
+                || !Objects.equals(request.getDevice().getDeviceId(), verifiedDevice.getDeviceId())
+                || deviceUser == null
+                || !Objects.equals(parentUser.getUsersId(), deviceUser.getUsersId())) {
+            throw new BusinessException(ErrorCode.SENIOR_RELOGIN_REQUEST_DEVICE_MISMATCH);
+        }
+    }
+
+    private void validateActiveUser(User user) {
+        if (user.getStatus() == UserStatus.WITHDRAWN) {
+            throw new BusinessException(ErrorCode.WITHDRAWN_USER);
         }
     }
 

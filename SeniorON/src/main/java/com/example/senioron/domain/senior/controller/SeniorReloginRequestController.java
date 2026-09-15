@@ -1,11 +1,13 @@
 package com.example.senioron.domain.senior.controller;
 
 import com.example.senioron.domain.senior.dto.request.SeniorReloginRequestCreateRequest;
+import com.example.senioron.domain.senior.dto.request.SeniorReloginReactivateRequest;
 import com.example.senioron.domain.senior.dto.response.SeniorReloginRequestApproveResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorReloginRequestCreateResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorReloginRequestListResponse;
 import com.example.senioron.domain.senior.service.SeniorReloginRequestService;
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.dto.response.TokenRefreshResponse;
 import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -39,6 +41,15 @@ public class SeniorReloginRequestController {
             @PathVariable Long requestId
     ) {
         return Response.ok(seniorReloginRequestService.approve(requestId, user));
+    }
+
+    @Operation(summary = "시니어 로그인 재활성화", description = "자녀가 승인한 재로그인 요청이 유효한 동안 등록된 시니어 기기 인증 정보로 새로운 Access Token과 Refresh Token을 발급합니다.")
+    @PostMapping("/{requestId}/reactivate")
+    public Response<TokenRefreshResponse> reactivate(
+            @PathVariable Long requestId,
+            @Valid @RequestBody SeniorReloginReactivateRequest request
+    ) {
+        return Response.ok(seniorReloginRequestService.reactivate(requestId, request));
     }
 
     @Operation(
