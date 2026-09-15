@@ -10,6 +10,7 @@ import com.example.senioron.domain.hospital.repository.HospitalNotificationCheck
 import com.example.senioron.domain.hospital.repository.HospitalRepository;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
+import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -46,6 +47,8 @@ public class HospitalNotificationScheduler {
     private final FcmSender fcmSender;
 
     private final PlatformTransactionManager transactionManager;
+
+    private final EntityManager entityManager;
 
     @Scheduled(
             cron = "0 * * * * *",
@@ -175,30 +178,31 @@ public class HospitalNotificationScheduler {
                         parentDevices
                 );
 
+        Map<Long, List<Long>>
+                familyIdsByParentUserId =
+                findFamilyIdsByUserIds(
+                        new ArrayList<>(
+                                parentUsersById.keySet()
+                        )
+                );
+
+        List<Long> targetFamilyIds =
+                familyIdsByParentUserId.values()
+                        .stream()
+                        .flatMap(List::stream)
+                        .distinct()
+                        .toList();
+
         Map<Long, List<DeviceTarget>>
                 childDevicesByFamilyId =
                 new LinkedHashMap<>();
 
-        for (User parentUser
-                : parentUsersById.values()) {
-            if (parentUser.getFamily() == null) {
-                continue;
-            }
-
-            Long familyId =
-                    parentUser.getFamily()
-                            .getFamilyId();
-
-            childDevicesByFamilyId.computeIfAbsent(
+        for (Long familyId : targetFamilyIds) {
+            childDevicesByFamilyId.put(
                     familyId,
-                    ignored ->
-                            toDeviceTargets(
-                                    deviceRepository
-                                            .findAllByUser_FamilyAndUser_Role(
-                                                    parentUser.getFamily(),
-                                                    Role.CHILD
-                                            )
-                            )
+                    findChildDeviceTargetsByFamilyId(
+                            familyId
+                    )
             );
         }
 
@@ -225,11 +229,13 @@ public class HospitalNotificationScheduler {
                 );
             }
 
-            if (parentUser.getFamily() != null) {
-                Long familyId =
-                        parentUser.getFamily()
-                                .getFamilyId();
+            List<Long> familyIds =
+                    familyIdsByParentUserId.getOrDefault(
+                            parentUser.getUsersId(),
+                            List.of()
+                    );
 
+            for (Long familyId : familyIds) {
                 for (DeviceTarget device :
                         childDevicesByFamilyId.getOrDefault(
                                 familyId,
@@ -257,6 +263,83 @@ public class HospitalNotificationScheduler {
                 List.copyOf(
                         notifications
                 )
+        );
+    }
+
+    private Map<Long, List<Long>> findFamilyIdsByUserIds(
+            List<Long> userIds
+    ) {
+        Map<Long, List<Long>> familyIdsByUserId =
+                new LinkedHashMap<>();
+
+        if (userIds.isEmpty()) {
+            return familyIdsByUserId;
+        }
+
+        List<Object[]> rows =
+                entityManager.createQuery(
+                                """
+                                SELECT familyMember.user.usersId,
+                                       familyMember.family.familyId
+                                FROM FamilyMember familyMember
+                                WHERE familyMember.user.usersId IN :userIds
+                                """,
+                                Object[].class
+                        )
+                        .setParameter(
+                                "userIds",
+                                userIds
+                        )
+                        .getResultList();
+
+        for (Object[] row : rows) {
+            Long userId =
+                    (Long) row[0];
+
+            Long familyId =
+                    (Long) row[1];
+
+            familyIdsByUserId
+                    .computeIfAbsent(
+                            userId,
+                            ignored ->
+                                    new ArrayList<>()
+                    )
+                    .add(
+                            familyId
+                    );
+        }
+
+        return familyIdsByUserId;
+    }
+
+    private List<DeviceTarget> findChildDeviceTargetsByFamilyId(
+            Long familyId
+    ) {
+        List<Device> childDevices =
+                entityManager.createQuery(
+                                """
+                                SELECT DISTINCT device
+                                FROM Device device
+                                JOIN device.user childUser
+                                JOIN childUser.familyMembers familyMember
+                                WHERE familyMember.family.familyId = :familyId
+                                AND childUser.role = :role
+                                """,
+                                Device.class
+                        )
+                        .setParameter(
+                                "familyId",
+                                familyId
+                        )
+                        .setParameter(
+                                "role",
+                                Role.CHILD
+                        )
+                        .getResultList();
+
+        return toDeviceTargets(
+                childDevices
         );
     }
 
@@ -297,31 +380,23 @@ public class HospitalNotificationScheduler {
                 Map.of(
                         "type",
                         "HOSPITAL_REMINDER",
-
                         "title",
                         title,
-
                         "body",
                         body,
-
                         "hospitalId",
                         hospital.getHospital_id()
                                 .toString(),
-
                         "hospitalName",
                         hospitalName,
-
                         "department",
                         department,
-
                         "scheduleDate",
                         hospital.getScheduleDate()
                                 .toString(),
-
                         "scheduleTime",
                         hospital.getScheduleTime()
                                 .toString(),
-
                         "reminderType",
                         hospital.getReminderType()
                                 .name()

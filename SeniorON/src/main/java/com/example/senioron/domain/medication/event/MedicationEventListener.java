@@ -5,7 +5,7 @@ import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.event.util.FcmSender;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
-import com.example.senioron.domain.user.repository.UserRepository;
+import jakarta.persistence.EntityManager;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -21,9 +21,9 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @Slf4j
 public class MedicationEventListener {
 
-    private final UserRepository userRepository;
     private final DeviceRepository deviceRepository;
     private final FcmSender fcmSender;
+    private final EntityManager entityManager;
 
     @TransactionalEventListener(
             phase = TransactionPhase.AFTER_COMMIT
@@ -35,12 +35,22 @@ public class MedicationEventListener {
     public void handleMedicationChecked(
             MedicationCheckedEvent event
     ) {
-        User parentUser = userRepository
-                .findById(event.parentUserId())
-                .orElse(null);
+        List<Long> familyIds =
+                entityManager.createQuery(
+                                """
+                                SELECT DISTINCT familyMember.family.familyId
+                                FROM FamilyMember familyMember
+                                WHERE familyMember.user.usersId = :parentUserId
+                                """,
+                                Long.class
+                        )
+                        .setParameter(
+                                "parentUserId",
+                                event.parentUserId()
+                        )
+                        .getResultList();
 
-        if (parentUser == null
-                || parentUser.getFamily() == null) {
+        if (familyIds.isEmpty()) {
             log.warn(
                     "복약 완료 푸시 대상 가족을 찾을 수 없습니다. parentUserId={}",
                     event.parentUserId()
@@ -49,11 +59,24 @@ public class MedicationEventListener {
         }
 
         List<User> childUsers =
-                userRepository.findByFamilyAndUsersIdNotAndRole(
-                        parentUser.getFamily(),
-                        parentUser.getUsersId(),
-                        Role.CHILD
-                );
+                entityManager.createQuery(
+                                """
+                                SELECT DISTINCT familyMember.user
+                                FROM FamilyMember familyMember
+                                WHERE familyMember.family.familyId IN :familyIds
+                                AND familyMember.user.role = :role
+                                """,
+                                User.class
+                        )
+                        .setParameter(
+                                "familyIds",
+                                familyIds
+                        )
+                        .setParameter(
+                                "role",
+                                Role.CHILD
+                        )
+                        .getResultList();
 
         if (childUsers.isEmpty()) {
             log.warn(
@@ -76,17 +99,11 @@ public class MedicationEventListener {
             return;
         }
 
-        String parentName = getSafeValue(
-                event.parentName(),
-                "부모님"
-        );
-
-        String medicineName = getSafeValue(
-                event.medicineName(),
-                "약"
-        );
-
-        String title = "복약 완료";
+        String medicineName =
+                getSafeValue(
+                        event.medicineName(),
+                        "약"
+                );
 
         String body;
 
@@ -104,14 +121,28 @@ public class MedicationEventListener {
                             + "을(를) 복용했어요.";
         }
 
-        Map<String, String> data = Map.of(
-                "type", "MEDICATION_CHECKED",
-                "title", title,
-                "body", body,
-                "parentUserId", String.valueOf(event.parentUserId()),
-                "medicationLogId", String.valueOf(event.medicationLogId()),
-                "medicineName", medicineName
-        );
+        String title =
+                "복약 완료";
+
+        Map<String, String> data =
+                Map.of(
+                        "type",
+                        "MEDICATION_CHECKED",
+                        "title",
+                        title,
+                        "body",
+                        body,
+                        "parentUserId",
+                        String.valueOf(
+                                event.parentUserId()
+                        ),
+                        "medicationLogId",
+                        String.valueOf(
+                                event.medicationLogId()
+                        ),
+                        "medicineName",
+                        medicineName
+                );
 
         int successCount = 0;
         int failureCount = 0;
@@ -146,20 +177,19 @@ public class MedicationEventListener {
                     failureCount++;
                 }
 
-
                 log.info(
                         "자녀 복약 완료 FCM 발송 요청 처리. deviceId={}, medicationLogId={}",
                         childDevice.getDeviceId(),
                         event.medicationLogId()
                 );
-            } catch (RuntimeException e) {
+            } catch (RuntimeException exception) {
                 failureCount++;
 
                 log.error(
                         "자녀 복약 완료 FCM 발송 요청 실패. deviceId={}, medicationLogId={}",
                         childDevice.getDeviceId(),
                         event.medicationLogId(),
-                        e
+                        exception
                 );
             }
         }
@@ -179,7 +209,8 @@ public class MedicationEventListener {
             String value,
             String fallback
     ) {
-        if (value == null || value.isBlank()) {
+        if (value == null
+                || value.isBlank()) {
             return fallback;
         }
 
