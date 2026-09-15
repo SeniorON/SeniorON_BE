@@ -63,7 +63,8 @@ public class SecurityConfig {
                                 "/api/social-accounts/signup",
                                 "/api/social-accounts/login/kakao/callback",
                                 "/h2-console/**",
-                                "/actuator/health/readiness"
+                                "/actuator/health/readiness",
+                                "/actuator/prometheus"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )
