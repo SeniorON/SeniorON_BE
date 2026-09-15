@@ -20,6 +20,7 @@ import com.example.senioron.domain.event.util.GeocodingClient;
 import com.example.senioron.domain.event.util.SafeBrowsingClient;
 import com.example.senioron.domain.notification.dto.NotificationDispatchTarget;
 import com.example.senioron.domain.notification.service.NotificationService;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.entity.User;
@@ -35,7 +36,6 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
-import java.util.Objects;
 @Service
 @RequiredArgsConstructor
 public class EventService {
@@ -50,6 +50,7 @@ public class EventService {
     private final ApplicationContext applicationContext;
     private final UserRepository userRepository;
     private final SeniorRepository seniorRepository;
+    private final FamilyMemberRepository familyMemberRepository;
     private final DeviceRepository deviceRepository;
     private final MeterRegistry meterRegistry;
 
@@ -199,10 +200,9 @@ public class EventService {
         User currentUser = userRepository.findById(principal.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        User eventOwner = event.getTriggeredUser();
-
-        if (eventOwner.getFamily() == null || currentUser.getFamily() == null
-                || !Objects.equals(currentUser.getFamily().getFamilyId(), eventOwner.getFamily().getFamilyId())) {
+        Senior senior = event.getSenior();
+        if (senior == null || senior.getFamily() == null
+                || !familyMemberRepository.existsByUserAndFamily(currentUser, senior.getFamily())) {
             throw new BusinessException(ErrorCode.EVENT_ACCESS_DENIED);
         }
     }
