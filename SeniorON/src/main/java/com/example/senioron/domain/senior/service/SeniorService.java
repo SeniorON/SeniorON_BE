@@ -11,6 +11,7 @@ import com.example.senioron.domain.senior.dto.response.SeniorFamilyResponse;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
+import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
@@ -99,6 +100,8 @@ public class SeniorService {
                 .registeredBy(user)
                 .build();
 
+        linkExistingParentUser(senior, lockedFamily, user);
+
         Senior savedSenior = saveSeniorOrThrowAlreadyExists(senior);
         return SeniorCreateResponse.from(savedSenior);
     }
@@ -169,5 +172,30 @@ public class SeniorService {
         if (!familyMemberRepository.existsByUserAndFamily(user, family)) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
+    }
+
+    private void linkExistingParentUser(
+            Senior senior,
+            Family family,
+            User registeringUser
+    ) {
+        familyMemberRepository
+                .findByFamilyAndUserIdNotAndUserRole(
+                        family,
+                        registeringUser.getUsersId(),
+                        Role.PARENT
+                )
+                .stream()
+                .map(FamilyMember::getUser)
+                .findFirst()
+                .ifPresent(parentUser -> {
+                    if (seniorRepository.existsByParentUser(parentUser)) {
+                        throw new BusinessException(
+                                ErrorCode.PARENT_USER_ALREADY_LINKED_TO_SENIOR
+                        );
+                    }
+
+                    senior.linkParentUser(parentUser);
+                });
     }
 }

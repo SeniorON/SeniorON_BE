@@ -25,6 +25,7 @@ import java.time.LocalDate;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataIntegrityViolationException;
 
 class SeniorServiceTest {
@@ -132,6 +133,39 @@ class SeniorServiceTest {
         assertThat(response.seniorId()).isEqualTo(10L);
         assertThat(response.relation()).isEqualTo(SeniorRelation.MOTHER);
         verify(seniorRepository).saveAndFlush(any(Senior.class));
+    }
+
+    @Test
+    void createSeniorLinksExistingParentMember() {
+        Family family = Family.builder().familyId(1L).build();
+        User child = createChild(1L, family, ManagerType.PRIMARY);
+        User parent = createParent(2L, family);
+
+        given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
+        given(familyMemberRepository.existsByUserAndFamily(child, family)).willReturn(true);
+        given(familyMemberRepository.findByFamilyAndUserIdNotAndUserRole(
+                family,
+                1L,
+                Role.PARENT
+        )).willReturn(java.util.List.of(
+                FamilyMember.builder()
+                        .user(parent)
+                        .family(family)
+                        .managerType(ManagerType.NONE)
+                        .build()
+        ));
+        given(seniorRepository.existsByParentUser(parent)).willReturn(false);
+        given(seniorRepository.saveAndFlush(any(Senior.class)))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        seniorService.createSenior(
+                child,
+                createRequest(SeniorRelation.MOTHER, null)
+        );
+
+        ArgumentCaptor<Senior> seniorCaptor = ArgumentCaptor.forClass(Senior.class);
+        verify(seniorRepository).saveAndFlush(seniorCaptor.capture());
+        assertThat(seniorCaptor.getValue().getParentUser()).isEqualTo(parent);
     }
 
     @Test
