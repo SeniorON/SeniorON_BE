@@ -17,11 +17,14 @@ import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.storage.S3Service;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,6 +45,7 @@ public class FamilyService {
     private final PhotoGroupRepository photoGroupRepository;
     private final PhotoGroupFamilyRepository photoGroupFamilyRepository;
     private final DeviceService deviceService;
+    private final SeniorRepository seniorRepository;
 
     private static final int RECENT_UPLOADER_COUNT = 3;
     private static final int RECENT_PHOTO_COUNT = 4;
@@ -123,6 +127,9 @@ public class FamilyService {
         }
 
         createFamilyMember(user, family, managerType);
+        if (user.getRole() == Role.PARENT) {
+            linkParentUserToFamilySenior(user, family);
+        }
 
         return FamilyJoinResponse.builder()
                 .familyId(family.getFamilyId())
@@ -386,5 +393,38 @@ public class FamilyService {
                         .photoGroup(photoGroup)
                         .build()
         );
+    }
+
+    private void linkParentUserToFamilySenior(User parentUser, Family family) {
+        List<Senior> seniors =
+                seniorRepository.findAllByFamilyOrderBySeniorIdAscForUpdate(family);
+
+        if (seniors.isEmpty()) {
+            return;
+        }
+
+        Senior senior = seniors.get(0);
+        if (senior.getParentUser() != null) {
+            if (Objects.equals(
+                    senior.getParentUser().getUsersId(),
+                    parentUser.getUsersId()
+            )) {
+                return;
+            }
+
+            throw new BusinessException(ErrorCode.SENIOR_ALREADY_LINKED_TO_PARENT);
+        }
+
+        if (seniorRepository.existsByParentUser(parentUser)) {
+            throw new BusinessException(ErrorCode.PARENT_USER_ALREADY_LINKED_TO_SENIOR);
+        }
+
+        senior.linkParentUser(parentUser);
+
+        try {
+            seniorRepository.saveAndFlush(senior);
+        } catch (DataIntegrityViolationException e) {
+            throw new BusinessException(ErrorCode.PARENT_USER_ALREADY_LINKED_TO_SENIOR);
+        }
     }
 }

@@ -22,6 +22,15 @@ public class Senior {
     @Column(nullable = false)
     private String name;
 
+    @Enumerated(EnumType.STRING)
+    private SeniorRelation relation;
+
+    /*
+     * relation이 OTHER인 경우 사용자가 직접 입력한 관계
+     * 예: 이모, 삼촌, 지인
+     */
+    private String customRelation;
+
     @Column(nullable = false)
     private LocalDate birth;
 
@@ -60,6 +69,8 @@ public class Senior {
 
     public void updateProfile(
             String name,
+            SeniorRelation relation,
+            String customRelation,
             LocalDate birth,
             String phoneNumber,
             String address,
@@ -68,12 +79,18 @@ public class Senior {
             Double longitude
     ) {
         this.name = name;
+        updateRelation(relation, customRelation);
         this.birth = birth;
         this.phoneNumber = phoneNumber;
         this.address = address;
         this.detailAddress = detailAddress;
         this.latitude = latitude;
         this.longitude = longitude;
+    }
+
+    public void updateRelation(SeniorRelation relation, String customRelation) {
+        this.relation = relation;
+        this.customRelation = customRelation;
     }
 
 }

@@ -2,16 +2,12 @@ package com.example.senioron.domain.senior.service;
 
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.senior.dto.request.SeniorCreateRequest;
-import com.example.senioron.domain.senior.dto.request.SeniorParentLinkRequest;
-import com.example.senioron.domain.senior.dto.request.SeniorRelationUpdateRequest;
-import com.example.senioron.domain.senior.dto.request.SeniorSelectionRequest;
 import com.example.senioron.domain.senior.dto.response.ManagedSeniorResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorCreateResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorFamilyResponse;
-import com.example.senioron.domain.senior.dto.response.SeniorParentLinkResponse;
-import com.example.senioron.domain.senior.dto.response.SeniorRelationUpdateResponse;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
@@ -26,7 +22,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 
 @Service
@@ -37,6 +32,7 @@ public class SeniorService {
     private final SeniorRepository seniorRepository;
     private final UserRepository userRepository;
     private final FamilyRepository familyRepository;
+    private final FamilyMemberRepository familyMemberRepository;
 
     public List<ManagedSeniorResponse> getManagedSeniors(User user) {
         if (user == null) {
@@ -55,7 +51,7 @@ public class SeniorService {
                 .toList();
     }
 
-    public List<SeniorFamilyResponse> getFamilySeniors(User principal) {
+    public List<SeniorFamilyResponse> getFamilySeniors(User principal, Long familyId) {
         if (principal == null) {
             throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
         }
@@ -63,80 +59,13 @@ public class SeniorService {
         User user = userRepository.findById(principal.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        if (user.getFamily() == null) {
-            throw new BusinessException(ErrorCode.FAMILY_NOT_CONNECTED);
-        }
+        Family family = getFamilyOrThrow(familyId);
+        validateFamilyMember(user, family);
 
-        return seniorRepository.findAllByFamilyOrderBySeniorIdAsc(user.getFamily())
+        return seniorRepository.findAllByFamilyOrderBySeniorIdAsc(family)
                 .stream()
                 .map(SeniorFamilyResponse::from)
                 .toList();
-    }
-
-    @Transactional
-    public SeniorRelationUpdateResponse selectManagedSenior(
-            User principal,
-            SeniorSelectionRequest request
-    ) {
-        if (principal == null) {
-            throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
-        }
-
-        User user = userRepository.findByIdForUpdate(principal.getUsersId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-
-        if (user.getFamily() == null) {
-            throw new BusinessException(ErrorCode.FAMILY_NOT_CONNECTED);
-        }
-
-        validateCustomRelation(request.relation(), request.customRelation());
-
-        Senior senior = seniorRepository.findById(request.seniorId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.SENIOR_NOT_FOUND));
-
-        validateSameFamily(user, senior);
-
-        return SeniorRelationUpdateResponse.from(
-                senior.getSeniorId(),
-                request.relation(),
-                resolveCustomRelation(request.relation(), request.customRelation())
-        );
-    }
-
-    @Transactional
-    public SeniorParentLinkResponse linkParentUser(
-            User principal,
-            SeniorParentLinkRequest request
-    ) {
-        if (principal == null) {
-            throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
-        }
-
-        User parentUser = userRepository.findByIdForUpdate(principal.getUsersId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-
-        if (parentUser.getRole() != Role.PARENT) {
-            throw new BusinessException(ErrorCode.SENIOR_PARENT_LINK_PARENT_ONLY);
-        }
-
-        if (parentUser.getFamily() == null) {
-            throw new BusinessException(ErrorCode.FAMILY_NOT_CONNECTED);
-        }
-
-        Senior senior = seniorRepository.findByIdForUpdate(request.seniorId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.SENIOR_NOT_FOUND));
-
-        validateParentUserSameFamily(parentUser, senior);
-        validateSeniorCanLinkParentUser(senior, parentUser);
-        validateParentUserCanLinkSenior(parentUser, senior);
-
-        senior.linkParentUser(parentUser);
-
-        try {
-            return SeniorParentLinkResponse.from(seniorRepository.saveAndFlush(senior));
-        } catch (DataIntegrityViolationException e) {
-            throw new BusinessException(ErrorCode.PARENT_USER_ALREADY_LINKED_TO_SENIOR);
-        }
     }
 
     /**
@@ -147,17 +76,20 @@ public class SeniorService {
             User user,
             SeniorCreateRequest request
     ) {
-        if (user.getFamily() == null) {
-            throw new BusinessException(ErrorCode.FAMILY_NOT_CONNECTED);
+        if (user == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
         }
 
         validateCustomRelation(request);
 
-        Family lockedFamily = familyRepository.findByIdForUpdate(user.getFamily().getFamilyId())
+        Family lockedFamily = familyRepository.findByIdForUpdate(request.familyId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND));
+        validateFamilyMember(user, lockedFamily);
 
         Senior senior = Senior.builder()
                 .name(request.name())
+                .relation(request.relation())
+                .customRelation(resolveCustomRelation(request))
                 .birth(request.birth())
                 .phoneNumber(normalizePhoneNumber(request.phoneNumber()))
                 .address(request.address())
@@ -168,12 +100,10 @@ public class SeniorService {
                 .registeredBy(user)
                 .build();
 
+        linkExistingParentUser(senior, lockedFamily, user);
+
         Senior savedSenior = saveSeniorOrThrowAlreadyExists(senior);
-        return SeniorCreateResponse.from(
-                savedSenior,
-                request.relation(),
-                resolveCustomRelation(request)
-        );
+        return SeniorCreateResponse.from(savedSenior);
     }
 
     private Senior saveSeniorOrThrowAlreadyExists(Senior senior) {
@@ -182,39 +112,6 @@ public class SeniorService {
         } catch (DataIntegrityViolationException e) {
             throw new BusinessException(ErrorCode.SENIOR_ALREADY_EXISTS);
         }
-    }
-
-    @Transactional
-    public SeniorRelationUpdateResponse updateSeniorRelation(
-            User user,
-            Long seniorId,
-            SeniorRelationUpdateRequest request
-    ) {
-        User lockedUser = userRepository.findByIdForUpdate(user.getUsersId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-
-        if (lockedUser.getFamily() == null) {
-            throw new BusinessException(ErrorCode.FAMILY_NOT_CONNECTED);
-        }
-
-        validateCustomRelation(request.relation(), request.customRelation());
-
-        Senior senior = seniorRepository.findById(seniorId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.SENIOR_NOT_FOUND));
-
-        validateSameFamily(lockedUser, senior);
-
-        String resolvedCustomRelation =
-                resolveCustomRelation(
-                        request.relation(),
-                        request.customRelation()
-                );
-
-        return SeniorRelationUpdateResponse.from(
-                senior.getSeniorId(),
-                request.relation(),
-                resolvedCustomRelation
-        );
     }
 
     /**
@@ -259,48 +156,46 @@ public class SeniorService {
     }
 
     private void validateSameFamily(User user, Senior senior) {
-        if (senior.getFamily() == null
-                || !user.getFamily()
-                .getFamilyId()
-                .equals(
-                        senior.getFamily()
-                                .getFamilyId()
-                )) {
+        if (senior.getFamily() == null) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+
+        validateFamilyMember(user, senior.getFamily());
+    }
+
+    private Family getFamilyOrThrow(Long familyId) {
+        return familyRepository.findById(familyId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND));
+    }
+
+    private void validateFamilyMember(User user, Family family) {
+        if (!familyMemberRepository.existsByUserAndFamily(user, family)) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
     }
 
-    private void validateParentUserSameFamily(User parentUser, Senior senior) {
-        if (senior.getFamily() == null
-                || !Objects.equals(
-                parentUser.getFamily().getFamilyId(),
-                senior.getFamily().getFamilyId()
-        )) {
-            throw new BusinessException(ErrorCode.SENIOR_NOT_IN_USER_FAMILY);
-        }
-    }
+    private void linkExistingParentUser(
+            Senior senior,
+            Family family,
+            User registeringUser
+    ) {
+        familyMemberRepository
+                .findByFamilyAndUserIdNotAndUserRole(
+                        family,
+                        registeringUser.getUsersId(),
+                        Role.PARENT
+                )
+                .stream()
+                .map(FamilyMember::getUser)
+                .findFirst()
+                .ifPresent(parentUser -> {
+                    if (seniorRepository.existsByParentUser(parentUser)) {
+                        throw new BusinessException(
+                                ErrorCode.PARENT_USER_ALREADY_LINKED_TO_SENIOR
+                        );
+                    }
 
-    private void validateSeniorCanLinkParentUser(Senior senior, User parentUser) {
-        if (senior.getParentUser() != null
-                && !Objects.equals(
-                senior.getParentUser().getUsersId(),
-                parentUser.getUsersId()
-        )) {
-            throw new BusinessException(ErrorCode.SENIOR_ALREADY_LINKED_TO_PARENT);
-        }
-    }
-
-    private void validateParentUserCanLinkSenior(User parentUser, Senior senior) {
-        if (senior.getParentUser() != null
-                && Objects.equals(
-                senior.getParentUser().getUsersId(),
-                parentUser.getUsersId()
-        )) {
-            return;
-        }
-
-        if (seniorRepository.existsByParentUser(parentUser)) {
-            throw new BusinessException(ErrorCode.PARENT_USER_ALREADY_LINKED_TO_SENIOR);
-        }
+                    senior.linkParentUser(parentUser);
+                });
     }
 }

@@ -19,15 +19,13 @@ public record SeniorProfileUpdateResponse(
 ) {
 
     public static SeniorProfileUpdateResponse from(
-            Senior senior,
-            SeniorRelation relation,
-            String customRelation
+            Senior senior
     ) {
         return new SeniorProfileUpdateResponse(
                 senior.getSeniorId(),
                 senior.getName(),
-                relation,
-                customRelation,
+                senior.getRelation(),
+                senior.getCustomRelation(),
                 senior.getBirth(),
                 senior.getPhoneNumber(),
                 senior.getAddress(),

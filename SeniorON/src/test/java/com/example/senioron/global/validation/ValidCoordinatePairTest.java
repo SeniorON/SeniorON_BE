@@ -61,6 +61,7 @@ class ValidCoordinatePairTest {
 
     private SeniorCreateRequest createSeniorCreateRequest(Double latitude, Double longitude) {
         return new SeniorCreateRequest(
+                1L,
                 "김영희",
                 SeniorRelation.MOTHER,
                 null,

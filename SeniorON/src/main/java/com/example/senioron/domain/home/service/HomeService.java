@@ -392,7 +392,9 @@ public class HomeService {
         HomeResponse.SeniorProfileResponse seniorProfileResponse =
                 createSeniorProfileResponse(
                         seniorProfile,
-                        null
+                        seniorProfile.getRelation() == null
+                                ? null
+                                : seniorProfile.getRelation().name()
                 );
 
         FontSize fontSize =
@@ -459,6 +461,8 @@ public class HomeService {
 
         senior.updateProfile(
                 request.name(),
+                request.relation(),
+                resolvedCustomRelation,
                 request.birth(),
                 normalizedPhoneNumber,
                 request.address(),
@@ -467,11 +471,7 @@ public class HomeService {
                 request.longitude()
         );
 
-        return SeniorProfileUpdateResponse.from(
-                senior,
-                request.relation(),
-                resolvedCustomRelation
-        );
+        return SeniorProfileUpdateResponse.from(senior);
     }
 
     /**
