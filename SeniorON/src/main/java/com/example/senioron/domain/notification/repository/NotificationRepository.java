@@ -18,16 +18,9 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     SELECT n FROM Notification n
     LEFT JOIN FETCH n.sendUser
     LEFT JOIN FETCH n.event e
-    LEFT JOIN e.senior eventSenior
+    JOIN e.senior eventSenior
     WHERE n.receiverUser.usersId = :userId
-    AND (
-        eventSenior.seniorId = :seniorId
-        OR (eventSenior IS NULL AND EXISTS (
-            SELECT s.seniorId FROM Senior s
-            WHERE s.seniorId = :seniorId
-            AND s.parentUser = e.triggeredUser
-        ))
-    )
+    AND eventSenior.seniorId = :seniorId
     AND n.notificationType IN :types
     AND n.isRead = false
     AND n.createdAt >= :threshold
@@ -43,16 +36,9 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     @Query("""
     SELECT n FROM Notification n
     JOIN n.event e
-    LEFT JOIN e.senior eventSenior
+    JOIN e.senior eventSenior
     WHERE n.receiverUser.usersId = :userId
-    AND (
-        eventSenior.seniorId = :seniorId
-        OR (eventSenior IS NULL AND EXISTS (
-            SELECT s.seniorId FROM Senior s
-            WHERE s.seniorId = :seniorId
-            AND s.parentUser = e.triggeredUser
-        ))
-    )
+    AND eventSenior.seniorId = :seniorId
     AND n.notificationType = :type
     AND n.createdAt >= :thirtyDaysAgo
     AND (:cursor IS NULL OR n.notificationId < :cursor)
@@ -70,16 +56,9 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     @Query("""
     SELECT COUNT(n) FROM Notification n
     JOIN n.event e
-    LEFT JOIN e.senior eventSenior
+    JOIN e.senior eventSenior
     WHERE n.receiverUser.usersId = :userId
-    AND (
-        eventSenior.seniorId = :seniorId
-        OR (eventSenior IS NULL AND EXISTS (
-            SELECT s.seniorId FROM Senior s
-            WHERE s.seniorId = :seniorId
-            AND s.parentUser = e.triggeredUser
-        ))
-    )
+    AND eventSenior.seniorId = :seniorId
     AND n.notificationType = :type
     AND n.createdAt >= :thirtyDaysAgo
     """)

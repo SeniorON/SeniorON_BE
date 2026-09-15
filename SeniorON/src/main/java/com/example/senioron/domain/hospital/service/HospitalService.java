@@ -9,6 +9,8 @@ import com.example.senioron.domain.hospital.dto.response.HospitalListResponse;
 import com.example.senioron.domain.hospital.dto.response.HospitalUpcomingResponse;
 import com.example.senioron.domain.hospital.entity.Hospital;
 import com.example.senioron.domain.hospital.repository.HospitalRepository;
+import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
@@ -41,19 +43,20 @@ public class HospitalService {
             2;
 
     private final HospitalRepository hospitalRepository;
+    private final SeniorRepository seniorRepository;
     private final EntityManager entityManager;
     private final HomeWebSocketService homeWebSocketService;
 
     @Transactional
     public HospitalCreateResponse createHospital(
             Long requesterUserId,
-            Long parentUserId,
+            Long seniorId,
             HospitalCreateRequest request
     ) {
         User parentUser =
                 getWritableParentOrThrow(
                         requesterUserId,
-                        parentUserId
+                        seniorId
                 );
 
         LocalDate date;
@@ -129,14 +132,14 @@ public class HospitalService {
 
     public List<HospitalListResponse> getHospitalByMonth(
             Long requesterUserId,
-            Long parentUserId,
+            Long seniorId,
             int year,
             int month
     ) {
         User parentUser =
                 getReadableParentOrThrow(
                         requesterUserId,
-                        parentUserId
+                        seniorId
                 );
 
         LocalDate startDate =
@@ -188,13 +191,13 @@ public class HospitalService {
     @Transactional
     public void deleteHospital(
             Long requesterUserId,
-            Long parentUserId,
+            Long seniorId,
             Long hospitalId
     ) {
         User parentUser =
                 getWritableParentOrThrow(
                         requesterUserId,
-                        parentUserId
+                        seniorId
                 );
 
         Hospital hospital =
@@ -216,14 +219,14 @@ public class HospitalService {
     @Transactional
     public void updateHospital(
             Long requesterUserId,
-            Long parentUserId,
+            Long seniorId,
             Long hospitalId,
             HospitalUpdateRequest request
     ) {
         User parentUser =
                 getWritableParentOrThrow(
                         requesterUserId,
-                        parentUserId
+                        seniorId
                 );
 
         Hospital hospital =
@@ -267,13 +270,13 @@ public class HospitalService {
 
     public List<HospitalDetailResponse> getHospitalByDate(
             Long requesterUserId,
-            Long parentUserId,
+            Long seniorId,
             LocalDate date
     ) {
         User parentUser =
                 getReadableParentOrThrow(
                         requesterUserId,
-                        parentUserId
+                        seniorId
                 );
 
         List<Hospital> hospitals =
@@ -292,12 +295,12 @@ public class HospitalService {
 
     public List<HospitalUpcomingResponse> getUpcomingHospitals(
             Long requesterUserId,
-            Long parentUserId
+            Long seniorId
     ) {
         User parentUser =
                 getReadableParentOrThrow(
                         requesterUserId,
-                        parentUserId
+                        seniorId
                 );
 
         LocalDateTime now =
@@ -394,53 +397,132 @@ public class HospitalService {
 
     private User getReadableParentOrThrow(
             Long requesterUserId,
-            Long parentUserId
+            Long seniorId
     ) {
         User requester =
                 getUserOrThrow(
                         requesterUserId
                 );
 
+        Senior senior =
+                getSeniorOrThrow(
+                        seniorId
+                );
+
+        User parentUser =
+                getParentUserOrThrow(
+                        senior
+                );
+
         if (requester.getRole() == Role.PARENT) {
             if (!Objects.equals(
                     requester.getUsersId(),
-                    parentUserId
+                    parentUser.getUsersId()
             )) {
                 throw new BusinessException(
                         ErrorCode.FORBIDDEN
                 );
             }
 
-            return requester;
+            return parentUser;
         }
 
-        validateChild(
-                requester
+        validateChildAccessToSenior(
+                requester,
+                senior
         );
 
-        return getSameFamilyParentOrThrow(
-                requester,
-                parentUserId
-        );
+        return parentUser;
     }
 
     private User getWritableParentOrThrow(
             Long requesterUserId,
-            Long parentUserId
+            Long seniorId
     ) {
         User requester =
                 getUserOrThrow(
                         requesterUserId
                 );
 
+        Senior senior =
+                getSeniorOrThrow(
+                        seniorId
+                );
+
+        validateChildAccessToSenior(
+                requester,
+                senior
+        );
+
+        return getParentUserOrThrow(
+                senior
+        );
+    }
+
+    private Senior getSeniorOrThrow(
+            Long seniorId
+    ) {
+        return seniorRepository
+                .findById(
+                        seniorId
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.SENIOR_NOT_FOUND
+                        )
+                );
+    }
+
+    private User getParentUserOrThrow(
+            Senior senior
+    ) {
+        User parentUser =
+                senior.getParentUser();
+
+        if (parentUser == null
+                || parentUser.getRole() != Role.PARENT) {
+            throw new BusinessException(
+                    ErrorCode.SENIOR_PARENT_USER_NOT_FOUND
+            );
+        }
+
+        return parentUser;
+    }
+
+    private void validateChildAccessToSenior(
+            User requester,
+            Senior senior
+    ) {
         validateChild(
                 requester
         );
 
-        return getSameFamilyParentOrThrow(
-                requester,
-                parentUserId
-        );
+        Long familyMemberCount =
+                entityManager.createQuery(
+                                """
+                                SELECT COUNT(familyMember)
+                                FROM FamilyMember familyMember
+                                WHERE familyMember.user.usersId = :requesterUserId
+                                  AND familyMember.family.familyId = :familyId
+                                """,
+                                Long.class
+                        )
+                        .setParameter(
+                                "requesterUserId",
+                                requester.getUsersId()
+                        )
+                        .setParameter(
+                                "familyId",
+                                senior.getFamily()
+                                        .getFamilyId()
+                        )
+                        .getSingleResult();
+
+        if (familyMemberCount == 0) {
+            throw new BusinessException(
+                    ErrorCode.SENIOR_NOT_IN_USER_FAMILY
+            );
+        }
     }
 
     private void validateChild(
@@ -452,69 +534,44 @@ public class HospitalService {
             );
         }
 
-        if (requester.getFamily() == null) {
+        Long familyCount =
+                entityManager.createQuery(
+                                """
+                                SELECT COUNT(familyMember)
+                                FROM FamilyMember familyMember
+                                WHERE familyMember.user.usersId = :userId
+                                """,
+                                Long.class
+                        )
+                        .setParameter(
+                                "userId",
+                                requester.getUsersId()
+                        )
+                        .getSingleResult();
+
+        if (familyCount == 0) {
             throw new BusinessException(
                     ErrorCode.FAMILY_NOT_FOUND
             );
         }
     }
 
-    private User getSameFamilyParentOrThrow(
-            User requester,
-            Long parentUserId
-    ) {
-        User parentUser =
-                getUserOrThrow(
-                        parentUserId
-                );
-
-        if (parentUser.getRole() != Role.PARENT) {
-            throw new BusinessException(
-                    ErrorCode.FAMILY_MEMBER_NOT_FOUND
-            );
-        }
-
-        boolean belongsToSameFamily =
-                parentUser.getFamily() != null
-                        && Objects.equals(
-                        requester.getFamily()
-                                .getFamilyId(),
-                        parentUser.getFamily()
-                                .getFamilyId()
-                );
-
-        if (!belongsToSameFamily) {
-            throw new BusinessException(
-                    ErrorCode.FAMILY_MEMBER_NOT_FOUND
-            );
-        }
-
-        return parentUser;
-    }
-
     private User getUserOrThrow(
             Long userId
     ) {
-        return entityManager.createQuery(
-                        """
-                        SELECT user
-                        FROM User user
-                        LEFT JOIN FETCH user.family
-                        WHERE user.usersId = :userId
-                        """,
-                        User.class
-                )
-                .setParameter(
-                        "userId",
+        User user =
+                entityManager.find(
+                        User.class,
                         userId
-                )
-                .getResultStream()
-                .findFirst()
-                .orElseThrow(() ->
-                        new BusinessException(
-                                ErrorCode.USER_NOT_FOUND
-                        )
                 );
+
+        if (user == null) {
+            throw new BusinessException(
+                    ErrorCode.USER_NOT_FOUND
+            );
+        }
+
+        return user;
     }
 
     private Hospital getHospitalOwnedByParentOrThrow(

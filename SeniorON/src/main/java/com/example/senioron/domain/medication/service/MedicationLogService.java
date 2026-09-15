@@ -13,6 +13,7 @@ import com.example.senioron.domain.medication.repository.MedicationLogRepository
 import com.example.senioron.domain.medication.repository.MedicationRepository;
 import com.example.senioron.domain.medication.support.MedicationFamilyAuthorization;
 import com.example.senioron.domain.medication.support.MedicationWeekdayUtils;
+import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
@@ -85,7 +86,7 @@ public class MedicationLogService {
 
     public List<MedicationScheduleResponse> getParentDailyMedicationSchedules(
             Long requesterUserId,
-            Long parentUserId,
+            Long seniorId,
             LocalDate date
     ) {
         User requester =
@@ -94,16 +95,22 @@ public class MedicationLogService {
                                 requesterUserId
                         );
 
+        Senior senior =
+                medicationFamilyAuthorization
+                        .getSeniorOrThrow(
+                                seniorId
+                        );
+
         medicationFamilyAuthorization
-                .validateChild(
-                        requester
+                .validateChildAccessToSenior(
+                        requester,
+                        senior
                 );
 
         User parentUser =
                 medicationFamilyAuthorization
-                        .getSameFamilyParentOrThrow(
-                                requester,
-                                parentUserId
+                        .getParentUserOrThrow(
+                                senior
                         );
 
         return getDailyMedicationSchedules(
@@ -115,7 +122,7 @@ public class MedicationLogService {
     @Transactional
     public MedicationMonthlyScheduleResponse getParentMonthlyMedicationSchedules(
             Long requesterUserId,
-            Long parentUserId,
+            Long seniorId,
             Integer year,
             Integer month
     ) {
@@ -125,16 +132,22 @@ public class MedicationLogService {
                                 requesterUserId
                         );
 
+        Senior senior =
+                medicationFamilyAuthorization
+                        .getSeniorOrThrow(
+                                seniorId
+                        );
+
         medicationFamilyAuthorization
-                .validateChild(
-                        requester
+                .validateChildAccessToSenior(
+                        requester,
+                        senior
                 );
 
         User parentUser =
                 medicationFamilyAuthorization
-                        .getSameFamilyParentOrThrow(
-                                requester,
-                                parentUserId
+                        .getParentUserOrThrow(
+                                senior
                         );
 
         return getMonthlyMedicationSchedules(

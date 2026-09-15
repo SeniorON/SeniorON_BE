@@ -7,15 +7,13 @@ import com.example.senioron.domain.medication.entity.MedicationLog;
 import com.example.senioron.domain.medication.repository.MedicationLogRepository;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
-import com.example.senioron.domain.user.repository.UserRepository;
+import jakarta.persistence.EntityManager;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,10 +34,10 @@ public class MedicationNotificationScheduler {
             120L;
 
     private final MedicationLogRepository medicationLogRepository;
-    private final UserRepository userRepository;
     private final DeviceRepository deviceRepository;
     private final FcmSender fcmSender;
     private final PlatformTransactionManager transactionManager;
+    private final EntityManager entityManager;
 
     @Scheduled(
             cron = "0 * * * * *",
@@ -152,29 +150,22 @@ public class MedicationNotificationScheduler {
                         Map.of(
                                 "type",
                                 "MEDICATION_REMINDER",
-
                                 "title",
                                 title,
-
                                 "body",
                                 body,
-
                                 "medicationLogId",
                                 medicationLog
                                         .getMedicationLogId()
                                         .toString(),
-
                                 "medicineName",
                                 medicineName,
-
                                 "ingredientName",
                                 ingredientName,
-
                                 "plannedDate",
                                 medicationLog
                                         .getPlannedDate()
                                         .toString(),
-
                                 "plannedTime",
                                 medicationLog
                                         .getPlannedTime()
@@ -192,7 +183,9 @@ public class MedicationNotificationScheduler {
                                 parentUser.getUsersId(),
                                 medicationLog
                                         .getMedicationLogId(),
-                                List.copyOf(devices),
+                                List.copyOf(
+                                        devices
+                                ),
                                 data
                         )
                 );
@@ -264,7 +257,7 @@ public class MedicationNotificationScheduler {
                     } else {
                         failureCount++;
                     }
-                } catch (RuntimeException e) {
+                } catch (RuntimeException exception) {
                     failureCount++;
 
                     log.error(
@@ -272,7 +265,7 @@ public class MedicationNotificationScheduler {
                                     + "deviceId={}, medicationLogId={}",
                             device.deviceId(),
                             notification.medicationLogId(),
-                            e
+                            exception
                     );
                 }
             }
@@ -311,9 +304,6 @@ public class MedicationNotificationScheduler {
             Map<Long, User> parentUsersById =
                     new LinkedHashMap<>();
 
-            Set<Object> targetFamilies =
-                    new LinkedHashSet<>();
-
             for (MedicationLog medicationLog : medicationLogs) {
                 User parentUser =
                         medicationLog.getUser();
@@ -322,51 +312,57 @@ public class MedicationNotificationScheduler {
                         parentUser.getUsersId(),
                         parentUser
                 );
-
-                if (parentUser.getFamily() != null) {
-                    targetFamilies.add(
-                            parentUser.getFamily()
-                    );
-                }
             }
 
-            if (targetFamilies.isEmpty()) {
+            Map<Long, List<Long>>
+                    familyIdsByParentUserId =
+                    findFamilyIdsByUserIds(
+                            new ArrayList<>(
+                                    parentUsersById.keySet()
+                            )
+                    );
+
+            if (familyIdsByParentUserId.isEmpty()) {
                 return List.of();
             }
 
-            List<User> childUsers =
-                    userRepository.findAll()
+            List<Long> targetFamilyIds =
+                    familyIdsByParentUserId.values()
                             .stream()
-                            .filter(user ->
-                                    user.getRole()
-                                            == Role.CHILD
-                            )
-                            .filter(user ->
-                                    user.getFamily()
-                                            != null
-                            )
-                            .filter(user ->
-                                    targetFamilies.contains(
-                                            user.getFamily()
-                                    )
-                            )
+                            .flatMap(List::stream)
+                            .distinct()
                             .toList();
+
+            Map<Long, List<User>>
+                    childUsersByFamilyId =
+                    findChildUsersByFamilyIds(
+                            targetFamilyIds
+                    );
+
+            if (childUsersByFamilyId.isEmpty()) {
+                return List.of();
+            }
+
+            Map<Long, User> uniqueChildUsersById =
+                    new LinkedHashMap<>();
+
+            childUsersByFamilyId.values()
+                    .stream()
+                    .flatMap(List::stream)
+                    .forEach(childUser ->
+                            uniqueChildUsersById.putIfAbsent(
+                                    childUser.getUsersId(),
+                                    childUser
+                            )
+                    );
+
+            List<User> childUsers =
+                    new ArrayList<>(
+                            uniqueChildUsersById.values()
+                    );
 
             if (childUsers.isEmpty()) {
                 return List.of();
-            }
-
-            Map<Object, List<User>>
-                    childUsersByFamily =
-                    new LinkedHashMap<>();
-
-            for (User childUser : childUsers) {
-                childUsersByFamily
-                        .computeIfAbsent(
-                                childUser.getFamily(),
-                                key -> new ArrayList<>()
-                        )
-                        .add(childUser);
             }
 
             List<Device> childDevices =
@@ -388,31 +384,60 @@ public class MedicationNotificationScheduler {
                 User parentUser =
                         medicationLog.getUser();
 
-                if (parentUser.getFamily() == null) {
+                List<Long> familyIds =
+                        familyIdsByParentUserId
+                                .getOrDefault(
+                                        parentUser.getUsersId(),
+                                        List.of()
+                                );
+
+                if (familyIds.isEmpty()) {
                     continue;
                 }
 
-                List<User> familyChildUsers =
-                        childUsersByFamily.getOrDefault(
-                                parentUser.getFamily(),
-                                List.of()
+                Map<Long, User>
+                        familyChildUsersById =
+                        new LinkedHashMap<>();
+
+                for (Long familyId : familyIds) {
+                    for (User childUser :
+                            childUsersByFamilyId.getOrDefault(
+                                    familyId,
+                                    List.of()
+                            )) {
+                        familyChildUsersById.putIfAbsent(
+                                childUser.getUsersId(),
+                                childUser
                         );
+                    }
+                }
 
-                if (familyChildUsers.isEmpty()) {
+                if (familyChildUsersById.isEmpty()) {
                     continue;
                 }
 
-                List<DeviceTarget> familyChildDevices =
-                        new ArrayList<>();
+                Map<Long, DeviceTarget>
+                        familyChildDevicesById =
+                        new LinkedHashMap<>();
 
-                for (User childUser : familyChildUsers) {
-                    familyChildDevices.addAll(
+                for (User childUser :
+                        familyChildUsersById.values()) {
+                    for (DeviceTarget device :
                             devicesByUserId.getOrDefault(
                                     childUser.getUsersId(),
                                     List.of()
-                            )
-                    );
+                            )) {
+                        familyChildDevicesById.putIfAbsent(
+                                device.deviceId(),
+                                device
+                        );
+                    }
                 }
+
+                List<DeviceTarget> familyChildDevices =
+                        new ArrayList<>(
+                                familyChildDevicesById.values()
+                        );
 
                 String parentName =
                         getSafeValue(
@@ -453,6 +478,105 @@ public class MedicationNotificationScheduler {
 
             return notifications;
         });
+    }
+
+    private Map<Long, List<Long>> findFamilyIdsByUserIds(
+            List<Long> userIds
+    ) {
+        Map<Long, List<Long>> familyIdsByUserId =
+                new LinkedHashMap<>();
+
+        if (userIds.isEmpty()) {
+            return familyIdsByUserId;
+        }
+
+        List<Object[]> rows =
+                entityManager.createQuery(
+                                """
+                                SELECT familyMember.user.usersId,
+                                       familyMember.family.familyId
+                                FROM FamilyMember familyMember
+                                WHERE familyMember.user.usersId IN :userIds
+                                """,
+                                Object[].class
+                        )
+                        .setParameter(
+                                "userIds",
+                                userIds
+                        )
+                        .getResultList();
+
+        for (Object[] row : rows) {
+            Long userId =
+                    (Long) row[0];
+
+            Long familyId =
+                    (Long) row[1];
+
+            familyIdsByUserId
+                    .computeIfAbsent(
+                            userId,
+                            ignored ->
+                                    new ArrayList<>()
+                    )
+                    .add(
+                            familyId
+                    );
+        }
+
+        return familyIdsByUserId;
+    }
+
+    private Map<Long, List<User>> findChildUsersByFamilyIds(
+            List<Long> familyIds
+    ) {
+        Map<Long, List<User>> childUsersByFamilyId =
+                new LinkedHashMap<>();
+
+        if (familyIds.isEmpty()) {
+            return childUsersByFamilyId;
+        }
+
+        List<Object[]> rows =
+                entityManager.createQuery(
+                                """
+                                SELECT familyMember.family.familyId,
+                                       familyMember.user
+                                FROM FamilyMember familyMember
+                                WHERE familyMember.family.familyId IN :familyIds
+                                AND familyMember.user.role = :role
+                                """,
+                                Object[].class
+                        )
+                        .setParameter(
+                                "familyIds",
+                                familyIds
+                        )
+                        .setParameter(
+                                "role",
+                                Role.CHILD
+                        )
+                        .getResultList();
+
+        for (Object[] row : rows) {
+            Long familyId =
+                    (Long) row[0];
+
+            User childUser =
+                    (User) row[1];
+
+            childUsersByFamilyId
+                    .computeIfAbsent(
+                            familyId,
+                            ignored ->
+                                    new ArrayList<>()
+                    )
+                    .add(
+                            childUser
+                    );
+        }
+
+        return childUsersByFamilyId;
     }
 
     private void sendChildMissedNotifications(
@@ -518,7 +642,7 @@ public class MedicationNotificationScheduler {
                     } else {
                         failureCount++;
                     }
-                } catch (RuntimeException e) {
+                } catch (RuntimeException exception) {
                     failureCount++;
 
                     log.error(
@@ -526,7 +650,7 @@ public class MedicationNotificationScheduler {
                                     + "deviceId={}, medicationLogId={}",
                             device.deviceId(),
                             notification.medicationLogId(),
-                            e
+                            exception
                     );
                 }
             }
@@ -571,7 +695,8 @@ public class MedicationNotificationScheduler {
             devicesByUserId
                     .computeIfAbsent(
                             userId,
-                            key -> new ArrayList<>()
+                            key ->
+                                    new ArrayList<>()
                     )
                     .add(
                             new DeviceTarget(
@@ -592,11 +717,14 @@ public class MedicationNotificationScheduler {
                         transactionManager
                 );
 
-        transactionTemplate.setReadOnly(true);
+        transactionTemplate.setReadOnly(
+                true
+        );
 
         T result =
                 transactionTemplate.execute(
-                        status -> action.get()
+                        status ->
+                                action.get()
                 );
 
         if (result == null) {
@@ -612,7 +740,8 @@ public class MedicationNotificationScheduler {
             String value,
             String fallback
     ) {
-        if (value == null || value.isBlank()) {
+        if (value == null
+                || value.isBlank()) {
             return fallback;
         }
 

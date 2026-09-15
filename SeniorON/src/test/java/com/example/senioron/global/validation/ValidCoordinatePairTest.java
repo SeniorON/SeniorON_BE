@@ -74,8 +74,12 @@ class ValidCoordinatePairTest {
         );
     }
 
-    private SeniorProfileUpdateRequest createSeniorProfileUpdateRequest(Double latitude, Double longitude) {
+    private SeniorProfileUpdateRequest createSeniorProfileUpdateRequest(
+            Double latitude,
+            Double longitude
+    ) {
         return new SeniorProfileUpdateRequest(
+                1L,
                 "김영희",
                 SeniorRelation.MOTHER,
                 null,

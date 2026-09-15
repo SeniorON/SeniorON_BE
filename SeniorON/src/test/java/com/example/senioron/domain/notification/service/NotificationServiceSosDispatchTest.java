@@ -135,6 +135,23 @@ class NotificationServiceSosDispatchTest {
     }
 
     @Test
+    void sendsToEveryTargetUsersDeviceToken() throws Exception {
+        given(fcmSender.sendHighPriority(anyString(), anyString(), anyString(), anyLong()))
+                .willReturn(true);
+
+        service.dispatchSosAsync(List.of(
+                target(1L, "primary-token"),
+                target(2L, "sub-token"),
+                target(3L, "none-token")
+        ));
+
+        awaitDispatchCount("delivered", 1.0, 2);
+        verify(fcmSender).sendHighPriority("primary-token", "SOS", "도움이 필요해요", 100L);
+        verify(fcmSender).sendHighPriority("sub-token", "SOS", "도움이 필요해요", 100L);
+        verify(fcmSender).sendHighPriority("none-token", "SOS", "도움이 필요해요", 100L);
+    }
+
+    @Test
     void distinguishesNoReceiversFromReceiversWithoutDevices() throws Exception {
         service.dispatchSosAsync(List.of());
         service.dispatchSosAsync(List.of(target(1L)));

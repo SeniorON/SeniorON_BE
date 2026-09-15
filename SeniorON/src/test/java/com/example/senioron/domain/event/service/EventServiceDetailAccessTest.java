@@ -14,7 +14,9 @@ import com.example.senioron.domain.event.repository.EventRepository;
 import com.example.senioron.domain.event.util.GeocodingClient;
 import com.example.senioron.domain.event.util.SafeBrowsingClient;
 import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.notification.service.NotificationService;
+import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
@@ -43,6 +45,7 @@ class EventServiceDetailAccessTest {
     private final ApplicationContext applicationContext = org.mockito.Mockito.mock(ApplicationContext.class);
     private final UserRepository userRepository = org.mockito.Mockito.mock(UserRepository.class);
     private final SeniorRepository seniorRepository = org.mockito.Mockito.mock(SeniorRepository.class);
+    private final FamilyMemberRepository familyMemberRepository = org.mockito.Mockito.mock(FamilyMemberRepository.class);
     private final DeviceRepository deviceRepository = org.mockito.Mockito.mock(DeviceRepository.class);
     private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
@@ -52,7 +55,8 @@ class EventServiceDetailAccessTest {
     void setUp() {
         eventService = new EventService(
                 eventRepository, notificationService, geocodingClient, safeBrowsingClient,
-                applicationContext, userRepository, seniorRepository, deviceRepository, meterRegistry);
+                applicationContext, userRepository, seniorRepository, familyMemberRepository,
+                deviceRepository, meterRegistry);
     }
 
     @Test
@@ -62,10 +66,12 @@ class EventServiceDetailAccessTest {
 
         User eventOwner = User.builder().usersId(1L).role(Role.PARENT).family(ownerFamily).build();
         User outsider = User.builder().usersId(2L).role(Role.CHILD).family(otherFamily).build();
+        Senior senior = Senior.builder().seniorId(10L).family(ownerFamily).registeredBy(eventOwner).build();
 
         Event event = Event.builder()
                 .eventType(EventType.SOS)
                 .triggeredUser(eventOwner)
+                .senior(senior)
                 .build();
 
         given(eventRepository.findById(EVENT_ID)).willReturn(Optional.of(event));
@@ -83,14 +89,17 @@ class EventServiceDetailAccessTest {
 
         User eventOwner = User.builder().usersId(1L).role(Role.PARENT).family(family).build();
         User familyMember = User.builder().usersId(2L).role(Role.CHILD).family(family).build();
+        Senior senior = Senior.builder().seniorId(10L).family(family).registeredBy(familyMember).build();
 
         Event event = Event.builder()
                 .eventType(EventType.SOS)
                 .triggeredUser(eventOwner)
+                .senior(senior)
                 .build();
 
         given(eventRepository.findById(EVENT_ID)).willReturn(Optional.of(event));
         given(userRepository.findById(familyMember.getUsersId())).willReturn(Optional.of(familyMember));
+        given(familyMemberRepository.existsByUserAndFamily(familyMember, family)).willReturn(true);
 
         EventDetailResponse response = eventService.getEventDetail(familyMember, EVENT_ID);
 
@@ -102,9 +111,11 @@ class EventServiceDetailAccessTest {
         Family family = Family.builder().familyId(1L).build();
         User eventOwner = User.builder().usersId(1L).role(Role.PARENT).family(family).build();
         User familyMember = User.builder().usersId(2L).role(Role.CHILD).family(family).build();
+        Senior senior = Senior.builder().seniorId(10L).family(family).registeredBy(familyMember).build();
         Event event = Event.builder()
                 .eventType(EventType.SOS)
                 .triggeredUser(eventOwner)
+                .senior(senior)
                 .deviceBattery(80)
                 .build();
         Device latestDevice = Device.builder()
@@ -114,6 +125,7 @@ class EventServiceDetailAccessTest {
 
         given(eventRepository.findById(EVENT_ID)).willReturn(Optional.of(event));
         given(userRepository.findById(familyMember.getUsersId())).willReturn(Optional.of(familyMember));
+        given(familyMemberRepository.existsByUserAndFamily(familyMember, family)).willReturn(true);
         given(deviceRepository.findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(eventOwner))
                 .willReturn(Optional.of(latestDevice));
 
@@ -127,15 +139,18 @@ class EventServiceDetailAccessTest {
         Family family = Family.builder().familyId(1L).build();
         User eventOwner = User.builder().usersId(1L).role(Role.PARENT).family(family).build();
         User familyMember = User.builder().usersId(2L).role(Role.CHILD).family(family).build();
+        Senior senior = Senior.builder().seniorId(10L).family(family).registeredBy(familyMember).build();
         Event event = Event.builder()
                 .eventType(EventType.SOS)
                 .triggeredUser(eventOwner)
+                .senior(senior)
                 .build();
         LocalDateTime occurredAt = LocalDateTime.of(2026, 9, 8, 14, 30, 25);
         ReflectionTestUtils.setField(event, "createdAt", occurredAt);
 
         given(eventRepository.findById(EVENT_ID)).willReturn(Optional.of(event));
         given(userRepository.findById(familyMember.getUsersId())).willReturn(Optional.of(familyMember));
+        given(familyMemberRepository.existsByUserAndFamily(familyMember, family)).willReturn(true);
 
         EventDetailResponse response = eventService.getEventDetail(familyMember, EVENT_ID);
 

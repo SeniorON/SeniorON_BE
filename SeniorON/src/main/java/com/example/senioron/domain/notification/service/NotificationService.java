@@ -8,6 +8,7 @@ import com.example.senioron.domain.event.entity.EventType;
 import com.example.senioron.domain.event.entity.OutingPhase;
 import com.example.senioron.domain.event.util.FcmSender;
 import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.notification.dto.NotificationDispatchResult;
 import com.example.senioron.domain.notification.dto.NotificationDispatchTarget;
@@ -45,7 +46,6 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -202,24 +202,31 @@ public class NotificationService {
      */
     private List<NotificationDispatchTarget> prepareNotifications(Event event) {
         User sender = event.getTriggeredUser();
-        if(sender.getFamily() == null) {
-            log.warn("가족이 등록되지 않아 알림 대상이 없습니다. eventType={}, senderId={}",
+        Senior senior = event.getSenior();
+        if (senior == null) {
+            log.warn("이벤트에 연결된 시니어가 없어 알림을 발송하지 않습니다. eventType={}, senderId={}",
                     event.getEventType(), sender.getUsersId());
             return List.of();
         }
-
-        Senior senior = event.getSenior();
-        List<User> receivers;
-        if (senior == null) {
-            // 부모-시니어 연결 전의 레거시 계정에서도 SOS가 유실되지 않도록 기존 가족 발송을 유지한다.
-            log.warn("이벤트에 연결된 시니어가 없어 가족 단위로 알림을 발송합니다. eventType={}, senderId={}",
-                    event.getEventType(), sender.getUsersId());
-            receivers = userRepository.findByFamilyAndUsersIdNotAndRole(
-                    sender.getFamily(), sender.getUsersId(), Role.CHILD);
-        } else {
-            receivers = userRepository.findByFamilyAndUsersIdNotAndRole(
-                    senior.getFamily(), sender.getUsersId(), Role.CHILD);
+        if (senior.getFamily() == null) {
+            log.warn("시니어에 연결된 가족이 없어 알림을 발송하지 않습니다. eventType={}, seniorId={}, senderId={}",
+                    event.getEventType(), senior.getSeniorId(), sender.getUsersId());
+            return List.of();
         }
+
+        List<User> receivers = familyMemberRepository
+                .findAllBySeniorIdAndUserRole(senior.getSeniorId(), Role.CHILD)
+                .stream()
+                .map(FamilyMember::getUser)
+                .collect(Collectors.collectingAndThen(
+                        Collectors.toMap(
+                                User::getUsersId,
+                                user -> user,
+                                (first, ignored) -> first,
+                                java.util.LinkedHashMap::new
+                        ),
+                        usersById -> List.copyOf(usersById.values())
+                ));
         if (receivers.isEmpty()) {
             log.warn("수신 가능한 자녀가 없어 알림 대상이 없습니다. eventType={}, senderId={}",
                     event.getEventType(), sender.getUsersId());
@@ -229,7 +236,7 @@ public class NotificationService {
         NotificationType type = resolveType(event.getEventType());
 
         // 같은 가족에 부모가 여러 명이어도 실제 이벤트 발신 부모의 설정을 적용한다.
-        if (!isEnabled(sender, type)) {
+        if (!isEnabled(senior, type)) {
             return List.of();
         }
 
@@ -391,12 +398,17 @@ public class NotificationService {
     }
 
     @Transactional(readOnly = true)
-    public  boolean isEnabled(User receiver, NotificationType type) {
+    public boolean isEnabled(Senior senior, NotificationType type) {
         if (type == NotificationType.SOS) {
             return true; // SOS 알림은 필수 알림이라 끌 수 없음
         }
-        return resolveSeniorOwner(receiver)
-                .flatMap(senior -> notificationSettingRepository.findById(senior.getUsersId()))
+        User parent = senior.getParentUser();
+        if (parent == null) {
+            log.warn("시니어에 연결된 부모 계정이 없어 기본 알림 설정을 적용합니다. seniorId={}",
+                    senior.getSeniorId());
+            return true;
+        }
+        return notificationSettingRepository.findById(parent.getUsersId())
                 .map(setting -> switch (type) {
                     case INACTIVITY -> setting.getInactivityEnabled();
                     case RISK_LINK -> setting.getRiskLinkEnabled();
@@ -404,22 +416,6 @@ public class NotificationService {
                     default -> throw new BusinessException(ErrorCode.FORBIDDEN);
                 })
                 .orElse(true);
-    }
-
-    //알림 설정은 유저 개인이 아니라 가족의 시니어(PARENT) 기준으로 공유
-    //본인이 PARENT면 자기 자신, CHILD면 같은 가족의 PARENT를 반환
-    private Optional<User> resolveSeniorOwner(User user) {
-        if (user.getRole() == Role.PARENT) {
-            return Optional.of(user);
-        }
-        if (user.getFamily() == null) {
-            return Optional.empty();
-        }
-        // 부모가 2명 이상이면 usersId가 가장 작은 한 명으로 고정 (쿼리에 ORDER BY u.usersId ASC 있음)
-        return userRepository.findByFamilyAndUsersIdNotAndRole(
-                        user.getFamily(), user.getUsersId(), Role.PARENT)
-                .stream()
-                .findFirst();
     }
 
     private NotificationType resolveType(EventType eventType) {
