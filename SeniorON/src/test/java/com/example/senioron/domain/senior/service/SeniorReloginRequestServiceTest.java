@@ -9,15 +9,18 @@ import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.device.service.DeviceCredentialIssueResult;
 import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.senior.dto.request.SeniorReloginRequestCreateRequest;
+import com.example.senioron.domain.senior.dto.response.SeniorReloginRequestApproveResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorReloginRequestCreateResponse;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorReloginRequest;
 import com.example.senioron.domain.senior.entity.SeniorReloginRequestStatus;
 import com.example.senioron.domain.senior.repository.SeniorReloginRequestRepository;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
+import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.RefreshToken;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
@@ -196,13 +199,123 @@ class SeniorReloginRequestServiceTest {
         assertThat(seniorReloginRequestRepository.count()).isEqualTo(1L);
     }
 
+    @Test
+    void approveSucceedsForSeniorGuardian() {
+        SeniorDeviceFixture fixture = saveSeniorDeviceFixture("device-1");
+        SeniorReloginRequest request = saveReloginRequest(
+                fixture.senior(),
+                fixture.device(),
+                SeniorReloginRequestStatus.PENDING,
+                LocalDateTime.now().plusSeconds(30)
+        );
+
+        SeniorReloginRequestApproveResponse response = service().approve(
+                request.getSeniorReloginRequestId(),
+                fixture.child()
+        );
+
+        assertThat(response.getStatus()).isEqualTo(SeniorReloginRequestStatus.APPROVED);
+        assertThat(response.getExpiresAt()).isAfter(LocalDateTime.now().plusMinutes(9));
+        assertThat(seniorReloginRequestRepository.findById(request.getSeniorReloginRequestId()))
+                .hasValueSatisfying(approved -> {
+                    assertThat(approved.getStatus()).isEqualTo(SeniorReloginRequestStatus.APPROVED);
+                    assertThat(approved.getExpiresAt()).isEqualTo(response.getExpiresAt());
+                });
+    }
+
+    @Test
+    void approveFailsWhenUserDoesNotManageSenior() {
+        SeniorDeviceFixture fixture = saveSeniorDeviceFixture("device-1");
+        SeniorReloginRequest request = saveReloginRequest(
+                fixture.senior(),
+                fixture.device(),
+                SeniorReloginRequestStatus.PENDING,
+                LocalDateTime.now().plusMinutes(5)
+        );
+        User otherChild = saveUser("other-child", Role.CHILD);
+
+        assertThatThrownBy(() -> service().approve(request.getSeniorReloginRequestId(), otherChild))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_RELOGIN_REQUEST_ACCESS_DENIED);
+    }
+
+    @Test
+    void approveFailsWhenRequestDoesNotExist() {
+        User child = saveUser("child", Role.CHILD);
+
+        assertThatThrownBy(() -> service().approve(999_999L, child))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_RELOGIN_REQUEST_NOT_FOUND);
+    }
+
+    @Test
+    void approveFailsAndExpiresPendingRequestWhenExpired() {
+        SeniorDeviceFixture fixture = saveSeniorDeviceFixture("device-1");
+        SeniorReloginRequest request = saveReloginRequest(
+                fixture.senior(),
+                fixture.device(),
+                SeniorReloginRequestStatus.PENDING,
+                LocalDateTime.now().minusSeconds(1)
+        );
+
+        assertThatThrownBy(() -> service().approve(request.getSeniorReloginRequestId(), fixture.child()))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_RELOGIN_REQUEST_EXPIRED);
+
+        assertThat(seniorReloginRequestRepository.findById(request.getSeniorReloginRequestId()))
+                .hasValueSatisfying(expired ->
+                        assertThat(expired.getStatus()).isEqualTo(SeniorReloginRequestStatus.EXPIRED)
+                );
+    }
+
+    @Test
+    void approveFailsWhenRequestIsAlreadyApproved() {
+        assertApproveFailsForStatus(SeniorReloginRequestStatus.APPROVED);
+    }
+
+    @Test
+    void approveFailsWhenRequestIsRejected() {
+        assertApproveFailsForStatus(SeniorReloginRequestStatus.REJECTED);
+    }
+
+    @Test
+    void approveFailsWhenRequestIsUsed() {
+        assertApproveFailsForStatus(SeniorReloginRequestStatus.USED);
+    }
+
+    @Test
+    void approveFailsWhenRequestDeviceDoesNotBelongToSeniorParentUser() {
+        SeniorDeviceFixture seniorA = saveSeniorDeviceFixture("device-A");
+        SeniorDeviceFixture seniorB = saveSeniorDeviceFixture("device-B");
+        SeniorReloginRequest request = saveReloginRequest(
+                seniorA.senior(),
+                seniorB.device(),
+                SeniorReloginRequestStatus.PENDING,
+                LocalDateTime.now().plusMinutes(5)
+        );
+
+        assertThatThrownBy(() -> service().approve(request.getSeniorReloginRequestId(), seniorA.child()))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_RELOGIN_REQUEST_DEVICE_MISMATCH);
+    }
+
     private SeniorReloginRequestService service() {
         if (seniorReloginRequestService == null) {
             seniorReloginRequestService = new SeniorReloginRequestService(
                     deviceService(),
                     deviceRepository,
                     seniorRepository,
-                    seniorReloginRequestRepository
+                    seniorReloginRequestRepository,
+                    familyMemberRepository,
+                    userRepository
             );
         }
         return seniorReloginRequestService;
@@ -238,9 +351,49 @@ class SeniorReloginRequestServiceTest {
                 .registeredBy(child)
                 .parentUser(parent)
                 .build());
+        saveFamilyMember(child, family, ManagerType.PRIMARY);
+        saveFamilyMember(parent, family, ManagerType.NONE);
         DeviceCredentialIssueResult credential = deviceService().registerDevice(parent, deviceIdentifier);
         Device device = deviceRepository.findByDeviceIdentifier(deviceIdentifier).orElseThrow();
-        return new SeniorDeviceFixture(senior, device, deviceIdentifier, credential.deviceAuthToken());
+        return new SeniorDeviceFixture(senior, device, child, parent, deviceIdentifier, credential.deviceAuthToken());
+    }
+
+    private SeniorReloginRequest saveReloginRequest(
+            Senior senior,
+            Device device,
+            SeniorReloginRequestStatus status,
+            LocalDateTime expiresAt
+    ) {
+        return seniorReloginRequestRepository.saveAndFlush(SeniorReloginRequest.builder()
+                .senior(senior)
+                .device(device)
+                .status(status)
+                .expiresAt(expiresAt)
+                .build());
+    }
+
+    private void assertApproveFailsForStatus(SeniorReloginRequestStatus status) {
+        SeniorDeviceFixture fixture = saveSeniorDeviceFixture("device-" + status);
+        SeniorReloginRequest request = saveReloginRequest(
+                fixture.senior(),
+                fixture.device(),
+                status,
+                LocalDateTime.now().plusMinutes(5)
+        );
+
+        assertThatThrownBy(() -> service().approve(request.getSeniorReloginRequestId(), fixture.child()))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_RELOGIN_REQUEST_NOT_PENDING);
+    }
+
+    private void saveFamilyMember(User user, Family family, ManagerType managerType) {
+        familyMemberRepository.saveAndFlush(FamilyMember.builder()
+                .user(user)
+                .family(family)
+                .managerType(managerType)
+                .build());
     }
 
     private User saveUser(String prefix, Role role) {
@@ -257,6 +410,8 @@ class SeniorReloginRequestServiceTest {
     private record SeniorDeviceFixture(
             Senior senior,
             Device device,
+            User child,
+            User parent,
             String deviceIdentifier,
             String deviceAuthToken
     ) {

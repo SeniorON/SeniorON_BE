@@ -64,6 +64,11 @@ public class SeniorReloginRequest extends BaseEntity {
         return status == SeniorReloginRequestStatus.PENDING && !isExpired(now);
     }
 
+    public void approve(LocalDateTime expiresAt) {
+        this.status = SeniorReloginRequestStatus.APPROVED;
+        this.expiresAt = expiresAt;
+    }
+
     public void expire() {
         this.status = SeniorReloginRequestStatus.EXPIRED;
     }
