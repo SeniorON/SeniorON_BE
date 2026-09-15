@@ -172,13 +172,11 @@ public class MedicationLogService {
                                         medicationLog.getMedicationLogId()
                                 )
                                 .medicineName(
-                                        medicationLog
-                                                .getMedication()
+                                        medicationLog.getMedication()
                                                 .getMedicineName()
                                 )
                                 .ingredientName(
-                                        medicationLog
-                                                .getMedication()
+                                        medicationLog.getMedication()
                                                 .getIngredientName()
                                 )
                                 .plannedDate(
@@ -189,8 +187,7 @@ public class MedicationLogService {
                                 )
                                 .takenTime(
                                         medicationLog.getTakenAt() != null
-                                                ? medicationLog
-                                                .getTakenAt()
+                                                ? medicationLog.getTakenAt()
                                                 .toLocalTime()
                                                 : null
                                 )
@@ -223,8 +220,7 @@ public class MedicationLogService {
                 yearMonth.atDay(1);
 
         LocalDate monthEndExclusiveDate =
-                yearMonth
-                        .plusMonths(1)
+                yearMonth.plusMonths(1)
                         .atDay(1);
 
         LocalDateTime monthStart =
@@ -400,7 +396,8 @@ public class MedicationLogService {
                         );
 
         if (!Objects.equals(
-                medicationLog.getUser().getUsersId(),
+                medicationLog.getUser()
+                        .getUsersId(),
                 parentUser.getUsersId()
         )) {
             throw new BusinessException(
@@ -473,21 +470,18 @@ public class MedicationLogService {
         }
 
         Long userId =
-                medicationLog
-                        .getUser()
+                medicationLog.getUser()
                         .getUsersId();
 
         String userName =
-                medicationLog
-                        .getUser()
+                medicationLog.getUser()
                         .getName();
 
         Long medicationLogId =
                 medicationLog.getMedicationLogId();
 
         String medicineName =
-                medicationLog
-                        .getMedication()
+                medicationLog.getMedication()
                         .getMedicineName();
 
         int updatedRows =
@@ -678,16 +672,14 @@ public class MedicationLogService {
                                 medication.getUser() != null
                         )
                         .filter(medication ->
-                                medication
-                                        .getUser()
+                                medication.getUser()
                                         .getRole()
                                         == Role.PARENT
                         )
                         .collect(
                                 Collectors.groupingBy(
                                         medication ->
-                                                medication
-                                                        .getUser()
+                                                medication.getUser()
                                                         .getUsersId(),
                                         LinkedHashMap::new,
                                         Collectors.toList()
@@ -702,8 +694,7 @@ public class MedicationLogService {
             }
 
             User parentUser =
-                    parentMedications
-                            .get(0)
+                    parentMedications.get(0)
                             .getUser();
 
             List<Medication> schedulableMedications =
@@ -883,8 +874,7 @@ public class MedicationLogService {
         Long userId =
                 medication.getUser() == null
                         ? null
-                        : medication
-                        .getUser()
+                        : medication.getUser()
                         .getUsersId();
 
         log.warn(
@@ -981,8 +971,7 @@ public class MedicationLogService {
         String medicationIdentifier;
 
         if (medication.getMedicationGroupId() != null
-                && !medication
-                .getMedicationGroupId()
+                && !medication.getMedicationGroupId()
                 .isBlank()) {
 
             medicationIdentifier =
@@ -1130,8 +1119,7 @@ public class MedicationLogService {
         }
 
         if (medication.getEffectiveFrom() != null) {
-            return medication
-                    .getEffectiveFrom()
+            return medication.getEffectiveFrom()
                     .toLocalDate();
         }
 
