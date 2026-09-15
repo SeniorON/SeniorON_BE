@@ -905,21 +905,15 @@ public class HomeService {
      * 오늘 병원 일정을 시간순으로 조회
      */
     private List<Hospital> findTodayHospitalSchedules(
-            User parent
+            User seniorUser
     ) {
-
-        if (parent.getFamily() == null) {
-            throw new BusinessException(
-                    ErrorCode.FAMILY_NOT_CONNECTED
-            );
-        }
 
         LocalDate today =
                 LocalDate.now();
 
         return hospitalRepository
                 .findByUserAndScheduleDateBetweenOrderByScheduleDateAscScheduleTimeAsc(
-                        parent,
+                        seniorUser,
                         today,
                         today
                 );
