@@ -452,7 +452,22 @@ public class HospitalService {
             );
         }
 
-        if (requester.getFamily() == null) {
+        Long familyCount =
+                entityManager.createQuery(
+                                """
+                                SELECT COUNT(familyMember)
+                                FROM FamilyMember familyMember
+                                WHERE familyMember.user.usersId = :userId
+                                """,
+                                Long.class
+                        )
+                        .setParameter(
+                                "userId",
+                                requester.getUsersId()
+                        )
+                        .getSingleResult();
+
+        if (familyCount == 0) {
             throw new BusinessException(
                     ErrorCode.FAMILY_NOT_FOUND
             );
@@ -474,16 +489,31 @@ public class HospitalService {
             );
         }
 
-        boolean belongsToSameFamily =
-                parentUser.getFamily() != null
-                        && Objects.equals(
-                        requester.getFamily()
-                                .getFamilyId(),
-                        parentUser.getFamily()
-                                .getFamilyId()
-                );
+        Long sameFamilyCount =
+                entityManager.createQuery(
+                                """
+                                SELECT COUNT(requesterMember)
+                                FROM FamilyMember requesterMember
+                                WHERE requesterMember.user.usersId = :requesterUserId
+                                AND requesterMember.family.familyId IN (
+                                    SELECT parentMember.family.familyId
+                                    FROM FamilyMember parentMember
+                                    WHERE parentMember.user.usersId = :parentUserId
+                                )
+                                """,
+                                Long.class
+                        )
+                        .setParameter(
+                                "requesterUserId",
+                                requester.getUsersId()
+                        )
+                        .setParameter(
+                                "parentUserId",
+                                parentUserId
+                        )
+                        .getSingleResult();
 
-        if (!belongsToSameFamily) {
+        if (sameFamilyCount == 0) {
             throw new BusinessException(
                     ErrorCode.FAMILY_MEMBER_NOT_FOUND
             );
@@ -495,26 +525,19 @@ public class HospitalService {
     private User getUserOrThrow(
             Long userId
     ) {
-        return entityManager.createQuery(
-                        """
-                        SELECT user
-                        FROM User user
-                        LEFT JOIN FETCH user.family
-                        WHERE user.usersId = :userId
-                        """,
-                        User.class
-                )
-                .setParameter(
-                        "userId",
+        User user =
+                entityManager.find(
+                        User.class,
                         userId
-                )
-                .getResultStream()
-                .findFirst()
-                .orElseThrow(() ->
-                        new BusinessException(
-                                ErrorCode.USER_NOT_FOUND
-                        )
                 );
+
+        if (user == null) {
+            throw new BusinessException(
+                    ErrorCode.USER_NOT_FOUND
+            );
+        }
+
+        return user;
     }
 
     private Hospital getHospitalOwnedByParentOrThrow(
