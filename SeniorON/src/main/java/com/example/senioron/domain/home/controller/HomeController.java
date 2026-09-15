@@ -89,12 +89,11 @@ public class HomeController {
     )
     @PatchMapping("/font-size")
     public Response<Void> updateFontSize(
-            @RequestParam Long seniorId,
             @Valid @RequestBody HomeFontSizeUpdateRequest request
     ) {
         long start = System.nanoTime();
 
-        homeService.updateFontSize(seniorId, request);
+        homeService.updateFontSize(request.getSeniorId(), request);
 
         log.debug(
                 "[TIMING] HomeController.updateFontSize : {}ms",
@@ -110,7 +109,6 @@ public class HomeController {
     )
     @PatchMapping("/senior-profile")
     public Response<SeniorProfileUpdateResponse> updateSeniorProfile(
-            @RequestParam Long seniorId,
             @Valid @RequestBody SeniorProfileUpdateRequest request
     ) {
         long start = System.nanoTime();
@@ -118,7 +116,7 @@ public class HomeController {
         Response<SeniorProfileUpdateResponse> response =
                 Response.ok(
                         homeService.updateSeniorProfile(
-                                seniorId,
+                                request.seniorId(),
                                 request
                         )
                 );
@@ -130,19 +128,19 @@ public class HomeController {
 
         return response;
     }
+
     @Operation(
             summary = "홈 버튼 설정 전체 저장",
             description = "노래 카드와 일반 버튼 선택 및 순서를 한 번에 저장"
     )
     @PutMapping("/buttons")
     public Response<Void> saveButtons(
-            @RequestParam Long seniorId,
             @Valid @RequestBody HomeButtonSaveRequest request
     ) {
         long start = System.nanoTime();
 
         homeService.saveButtons(
-                seniorId,
+                request.getSeniorId(),
                 request
         );
 
@@ -153,6 +151,7 @@ public class HomeController {
 
         return Response.ok();
     }
+
     @Operation(
             summary = "오늘 병원 일정 상세 목록 조회",
             description = "자녀가 선택한 시니어의 오늘 병원 일정을 시간순으로 조회"
