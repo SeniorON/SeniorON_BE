@@ -4,7 +4,9 @@ import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
 
 public record ManagedSeniorResponse(
+        Long familyId,
         Long seniorId,
+        Long parentUserId,
         String name,
         SeniorRelation relation,
         String customRelation
@@ -12,7 +14,11 @@ public record ManagedSeniorResponse(
 
     public static ManagedSeniorResponse from(Senior senior) {
         return new ManagedSeniorResponse(
+                senior.getFamily().getFamilyId(),
                 senior.getSeniorId(),
+                senior.getParentUser() == null
+                        ? null
+                        : senior.getParentUser().getUsersId(),
                 senior.getName(),
                 null,
                 null

@@ -15,6 +15,9 @@ import java.time.LocalDate;
 @ValidCoordinatePair
 public record SeniorCreateRequest(
 
+        @NotNull(message = "가족을 선택해 주세요.")
+        Long familyId,
+
         @NotBlank(message = "이름을 입력해 주세요.")
         String name,
 

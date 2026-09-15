@@ -1,13 +1,10 @@
 package com.example.senioron.domain.senior.controller;
 
 import com.example.senioron.domain.senior.dto.request.SeniorCreateRequest;
-import com.example.senioron.domain.senior.dto.request.SeniorParentLinkRequest;
 import com.example.senioron.domain.senior.dto.request.SeniorRelationUpdateRequest;
-import com.example.senioron.domain.senior.dto.request.SeniorSelectionRequest;
 import com.example.senioron.domain.senior.dto.response.ManagedSeniorResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorCreateResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorFamilyResponse;
-import com.example.senioron.domain.senior.dto.response.SeniorParentLinkResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorRelationUpdateResponse;
 import com.example.senioron.domain.senior.service.SeniorService;
 import com.example.senioron.domain.user.entity.User;
@@ -29,7 +26,7 @@ public class SeniorController {
 
     private final SeniorService seniorService;
 
-    @Operation(summary = "내가 관리 중인 시니어", description = "현재 로그인한 사용자의 가족 멤버십으로 연결된 시니어 목록을 조회합니다.")
+    @Operation(summary = "내가 속한 가족/시니어 목록", description = "현재 로그인한 사용자가 속한 가족과 각 가족에 연결된 시니어를 전환 목록으로 조회합니다.")
     @GetMapping("/me")
     public Response<List<ManagedSeniorResponse>> getManagedSeniors(
             @AuthenticationPrincipal User user
@@ -39,35 +36,14 @@ public class SeniorController {
         );
     }
 
-    @Operation(summary = "관리할 시니어 선택", description = "현재 로그인한 사용자가 같은 가족에 등록된 시니어 중 관리할 시니어를 선택하고 관계를 등록합니다.")
-    @PostMapping("/me")
-    public Response<SeniorRelationUpdateResponse> selectManagedSenior(
-            @AuthenticationPrincipal User user,
-            @Valid @RequestBody SeniorSelectionRequest request
-    ) {
-        return Response.ok(
-                seniorService.selectManagedSenior(user, request)
-        );
-    }
-
-    @Operation(summary = "우리 가족 시니어 목록 조회", description = "현재 로그인한 사용자가 속한 가족에 등록된 모든 시니어 목록을 조회합니다.")
-    @GetMapping("/family")
+    @Operation(summary = "우리 가족 시니어 목록 조회", description = "지정한 가족에 속한 시니어 목록을 조회합니다.")
+    @GetMapping("/family/{familyId}")
     public Response<List<SeniorFamilyResponse>> getFamilySeniors(
-            @AuthenticationPrincipal User user
-    ) {
-        return Response.ok(
-                seniorService.getFamilySeniors(user)
-        );
-    }
-
-    @Operation(summary = "시니어 본인 프로필 연결", description = "현재 로그인한 부모 계정이 같은 가족에 등록된 시니어 프로필 중 본인을 선택해 연결합니다.")
-    @PatchMapping("/me")
-    public Response<SeniorParentLinkResponse> linkParentUser(
             @AuthenticationPrincipal User user,
-            @Valid @RequestBody SeniorParentLinkRequest request
+            @PathVariable Long familyId
     ) {
         return Response.ok(
-                seniorService.linkParentUser(user, request)
+                seniorService.getFamilySeniors(user, familyId)
         );
     }
 

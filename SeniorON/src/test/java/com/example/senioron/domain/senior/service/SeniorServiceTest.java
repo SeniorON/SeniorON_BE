@@ -9,11 +9,10 @@ import static org.mockito.Mockito.verify;
 
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.senior.dto.request.SeniorCreateRequest;
-import com.example.senioron.domain.senior.dto.request.SeniorParentLinkRequest;
 import com.example.senioron.domain.senior.dto.request.SeniorRelationUpdateRequest;
-import com.example.senioron.domain.senior.dto.request.SeniorSelectionRequest;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
@@ -37,6 +36,8 @@ class SeniorServiceTest {
             org.mockito.Mockito.mock(UserRepository.class);
     private final FamilyRepository familyRepository =
             org.mockito.Mockito.mock(FamilyRepository.class);
+    private final FamilyMemberRepository familyMemberRepository =
+            org.mockito.Mockito.mock(FamilyMemberRepository.class);
 
     private SeniorService seniorService;
 
@@ -45,7 +46,8 @@ class SeniorServiceTest {
         seniorService = new SeniorService(
                 seniorRepository,
                 userRepository,
-                familyRepository
+                familyRepository,
+                familyMemberRepository
         );
     }
 
@@ -64,6 +66,8 @@ class SeniorServiceTest {
 
         assertThat(response).hasSize(1);
         assertThat(response.get(0).seniorId()).isEqualTo(10L);
+        assertThat(response.get(0).familyId()).isEqualTo(1L);
+        assertThat(response.get(0).parentUserId()).isNull();
         assertThat(response.get(0).name()).isEqualTo("김영희");
         assertThat(response.get(0).relation()).isNull();
         assertThat(response.get(0).customRelation()).isNull();
@@ -85,85 +89,30 @@ class SeniorServiceTest {
         Senior senior = createSenior(10L, family, user);
 
         given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(familyRepository.findById(1L)).willReturn(Optional.of(family));
+        given(familyMemberRepository.existsByUserAndFamily(user, family)).willReturn(true);
         given(seniorRepository.findAllByFamilyOrderBySeniorIdAsc(family))
                 .willReturn(java.util.List.of(senior));
 
-        var response = seniorService.getFamilySeniors(user);
+        var response = seniorService.getFamilySeniors(user, 1L);
 
         assertThat(response).hasSize(1);
         assertThat(response.get(0).seniorId()).isEqualTo(10L);
     }
 
     @Test
-    void getFamilySeniorsRejectsUserWithoutFamily() {
+    void getFamilySeniorsRejectsUserOutsideRequestedFamily() {
+        Family family = Family.builder().familyId(1L).build();
         User user = createChild(1L, null, ManagerType.PRIMARY);
         given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(familyRepository.findById(1L)).willReturn(Optional.of(family));
+        given(familyMemberRepository.existsByUserAndFamily(user, family)).willReturn(false);
 
-        assertThatThrownBy(() -> seniorService.getFamilySeniors(user))
-                .isInstanceOf(BusinessException.class)
-                .asInstanceOf(type(BusinessException.class))
-                .extracting(BusinessException::getCode)
-                .isEqualTo(ErrorCode.FAMILY_NOT_CONNECTED);
-    }
-
-    @Test
-    void selectManagedSeniorValidatesSameFamilyAndReturnsRequestedRelation() {
-        Family family = Family.builder().familyId(1L).build();
-        User user = createChild(1L, family, ManagerType.SUB);
-        Senior senior = createSenior(10L, family, user);
-
-        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(user));
-        given(seniorRepository.findById(10L)).willReturn(Optional.of(senior));
-
-        var response = seniorService.selectManagedSenior(
-                user,
-                new SeniorSelectionRequest(10L, SeniorRelation.MOTHER, null)
-        );
-
-        assertThat(response.seniorId()).isEqualTo(10L);
-        assertThat(response.relation()).isEqualTo(SeniorRelation.MOTHER);
-    }
-
-    @Test
-    void selectManagedSeniorRejectsSeniorFromDifferentFamily() {
-        Family family = Family.builder().familyId(1L).build();
-        Family otherFamily = Family.builder().familyId(2L).build();
-        User user = createChild(1L, family, ManagerType.SUB);
-        Senior senior = createSenior(10L, otherFamily, user);
-
-        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(user));
-        given(seniorRepository.findById(10L)).willReturn(Optional.of(senior));
-
-        assertThatThrownBy(() -> seniorService.selectManagedSenior(
-                user,
-                new SeniorSelectionRequest(10L, SeniorRelation.MOTHER, null)
-        ))
+        assertThatThrownBy(() -> seniorService.getFamilySeniors(user, 1L))
                 .isInstanceOf(BusinessException.class)
                 .asInstanceOf(type(BusinessException.class))
                 .extracting(BusinessException::getCode)
                 .isEqualTo(ErrorCode.FORBIDDEN);
-    }
-
-    @Test
-    void linkParentUserLinksParentAccountToSeniorInSameFamily() {
-        Family family = Family.builder().familyId(1L).build();
-        User parent = createParent(3L, family);
-        User child = createChild(1L, family, ManagerType.PRIMARY);
-        Senior senior = createSenior(10L, family, child);
-
-        given(userRepository.findByIdForUpdate(3L)).willReturn(Optional.of(parent));
-        given(seniorRepository.findByIdForUpdate(10L)).willReturn(Optional.of(senior));
-        given(seniorRepository.existsByParentUser(parent)).willReturn(false);
-        given(seniorRepository.saveAndFlush(senior)).willReturn(senior);
-
-        var response = seniorService.linkParentUser(
-                parent,
-                new SeniorParentLinkRequest(10L)
-        );
-
-        assertThat(response.seniorId()).isEqualTo(10L);
-        assertThat(response.parentUserId()).isEqualTo(3L);
-        assertThat(senior.getParentUser()).isEqualTo(parent);
     }
 
     @Test
@@ -173,6 +122,7 @@ class SeniorServiceTest {
         Senior savedSenior = createSenior(10L, family, user);
 
         given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
+        given(familyMemberRepository.existsByUserAndFamily(user, family)).willReturn(true);
         given(seniorRepository.saveAndFlush(any(Senior.class))).willReturn(savedSenior);
 
         var response = seniorService.createSenior(
@@ -191,6 +141,7 @@ class SeniorServiceTest {
         User user = createChild(1L, family, ManagerType.PRIMARY);
 
         given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
+        given(familyMemberRepository.existsByUserAndFamily(user, family)).willReturn(true);
         given(seniorRepository.saveAndFlush(any(Senior.class)))
                 .willThrow(new DataIntegrityViolationException("duplicate family senior"));
 
@@ -212,6 +163,7 @@ class SeniorServiceTest {
 
         given(userRepository.findByIdForUpdate(2L)).willReturn(Optional.of(user));
         given(seniorRepository.findById(10L)).willReturn(Optional.of(senior));
+        given(familyMemberRepository.existsByUserAndFamily(user, family)).willReturn(true);
 
         var response = seniorService.updateSeniorRelation(
                 user,
@@ -228,6 +180,7 @@ class SeniorServiceTest {
             String customRelation
     ) {
         return new SeniorCreateRequest(
+                1L,
                 "김영희",
                 relation,
                 customRelation,
