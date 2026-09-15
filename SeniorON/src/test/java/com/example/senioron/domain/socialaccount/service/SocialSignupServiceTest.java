@@ -106,7 +106,8 @@ class SocialSignupServiceTest {
         assertThat(response.isNewUser()).isFalse();
         verify(userRepository).saveAndFlush(any(User.class));
         verify(socialAccountRepository).saveAndFlush(any(SocialAccount.class));
-        verify(deviceService, never()).registerToken(any(User.class), any(), any());
+        verify(deviceService).registerDevice(any(User.class), isNull());
+        verify(deviceService, never()).updateFcmToken(any(User.class), any(), any());
         verify(refreshTokenService).saveOrRotate(any(User.class), isNull(), eq(REFRESH_TOKEN));
     }
 
@@ -128,6 +129,8 @@ class SocialSignupServiceTest {
         verify(userRepository, atLeastOnce()).saveAndFlush(userCaptor.capture());
         assertThat(userCaptor.getValue().getRole()).isEqualTo(Role.CHILD);
         verify(socialAccountRepository).saveAndFlush(any(SocialAccount.class));
+        verify(deviceService).registerDevice(any(User.class), isNull());
+        verify(deviceService, never()).updateFcmToken(any(User.class), any(), any());
         verify(refreshTokenService).saveOrRotate(any(User.class), isNull(), eq(REFRESH_TOKEN));
     }
 
@@ -143,7 +146,8 @@ class SocialSignupServiceTest {
 
         assertThat(response.getAccessToken()).isEqualTo(ACCESS_TOKEN);
         assertThat(response.getRefreshToken()).isEqualTo(REFRESH_TOKEN);
-        verify(deviceService).registerToken(any(User.class), eq(FCM_TOKEN), eq(DEVICE_IDENTIFIER));
+        verify(deviceService).registerDevice(any(User.class), eq(DEVICE_IDENTIFIER));
+        verify(deviceService).updateFcmToken(any(User.class), eq(FCM_TOKEN), eq(DEVICE_IDENTIFIER));
         verify(refreshTokenService).saveOrRotate(any(User.class), eq(DEVICE_IDENTIFIER), eq(REFRESH_TOKEN));
     }
 
@@ -300,7 +304,8 @@ class SocialSignupServiceTest {
 
         verify(socialAccountRepository, never()).saveAndFlush(any(SocialAccount.class));
         verify(inactivitySettingService, never()).createDefaultSetting(any(User.class));
-        verify(deviceService, never()).registerToken(any(User.class), any(), any());
+        verify(deviceService, never()).registerDevice(any(User.class), any());
+        verify(deviceService, never()).updateFcmToken(any(User.class), any(), any());
         verify(jwtUtil, never()).createAccessToken(any(User.class));
         verify(jwtUtil, never()).createRefreshToken(any(User.class));
         verify(refreshTokenService, never()).saveOrRotate(any(User.class), any(), any());
@@ -320,7 +325,8 @@ class SocialSignupServiceTest {
         verify(userRepository, never()).saveAndFlush(any(User.class));
         verify(socialAccountRepository, never()).saveAndFlush(any(SocialAccount.class));
         verify(inactivitySettingService, never()).createDefaultSetting(any(User.class));
-        verify(deviceService, never()).registerToken(any(User.class), any(), any());
+        verify(deviceService, never()).registerDevice(any(User.class), any());
+        verify(deviceService, never()).updateFcmToken(any(User.class), any(), any());
         verify(jwtUtil, never()).createAccessToken(any(User.class));
         verify(jwtUtil, never()).createRefreshToken(any(User.class));
         verify(refreshTokenService, never()).saveOrRotate(any(User.class), any(), any());

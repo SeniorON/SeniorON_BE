@@ -11,11 +11,14 @@ import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.user.entity.Role;
+import com.example.senioron.domain.user.entity.RefreshToken;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
+import com.example.senioron.domain.user.repository.RefreshTokenRepository;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.domain.device.dto.request.DeviceStatusUpdateRequest;
 import com.example.senioron.domain.user.entity.ManagerType;
+import java.time.LocalDateTime;
 import java.util.UUID;
 import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
@@ -33,6 +36,9 @@ class DeviceServiceTest {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
 
     @Autowired
     private DeviceRepository deviceRepository;
@@ -60,6 +66,54 @@ class DeviceServiceTest {
     }
 
     @Test
+    void updateFcmTokenRegistersDeviceAndStoresFcmToken() {
+        User parent = saveUser("parent", Role.PARENT);
+
+        deviceService().updateFcmToken(parent, "fcm-token-parent", DEVICE_IDENTIFIER);
+
+        Device device = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow();
+        assertThat(device.getUser().getUsersId()).isEqualTo(parent.getUsersId());
+        assertThat(device.getDeviceIdentifier()).isEqualTo(DEVICE_IDENTIFIER);
+        assertThat(device.getDeviceToken()).isEqualTo("fcm-token-parent");
+        assertThat(device.getConnectionStatus()).isEqualTo(DeviceStatus.ONLINE);
+    }
+
+    @Test
+    void registerDeviceRegistersDeviceWithoutFcmToken() {
+        User parent = saveUser("parent", Role.PARENT);
+
+        deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+
+        Device device = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow();
+        assertThat(device.getUser().getUsersId()).isEqualTo(parent.getUsersId());
+        assertThat(device.getDeviceIdentifier()).isEqualTo(DEVICE_IDENTIFIER);
+        assertThat(device.getDeviceToken()).isNull();
+    }
+
+    @Test
+    void registerDeviceDoesNotCreateDuplicateRowForSameDeviceIdentifier() {
+        User parent = saveUser("parent", Role.PARENT);
+
+        deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+        deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+
+        assertThat(deviceRepository.count()).isEqualTo(1L);
+        assertThat(deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER)).isPresent();
+    }
+
+    @Test
+    void sameUserCanRegisterMultipleDevices() {
+        User parent = saveUser("parent", Role.PARENT);
+
+        deviceService().registerDevice(parent, "device-A");
+        deviceService().registerDevice(parent, "device-B");
+
+        assertThat(deviceRepository.findAllByUser(parent))
+                .extracting(Device::getDeviceIdentifier)
+                .containsExactlyInAnyOrder("device-A", "device-B");
+    }
+
+    @Test
     void logoutClearsDeviceTokenForThatDevice() {
         User parent = saveUser("parent", Role.PARENT);
 
@@ -69,6 +123,39 @@ class DeviceServiceTest {
         Device device = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow();
         assertThat(device.getDeviceToken()).isNull();
         assertThat(device.getConnectionStatus()).isEqualTo(DeviceStatus.DISCONNECTED);
+    }
+
+    @Test
+    void logoutKeepsDeviceRowAndUserDeviceIdentifierRelation() {
+        User parent = saveUser("parent", Role.PARENT);
+        deviceService().updateFcmToken(parent, "fcm-token-parent", DEVICE_IDENTIFIER);
+
+        deviceService().clearToken(parent, DEVICE_IDENTIFIER);
+
+        Device device = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow();
+        assertThat(device.getUser().getUsersId()).isEqualTo(parent.getUsersId());
+        assertThat(device.getDeviceIdentifier()).isEqualTo(DEVICE_IDENTIFIER);
+        assertThat(device.getDeviceToken()).isNull();
+        assertThat(device.getConnectionStatus()).isEqualTo(DeviceStatus.DISCONNECTED);
+    }
+
+    @Test
+    void deletingRefreshTokenDoesNotDeleteRegisteredDevice() {
+        User parent = saveUser("parent", Role.PARENT);
+        deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+        refreshTokenRepository.saveAndFlush(RefreshToken.builder()
+                .user(parent)
+                .deviceIdentifier(DEVICE_IDENTIFIER)
+                .tokenHash("refresh-token-hash-" + UUID.randomUUID())
+                .expiresAt(LocalDateTime.now().minusMinutes(1))
+                .build());
+
+        refreshTokenRepository.deleteByExpiresAtBefore(LocalDateTime.now());
+
+        assertThat(refreshTokenRepository.count()).isZero();
+        Device device = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow();
+        assertThat(device.getUser().getUsersId()).isEqualTo(parent.getUsersId());
+        assertThat(device.getDeviceIdentifier()).isEqualTo(DEVICE_IDENTIFIER);
     }
 
     @Test

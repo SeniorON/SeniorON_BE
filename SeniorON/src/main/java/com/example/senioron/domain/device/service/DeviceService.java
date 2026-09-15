@@ -36,36 +36,54 @@ public class DeviceService {
     private final FamilyMemberRepository familyMemberRepository;
 
     @Transactional
-    public void registerToken(User user, String deviceToken, String deviceIdentifier) {
+    public void registerDevice(User user, String deviceIdentifier) {
+        if (deviceIdentifier == null || deviceIdentifier.isBlank()) {
+            return;
+        }
+
+        findOrCreateDevice(user, deviceIdentifier);
+    }
+
+    @Transactional
+    public void updateFcmToken(User user, String deviceToken, String deviceIdentifier) {
         if (deviceIdentifier == null || deviceIdentifier.isBlank()) {
             throw new BusinessException(ErrorCode.DEVICE_IDENTIFIER_REQUIRED);
         }
 
+        Device device = findOrCreateDevice(user, deviceIdentifier);
+        applyFcmToken(device, user, deviceToken);
+        deviceRepository.save(device);
+    }
+
+    @Transactional
+    public void registerToken(User user, String deviceToken, String deviceIdentifier) {
+        updateFcmToken(user, deviceToken, deviceIdentifier);
+    }
+
+    private Device findOrCreateDevice(User user, String deviceIdentifier) {
         Optional<Device> existingDevice = deviceRepository.findByDeviceIdentifier(deviceIdentifier);
         if (existingDevice.isPresent()) {
             Device device = existingDevice.get();
-            applyToken(device, user, deviceToken);
-            deviceRepository.save(device);
-            return;
+            device.reassignOwner(user);
+            return device;
         }
 
         Device newDevice = Device.builder()
                 .user(user)
                 .deviceIdentifier(deviceIdentifier)
                 .build();
-        applyToken(newDevice, user, deviceToken);
 
         try {
-            deviceRepository.saveAndFlush(newDevice);
+            return deviceRepository.saveAndFlush(newDevice);
         } catch (DataIntegrityViolationException e) {
             Device device = deviceRepository.findByDeviceIdentifier(deviceIdentifier)
                     .orElseThrow(() -> e);
-            applyToken(device, user, deviceToken);
-            deviceRepository.save(device);
+            device.reassignOwner(user);
+            return device;
         }
     }
 
-    private void applyToken(
+    private void applyFcmToken(
             Device device,
             User user,
             String deviceToken

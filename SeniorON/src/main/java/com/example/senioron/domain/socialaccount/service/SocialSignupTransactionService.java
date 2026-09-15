@@ -74,16 +74,17 @@ public class SocialSignupTransactionService {
         }
 
         log.info(
-                "[SOCIAL_SIGNUP] fcm device registration start fcmTokenPresent={} deviceIdentifierPresent={}",
+                "[SOCIAL_SIGNUP] device registration start fcmTokenPresent={} deviceIdentifierPresent={}",
                 !isBlank(request.getFcmToken()),
                 !isBlank(request.getDeviceIdentifier())
         );
         try {
-            registerFcmTokenIfPresent(socialAccount.getUser(), request.getFcmToken(), request.getDeviceIdentifier());
-            log.info("[SOCIAL_SIGNUP] fcm device registration complete success=true");
+            registerDevice(socialAccount.getUser(), request.getDeviceIdentifier());
+            updateFcmTokenIfPresent(socialAccount.getUser(), request.getFcmToken(), request.getDeviceIdentifier());
+            log.info("[SOCIAL_SIGNUP] device registration complete success=true");
         } catch (RuntimeException e) {
             log.warn(
-                    "[SOCIAL_SIGNUP] fcm device registration failed success=false exceptionClass={} rootCauseClass={} sqlState={} constraintName={}",
+                    "[SOCIAL_SIGNUP] device registration failed success=false exceptionClass={} rootCauseClass={} sqlState={} constraintName={}",
                     e.getClass().getName(),
                     rootCauseClassName(e),
                     sqlState(e),
@@ -254,9 +255,13 @@ public class SocialSignupTransactionService {
         return value == null || value.isBlank();
     }
 
-    private void registerFcmTokenIfPresent(User user, String fcmToken, String deviceIdentifier) {
+    private void registerDevice(User user, String deviceIdentifier) {
+        deviceService.registerDevice(user, deviceIdentifier);
+    }
+
+    private void updateFcmTokenIfPresent(User user, String fcmToken, String deviceIdentifier) {
         if (!isBlank(fcmToken)) {
-            deviceService.registerToken(user, fcmToken, deviceIdentifier);
+            deviceService.updateFcmToken(user, fcmToken, deviceIdentifier);
         }
     }
 

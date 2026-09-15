@@ -44,7 +44,8 @@ public class GoogleLoginTransactionService {
             throw new BusinessException(ErrorCode.WITHDRAWN_USER);
         }
 
-        registerFcmTokenIfPresent(user, request.getFcmToken(), request.getDeviceIdentifier());
+        registerDevice(user, request.getDeviceIdentifier());
+        updateFcmTokenIfPresent(user, request.getFcmToken(), request.getDeviceIdentifier());
 
         String accessToken = jwtUtil.createAccessToken(user);
         String refreshToken = jwtUtil.createRefreshToken(user);
@@ -71,9 +72,13 @@ public class GoogleLoginTransactionService {
                 .build();
     }
 
-    private void registerFcmTokenIfPresent(User user, String fcmToken, String deviceIdentifier) {
+    private void registerDevice(User user, String deviceIdentifier) {
+        deviceService.registerDevice(user, deviceIdentifier);
+    }
+
+    private void updateFcmTokenIfPresent(User user, String fcmToken, String deviceIdentifier) {
         if (fcmToken != null && !fcmToken.isBlank()) {
-            deviceService.registerToken(user, fcmToken, deviceIdentifier);
+            deviceService.updateFcmToken(user, fcmToken, deviceIdentifier);
         }
     }
 }

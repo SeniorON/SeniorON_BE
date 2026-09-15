@@ -218,8 +218,10 @@ public class UserService {
             throw new BusinessException(ErrorCode.INVALID_PASSWORD);
         }
 
+        deviceService.registerDevice(user, request.getDeviceIdentifier());
+
         if(request.getFcmToken() != null && !request.getFcmToken().isBlank()){
-            deviceService.registerToken(user, request.getFcmToken(), request.getDeviceIdentifier());
+            deviceService.updateFcmToken(user, request.getFcmToken(), request.getDeviceIdentifier());
         }
 
         String accessToken = jwtUtil.createAccessToken(user);

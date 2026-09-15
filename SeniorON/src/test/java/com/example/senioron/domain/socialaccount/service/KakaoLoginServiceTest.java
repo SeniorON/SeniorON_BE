@@ -106,7 +106,40 @@ class KakaoLoginServiceTest {
         assertThat(response.getName()).isEqualTo("홍길동");
         assertThat(response.getRole()).isEqualTo(Role.CHILD);
         assertThat(response.isNewUser()).isFalse();
-        verify(deviceService).registerToken(user, FCM_TOKEN, DEVICE_IDENTIFIER);
+        verify(deviceService).registerDevice(user, DEVICE_IDENTIFIER);
+        verify(deviceService).updateFcmToken(user, FCM_TOKEN, DEVICE_IDENTIFIER);
+        verify(refreshTokenService).saveOrRotate(user, DEVICE_IDENTIFIER, REFRESH_TOKEN);
+    }
+
+    @Test
+    void kakaoLoginTransactionServiceRegistersDeviceWithoutFcmToken() {
+        SocialAccountRepository socialAccountRepository = mock(SocialAccountRepository.class);
+        JwtUtil jwtUtil = mock(JwtUtil.class);
+        RefreshTokenService refreshTokenService = mock(RefreshTokenService.class);
+        DeviceService deviceService = mock(DeviceService.class);
+        KakaoLoginTransactionService transactionService = new KakaoLoginTransactionService(
+                socialAccountRepository,
+                jwtUtil,
+                refreshTokenService,
+                deviceService
+        );
+        KakaoLoginRequest request = createRequest(null, DEVICE_IDENTIFIER);
+        User user = createUser();
+        SocialAccount socialAccount = SocialAccount.builder()
+                .user(user)
+                .provider(LoginProvider.KAKAO)
+                .providerId(KAKAO_PROVIDER_ID)
+                .build();
+
+        given(socialAccountRepository.findByProviderAndProviderId(LoginProvider.KAKAO, KAKAO_PROVIDER_ID))
+                .willReturn(Optional.of(socialAccount));
+        given(jwtUtil.createAccessToken(user)).willReturn(ACCESS_TOKEN);
+        given(jwtUtil.createRefreshToken(user)).willReturn(REFRESH_TOKEN);
+
+        transactionService.login(request, createKakaoUserInfo());
+
+        verify(deviceService).registerDevice(user, DEVICE_IDENTIFIER);
+        verify(deviceService, never()).updateFcmToken(any(), any(), any());
         verify(refreshTokenService).saveOrRotate(user, DEVICE_IDENTIFIER, REFRESH_TOKEN);
     }
 
@@ -160,10 +193,14 @@ class KakaoLoginServiceTest {
     }
 
     private KakaoLoginRequest createRequest() {
+        return createRequest(FCM_TOKEN, DEVICE_IDENTIFIER);
+    }
+
+    private KakaoLoginRequest createRequest(String fcmToken, String deviceIdentifier) {
         KakaoLoginRequest request = new KakaoLoginRequest();
         ReflectionTestUtils.setField(request, "kakaoAccessToken", KAKAO_ACCESS_TOKEN);
-        ReflectionTestUtils.setField(request, "fcmToken", FCM_TOKEN);
-        ReflectionTestUtils.setField(request, "deviceIdentifier", DEVICE_IDENTIFIER);
+        ReflectionTestUtils.setField(request, "fcmToken", fcmToken);
+        ReflectionTestUtils.setField(request, "deviceIdentifier", deviceIdentifier);
         return request;
     }
 

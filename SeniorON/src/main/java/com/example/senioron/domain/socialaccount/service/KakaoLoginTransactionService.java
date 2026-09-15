@@ -46,7 +46,8 @@ public class KakaoLoginTransactionService {
 
             String accessToken = jwtUtil.createAccessToken(user);
             String refreshToken = jwtUtil.createRefreshToken(user);
-            registerFcmTokenIfPresent(user, request.getFcmToken(), request.getDeviceIdentifier());
+            registerDevice(user, request.getDeviceIdentifier());
+            updateFcmTokenIfPresent(user, request.getFcmToken(), request.getDeviceIdentifier());
             refreshTokenService.saveOrRotate(user, request.getDeviceIdentifier(), refreshToken);
 
             return KakaoLoginResponse.builder()
@@ -70,9 +71,13 @@ public class KakaoLoginTransactionService {
                 .build();
     }
 
-    private void registerFcmTokenIfPresent(User user, String fcmToken, String deviceIdentifier) {
+    private void registerDevice(User user, String deviceIdentifier) {
+        deviceService.registerDevice(user, deviceIdentifier);
+    }
+
+    private void updateFcmTokenIfPresent(User user, String fcmToken, String deviceIdentifier) {
         if (fcmToken != null && !fcmToken.isBlank()) {
-            deviceService.registerToken(user, fcmToken, deviceIdentifier);
+            deviceService.updateFcmToken(user, fcmToken, deviceIdentifier);
         }
     }
 }

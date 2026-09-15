@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -60,6 +61,8 @@ class UserServiceTest {
 
     private static final String EMAIL = "test@example.com";
     private static final String VERIFICATION_CODE = "123456";
+    private static final String FCM_TOKEN = "fcm-token";
+    private static final String DEVICE_IDENTIFIER = "device-1";
 
     private final UserRepository userRepository = mock(UserRepository.class);
     private final RefreshTokenRepository refreshTokenRepository = mock(RefreshTokenRepository.class);
@@ -205,6 +208,36 @@ class UserServiceTest {
         assertThat(response.getRole()).isEqualTo(Role.PARENT);
         assertThat(response.getAccessToken()).isNotBlank();
         assertThat(response.getRefreshToken()).isNotBlank();
+        verify(refreshTokenRepository).saveAndFlush(any(RefreshToken.class));
+    }
+
+    @Test
+    void loginRegistersDeviceAndUpdatesFcmTokenWhenFcmTokenIsProvided() {
+        User user = createUser(1L);
+        given(userRepository.findByLoginId("testId")).willReturn(Optional.of(user));
+        given(refreshTokenRepository.findByUserAndDeviceIdentifier(user, DEVICE_IDENTIFIER)).willReturn(Optional.empty());
+
+        UserLoginResponse response = userService.login(createLoginRequest(FCM_TOKEN, DEVICE_IDENTIFIER));
+
+        assertThat(response.getAccessToken()).isNotBlank();
+        assertThat(response.getRefreshToken()).isNotBlank();
+        verify(deviceService).registerDevice(user, DEVICE_IDENTIFIER);
+        verify(deviceService).updateFcmToken(user, FCM_TOKEN, DEVICE_IDENTIFIER);
+        verify(refreshTokenRepository).saveAndFlush(any(RefreshToken.class));
+    }
+
+    @Test
+    void loginRegistersDeviceEvenWhenFcmTokenIsMissing() {
+        User user = createUser(1L);
+        given(userRepository.findByLoginId("testId")).willReturn(Optional.of(user));
+        given(refreshTokenRepository.findByUserAndDeviceIdentifier(user, DEVICE_IDENTIFIER)).willReturn(Optional.empty());
+
+        UserLoginResponse response = userService.login(createLoginRequest(null, DEVICE_IDENTIFIER));
+
+        assertThat(response.getAccessToken()).isNotBlank();
+        assertThat(response.getRefreshToken()).isNotBlank();
+        verify(deviceService).registerDevice(user, DEVICE_IDENTIFIER);
+        verify(deviceService, never()).updateFcmToken(eq(user), anyString(), eq(DEVICE_IDENTIFIER));
         verify(refreshTokenRepository).saveAndFlush(any(RefreshToken.class));
     }
 
@@ -696,9 +729,15 @@ class UserServiceTest {
     }
 
     private UserLoginRequest createLoginRequest() {
+        return createLoginRequest(null, null);
+    }
+
+    private UserLoginRequest createLoginRequest(String fcmToken, String deviceIdentifier) {
         UserLoginRequest request = new UserLoginRequest();
         ReflectionTestUtils.setField(request, "loginId", "testId");
         ReflectionTestUtils.setField(request, "password", "password123!");
+        ReflectionTestUtils.setField(request, "fcmToken", fcmToken);
+        ReflectionTestUtils.setField(request, "deviceIdentifier", deviceIdentifier);
         return request;
     }
 
