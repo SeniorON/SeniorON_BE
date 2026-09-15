@@ -16,6 +16,7 @@ import com.example.senioron.domain.senior.entity.SeniorRelation;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.entity.RefreshToken;
 import com.example.senioron.domain.user.entity.SignupEmailVerificationCode;
+import com.example.senioron.domain.device.service.DeviceCredentialIssueResult;
 import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.inactivity.service.InactivitySettingService;
 import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
@@ -218,7 +219,8 @@ public class UserService {
             throw new BusinessException(ErrorCode.INVALID_PASSWORD);
         }
 
-        deviceService.registerDevice(user, request.getDeviceIdentifier());
+        DeviceCredentialIssueResult deviceCredentialIssueResult =
+                deviceService.registerDevice(user, request.getDeviceIdentifier());
 
         if(request.getFcmToken() != null && !request.getFcmToken().isBlank()){
             deviceService.updateFcmToken(user, request.getFcmToken(), request.getDeviceIdentifier());
@@ -235,6 +237,7 @@ public class UserService {
                 .role(user.getRole())
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
+                .deviceAuthToken(deviceAuthToken(deviceCredentialIssueResult))
                 .build();
     }
 
@@ -385,6 +388,10 @@ public class UserService {
 
     private String generateVerificationCode() {
         return String.format("%06d", SECURE_RANDOM.nextInt(VERIFICATION_CODE_BOUND));
+    }
+
+    private String deviceAuthToken(DeviceCredentialIssueResult deviceCredentialIssueResult) {
+        return deviceCredentialIssueResult == null ? null : deviceCredentialIssueResult.deviceAuthToken();
     }
 
     private void validateActiveUser(User user) {

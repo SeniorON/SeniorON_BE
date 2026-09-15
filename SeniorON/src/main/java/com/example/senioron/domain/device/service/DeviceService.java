@@ -20,14 +20,20 @@ import org.springframework.transaction.annotation.Transactional;
 import com.example.senioron.domain.device.dto.request.DeviceStatusUpdateRequest;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.ManagerType;
+import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.List;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 @Service
 @RequiredArgsConstructor
 public class DeviceService {
+
+    private static final int DEVICE_AUTH_TOKEN_BYTE_LENGTH = 32;
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final DeviceRepository deviceRepository;
 
@@ -35,13 +41,16 @@ public class DeviceService {
 
     private final FamilyMemberRepository familyMemberRepository;
 
+    private final PasswordEncoder passwordEncoder;
+
     @Transactional
-    public void registerDevice(User user, String deviceIdentifier) {
+    public DeviceCredentialIssueResult registerDevice(User user, String deviceIdentifier) {
         if (deviceIdentifier == null || deviceIdentifier.isBlank()) {
-            return;
+            return DeviceCredentialIssueResult.empty();
         }
 
-        findOrCreateDevice(user, deviceIdentifier);
+        Device device = findOrCreateDevice(user, deviceIdentifier);
+        return issueDeviceCredentialIfMissing(device);
     }
 
     @Transactional
@@ -58,6 +67,19 @@ public class DeviceService {
     @Transactional
     public void registerToken(User user, String deviceToken, String deviceIdentifier) {
         updateFcmToken(user, deviceToken, deviceIdentifier);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean verifyDeviceCredential(String deviceIdentifier, String deviceAuthToken) {
+        if (deviceIdentifier == null || deviceIdentifier.isBlank()
+                || deviceAuthToken == null || deviceAuthToken.isBlank()) {
+            return false;
+        }
+
+        return deviceRepository.findByDeviceIdentifier(deviceIdentifier)
+                .filter(Device::hasDeviceAuthToken)
+                .filter(device -> passwordEncoder.matches(deviceAuthToken, device.getDeviceAuthTokenHash()))
+                .isPresent();
     }
 
     private Device findOrCreateDevice(User user, String deviceIdentifier) {
@@ -101,6 +123,22 @@ public class DeviceService {
                 device.getBatteryLevel(),
                 LocalDateTime.now()
         );
+    }
+
+    private DeviceCredentialIssueResult issueDeviceCredentialIfMissing(Device device) {
+        if (device.hasDeviceAuthToken()) {
+            return DeviceCredentialIssueResult.empty();
+        }
+
+        String deviceAuthToken = generateDeviceAuthToken();
+        device.issueDeviceAuthTokenHash(passwordEncoder.encode(deviceAuthToken));
+        return DeviceCredentialIssueResult.issued(deviceAuthToken);
+    }
+
+    private String generateDeviceAuthToken() {
+        byte[] randomBytes = new byte[DEVICE_AUTH_TOKEN_BYTE_LENGTH];
+        SECURE_RANDOM.nextBytes(randomBytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
     }
 
     @Transactional

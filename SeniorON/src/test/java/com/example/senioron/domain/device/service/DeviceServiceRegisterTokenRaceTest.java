@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 /**
  * 같은 device_identifier로 최초 등록 요청 두 개가 동시에 들어오는 경쟁 상태에서,
@@ -39,7 +40,8 @@ class DeviceServiceRegisterTokenRaceTest {
     private final DeviceService deviceService = new DeviceService(
             deviceRepository,
             seniorRepository,
-            familyMemberRepository
+            familyMemberRepository,
+            new BCryptPasswordEncoder()
     );
 
     @Test

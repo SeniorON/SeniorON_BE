@@ -13,4 +13,5 @@ public class UserLoginResponse {
     private Role role;
     private String accessToken;
     private String refreshToken;
+    private String deviceAuthToken;
 }

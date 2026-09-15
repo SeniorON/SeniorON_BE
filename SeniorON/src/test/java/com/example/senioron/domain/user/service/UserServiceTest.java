@@ -13,6 +13,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.example.senioron.domain.device.repository.DeviceRepository;
+import com.example.senioron.domain.device.service.DeviceCredentialIssueResult;
 import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
@@ -63,6 +64,7 @@ class UserServiceTest {
     private static final String VERIFICATION_CODE = "123456";
     private static final String FCM_TOKEN = "fcm-token";
     private static final String DEVICE_IDENTIFIER = "device-1";
+    private static final String DEVICE_AUTH_TOKEN = "device-auth-token";
 
     private final UserRepository userRepository = mock(UserRepository.class);
     private final RefreshTokenRepository refreshTokenRepository = mock(RefreshTokenRepository.class);
@@ -216,11 +218,14 @@ class UserServiceTest {
         User user = createUser(1L);
         given(userRepository.findByLoginId("testId")).willReturn(Optional.of(user));
         given(refreshTokenRepository.findByUserAndDeviceIdentifier(user, DEVICE_IDENTIFIER)).willReturn(Optional.empty());
+        given(deviceService.registerDevice(user, DEVICE_IDENTIFIER))
+                .willReturn(DeviceCredentialIssueResult.issued(DEVICE_AUTH_TOKEN));
 
         UserLoginResponse response = userService.login(createLoginRequest(FCM_TOKEN, DEVICE_IDENTIFIER));
 
         assertThat(response.getAccessToken()).isNotBlank();
         assertThat(response.getRefreshToken()).isNotBlank();
+        assertThat(response.getDeviceAuthToken()).isEqualTo(DEVICE_AUTH_TOKEN);
         verify(deviceService).registerDevice(user, DEVICE_IDENTIFIER);
         verify(deviceService).updateFcmToken(user, FCM_TOKEN, DEVICE_IDENTIFIER);
         verify(refreshTokenRepository).saveAndFlush(any(RefreshToken.class));
@@ -231,11 +236,14 @@ class UserServiceTest {
         User user = createUser(1L);
         given(userRepository.findByLoginId("testId")).willReturn(Optional.of(user));
         given(refreshTokenRepository.findByUserAndDeviceIdentifier(user, DEVICE_IDENTIFIER)).willReturn(Optional.empty());
+        given(deviceService.registerDevice(user, DEVICE_IDENTIFIER))
+                .willReturn(DeviceCredentialIssueResult.issued(DEVICE_AUTH_TOKEN));
 
         UserLoginResponse response = userService.login(createLoginRequest(null, DEVICE_IDENTIFIER));
 
         assertThat(response.getAccessToken()).isNotBlank();
         assertThat(response.getRefreshToken()).isNotBlank();
+        assertThat(response.getDeviceAuthToken()).isEqualTo(DEVICE_AUTH_TOKEN);
         verify(deviceService).registerDevice(user, DEVICE_IDENTIFIER);
         verify(deviceService, never()).updateFcmToken(eq(user), anyString(), eq(DEVICE_IDENTIFIER));
         verify(refreshTokenRepository).saveAndFlush(any(RefreshToken.class));
