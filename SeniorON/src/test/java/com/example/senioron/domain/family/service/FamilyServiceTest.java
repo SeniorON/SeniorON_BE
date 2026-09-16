@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 
 import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.family.dto.request.FamilyJoinRequest;
+import com.example.senioron.domain.family.dto.request.FamilyPrimaryManagerUpdateRequest;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
@@ -221,9 +222,73 @@ class FamilyServiceTest {
         verify(familyMemberRepository, never()).countByFamily(firstFamily);
     }
 
+    @Test
+    void updatePrimaryManagerChangesMembersOfSelectedSeniorFamily() {
+        Family firstFamily = Family.builder()
+                .familyId(1L)
+                .build();
+        Family selectedFamily = Family.builder()
+                .familyId(2L)
+                .build();
+        User currentUser = createUser(1L, "기존 주 담당자");
+        currentUser.updateFamily(firstFamily);
+        User targetUser = createUser(2L, "새 주 담당자");
+        Senior selectedSenior = Senior.builder()
+                .seniorId(20L)
+                .family(selectedFamily)
+                .build();
+        FamilyMember currentMember = createMember(
+                1L,
+                currentUser,
+                selectedFamily,
+                ManagerType.PRIMARY
+        );
+        FamilyMember targetMember = createMember(
+                2L,
+                targetUser,
+                selectedFamily,
+                ManagerType.SUB
+        );
+
+        given(userRepository.findByIdForUpdate(1L))
+                .willReturn(Optional.of(currentUser));
+        given(seniorRepository.findById(20L))
+                .willReturn(Optional.of(selectedSenior));
+        given(familyMemberRepository.existsByUserAndFamily(currentUser, selectedFamily))
+                .willReturn(true);
+        given(familyMemberRepository.findByUserAndFamilyForUpdate(currentUser, selectedFamily))
+                .willReturn(Optional.of(currentMember));
+        given(userRepository.findByIdForUpdate(2L))
+                .willReturn(Optional.of(targetUser));
+        given(familyMemberRepository.findByUserAndFamilyForUpdate(targetUser, selectedFamily))
+                .willReturn(Optional.of(targetMember));
+
+        var response = familyService.updatePrimaryManager(
+                currentUser,
+                20L,
+                createPrimaryManagerUpdateRequest(2L)
+        );
+
+        assertThat(currentMember.getManagerType()).isEqualTo(ManagerType.SUB);
+        assertThat(targetMember.getManagerType()).isEqualTo(ManagerType.PRIMARY);
+        assertThat(response.getUsersId()).isEqualTo(2L);
+        assertThat(response.getManagerType()).isEqualTo(ManagerType.PRIMARY);
+        verify(familyMemberRepository, never())
+                .findByUserAndFamilyForUpdate(currentUser, firstFamily);
+    }
+
     private FamilyJoinRequest createJoinRequest(String seniorCode) {
         FamilyJoinRequest request = new FamilyJoinRequest();
         ReflectionTestUtils.setField(request, "seniorCode", seniorCode);
+        return request;
+    }
+
+    private FamilyPrimaryManagerUpdateRequest createPrimaryManagerUpdateRequest(
+            Long targetUserId
+    ) {
+        FamilyPrimaryManagerUpdateRequest request =
+                new FamilyPrimaryManagerUpdateRequest();
+        ReflectionTestUtils.setField(request, "targetUserId", targetUserId);
         return request;
     }
 
