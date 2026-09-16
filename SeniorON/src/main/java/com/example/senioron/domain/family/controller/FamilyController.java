@@ -36,12 +36,13 @@ public class FamilyController {
         return Response.ok(familyService.joinFamily(user, request));
     }
 
-    @Operation(summary = "가족 구성원 조회", description = "현재 로그인한 사용자가 속한 가족의 구성원 목록을 조회합니다.")
+    @Operation(summary = "가족 구성원 조회", description = "선택한 시니어의 가족 구성원 목록을 조회합니다.")
     @GetMapping("/members")
     public Response<List<FamilyMemberResponse>> getFamilyMembers(
-            @AuthenticationPrincipal User user
+            @AuthenticationPrincipal User user,
+            @RequestParam Long seniorId
     ){
-        return Response.ok(familyService.getFamilyMembers(user));
+        return Response.ok(familyService.getFamilyMembers(user, seniorId));
     }
 
     @Operation(summary = "주 담당자 변경", description = "현재 주 담당자를 같은 가족의 다른 구성원으로 변경합니다.")
