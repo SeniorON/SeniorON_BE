@@ -187,6 +187,40 @@ class FamilyServiceTest {
                 .findAllByFamilyOrderByIdAsc(otherFamily);
     }
 
+    @Test
+    void getSeniorCodeReturnsSelectedSeniorFamilyCodeAndMemberCount() {
+        Family firstFamily = Family.builder()
+                .familyId(1L)
+                .seniorCode("FIRST-001")
+                .build();
+        Family selectedFamily = Family.builder()
+                .familyId(2L)
+                .seniorCode("SELECTED")
+                .build();
+        User currentUser = createUser(1L, "현재 사용자");
+        currentUser.updateFamily(firstFamily);
+        Senior selectedSenior = Senior.builder()
+                .seniorId(20L)
+                .family(selectedFamily)
+                .build();
+
+        given(userRepository.findById(1L))
+                .willReturn(Optional.of(currentUser));
+        given(seniorRepository.findById(20L))
+                .willReturn(Optional.of(selectedSenior));
+        given(familyMemberRepository.existsByUserAndFamily(currentUser, selectedFamily))
+                .willReturn(true);
+        given(familyMemberRepository.countByFamily(selectedFamily))
+                .willReturn(3L);
+
+        var response = familyService.getSeniorCode(currentUser, 20L);
+
+        assertThat(response.getSeniorCode()).isEqualTo("SELECTED");
+        assertThat(response.getFamilyMemberCount()).isEqualTo(3L);
+        verify(familyMemberRepository).countByFamily(selectedFamily);
+        verify(familyMemberRepository, never()).countByFamily(firstFamily);
+    }
+
     private FamilyJoinRequest createJoinRequest(String seniorCode) {
         FamilyJoinRequest request = new FamilyJoinRequest();
         ReflectionTestUtils.setField(request, "seniorCode", seniorCode);
