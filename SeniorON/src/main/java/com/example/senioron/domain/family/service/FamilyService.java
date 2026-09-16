@@ -157,17 +157,14 @@ public class FamilyService {
     @Transactional
     public FamilyPrimaryManagerUpdateResponse updatePrimaryManager(
             User principal,
+            Long seniorId,
             FamilyPrimaryManagerUpdateRequest request
     ){
         // 현재 로그인한 사용자가 실제 DB에 없는 경우
         User currentUser = userRepository.findByIdForUpdate(principal.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        Family family = currentUser.getFamily();
-
-        if(family == null){
-            throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
-        }
+        Family family = resolveAccessibleFamily(currentUser, seniorId);
 
         FamilyMember currentMember = familyMemberRepository
                 .findByUserAndFamilyForUpdate(currentUser, family)

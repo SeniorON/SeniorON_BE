@@ -45,13 +45,14 @@ public class FamilyController {
         return Response.ok(familyService.getFamilyMembers(user, seniorId));
     }
 
-    @Operation(summary = "주 담당자 변경", description = "현재 주 담당자를 같은 가족의 다른 구성원으로 변경합니다.")
+    @Operation(summary = "주 담당자 변경", description = "선택한 시니어 가족의 주 담당자를 같은 가족의 다른 자녀 구성원으로 변경합니다.")
     @PatchMapping("/primary-manager")
     public Response<FamilyPrimaryManagerUpdateResponse> updatePrimaryManager(
             @AuthenticationPrincipal User user,
+            @RequestParam Long seniorId,
             @Valid @RequestBody FamilyPrimaryManagerUpdateRequest request
-    ){
-        return Response.ok(familyService.updatePrimaryManager(user, request));
+    ) {
+        return Response.ok(familyService.updatePrimaryManager(user, seniorId, request));
     }
 
     @Operation(summary = "가족 구성원 삭제", description = "주 담당자가 같은 가족의 구성원을 가족에서 제외합니다.")
