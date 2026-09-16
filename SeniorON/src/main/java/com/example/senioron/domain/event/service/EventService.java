@@ -18,7 +18,8 @@ import com.example.senioron.domain.event.entity.RiskCheckResult;
 import com.example.senioron.domain.event.repository.EventRepository;
 import com.example.senioron.domain.event.util.GeocodingClient;
 import com.example.senioron.domain.event.util.SafeBrowsingClient;
-import com.example.senioron.domain.notification.dto.NotificationDispatchTarget;
+import com.example.senioron.domain.notification.dto.NotificationPreparationResult;
+import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.notification.service.NotificationService;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.senior.entity.Senior;
@@ -29,15 +30,16 @@ import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-import java.util.List;
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class EventService {
 
     private static final String SOS_EVENT_METRIC = "sos_event_total";
@@ -63,7 +65,7 @@ public class EventService {
 
         SosEventCreation creation = self.saveSosEvent(user, req);
 
-        return SosEventResponse.of(creation.event(), creation.dispatchTargets().size());
+        return SosEventResponse.of(creation.event(), creation.notificationResult());
     }
 
     @Transactional
@@ -80,15 +82,15 @@ public class EventService {
                 .build();
 
         Event savedEvent = eventRepository.save(event);
-        List<NotificationDispatchTarget> dispatchTargets =
-                notificationService.prepareSosNotifications(savedEvent);
+        NotificationPreparationResult notificationResult =
+                notificationService.prepareSosNotificationResult(savedEvent);
 
         // REQUIRED 전파로 외부 트랜잭션에 참여한 경우에도 실제 커밋 이후에만 발송한다.
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
                 countSosEvent("success");
-                notificationService.dispatchSosAsync(dispatchTargets);
+                notificationService.dispatchSosAsync(notificationResult.targets());
             }
         });
 
@@ -96,10 +98,11 @@ public class EventService {
         applicationContext.publishEvent(new SosAddressLookupRequested(
                 savedEvent.getEventId(), savedEvent.getLatitude(), savedEvent.getLongitude()));
 
-        return new SosEventCreation(savedEvent, dispatchTargets);
+        return new SosEventCreation(savedEvent, notificationResult);
     }
 
     public InactivityResponse createInactivityEvent(User user, InactivityRequest req){
+        validateParent(user);
         String address = geocodingClient.reverseGeocode(req.getLatitude(), req.getLongitude());
         EventService self = applicationContext.getBean(EventService.class);
         return self.saveInactivityEvent(address, user, req);
@@ -120,12 +123,13 @@ public class EventService {
                 .build();
 
         Event savedEvent = eventRepository.save(event);
-        notificationService.createFormEvent(savedEvent);
+        NotificationPreparationResult result = notificationService.createFormEvent(savedEvent);
 
-        return InactivityResponse.of(savedEvent);
+        return InactivityResponse.of(savedEvent, result);
     }
 
     public OutingReturnResponse createOutingReturnEvent(User user, OutingReturnRequest req) {
+        validateParent(user);
         String address = geocodingClient.reverseGeocode(req.getLatitude(), req.getLongitude());
         EventService self = applicationContext.getBean(EventService.class);
         return self.saveOutingReturnEvent(address, user, req);
@@ -146,9 +150,9 @@ public class EventService {
                 .build();
 
         Event savedEvent = eventRepository.save(event);
-        notificationService.createFormEvent(savedEvent);
+        NotificationPreparationResult result = notificationService.createFormEvent(savedEvent);
 
-        return OutingReturnResponse.of(savedEvent);
+        return OutingReturnResponse.of(savedEvent, result);
     }
 
     /**
@@ -159,6 +163,7 @@ public class EventService {
     @Transactional
     public RiskLinkResponse saveRiskLinkEvent(User user, RiskLinkRequest req) {
 
+        validateParent(user);
         RiskCheckResult result = safeBrowsingClient.checkUrl(req.getLinkUrl());
         Boolean isDangerous = switch (result) {
             case DANGEROUS -> true;
@@ -177,11 +182,20 @@ public class EventService {
                 .build();
 
         Event savedEvent = eventRepository.save(event);
+        NotificationPreparationResult notificationResult;
         if (Boolean.TRUE.equals(isDangerous)) {
-            notificationService.createFormEvent(savedEvent);
+            notificationResult = notificationService.createFormEvent(savedEvent);
+        } else {
+            notificationResult = NotificationPreparationResult.notDispatched(
+                    savedEvent.getSenior() == null ? "SENIOR_NOT_LINKED"
+                            : isDangerous == null ? "RISK_CHECK_UNAVAILABLE" : "RISK_NOT_DETECTED");
+            log.info("위험링크 알림 발송 건너뜀. reason={}, eventId={}, seniorId={}, senderId={}",
+                    notificationResult.reason(), savedEvent.getEventId(),
+                    savedEvent.getSenior() == null ? null : savedEvent.getSenior().getSeniorId(),
+                    user.getUsersId());
         }
 
-        return RiskLinkResponse.of(savedEvent);
+        return RiskLinkResponse.of(savedEvent, notificationResult);
     }
 
     @Transactional(readOnly = true)
@@ -208,7 +222,22 @@ public class EventService {
     }
 
     private Senior resolveSenior(User user) {
-        return seniorRepository.findByParentUser(user).orElse(null);
+        validateParent(user);
+        Senior senior = seniorRepository.findByParentUser(user).orElse(null);
+        if (senior != null && (senior.getFamily() == null
+                || !familyMemberRepository.existsByUserAndFamily(user, senior.getFamily()))) {
+            throw new BusinessException(ErrorCode.EVENT_SENIOR_ACCESS_DENIED);
+        }
+        return senior;
+    }
+
+    private void validateParent(User user) {
+        if (user == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
+        }
+        if (user.getRole() != Role.PARENT) {
+            throw new BusinessException(ErrorCode.EVENT_PARENT_ONLY);
+        }
     }
 
     private void countSosEvent(String result) {

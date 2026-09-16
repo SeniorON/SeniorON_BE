@@ -12,6 +12,11 @@ public record NotificationDispatchTarget(
         String title,
         String body,
         Long eventId,
+        Long seniorId,
         List<String> deviceTokens
 ) {
+    public NotificationDispatchTarget(Long receiverId, String title, String body,
+                                      Long eventId, List<String> deviceTokens) {
+        this(receiverId, title, body, eventId, null, deviceTokens);
+    }
 }

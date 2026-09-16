@@ -146,6 +146,8 @@ public enum ErrorCode implements BaseCode {
     INACTIVITY_SETTING_PARENT_ONLY(HttpStatus.FORBIDDEN, "INACTIVITY403", "부모 계정만 자신의 무활동 감지 설정을 조회할 수 있습니다."),
 
     // Event Error
+    EVENT_PARENT_ONLY(HttpStatus.FORBIDDEN, "EVENT403_1", "부모 계정만 이벤트를 생성할 수 있습니다."),
+    EVENT_SENIOR_ACCESS_DENIED(HttpStatus.FORBIDDEN, "EVENT403_2", "이벤트 대상 시니어의 가족 구성원이 아닙니다."),
     EVENT_NOT_FOUND(HttpStatus.NOT_FOUND, "EVENT404", "이벤트를 찾을 수 없습니다."),
     EVENT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "EVENT403", "같은 가족만 이벤트 상세를 조회할 수 있습니다."),
 
