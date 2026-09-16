@@ -313,4 +313,50 @@ class FamilyServiceTest {
                 .managerType(managerType)
                 .build();
     }
+
+    @Test
+    void removeFamilyMemberDeletesMemberOnlyFromSelectedSeniorFamily() {
+        Family firstFamily = Family.builder()
+                .familyId(1L)
+                .build();
+        Family selectedFamily = Family.builder()
+                .familyId(2L)
+                .build();
+
+        User currentUser = createUser(1L, "주 담당자");
+        currentUser.updateFamily(firstFamily);
+        User targetUser = createUser(2L, "삭제 대상");
+
+        Senior selectedSenior = Senior.builder()
+                .seniorId(20L)
+                .family(selectedFamily)
+                .build();
+
+        FamilyMember currentMember = createMember(
+                1L,
+                currentUser,
+                selectedFamily,
+                ManagerType.PRIMARY
+        );
+
+        given(userRepository.findByIdForUpdate(1L))
+                .willReturn(Optional.of(currentUser));
+        given(seniorRepository.findById(20L))
+                .willReturn(Optional.of(selectedSenior));
+        given(familyMemberRepository.existsByUserAndFamily(currentUser, selectedFamily))
+                .willReturn(true);
+        given(familyMemberRepository.findByUserAndFamilyForUpdate(currentUser, selectedFamily))
+                .willReturn(Optional.of(currentMember));
+        given(userRepository.findByIdForUpdate(2L))
+                .willReturn(Optional.of(targetUser));
+        given(familyMemberRepository.existsByUserAndFamily(targetUser, selectedFamily))
+                .willReturn(true);
+
+        familyService.removeFamilyMember(currentUser, 20L, 2L);
+
+        verify(familyMemberRepository)
+                .deleteByUserAndFamily(targetUser, selectedFamily);
+        verify(familyMemberRepository, never())
+                .deleteByUserAndFamily(targetUser, firstFamily);
+    }
 }
