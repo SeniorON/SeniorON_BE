@@ -267,4 +267,26 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
     );
 
     boolean existsByImageKey(String imageKey);
+
+    @EntityGraph(attributePaths = {"user", "photoGroup"})
+    @Query("""
+        SELECT fp
+        FROM FamilyPhoto fp
+        WHERE fp.familyPhotoId = :familyPhotoId
+          AND EXISTS (
+              SELECT pgf.id
+              FROM PhotoGroupFamily pgf
+              WHERE pgf.photoGroup = fp.photoGroup
+                AND EXISTS (
+                    SELECT fm.id
+                    FROM FamilyMember fm
+                    WHERE fm.family = pgf.family
+                      AND fm.user = :user
+                )
+          )
+        """)
+    Optional<FamilyPhoto> findAccessibleByFamilyPhotoIdAndUser(
+            @Param("familyPhotoId") Long familyPhotoId,
+            @Param("user") User user
+    );
 }

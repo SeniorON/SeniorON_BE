@@ -783,19 +783,13 @@ public class FamilyPhotoService {
             Long familyPhotoId
     ) {
         User currentUser = userRepository
-                .findByIdWithFamily(principal.getUsersId())
+                .findById(principal.getUsersId())
                 .orElseThrow(()-> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        Family family = currentUser.getFamily();
-
-        if(family == null) {
-            throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
-        }
-
         FamilyPhoto photo = familyPhotoRepository
-                .findByFamilyPhotoIdAndFamily(
+                .findAccessibleByFamilyPhotoIdAndUser(
                         familyPhotoId,
-                        family
+                        currentUser
                 )
                 .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_PHOTO_NOT_FOUND));
 
