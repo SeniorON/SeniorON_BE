@@ -13,6 +13,8 @@ import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
 import com.example.senioron.domain.family.repository.PhotoGroupRepository;
+import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
@@ -139,12 +141,8 @@ public class FamilyService {
 
     // 가족 구성원 조회 메소드
     @Transactional(readOnly=true)
-    public List<FamilyMemberResponse> getFamilyMembers(User user){
-        Family family = user.getFamily();
-
-        if(family == null){
-            throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
-        }
+    public List<FamilyMemberResponse> getFamilyMembers(User user, Long seniorId){
+        Family family = resolveAccessibleFamily(user, seniorId);
 
         return familyMemberRepository.findAllByFamilyOrderByIdAsc(family).stream()
                 // 계정 주인만 맨 앞 정렬
@@ -426,5 +424,25 @@ public class FamilyService {
         } catch (DataIntegrityViolationException e) {
             throw new BusinessException(ErrorCode.PARENT_USER_ALREADY_LINKED_TO_SENIOR);
         }
+    }
+
+    private Family resolveAccessibleFamily(
+            User user,
+            Long seniorId
+    ) {
+        Senior senior = seniorRepository.findById(seniorId)
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.SENIOR_NOT_FOUND)
+                );
+
+        Family family = senior.getFamily();
+
+        if (!familyMemberRepository.existsByUserAndFamily(user, family)) {
+            throw new BusinessException(
+                    ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED
+            );
+        }
+
+        return family;
     }
 }

@@ -1,12 +1,16 @@
 package com.example.senioron.domain.family.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.family.dto.request.FamilyJoinRequest;
 import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
@@ -14,11 +18,15 @@ import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
 import com.example.senioron.domain.family.repository.PhotoGroupRepository;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
+import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.global.apiPayload.code.ErrorCode;
+import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.storage.S3Service;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -94,7 +102,7 @@ class FamilyServiceTest {
         given(familyRepository.findBySeniorCode("ABCD-1234")).willReturn(Optional.of(family));
         given(familyMemberRepository.existsByUserAndFamily(parent, family)).willReturn(false);
         given(seniorRepository.findAllByFamilyOrderBySeniorIdAscForUpdate(family))
-                .willReturn(java.util.List.of(senior));
+                .willReturn(List.of(senior));
         given(seniorRepository.existsByParentUser(parent)).willReturn(false);
 
         familyService.joinFamily(parent, createJoinRequest("ABCD-1234"));
@@ -104,9 +112,106 @@ class FamilyServiceTest {
         verify(seniorRepository).saveAndFlush(senior);
     }
 
+    @Test
+    void getFamilyMembersReturnsMembersOfSelectedSeniorFamily() {
+        Family firstFamily = Family.builder()
+                .familyId(1L)
+                .build();
+        Family selectedFamily = Family.builder()
+                .familyId(2L)
+                .build();
+        User currentUser = createUser(1L, "현재 사용자");
+        currentUser.updateFamily(firstFamily);
+        User otherUser = createUser(2L, "다른 구성원");
+        Senior selectedSenior = Senior.builder()
+                .seniorId(20L)
+                .family(selectedFamily)
+                .build();
+        FamilyMember currentMember = createMember(
+                1L,
+                currentUser,
+                selectedFamily,
+                ManagerType.PRIMARY
+        );
+        FamilyMember otherMember = createMember(
+                2L,
+                otherUser,
+                selectedFamily,
+                ManagerType.SUB
+        );
+
+        given(seniorRepository.findById(20L))
+                .willReturn(Optional.of(selectedSenior));
+        given(familyMemberRepository.existsByUserAndFamily(currentUser, selectedFamily))
+                .willReturn(true);
+        given(familyMemberRepository.findAllByFamilyOrderByIdAsc(selectedFamily))
+                .willReturn(List.of(otherMember, currentMember));
+
+        var responses = familyService.getFamilyMembers(currentUser, 20L);
+
+        assertThat(responses)
+                .extracting(response -> response.getUsersId())
+                .containsExactly(1L, 2L);
+        assertThat(responses.get(0).isMe()).isTrue();
+        verify(familyMemberRepository)
+                .findAllByFamilyOrderByIdAsc(selectedFamily);
+        verify(familyMemberRepository, never())
+                .findAllByFamilyOrderByIdAsc(firstFamily);
+    }
+
+    @Test
+    void getFamilyMembersRejectsUserOutsideSelectedSeniorFamily() {
+        Family otherFamily = Family.builder()
+                .familyId(2L)
+                .build();
+        User currentUser = createUser(1L, "현재 사용자");
+        Senior selectedSenior = Senior.builder()
+                .seniorId(20L)
+                .family(otherFamily)
+                .build();
+
+        given(seniorRepository.findById(20L))
+                .willReturn(Optional.of(selectedSenior));
+        given(familyMemberRepository.existsByUserAndFamily(currentUser, otherFamily))
+                .willReturn(false);
+
+        assertThatThrownBy(() ->
+                familyService.getFamilyMembers(currentUser, 20L)
+        )
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED);
+
+        verify(familyMemberRepository, never())
+                .findAllByFamilyOrderByIdAsc(otherFamily);
+    }
+
     private FamilyJoinRequest createJoinRequest(String seniorCode) {
         FamilyJoinRequest request = new FamilyJoinRequest();
         ReflectionTestUtils.setField(request, "seniorCode", seniorCode);
         return request;
+    }
+
+    private User createUser(Long userId, String name) {
+        return User.builder()
+                .usersId(userId)
+                .name(name)
+                .role(Role.CHILD)
+                .build();
+    }
+
+    private FamilyMember createMember(
+            Long memberId,
+            User user,
+            Family family,
+            ManagerType managerType
+    ) {
+        return FamilyMember.builder()
+                .id(memberId)
+                .user(user)
+                .family(family)
+                .managerType(managerType)
+                .build();
     }
 }
