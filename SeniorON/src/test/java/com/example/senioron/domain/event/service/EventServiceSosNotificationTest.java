@@ -86,6 +86,9 @@ class EventServiceSosNotificationTest {
         SosEventResponse response = eventService.createSosEvent(senior, sosRequest());
 
         assertThat(response.getReceiverCount()).isEqualTo(0);
+        assertThat(response.getSeniorId()).isNull();
+        assertThat(response.getNotificationStatus().name()).isEqualTo("NOT_DISPATCHED");
+        assertThat(response.getReason()).isEqualTo("SENIOR_NOT_LINKED");
         assertThat(counterValueOrZero("sos_event_total", "result", "success") - eventSuccessBefore)
                 .isZero();
         assertThat(counterValueOrZero("sos_dispatch_total", "result", "no_receiver") - noReceiverBefore)
@@ -189,6 +192,11 @@ class EventServiceSosNotificationTest {
 
         SosEventResponse eventA = eventService.createSosEvent(parentA, sosRequest());
         SosEventResponse eventB = eventService.createSosEvent(parentB, sosRequest());
+        assertThat(eventA.getSeniorId()).isEqualTo(seniorA.getSeniorId());
+        assertThat(eventB.getSeniorId()).isEqualTo(seniorB.getSeniorId());
+        assertThat(eventA.getNotificationStatus().name()).isEqualTo("NOT_DISPATCHED");
+        assertThat(eventA.getReason()).isEqualTo("NO_DEVICE_TOKEN");
+        assertThat(eventA.getReceiverCount()).isEqualTo(1);
 
         NotificationListResponse response = notificationService.getNotificationList(
                 child.getUsersId(), seniorA.getSeniorId(), NotificationType.SOS, null, 20);

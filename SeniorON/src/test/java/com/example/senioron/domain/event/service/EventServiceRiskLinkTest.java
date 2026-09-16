@@ -7,6 +7,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.example.senioron.domain.event.dto.request.RiskLinkRequest;
+import com.example.senioron.domain.notification.dto.NotificationPreparationResult;
+import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.senior.entity.Senior;
+import java.util.Optional;
 import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.event.dto.response.RiskLinkResponse;
 import com.example.senioron.domain.event.entity.Event;
@@ -59,6 +63,13 @@ class EventServiceRiskLinkTest {
 
         senior = User.builder().usersId(1L).name("시니어").role(Role.PARENT).build();
 
+        Family family = Family.builder().familyId(1L).build();
+        given(seniorRepository.findByParentUser(senior)).willReturn(Optional.of(
+                Senior.builder().seniorId(100L).family(family).parentUser(senior).build()));
+        given(familyMemberRepository.existsByUserAndFamily(senior, family)).willReturn(true);
+        given(notificationService.createFormEvent(any(Event.class)))
+                .willReturn(NotificationPreparationResult.notDispatched("NO_CHILD_RECEIVER"));
+
         given(eventRepository.save(any(Event.class)))
                 .willAnswer(invocation -> invocation.getArgument(0));
     }
@@ -70,6 +81,7 @@ class EventServiceRiskLinkTest {
         RiskLinkResponse response = eventService.saveRiskLinkEvent(senior, riskLinkRequest("https://danger.example"));
 
         assertThat(response.getRiskLevel()).isEqualTo("높음");
+        assertThat(response.getSeniorId()).isEqualTo(100L);
         verify(eventRepository).save(argThatEventWith(EventType.RISK_LINK, Boolean.TRUE));
         verify(notificationService).createFormEvent(any(Event.class));
     }
@@ -81,6 +93,7 @@ class EventServiceRiskLinkTest {
         RiskLinkResponse response = eventService.saveRiskLinkEvent(senior, riskLinkRequest("https://safe.example"));
 
         assertThat(response.getRiskLevel()).isEqualTo("낮음");
+        assertThat(response.getReason()).isEqualTo("RISK_NOT_DETECTED");
         verify(eventRepository).save(argThatEventWith(EventType.RISK_LINK, Boolean.FALSE));
         verify(notificationService, never()).createFormEvent(any(Event.class));
     }
@@ -93,6 +106,7 @@ class EventServiceRiskLinkTest {
 
         assertThat(response.getId()).isNull(); // 저장 자체는 됐지만 mock save는 eventId를 채우지 않음
         assertThat(response.getRiskLevel()).isEqualTo("확인불가");
+        assertThat(response.getReason()).isEqualTo("RISK_CHECK_UNAVAILABLE");
         verify(eventRepository).save(argThatEventWith(EventType.RISK_LINK, null));
         verify(notificationService, never()).createFormEvent(any(Event.class));
     }

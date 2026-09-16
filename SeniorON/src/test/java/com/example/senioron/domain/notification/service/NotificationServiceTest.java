@@ -133,7 +133,11 @@ class NotificationServiceTest {
 
         TransactionSynchronizationManager.initSynchronization();
         try {
-            notificationService.createFormEvent(event);
+            var result = notificationService.createFormEvent(event);
+            assertThat(result.notificationStatus().name()).isEqualTo("NOT_DISPATCHED");
+            assertThat(result.reason()).isEqualTo("NO_DEVICE_TOKEN");
+            assertThat(result.receiverCount()).isEqualTo(1);
+            assertThat(result.targets().get(0).seniorId()).isEqualTo(SENIOR_ID);
 
             verify(notificationRepository).saveAll(
                     org.mockito.ArgumentMatchers.argThat(items -> {
@@ -143,6 +147,30 @@ class NotificationServiceTest {
                                 && saved.get(0).getReceiverUser() == child;
                     })
             );
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void generalPushIncludesSeniorIdAndStartsOnlyAfterCommit() {
+        given(familyMemberRepository.findAllBySeniorIdAndUserRole(SENIOR_ID, Role.CHILD))
+                .willReturn(List.of(FamilyMember.builder().user(child).family(family)
+                        .managerType(ManagerType.NONE).build()));
+        given(deviceRepository.findAllByUserIn(List.of(child)))
+                .willReturn(List.of(Device.builder().user(child).deviceToken("child-token").build()));
+        Event event = Event.builder().eventId(100L).triggeredUser(parent).user(parent)
+                .senior(senior).eventType(EventType.INACTIVITY).build();
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            var result = notificationService.createFormEvent(event);
+            assertThat(result.notificationStatus().name()).isEqualTo("DISPATCH_REQUESTED");
+            assertThat(result.reason()).isNull();
+            org.mockito.Mockito.verifyNoInteractions(fcmSender);
+            TransactionSynchronizationManager.getSynchronizations().forEach(
+                    org.springframework.transaction.support.TransactionSynchronization::afterCommit);
+            org.mockito.Mockito.verify(fcmSender, org.mockito.Mockito.timeout(2000))
+                    .send("child-token", "무활동 감지 알림", "무활동 감지됨", 100L, SENIOR_ID);
         } finally {
             TransactionSynchronizationManager.clearSynchronization();
         }

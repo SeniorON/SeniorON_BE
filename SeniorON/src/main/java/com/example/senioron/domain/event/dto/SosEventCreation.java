@@ -2,6 +2,7 @@ package com.example.senioron.domain.event.dto;
 
 import com.example.senioron.domain.event.entity.Event;
 import com.example.senioron.domain.notification.dto.NotificationDispatchTarget;
+import com.example.senioron.domain.notification.dto.NotificationPreparationResult;
 
 import java.util.List;
 
@@ -11,6 +12,9 @@ import java.util.List;
  */
 public record SosEventCreation(
         Event event,
-        List<NotificationDispatchTarget> dispatchTargets
+        NotificationPreparationResult notificationResult
 ) {
+    public List<NotificationDispatchTarget> dispatchTargets() {
+        return notificationResult.targets();
+    }
 }

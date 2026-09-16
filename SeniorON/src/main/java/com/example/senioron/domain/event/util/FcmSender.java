@@ -40,23 +40,31 @@ public class FcmSender {
     // eventId가 있으면 data 페이로드에 같이 실어 보내, 푸시를 탭했을 때 프론트가
     // 알림 목록을 거치지 않고 바로 해당 이벤트 상세로 딥링크할 수 있게 한다.
     public boolean send(String fcmToken, String title, String body, Long eventId) {
-        return send(fcmToken, title, body, eventId, false);
+        return send(fcmToken, title, body, eventId, null, false);
     }
 
     public boolean sendHighPriority(String fcmToken, String title, String body, Long eventId) {
-        return send(fcmToken, title, body, eventId, true);
+        return send(fcmToken, title, body, eventId, null, true);
     }
 
-    private boolean send(String fcmToken, String title, String body, Long eventId, boolean highPriority) {
+    public boolean send(String fcmToken, String title, String body, Long eventId, Long seniorId) {
+        return send(fcmToken, title, body, eventId, seniorId, false);
+    }
+
+    public boolean sendHighPriority(String fcmToken, String title, String body, Long eventId, Long seniorId) {
+        return send(fcmToken, title, body, eventId, seniorId, true);
+    }
+
+    private boolean send(String fcmToken, String title, String body, Long eventId, Long seniorId, boolean highPriority) {
         if (fcmToken == null || fcmToken.isBlank()) {
             countSend("skipped", "NO_TOKEN");
-            log.warn("FCM 토큰이 비어있어 발송을 건너뜁니다.");
+            log.warn("FCM 발송 건너뜀. reason=NO_DEVICE_TOKEN, eventId={}, seniorId={}", eventId, seniorId);
             return false;
         }
 
         if (!firebaseConfig.isInitialized()) {
             countSend("skipped", "NOT_INITIALIZED");
-            log.warn("Firebase가 초기화되지 않아 FCM 발송을 건너뜁니다.");
+            log.warn("FCM 발송 건너뜀. reason=FIREBASE_NOT_INITIALIZED, eventId={}, seniorId={}", eventId, seniorId);
             return false;
         }
 
@@ -78,6 +86,9 @@ public class FcmSender {
             messageBuilder.putData("eventId", String.valueOf(eventId));
         }
 
+        if (seniorId != null) {
+            messageBuilder.putData("seniorId", String.valueOf(seniorId));
+        }
         Message message = messageBuilder.build();
 
         long start = System.nanoTime();
@@ -85,7 +96,7 @@ public class FcmSender {
         try {
             FirebaseMessaging.getInstance().send(message);
             long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
-            log.info("FCM 발송 소요시간={}ms", elapsedMillis);
+            log.info("FCM 발송 성공. eventId={}, seniorId={}, elapsedMs={}", eventId, seniorId, elapsedMillis);
             countSend("success", "NONE");
             return true;
         } catch (FirebaseMessagingException e) {
@@ -98,7 +109,7 @@ public class FcmSender {
 
             if (errorCode == MessagingErrorCode.UNREGISTERED) {
                 countSend("token_invalid", errorCodeName);
-                log.warn("유효하지 않은 FCM 토큰, 삭제 처리");
+                log.warn("유효하지 않은 FCM 토큰 삭제. eventId={}, seniorId={}", eventId, seniorId);
 
                 FcmSender self = applicationContext.getBean(FcmSender.class);
                 self.clearInvalidToken(fcmToken);
@@ -107,9 +118,8 @@ public class FcmSender {
 
             countSend("failed", errorCodeName);
             log.warn(
-                    "FCM 발송 실패, token={}, errorCode={}",
-                    maskToken(fcmToken),
-                    errorCodeName
+                    "FCM 발송 실패. eventId={}, seniorId={}, errorCode={}",
+                    eventId, seniorId, errorCodeName
             );
             return false;
         } catch (RuntimeException e) {

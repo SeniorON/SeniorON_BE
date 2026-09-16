@@ -11,6 +11,7 @@ import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.notification.dto.NotificationDispatchResult;
+import com.example.senioron.domain.notification.dto.NotificationPreparationResult;
 import com.example.senioron.domain.notification.dto.NotificationDispatchTarget;
 import com.example.senioron.domain.notification.dto.response.NotificationHomeListResponse;
 import com.example.senioron.domain.notification.dto.response.NotificationHomeResponse;
@@ -127,9 +128,10 @@ public class NotificationService {
      * 발송 실패는 API 응답에 로그로만 남김.
      */
     @Transactional
-    public void createFormEvent(Event event) {
-        List<NotificationDispatchTarget> targets = prepareNotifications(event);
-        if (targets.isEmpty()) return;
+    public NotificationPreparationResult createFormEvent(Event event) {
+        NotificationPreparationResult result = prepareNotifications(event);
+        List<NotificationDispatchTarget> targets = result.targets();
+        if (result.notificationStatus() == NotificationPreparationResult.Status.NOT_DISPATCHED) return result;
 
         // 커밋 성공 이후에만 FCM 발송이 실행되도록 등록
         TransactionSynchronizationManager.registerSynchronization(
@@ -140,6 +142,7 @@ public class NotificationService {
                     }
                 }
         );
+        return result;
     }
 
     /**
@@ -148,6 +151,11 @@ public class NotificationService {
      */
     @Transactional
     public List<NotificationDispatchTarget> prepareSosNotifications(Event event) {
+        return prepareNotifications(event).targets();
+    }
+
+    @Transactional
+    public NotificationPreparationResult prepareSosNotificationResult(Event event) {
         return prepareNotifications(event);
     }
 
@@ -200,18 +208,18 @@ public class NotificationService {
     /**
      * 알림을 저장하고, 커밋 이후 발송에 필요한 정보를 추출한다.
      */
-    private List<NotificationDispatchTarget> prepareNotifications(Event event) {
+    private NotificationPreparationResult prepareNotifications(Event event) {
         User sender = event.getTriggeredUser();
         Senior senior = event.getSenior();
         if (senior == null) {
             log.warn("이벤트에 연결된 시니어가 없어 알림을 발송하지 않습니다. eventType={}, senderId={}",
                     event.getEventType(), sender.getUsersId());
-            return List.of();
+            return notDispatched(event, "SENIOR_NOT_LINKED");
         }
         if (senior.getFamily() == null) {
             log.warn("시니어에 연결된 가족이 없어 알림을 발송하지 않습니다. eventType={}, seniorId={}, senderId={}",
                     event.getEventType(), senior.getSeniorId(), sender.getUsersId());
-            return List.of();
+            return notDispatched(event, "FAMILY_NOT_LINKED");
         }
 
         List<User> receivers = familyMemberRepository
@@ -230,14 +238,14 @@ public class NotificationService {
         if (receivers.isEmpty()) {
             log.warn("수신 가능한 자녀가 없어 알림 대상이 없습니다. eventType={}, senderId={}",
                     event.getEventType(), sender.getUsersId());
-            return List.of();
+            return notDispatched(event, "NO_CHILD_RECEIVER");
         }
 
         NotificationType type = resolveType(event.getEventType());
 
         // 같은 가족에 부모가 여러 명이어도 실제 이벤트 발신 부모의 설정을 적용한다.
         if (!isEnabled(senior, type)) {
-            return List.of();
+            return notDispatched(event, "SETTING_DISABLED");
         }
 
         String title = resolveTitle(event.getEventType());
@@ -264,7 +272,7 @@ public class NotificationService {
                         Collectors.mapping(Device::getDeviceToken, Collectors.toList())
                 ));
 
-        return notifications.stream()
+        List<NotificationDispatchTarget> targets = notifications.stream()
                 .map(notification -> {
                     Long receiverId = notification.getReceiverUser().getUsersId();
                     return new NotificationDispatchTarget(
@@ -272,10 +280,27 @@ public class NotificationService {
                             notification.getTitle(),
                             notification.getBody(),
                             event.getEventId(),
+                            senior.getSeniorId(),
                             deviceTokensByUserId.getOrDefault(receiverId, List.of())
                     );
                 })
                 .toList();
+        for (NotificationDispatchTarget target : targets) {
+            if (target.deviceTokens().isEmpty()) {
+                log.warn("알림 발송 건너뜀. reason=NO_DEVICE_TOKEN, eventId={}, seniorId={}, receiverId={}",
+                        target.eventId(), target.seniorId(), target.receiverId());
+                meterRegistry.counter("notification_dispatch_skipped_total", TAG_RESULT, "NO_DEVICE_TOKEN").increment();
+            }
+        }
+        return NotificationPreparationResult.prepared(targets);
+    }
+
+    private NotificationPreparationResult notDispatched(Event event, String reason) {
+        log.warn("알림 발송 건너뜀. reason={}, eventId={}, seniorId={}, senderId={}", reason,
+                event.getEventId(), event.getSenior() == null ? null : event.getSenior().getSeniorId(),
+                event.getTriggeredUser().getUsersId());
+        meterRegistry.counter("notification_dispatch_skipped_total", TAG_RESULT, reason).increment();
+        return NotificationPreparationResult.notDispatched(reason);
     }
 
     /**
@@ -383,12 +408,26 @@ public class NotificationService {
 
     private boolean sendToDevice(NotificationDispatchTarget target, String deviceToken, boolean highPriority) {
         try {
-            if (highPriority) {
-                return fcmSender.sendHighPriority(deviceToken, target.title(), target.body(), target.eventId());
+            log.debug("FCM 발송 요청. eventId={}, seniorId={}, receiverId={}",
+                    target.eventId(), target.seniorId(), target.receiverId());
+            boolean sent;
+            if (target.seniorId() != null) {
+                sent = highPriority
+                        ? fcmSender.sendHighPriority(deviceToken, target.title(), target.body(), target.eventId(), target.seniorId())
+                        : fcmSender.send(deviceToken, target.title(), target.body(), target.eventId(), target.seniorId());
+            } else if (highPriority) {
+                sent = fcmSender.sendHighPriority(deviceToken, target.title(), target.body(), target.eventId());
+            } else {
+                sent = fcmSender.send(deviceToken, target.title(), target.body(), target.eventId());
             }
-            return fcmSender.send(deviceToken, target.title(), target.body(), target.eventId());
+            if (!sent) {
+                log.warn("FCM 미발송. eventId={}, seniorId={}, receiverId={}",
+                        target.eventId(), target.seniorId(), target.receiverId());
+            }
+            return sent;
         } catch (Exception e) {
-            log.warn("FCM 발송 처리 중 예외 발생, receiverId={}", target.receiverId(), e);
+            log.warn("FCM 발송 처리 중 예외. eventId={}, seniorId={}, receiverId={}",
+                    target.eventId(), target.seniorId(), target.receiverId(), e);
             return false;
         }
     }
