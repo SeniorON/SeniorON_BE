@@ -202,17 +202,12 @@ public class FamilyService {
     }
 
     // 가족 구성원 제거 메서드
-    public void removeFamilyMember(User principal, Long targetUserId) {
+    public void removeFamilyMember(User principal, Long seniorId, Long targetUserId) {
         // 로그인한 사용자 조회
         User currentUser = userRepository.findByIdForUpdate(principal.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        // 요청자가 가족에 소속되어 있는지 확인
-        Family family = currentUser.getFamily();
-
-        if (family == null) {
-            throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
-        }
+        Family family = resolveAccessibleFamily(currentUser, seniorId);
 
         // 주 담당자만 가족 구성원을 제외할 수 있음
         FamilyMember currentMember = familyMemberRepository
