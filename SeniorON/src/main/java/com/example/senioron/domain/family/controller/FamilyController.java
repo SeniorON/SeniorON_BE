@@ -72,13 +72,14 @@ public class FamilyController {
         return Response.ok(familyService.getFamilyHome(user));
     }
 
-    @Operation(summary = "시니어 코드 조회", description = "현재 사용자가 속한 가족의 시니어 코드와 구성원 수를 조회합니다.")
+    @Operation(summary = "시니어 코드 조회", description = "선택한 시니어 가족의 가입 코드와 구성원 수를 조회합니다.")
     @GetMapping("/code")
     public Response<SeniorCodeResponse> getSeniorCode(
-            @AuthenticationPrincipal User user
+            @AuthenticationPrincipal User user,
+            @RequestParam Long seniorId
     ) {
         return Response.ok(
-                familyService.getSeniorCode(user)
+                familyService.getSeniorCode(user, seniorId)
         );
     }
 
