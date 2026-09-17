@@ -19,8 +19,6 @@ import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
-import com.example.senioron.domain.senior.entity.Senior;
-import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
@@ -32,6 +30,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
+import com.example.senioron.domain.family.dto.request.PhotoGroupConnectRequest;
 
 @Service
 @RequiredArgsConstructor
@@ -435,5 +434,85 @@ public class FamilyService {
         }
 
         return family;
+    }
+
+    public void connectPhotoGroup(
+            User principal,
+            PhotoGroupConnectRequest request
+    ) {
+        User currentUser = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.USER_NOT_FOUND)
+                );
+
+        Family currentFamily = resolveAccessibleFamily(
+                currentUser,
+                request.getSeniorId()
+        );
+
+        FamilyMember currentMember = familyMemberRepository
+                .findByUserAndFamilyForUpdate(currentUser, currentFamily)
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.FAMILY_NOT_FOUND)
+                );
+
+        if (currentMember.getManagerType() != ManagerType.PRIMARY) {
+            throw new BusinessException(
+                    ErrorCode.PHOTO_GROUP_CONNECTION_FORBIDDEN
+            );
+        }
+
+        Family targetFamily = familyRepository
+                .findBySeniorCode(request.getSeniorCode().trim().toUpperCase())
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.INVALID_SENIOR_CODE)
+                );
+
+        seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(targetFamily)
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.SENIOR_NOT_FOUND)
+                );
+
+        if (Objects.equals(
+                currentFamily.getFamilyId(),
+                targetFamily.getFamilyId()
+        )) {
+            throw new BusinessException(
+                    ErrorCode.PHOTO_GROUP_SELF_CONNECTION_NOT_ALLOWED
+            );
+        }
+
+        if (photoGroupFamilyRepository.existsSharedPhotoGroup(
+                currentFamily,
+                targetFamily
+        )) {
+            throw new BusinessException(
+                    ErrorCode.PHOTO_GROUP_ALREADY_CONNECTED
+            );
+        }
+
+        PhotoGroup photoGroup = photoGroupRepository.save(
+                PhotoGroup.builder()
+                        .name(
+                                "Shared Family "
+                                        + currentFamily.getFamilyId()
+                                        + "-"
+                                        + targetFamily.getFamilyId()
+                        )
+                        .build()
+        );
+
+        photoGroupFamilyRepository.saveAll(
+                List.of(
+                        PhotoGroupFamily.builder()
+                                .family(currentFamily)
+                                .photoGroup(photoGroup)
+                                .build(),
+                        PhotoGroupFamily.builder()
+                                .family(targetFamily)
+                                .photoGroup(photoGroup)
+                                .build()
+                )
+        );
     }
 }

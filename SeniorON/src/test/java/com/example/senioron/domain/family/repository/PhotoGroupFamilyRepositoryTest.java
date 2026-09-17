@@ -1,0 +1,86 @@
+package com.example.senioron.domain.family.repository;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.PhotoGroup;
+import com.example.senioron.domain.family.entity.PhotoGroupFamily;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+
+@DataJpaTest
+class PhotoGroupFamilyRepositoryTest {
+
+    @Autowired
+    private FamilyRepository familyRepository;
+
+    @Autowired
+    private PhotoGroupRepository photoGroupRepository;
+
+    @Autowired
+    private PhotoGroupFamilyRepository photoGroupFamilyRepository;
+
+    @Test
+    void returnsTrueWhenFamiliesBelongToSamePhotoGroup() {
+        Family currentFamily = saveFamily("CURRENT1");
+        Family targetFamily = saveFamily("TARGET-1");
+        PhotoGroup sharedGroup = savePhotoGroup("shared-group");
+        savePhotoGroupFamily(currentFamily, sharedGroup);
+        savePhotoGroupFamily(targetFamily, sharedGroup);
+
+        boolean result = photoGroupFamilyRepository.existsSharedPhotoGroup(
+                currentFamily,
+                targetFamily
+        );
+
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    void returnsFalseWhenTargetSharesOnlyWithAnotherFamily() {
+        Family currentFamily = saveFamily("CURRENT1");
+        Family targetFamily = saveFamily("TARGET-1");
+        Family anotherFamily = saveFamily("ANOTHER1");
+        PhotoGroup currentGroup = savePhotoGroup("current-group");
+        PhotoGroup otherSharedGroup = savePhotoGroup("other-shared-group");
+        savePhotoGroupFamily(currentFamily, currentGroup);
+        savePhotoGroupFamily(targetFamily, otherSharedGroup);
+        savePhotoGroupFamily(anotherFamily, otherSharedGroup);
+
+        boolean result = photoGroupFamilyRepository.existsSharedPhotoGroup(
+                currentFamily,
+                targetFamily
+        );
+
+        assertThat(result).isFalse();
+    }
+
+    private Family saveFamily(String seniorCode) {
+        return familyRepository.saveAndFlush(
+                Family.builder()
+                        .seniorCode(seniorCode)
+                        .build()
+        );
+    }
+
+    private PhotoGroup savePhotoGroup(String name) {
+        return photoGroupRepository.saveAndFlush(
+                PhotoGroup.builder()
+                        .name(name)
+                        .build()
+        );
+    }
+
+    private void savePhotoGroupFamily(
+            Family family,
+            PhotoGroup photoGroup
+    ) {
+        photoGroupFamilyRepository.saveAndFlush(
+                PhotoGroupFamily.builder()
+                        .family(family)
+                        .photoGroup(photoGroup)
+                        .build()
+        );
+    }
+}
