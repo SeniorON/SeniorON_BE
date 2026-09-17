@@ -515,4 +515,41 @@ public class FamilyService {
                 )
         );
     }
+
+    @Transactional(readOnly = true)
+    public List<ConnectedSeniorResponse> getConnectedSeniors(
+            User principal,
+            Long seniorId
+    ) {
+        User currentUser = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.USER_NOT_FOUND)
+                );
+
+        Family currentFamily = resolveAccessibleFamily(
+                currentUser,
+                seniorId
+        );
+
+        return photoGroupFamilyRepository
+                .findConnectedFamilyLinks(currentFamily)
+                .stream()
+                .map(this::toConnectedSeniorResponse)
+                .toList();
+    }
+
+    private ConnectedSeniorResponse toConnectedSeniorResponse(
+            PhotoGroupFamily connectedLink
+    ) {
+        Senior connectedSenior = Optional
+                .ofNullable(connectedLink.getFamily().getSenior())
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.SENIOR_NOT_FOUND)
+                );
+
+        return ConnectedSeniorResponse.from(
+                connectedLink.getPhotoGroup(),
+                connectedSenior
+        );
+    }
 }
