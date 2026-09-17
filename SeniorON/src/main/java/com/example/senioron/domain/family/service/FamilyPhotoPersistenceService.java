@@ -17,6 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
 
 import java.util.Optional;
+import com.example.senioron.domain.family.entity.FamilyPhotoGroup;
+import com.example.senioron.domain.family.repository.FamilyPhotoGroupRepository;
 
 @Service
 @RequiredArgsConstructor
@@ -26,6 +28,7 @@ public class FamilyPhotoPersistenceService {
     private final UserRepository userRepository;
     private final PhotoGroupRepository photoGroupRepository;
     private final PhotoGroupFamilyRepository photoGroupFamilyRepository;
+    private final FamilyPhotoGroupRepository familyPhotoGroupRepository;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public FamilyPhoto create(
@@ -55,7 +58,17 @@ public class FamilyPhotoPersistenceService {
                 .description(description)
                 .build();
 
-        return familyPhotoRepository.saveAndFlush(familyPhoto);
+        FamilyPhoto savedPhoto =
+                familyPhotoRepository.saveAndFlush(familyPhoto);
+
+        familyPhotoGroupRepository.saveAndFlush(
+                FamilyPhotoGroup.builder()
+                        .familyPhoto(savedPhoto)
+                        .photoGroup(photoGroup)
+                        .build()
+        );
+
+        return savedPhoto;
     }
 
     private PhotoGroup getOrCreateDefaultPhotoGroup(Family family) {
