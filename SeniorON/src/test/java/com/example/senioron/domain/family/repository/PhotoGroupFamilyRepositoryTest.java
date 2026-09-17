@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.PhotoGroup;
 import com.example.senioron.domain.family.entity.PhotoGroupFamily;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -56,6 +57,32 @@ class PhotoGroupFamilyRepositoryTest {
         assertThat(result).isFalse();
     }
 
+    @Test
+    void findsOnlyFamiliesDirectlyConnectedThroughCurrentFamilyPhotoGroups() {
+        Family currentFamily = saveFamily("CURRENT1");
+        Family targetFamily = saveFamily("TARGET-1");
+        Family indirectFamily = saveFamily("INDIRECT");
+        PhotoGroup defaultGroup = savePhotoGroup("current-default");
+        PhotoGroup directGroup = savePhotoGroup("current-target");
+        PhotoGroup indirectGroup = savePhotoGroup("target-indirect");
+
+        savePhotoGroupFamily(currentFamily, defaultGroup);
+        savePhotoGroupFamily(currentFamily, directGroup);
+        PhotoGroupFamily expectedLink =
+                savePhotoGroupFamily(targetFamily, directGroup);
+        savePhotoGroupFamily(targetFamily, indirectGroup);
+        savePhotoGroupFamily(indirectFamily, indirectGroup);
+
+        List<PhotoGroupFamily> result =
+                photoGroupFamilyRepository.findConnectedFamilyLinks(
+                        currentFamily
+                );
+
+        assertThat(result).containsExactly(expectedLink);
+        assertThat(result.get(0).getPhotoGroup()).isEqualTo(directGroup);
+        assertThat(result.get(0).getFamily()).isEqualTo(targetFamily);
+    }
+
     private Family saveFamily(String seniorCode) {
         return familyRepository.saveAndFlush(
                 Family.builder()
@@ -72,11 +99,11 @@ class PhotoGroupFamilyRepositoryTest {
         );
     }
 
-    private void savePhotoGroupFamily(
+    private PhotoGroupFamily savePhotoGroupFamily(
             Family family,
             PhotoGroup photoGroup
     ) {
-        photoGroupFamilyRepository.saveAndFlush(
+        return photoGroupFamilyRepository.saveAndFlush(
                 PhotoGroupFamily.builder()
                         .family(family)
                         .photoGroup(photoGroup)

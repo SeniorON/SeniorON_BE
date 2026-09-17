@@ -22,6 +22,7 @@ import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
 import com.example.senioron.domain.family.repository.PhotoGroupRepository;
 import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.senior.entity.SeniorRelation;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
@@ -31,6 +32,7 @@ import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.storage.S3Service;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.StreamSupport;
@@ -361,6 +363,91 @@ class FamilyServiceTest {
                 .isEqualTo(ErrorCode.PHOTO_GROUP_ALREADY_CONNECTED);
 
         verify(photoGroupRepository, never()).save(any(PhotoGroup.class));
+    }
+
+    @Test
+    void getConnectedSeniorsReturnsDirectConnectionWithPhotoGroupId() {
+        Family currentFamily = Family.builder()
+                .familyId(1L)
+                .build();
+        Family targetFamily = Family.builder()
+                .familyId(2L)
+                .build();
+        User currentUser = createUser(1L, "현재 사용자");
+        Senior currentSenior = Senior.builder()
+                .seniorId(10L)
+                .family(currentFamily)
+                .build();
+        Senior targetSenior = Senior.builder()
+                .seniorId(20L)
+                .name("연결 시니어")
+                .relation(SeniorRelation.FATHER)
+                .family(targetFamily)
+                .build();
+        ReflectionTestUtils.setField(targetFamily, "senior", targetSenior);
+
+        LocalDateTime connectedAt = LocalDateTime.of(
+                2026,
+                9,
+                17,
+                10,
+                0
+        );
+        PhotoGroup sharedGroup = PhotoGroup.builder()
+                .id(100L)
+                .name("Shared Family 1-2")
+                .build();
+        ReflectionTestUtils.setField(sharedGroup, "createdAt", connectedAt);
+
+        PhotoGroupFamily connectedLink = PhotoGroupFamily.builder()
+                .id(200L)
+                .family(targetFamily)
+                .photoGroup(sharedGroup)
+                .build();
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
+        given(seniorRepository.findById(10L)).willReturn(Optional.of(currentSenior));
+        given(familyMemberRepository.existsByUserAndFamily(currentUser, currentFamily))
+                .willReturn(true);
+        given(photoGroupFamilyRepository.findConnectedFamilyLinks(currentFamily))
+                .willReturn(List.of(connectedLink));
+
+        var result = familyService.getConnectedSeniors(currentUser, 10L);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).photoGroupId()).isEqualTo(100L);
+        assertThat(result.get(0).seniorId()).isEqualTo(20L);
+        assertThat(result.get(0).name()).isEqualTo("연결 시니어");
+        assertThat(result.get(0).relation()).isEqualTo(SeniorRelation.FATHER);
+        assertThat(result.get(0).connectedAt()).isEqualTo(connectedAt);
+    }
+
+    @Test
+    void getConnectedSeniorsRejectsUserOutsideSelectedFamily() {
+        Family selectedFamily = Family.builder()
+                .familyId(1L)
+                .build();
+        User currentUser = createUser(1L, "다른 가족 사용자");
+        Senior selectedSenior = Senior.builder()
+                .seniorId(10L)
+                .family(selectedFamily)
+                .build();
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
+        given(seniorRepository.findById(10L)).willReturn(Optional.of(selectedSenior));
+        given(familyMemberRepository.existsByUserAndFamily(currentUser, selectedFamily))
+                .willReturn(false);
+
+        assertThatThrownBy(() ->
+                familyService.getConnectedSeniors(currentUser, 10L)
+        )
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED);
+
+        verify(photoGroupFamilyRepository, never())
+                .findConnectedFamilyLinks(selectedFamily);
     }
 
     @Test
