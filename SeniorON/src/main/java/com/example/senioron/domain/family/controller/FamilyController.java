@@ -2,6 +2,7 @@ package com.example.senioron.domain.family.controller;
 
 import com.example.senioron.domain.family.dto.request.FamilyJoinRequest;
 import com.example.senioron.domain.family.dto.request.FamilyPrimaryManagerUpdateRequest;
+import com.example.senioron.domain.family.dto.request.PhotoGroupConnectRequest;
 import com.example.senioron.domain.family.dto.response.*;
 import com.example.senioron.domain.family.service.FamilyService;
 import com.example.senioron.domain.user.entity.User;
@@ -83,6 +84,16 @@ public class FamilyController {
         return Response.ok(
                 familyService.getSeniorCode(user, seniorId)
         );
+    }
+
+    @Operation(summary = "사진 공유 시니어 연결", description = "선택한 시니어의 가족과 입력한 시니어 코드의 가족을 새로운 사진 공유 그룹으로 연결합니다.")
+    @PostMapping("/photo-groups/connections")
+    public Response<Void> connectPhotoGroup(
+            @AuthenticationPrincipal User user,
+            @Valid @RequestBody PhotoGroupConnectRequest request
+    ) {
+        familyService.connectPhotoGroup(user, request);
+        return Response.ok();
     }
 
 }
