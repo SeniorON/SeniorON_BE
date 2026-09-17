@@ -51,7 +51,7 @@ public class FamilyPhotoController {
         return Response.ok(familyPhotoService.createPhotoUploadUrl(user, request));
     }
 
-    @Operation(summary = "가족사진 업로드 완료", description = "S3에 직접 업로드한 가족사진을 검증하고 등록합니다.")
+    @Operation(summary = "가족사진 업로드 완료", description = "업로드한 가족사진을 검증하고 선택한 여러 사진 공유 그룹에 등록합니다.")
     @PostMapping(value = "/complete", consumes = MediaType.APPLICATION_JSON_VALUE)
     public Response<FamilyPhotoItemResponse> completePhotoUpload(
             @AuthenticationPrincipal User user,

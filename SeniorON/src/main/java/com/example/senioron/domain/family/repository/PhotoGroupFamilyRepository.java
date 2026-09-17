@@ -54,4 +54,17 @@ public interface PhotoGroupFamilyRepository
     List<PhotoGroupFamily> findConnectedFamilyLinks(
             @Param("currentFamily") Family currentFamily
     );
+
+    @Query("""
+        SELECT pgf
+        FROM PhotoGroupFamily pgf
+        JOIN FETCH pgf.photoGroup pg
+        WHERE pgf.family = :family
+          AND pg.id IN :photoGroupIds
+        ORDER BY pg.id ASC
+        """)
+    List<PhotoGroupFamily> findAllByFamilyAndPhotoGroupIds(
+            @Param("family") Family family,
+            @Param("photoGroupIds") List<Long> photoGroupIds
+    );
 }
