@@ -9,6 +9,8 @@ import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.entity.PhotoGroup;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
+import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
@@ -34,6 +36,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 class FamilyPhotoPresignedUploadServiceTest {
 
     private static final Long FAMILY_ID = 3L;
+    private static final Long SENIOR_ID = 7L;
     private static final Long USER_ID = 10L;
 
     private static final String IMAGE_KEY =
@@ -60,6 +63,8 @@ class FamilyPhotoPresignedUploadServiceTest {
             mock(FamilyPhotoPersistenceService.class);
     private final FamilyMemberRepository familyMemberRepository =
             mock(FamilyMemberRepository.class);
+    private final SeniorRepository seniorRepository =
+            mock(SeniorRepository.class);
 
     private FamilyPhotoService familyPhotoService;
 
@@ -71,7 +76,8 @@ class FamilyPhotoPresignedUploadServiceTest {
                 s3Service,
                 permissionService,
                 persistenceService,
-                familyMemberRepository
+                familyMemberRepository,
+                seniorRepository
         );
     }
 
@@ -80,6 +86,10 @@ class FamilyPhotoPresignedUploadServiceTest {
         Family family = Family.builder()
                 .familyId(FAMILY_ID)
                 .seniorCode("TEST01")
+                .build();
+        Senior senior = Senior.builder()
+                .seniorId(SENIOR_ID)
+                .family(family)
                 .build();
 
         User child = User.builder()
@@ -94,12 +104,17 @@ class FamilyPhotoPresignedUploadServiceTest {
 
         request.setContentType("image/jpeg");
         request.setFileSize(5L * 1024 * 1024);
+        request.setSeniorId(SENIOR_ID);
 
         given(
-                userRepository.findByIdWithFamily(USER_ID)
+                userRepository.findById(USER_ID)
         ).willReturn(
                 Optional.of(child)
         );
+        given(seniorRepository.findById(SENIOR_ID))
+                .willReturn(Optional.of(senior));
+        given(familyMemberRepository.existsByUserAndFamily(child, family))
+                .willReturn(true);
 
         given(
                 s3Service.createPresignedUploadUrl(
@@ -155,9 +170,10 @@ class FamilyPhotoPresignedUploadServiceTest {
 
         request.setContentType("image/jpeg");
         request.setFileSize(5L * 1024 * 1024);
+        request.setSeniorId(SENIOR_ID);
 
         given(
-                userRepository.findByIdWithFamily(USER_ID)
+                userRepository.findById(USER_ID)
         ).willReturn(
                 Optional.of(parent)
         );
@@ -172,6 +188,73 @@ class FamilyPhotoPresignedUploadServiceTest {
                 .asInstanceOf(type(BusinessException.class))
                 .extracting(BusinessException::getCode)
                 .isEqualTo(ErrorCode.FORBIDDEN);
+
+        verifyNoInteractions(s3Service);
+    }
+
+    @Test
+    void rejectsPresignedUploadUrlWhenSeniorDoesNotExist() {
+        User child = User.builder()
+                .usersId(USER_ID)
+                .name("테스트 자녀")
+                .role(Role.CHILD)
+                .build();
+        FamilyPhotoUploadUrlRequest request =
+                new FamilyPhotoUploadUrlRequest();
+        request.setContentType("image/jpeg");
+        request.setFileSize(5L * 1024 * 1024);
+        request.setSeniorId(SENIOR_ID);
+
+        given(userRepository.findById(USER_ID))
+                .willReturn(Optional.of(child));
+        given(seniorRepository.findById(SENIOR_ID))
+                .willReturn(Optional.empty());
+
+        assertThatThrownBy(() ->
+                familyPhotoService.createPhotoUploadUrl(
+                        child,
+                        request
+                )
+        )
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_NOT_FOUND);
+
+        verifyNoInteractions(s3Service);
+    }
+
+    @Test
+    void rejectsPresignedUploadUrlForInaccessibleFamily() {
+        Family family = createFamily();
+        Senior senior = Senior.builder()
+                .seniorId(SENIOR_ID)
+                .family(family)
+                .build();
+        User child = createChild(family);
+        FamilyPhotoUploadUrlRequest request =
+                new FamilyPhotoUploadUrlRequest();
+        request.setContentType("image/jpeg");
+        request.setFileSize(5L * 1024 * 1024);
+        request.setSeniorId(SENIOR_ID);
+
+        given(userRepository.findById(USER_ID))
+                .willReturn(Optional.of(child));
+        given(seniorRepository.findById(SENIOR_ID))
+                .willReturn(Optional.of(senior));
+        given(familyMemberRepository.existsByUserAndFamily(child, family))
+                .willReturn(false);
+
+        assertThatThrownBy(() ->
+                familyPhotoService.createPhotoUploadUrl(
+                        child,
+                        request
+                )
+        )
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED);
 
         verifyNoInteractions(s3Service);
     }

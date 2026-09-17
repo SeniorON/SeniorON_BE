@@ -42,7 +42,7 @@ public class FamilyPhotoController {
         return Response.ok(familyPhotoService.createPhoto(user, idempotencyKey.toString(), request));
     }
 
-    @Operation(summary = "가족사진 업로드 URL 발급", description = "가족사진을 S3에 직접 업로드할 수 있는 Presigned PUT URL을 발급합니다.")
+    @Operation(summary = "가족사진 업로드 URL 발급", description = "선택한 시니어의 가족에 사진을 업로드할 수 있는 Presigned PUT URL을 발급합니다.")
     @PostMapping(value = "/upload-url", consumes = MediaType.APPLICATION_JSON_VALUE)
     public Response<FamilyPhotoUploadUrlResponse> createPhotoUploadUrl(
             @AuthenticationPrincipal User user,

@@ -29,4 +29,8 @@ public class FamilyPhotoUploadUrlRequest {
     @Max(value = 10 * 1024 * 1024, message = "사진 크기는 10MB 이하여야 합니다.")
     @Schema(description = "업로드할 이미지의 바이트 크기", example = "5242880", maximum = "10485760")
     private Long fileSize;
+
+    @NotNull(message = "시니어 ID는 필수입니다.")
+    @Schema(description = "사진을 업로드할 가족의 시니어 ID", example = "1")
+    private Long seniorId;
 }
