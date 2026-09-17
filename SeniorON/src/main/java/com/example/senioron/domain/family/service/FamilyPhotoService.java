@@ -39,6 +39,9 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
+import com.example.senioron.domain.family.entity.PhotoGroup;
+import com.example.senioron.domain.family.entity.PhotoGroupFamily;
 
 @Slf4j
 @Service
@@ -52,6 +55,7 @@ public class FamilyPhotoService {
     private final FamilyPhotoPersistenceService photoPersistenceService;
     private final FamilyMemberRepository familyMemberRepository;
     private final SeniorRepository seniorRepository;
+    private final PhotoGroupFamilyRepository photoGroupFamilyRepository;
 
     private static final int NEW_PHOTO_WINDOW_HOURS = 24;
     private static final long MAX_FAMILY_PHOTO_SIZE = 10L * 1024 * 1024;
@@ -123,7 +127,7 @@ public class FamilyPhotoService {
             FamilyPhotoUploadCompleteRequest request
     ) {
         User user = userRepository
-                .findByIdWithFamily(principal.getUsersId())
+                .findById(principal.getUsersId())
                 .orElseThrow(() ->
                         new BusinessException(
                                 ErrorCode.USER_NOT_FOUND
@@ -136,13 +140,16 @@ public class FamilyPhotoService {
             );
         }
 
-        Family family = user.getFamily();
+        Family family = resolveAccessibleFamily(
+                user,
+                request.getSeniorId()
+        );
 
-        if (family == null) {
-            throw new BusinessException(
-                    ErrorCode.FAMILY_NOT_FOUND
-            );
-        }
+        List<PhotoGroup> photoGroups =
+                resolveAccessiblePhotoGroups(
+                        family,
+                        request.getPhotoGroupIds()
+                );
 
         LocalDateTime newPhotoCutoff =
                 LocalDateTime.now()
@@ -205,7 +212,8 @@ public class FamilyPhotoService {
                             user.getUsersId(),
                             imageKey,
                             idempotencyKey,
-                            request.getDescription()
+                            request.getDescription(),
+                            photoGroups
                     );
 
             return toItemResponse(
@@ -820,5 +828,32 @@ public class FamilyPhotoService {
         }
 
         return family;
+    }
+
+    private List<PhotoGroup> resolveAccessiblePhotoGroups(
+            Family family,
+            List<Long> requestedPhotoGroupIds
+    ) {
+        List<Long> distinctPhotoGroupIds =
+                requestedPhotoGroupIds.stream()
+                        .distinct()
+                        .toList();
+
+        List<PhotoGroupFamily> groupLinks =
+                photoGroupFamilyRepository
+                        .findAllByFamilyAndPhotoGroupIds(
+                                family,
+                                distinctPhotoGroupIds
+                        );
+
+        if (groupLinks.size() != distinctPhotoGroupIds.size()) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN
+            );
+        }
+
+        return groupLinks.stream()
+                .map(PhotoGroupFamily::getPhotoGroup)
+                .toList();
     }
 }

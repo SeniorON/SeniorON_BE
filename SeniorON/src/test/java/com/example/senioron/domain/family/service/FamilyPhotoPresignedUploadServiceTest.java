@@ -7,8 +7,10 @@ import com.example.senioron.domain.family.dto.response.FamilyPhotoUploadUrlRespo
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.entity.PhotoGroup;
+import com.example.senioron.domain.family.entity.PhotoGroupFamily;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
+import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.entity.Role;
@@ -22,6 +24,7 @@ import com.example.senioron.global.storage.StoredObjectInfo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -65,6 +68,8 @@ class FamilyPhotoPresignedUploadServiceTest {
             mock(FamilyMemberRepository.class);
     private final SeniorRepository seniorRepository =
             mock(SeniorRepository.class);
+    private final PhotoGroupFamilyRepository photoGroupFamilyRepository =
+            mock(PhotoGroupFamilyRepository.class);
 
     private FamilyPhotoService familyPhotoService;
 
@@ -77,7 +82,8 @@ class FamilyPhotoPresignedUploadServiceTest {
                 permissionService,
                 persistenceService,
                 familyMemberRepository,
-                seniorRepository
+                seniorRepository,
+                photoGroupFamilyRepository
         );
     }
 
@@ -260,11 +266,49 @@ class FamilyPhotoPresignedUploadServiceTest {
     }
 
     @Test
+    void rejectsCompletionForInaccessiblePhotoGroup() {
+        Family family = createFamily();
+        User child = createChild(family);
+        Senior senior = Senior.builder()
+                .seniorId(SENIOR_ID)
+                .family(family)
+                .build();
+        FamilyPhotoUploadCompleteRequest request =
+                createCompleteRequest("접근할 수 없는 그룹");
+
+        given(userRepository.findById(USER_ID))
+                .willReturn(Optional.of(child));
+        given(seniorRepository.findById(SENIOR_ID))
+                .willReturn(Optional.of(senior));
+        given(familyMemberRepository.existsByUserAndFamily(child, family))
+                .willReturn(true);
+        given(photoGroupFamilyRepository.findAllByFamilyAndPhotoGroupIds(
+                family,
+                request.getPhotoGroupIds()
+        )).willReturn(List.of());
+
+        assertThatThrownBy(() ->
+                familyPhotoService.completePhotoUpload(
+                        child,
+                        "inaccessible-group-key",
+                        request
+                )
+        )
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN);
+
+        verifyNoInteractions(persistenceService, s3Service);
+    }
+
+    @Test
     void rejectsImageKeyOwnedByAnotherUser() {
         Family family = Family.builder()
                 .familyId(FAMILY_ID)
                 .seniorCode("TEST01")
                 .build();
+        PhotoGroup photoGroup = createPhotoGroup();
 
         User child = User.builder()
                 .usersId(USER_ID)
@@ -274,22 +318,17 @@ class FamilyPhotoPresignedUploadServiceTest {
                 .build();
 
         FamilyPhotoUploadCompleteRequest request =
-                new FamilyPhotoUploadCompleteRequest();
+                createCompleteRequest("다른 사용자의 사진");
 
         request.setImageKey(
                 "family-photos/3/999/"
                         + "550e8400-e29b-41d4-a716-446655440000.jpg"
         );
-        request.setDescription("다른 사용자의 사진");
 
         String idempotencyKey =
                 "53d006a9-7440-44cf-b12a-82d6dca64ed7";
 
-        given(
-                userRepository.findByIdWithFamily(USER_ID)
-        ).willReturn(
-                Optional.of(child)
-        );
+        stubAccessibleUploadContext(family, child, photoGroup);
 
         given(
                 persistenceService.findExisting(
@@ -338,8 +377,7 @@ class FamilyPhotoPresignedUploadServiceTest {
                 .idempotencyKey(idempotencyKey)
                 .build();
 
-        given(userRepository.findByIdWithFamily(USER_ID))
-                .willReturn(Optional.of(child));
+        stubAccessibleUploadContext(family, child, photoGroup);
         given(persistenceService.findExisting(USER_ID, idempotencyKey))
                 .willReturn(Optional.empty());
         given(familyPhotoRepository.existsByImageKey(IMAGE_KEY))
@@ -355,7 +393,8 @@ class FamilyPhotoPresignedUploadServiceTest {
                 USER_ID,
                 IMAGE_KEY,
                 idempotencyKey,
-                request.getDescription()
+                request.getDescription(),
+                List.of(photoGroup)
         )).willReturn(savedPhoto);
         given(s3Service.getFileUrl(IMAGE_KEY))
                 .willReturn("https://example.com/" + IMAGE_KEY);
@@ -381,7 +420,8 @@ class FamilyPhotoPresignedUploadServiceTest {
                 USER_ID,
                 IMAGE_KEY,
                 idempotencyKey,
-                "오늘 찍은 사진"
+                "오늘 찍은 사진",
+                List.of(photoGroup)
         );
     }
 
@@ -395,8 +435,7 @@ class FamilyPhotoPresignedUploadServiceTest {
         FamilyPhotoUploadCompleteRequest request =
                 createCompleteRequest("업로드 실패 사진");
 
-        given(userRepository.findByIdWithFamily(USER_ID))
-                .willReturn(Optional.of(child));
+        stubAccessibleUploadContext(family, child, photoGroup);
         given(persistenceService.findExisting(USER_ID, idempotencyKey))
                 .willReturn(Optional.empty());
         given(familyPhotoRepository.existsByImageKey(IMAGE_KEY))
@@ -420,21 +459,22 @@ class FamilyPhotoPresignedUploadServiceTest {
                 USER_ID,
                 IMAGE_KEY,
                 idempotencyKey,
-                request.getDescription()
+                request.getDescription(),
+                List.of(photoGroup)
         );
     }
 
     @Test
     void rejectsAndDeletesUploadedObjectLargerThanTenMegabytes() {
         Family family = createFamily();
+        PhotoGroup photoGroup = createPhotoGroup();
         User child = createChild(family);
         String idempotencyKey =
                 "aa3af3f9-9d30-49b8-bdb4-3b52dc7393cb";
         FamilyPhotoUploadCompleteRequest request =
                 createCompleteRequest("너무 큰 사진");
 
-        given(userRepository.findByIdWithFamily(USER_ID))
-                .willReturn(Optional.of(child));
+        stubAccessibleUploadContext(family, child, photoGroup);
         given(persistenceService.findExisting(USER_ID, idempotencyKey))
                 .willReturn(Optional.empty());
         given(familyPhotoRepository.existsByImageKey(IMAGE_KEY))
@@ -464,7 +504,8 @@ class FamilyPhotoPresignedUploadServiceTest {
                 USER_ID,
                 IMAGE_KEY,
                 idempotencyKey,
-                request.getDescription()
+                request.getDescription(),
+                List.of(photoGroup)
         );
     }
 
@@ -486,8 +527,7 @@ class FamilyPhotoPresignedUploadServiceTest {
                 .idempotencyKey(idempotencyKey)
                 .build();
 
-        given(userRepository.findByIdWithFamily(USER_ID))
-                .willReturn(Optional.of(child));
+        stubAccessibleUploadContext(family, child, photoGroup);
         given(persistenceService.findExisting(USER_ID, idempotencyKey))
                 .willReturn(Optional.of(existingPhoto));
         given(s3Service.getFileUrl(IMAGE_KEY))
@@ -508,7 +548,8 @@ class FamilyPhotoPresignedUploadServiceTest {
                 USER_ID,
                 IMAGE_KEY,
                 idempotencyKey,
-                request.getDescription()
+                request.getDescription(),
+                List.of(photoGroup)
         );
     }
 
@@ -540,8 +581,36 @@ class FamilyPhotoPresignedUploadServiceTest {
     ) {
         FamilyPhotoUploadCompleteRequest request =
                 new FamilyPhotoUploadCompleteRequest();
+        request.setSeniorId(SENIOR_ID);
+        request.setPhotoGroupIds(List.of(30L));
         request.setImageKey(IMAGE_KEY);
         request.setDescription(description);
         return request;
+    }
+
+    private void stubAccessibleUploadContext(
+            Family family,
+            User child,
+            PhotoGroup photoGroup
+    ) {
+        Senior senior = Senior.builder()
+                .seniorId(SENIOR_ID)
+                .family(family)
+                .build();
+        PhotoGroupFamily groupFamily = PhotoGroupFamily.builder()
+                .family(family)
+                .photoGroup(photoGroup)
+                .build();
+
+        given(userRepository.findById(USER_ID))
+                .willReturn(Optional.of(child));
+        given(seniorRepository.findById(SENIOR_ID))
+                .willReturn(Optional.of(senior));
+        given(familyMemberRepository.existsByUserAndFamily(child, family))
+                .willReturn(true);
+        given(photoGroupFamilyRepository.findAllByFamilyAndPhotoGroupIds(
+                family,
+                List.of(photoGroup.getId())
+        )).willReturn(List.of(groupFamily));
     }
 }
