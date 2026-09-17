@@ -96,4 +96,15 @@ public class FamilyController {
         return Response.ok();
     }
 
+    @Operation(summary = "연결된 시니어 조회", description = "선택한 시니어 가족과 사진 공유 그룹으로 직접 연결된 시니어 목록을 조회합니다.")
+    @GetMapping("/photo-groups/connections")
+    public Response<List<ConnectedSeniorResponse>> getConnectedSeniors(
+            @AuthenticationPrincipal User user,
+            @RequestParam Long seniorId
+    ) {
+        return Response.ok(
+                familyService.getConnectedSeniors(user, seniorId)
+        );
+    }
+
 }
