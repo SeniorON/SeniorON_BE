@@ -37,6 +37,8 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
+import com.example.senioron.domain.senior.entity.Senior;
 
 @Slf4j
 @Service
@@ -49,6 +51,7 @@ public class FamilyPhotoService {
     private final FamilyPhotoPermissionService familyPhotoPermissionService;
     private final FamilyPhotoPersistenceService photoPersistenceService;
     private final FamilyMemberRepository familyMemberRepository;
+    private final SeniorRepository seniorRepository;
 
     private static final int NEW_PHOTO_WINDOW_HOURS = 24;
     private static final long MAX_FAMILY_PHOTO_SIZE = 10L * 1024 * 1024;
@@ -76,7 +79,7 @@ public class FamilyPhotoService {
             FamilyPhotoUploadUrlRequest request
     ) {
         User user = userRepository
-                .findByIdWithFamily(principal.getUsersId())
+                .findById(principal.getUsersId())
                 .orElseThrow(() ->
                         new BusinessException(
                                 ErrorCode.USER_NOT_FOUND
@@ -89,13 +92,10 @@ public class FamilyPhotoService {
             );
         }
 
-        Family family = user.getFamily();
-
-        if (family == null) {
-            throw new BusinessException(
-                    ErrorCode.FAMILY_NOT_FOUND
-            );
-        }
+        Family family = resolveAccessibleFamily(
+                user,
+                request.getSeniorId()
+        );
 
         String directory = "family-photos/"
                 + family.getFamilyId()
@@ -800,5 +800,25 @@ public class FamilyPhotoService {
                 currentUser,
                 newPhotoCutoff
         );
+    }
+
+    private Family resolveAccessibleFamily(
+            User user,
+            Long seniorId
+    ) {
+        Senior senior = seniorRepository.findById(seniorId)
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.SENIOR_NOT_FOUND)
+                );
+
+        Family family = senior.getFamily();
+
+        if (!familyMemberRepository.existsByUserAndFamily(user, family)) {
+            throw new BusinessException(
+                    ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED
+            );
+        }
+
+        return family;
     }
 }
