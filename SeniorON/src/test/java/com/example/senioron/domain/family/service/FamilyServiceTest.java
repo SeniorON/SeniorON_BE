@@ -3,6 +3,7 @@ package com.example.senioron.domain.family.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -10,8 +11,11 @@ import static org.mockito.Mockito.verify;
 import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.family.dto.request.FamilyJoinRequest;
 import com.example.senioron.domain.family.dto.request.FamilyPrimaryManagerUpdateRequest;
+import com.example.senioron.domain.family.dto.request.PhotoGroupConnectRequest;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
+import com.example.senioron.domain.family.entity.PhotoGroup;
+import com.example.senioron.domain.family.entity.PhotoGroupFamily;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
@@ -29,8 +33,10 @@ import com.example.senioron.global.storage.S3Service;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.StreamSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class FamilyServiceTest {
@@ -158,6 +164,203 @@ class FamilyServiceTest {
                 .findAllByFamilyOrderByIdAsc(selectedFamily);
         verify(familyMemberRepository, never())
                 .findAllByFamilyOrderByIdAsc(firstFamily);
+    }
+
+    @Test
+    void connectPhotoGroupCreatesNewGroupWithCurrentAndTargetFamilies() {
+        Family currentFamily = Family.builder()
+                .familyId(1L)
+                .seniorCode("CURRENT1")
+                .build();
+        Family targetFamily = Family.builder()
+                .familyId(2L)
+                .seniorCode("TARGET-1")
+                .build();
+        User currentUser = createUser(1L, "주 담당자");
+        Senior currentSenior = Senior.builder()
+                .seniorId(10L)
+                .family(currentFamily)
+                .build();
+        Senior targetSenior = Senior.builder()
+                .seniorId(20L)
+                .family(targetFamily)
+                .build();
+        FamilyMember primaryMember = createMember(
+                1L,
+                currentUser,
+                currentFamily,
+                ManagerType.PRIMARY
+        );
+        PhotoGroup savedPhotoGroup = PhotoGroup.builder()
+                .id(100L)
+                .name("Shared Family 1-2")
+                .build();
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
+        given(seniorRepository.findById(10L)).willReturn(Optional.of(currentSenior));
+        given(familyMemberRepository.existsByUserAndFamily(currentUser, currentFamily))
+                .willReturn(true);
+        given(familyMemberRepository.findByUserAndFamilyForUpdate(currentUser, currentFamily))
+                .willReturn(Optional.of(primaryMember));
+        given(familyRepository.findBySeniorCode("TARGET-1"))
+                .willReturn(Optional.of(targetFamily));
+        given(seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(targetFamily))
+                .willReturn(Optional.of(targetSenior));
+        given(photoGroupFamilyRepository.existsSharedPhotoGroup(currentFamily, targetFamily))
+                .willReturn(false);
+        given(photoGroupRepository.save(any(PhotoGroup.class)))
+                .willReturn(savedPhotoGroup);
+
+        familyService.connectPhotoGroup(
+                currentUser,
+                createPhotoGroupConnectRequest(10L, "TARGET-1")
+        );
+
+        verify(photoGroupRepository).save(any(PhotoGroup.class));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Iterable<PhotoGroupFamily>> captor =
+                ArgumentCaptor.forClass(Iterable.class);
+        verify(photoGroupFamilyRepository).saveAll(captor.capture());
+
+        List<PhotoGroupFamily> mappings = StreamSupport
+                .stream(captor.getValue().spliterator(), false)
+                .toList();
+
+        assertThat(mappings).hasSize(2);
+        assertThat(mappings)
+                .extracting(PhotoGroupFamily::getFamily)
+                .containsExactlyInAnyOrder(currentFamily, targetFamily);
+        assertThat(mappings)
+                .extracting(PhotoGroupFamily::getPhotoGroup)
+                .containsOnly(savedPhotoGroup);
+    }
+
+    @Test
+    void connectPhotoGroupRejectsNonPrimaryMember() {
+        Family currentFamily = Family.builder()
+                .familyId(1L)
+                .build();
+        User currentUser = createUser(1L, "부 담당자");
+        Senior currentSenior = Senior.builder()
+                .seniorId(10L)
+                .family(currentFamily)
+                .build();
+        FamilyMember subMember = createMember(
+                1L,
+                currentUser,
+                currentFamily,
+                ManagerType.SUB
+        );
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
+        given(seniorRepository.findById(10L)).willReturn(Optional.of(currentSenior));
+        given(familyMemberRepository.existsByUserAndFamily(currentUser, currentFamily))
+                .willReturn(true);
+        given(familyMemberRepository.findByUserAndFamilyForUpdate(currentUser, currentFamily))
+                .willReturn(Optional.of(subMember));
+
+        assertThatThrownBy(() -> familyService.connectPhotoGroup(
+                currentUser,
+                createPhotoGroupConnectRequest(10L, "TARGET-1")
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.PHOTO_GROUP_CONNECTION_FORBIDDEN);
+
+        verify(photoGroupRepository, never()).save(any(PhotoGroup.class));
+    }
+
+    @Test
+    void connectPhotoGroupRejectsCurrentFamilyCode() {
+        Family currentFamily = Family.builder()
+                .familyId(1L)
+                .seniorCode("CURRENT1")
+                .build();
+        User currentUser = createUser(1L, "주 담당자");
+        Senior currentSenior = Senior.builder()
+                .seniorId(10L)
+                .family(currentFamily)
+                .build();
+        FamilyMember primaryMember = createMember(
+                1L,
+                currentUser,
+                currentFamily,
+                ManagerType.PRIMARY
+        );
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
+        given(seniorRepository.findById(10L)).willReturn(Optional.of(currentSenior));
+        given(familyMemberRepository.existsByUserAndFamily(currentUser, currentFamily))
+                .willReturn(true);
+        given(familyMemberRepository.findByUserAndFamilyForUpdate(currentUser, currentFamily))
+                .willReturn(Optional.of(primaryMember));
+        given(familyRepository.findBySeniorCode("CURRENT1"))
+                .willReturn(Optional.of(currentFamily));
+        given(seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(currentFamily))
+                .willReturn(Optional.of(currentSenior));
+
+        assertThatThrownBy(() -> familyService.connectPhotoGroup(
+                currentUser,
+                createPhotoGroupConnectRequest(10L, "CURRENT1")
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.PHOTO_GROUP_SELF_CONNECTION_NOT_ALLOWED);
+
+        verify(photoGroupRepository, never()).save(any(PhotoGroup.class));
+    }
+
+    @Test
+    void connectPhotoGroupRejectsAlreadyConnectedFamily() {
+        Family currentFamily = Family.builder()
+                .familyId(1L)
+                .build();
+        Family targetFamily = Family.builder()
+                .familyId(2L)
+                .seniorCode("TARGET-1")
+                .build();
+        User currentUser = createUser(1L, "주 담당자");
+        Senior currentSenior = Senior.builder()
+                .seniorId(10L)
+                .family(currentFamily)
+                .build();
+        Senior targetSenior = Senior.builder()
+                .seniorId(20L)
+                .family(targetFamily)
+                .build();
+        FamilyMember primaryMember = createMember(
+                1L,
+                currentUser,
+                currentFamily,
+                ManagerType.PRIMARY
+        );
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
+        given(seniorRepository.findById(10L)).willReturn(Optional.of(currentSenior));
+        given(familyMemberRepository.existsByUserAndFamily(currentUser, currentFamily))
+                .willReturn(true);
+        given(familyMemberRepository.findByUserAndFamilyForUpdate(currentUser, currentFamily))
+                .willReturn(Optional.of(primaryMember));
+        given(familyRepository.findBySeniorCode("TARGET-1"))
+                .willReturn(Optional.of(targetFamily));
+        given(seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(targetFamily))
+                .willReturn(Optional.of(targetSenior));
+        given(photoGroupFamilyRepository.existsSharedPhotoGroup(currentFamily, targetFamily))
+                .willReturn(true);
+
+        assertThatThrownBy(() -> familyService.connectPhotoGroup(
+                currentUser,
+                createPhotoGroupConnectRequest(10L, "TARGET-1")
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.PHOTO_GROUP_ALREADY_CONNECTED);
+
+        verify(photoGroupRepository, never()).save(any(PhotoGroup.class));
     }
 
     @Test
@@ -289,6 +492,16 @@ class FamilyServiceTest {
         FamilyPrimaryManagerUpdateRequest request =
                 new FamilyPrimaryManagerUpdateRequest();
         ReflectionTestUtils.setField(request, "targetUserId", targetUserId);
+        return request;
+    }
+
+    private PhotoGroupConnectRequest createPhotoGroupConnectRequest(
+            Long seniorId,
+            String seniorCode
+    ) {
+        PhotoGroupConnectRequest request = new PhotoGroupConnectRequest();
+        ReflectionTestUtils.setField(request, "seniorId", seniorId);
+        ReflectionTestUtils.setField(request, "seniorCode", seniorCode);
         return request;
     }
 
