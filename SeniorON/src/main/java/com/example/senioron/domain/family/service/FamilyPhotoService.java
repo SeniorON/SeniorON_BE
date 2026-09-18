@@ -34,6 +34,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -42,6 +43,7 @@ import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
 import com.example.senioron.domain.family.entity.PhotoGroup;
 import com.example.senioron.domain.family.entity.PhotoGroupFamily;
+import com.example.senioron.domain.family.repository.FamilyPhotoViewRepository;
 
 @Slf4j
 @Service
@@ -49,6 +51,7 @@ import com.example.senioron.domain.family.entity.PhotoGroupFamily;
 public class FamilyPhotoService {
 
     private final FamilyPhotoRepository familyPhotoRepository;
+    private final FamilyPhotoViewRepository familyPhotoViewRepository;
     private final UserRepository userRepository;
     private final S3Service s3Service;
     private final FamilyPhotoPermissionService familyPhotoPermissionService;
@@ -173,7 +176,8 @@ public class FamilyPhotoService {
             return toItemResponse(
                     existingByIdempotencyKey,
                     user,
-                    newPhotoCutoff
+                    newPhotoCutoff,
+                    false
             );
         }
 
@@ -219,7 +223,8 @@ public class FamilyPhotoService {
             return toItemResponse(
                     savedPhoto,
                     user,
-                    newPhotoCutoff
+                    newPhotoCutoff,
+                    false
             );
         } catch (DataIntegrityViolationException exception) {
             /*
@@ -238,7 +243,8 @@ public class FamilyPhotoService {
                 return toItemResponse(
                         existingPhoto,
                         user,
-                        newPhotoCutoff
+                        newPhotoCutoff,
+                        false
                 );
             }
 
@@ -367,7 +373,12 @@ public class FamilyPhotoService {
         return photoPersistenceService
                 .findExisting(user.getUsersId(), idempotencyKey)
                 .map(photo ->
-                        toItemResponse(photo, user, newPhotoCutoff)
+                        toItemResponse(
+                                photo,
+                                user,
+                                newPhotoCutoff,
+                                false
+                        )
                 )
                 .orElseGet(() ->
                         uploadAndCreatePhoto(
@@ -422,7 +433,8 @@ public class FamilyPhotoService {
             return toItemResponse(
                     existingPhoto,
                     user,
-                    newPhotoCutoff
+                    newPhotoCutoff,
+                    false
             );
 
         } catch (RuntimeException exception) {
@@ -433,7 +445,8 @@ public class FamilyPhotoService {
         return toItemResponse(
                 savedPhoto,
                 user,
-                newPhotoCutoff
+                newPhotoCutoff,
+                false
         );
     }
 
@@ -465,18 +478,26 @@ public class FamilyPhotoService {
     private FamilyPhotoItemResponse toItemResponse(
             FamilyPhoto photo,
             User currentUser,
-            LocalDateTime newPhotoCutoff
+            LocalDateTime newPhotoCutoff,
+            boolean viewedByCurrentParent
     ) {
         boolean newPhoto =
                 currentUser.getRole() == Role.PARENT
                         && photo.getUser().getRole() == Role.CHILD
-                        && !photo.isViewedByParent()
-                        && !photo.getCreatedAt().isBefore(newPhotoCutoff);
+                        && !viewedByCurrentParent
+                        && !photo.getCreatedAt()
+                        .isBefore(newPhotoCutoff);
 
         return FamilyPhotoItemResponse.builder()
                 .familyPhotoId(photo.getFamilyPhotoId())
-                .imageUrl(s3Service.getFileUrl(photo.getImageKey()))
-                .uploaderUserId(photo.getUser().getUsersId())
+                .imageUrl(
+                        s3Service.getFileUrl(
+                                photo.getImageKey()
+                        )
+                )
+                .uploaderUserId(
+                        photo.getUser().getUsersId()
+                )
                 .uploaderName(photo.getUser().getName())
                 .description(photo.getDescription())
                 .canDelete(
@@ -488,6 +509,28 @@ public class FamilyPhotoService {
                 .createdAt(photo.getCreatedAt())
                 .newPhoto(newPhoto)
                 .build();
+    }
+
+    private Set<Long> findViewedPhotoIds(
+            User currentUser,
+            List<FamilyPhoto> photos
+    ) {
+        if (currentUser.getRole() != Role.PARENT
+                || photos.isEmpty()) {
+            return Set.of();
+        }
+
+        List<Long> familyPhotoIds = photos.stream()
+                .map(FamilyPhoto::getFamilyPhotoId)
+                .toList();
+
+        return Set.copyOf(
+                familyPhotoViewRepository
+                        .findViewedFamilyPhotoIds(
+                                currentUser.getUsersId(),
+                                familyPhotoIds
+                        )
+        );
     }
 
     @Transactional(readOnly = true)
@@ -601,13 +644,22 @@ public class FamilyPhotoService {
         LocalDateTime newPhotoCutoff =
                 LocalDateTime.now().minusHours(NEW_PHOTO_WINDOW_HOURS);
 
+        Set<Long> viewedPhotoIds =
+                findViewedPhotoIds(
+                        currentUser,
+                        pagePhotos
+                );
+
         List<FamilyPhotoItemResponse> photoResponses =
                 pagePhotos.stream()
                         .map(photo ->
                                 toItemResponse(
                                         photo,
                                         currentUser,
-                                        newPhotoCutoff
+                                        newPhotoCutoff,
+                                        viewedPhotoIds.contains(
+                                                photo.getFamilyPhotoId()
+                                        )
                                 )
                         )
                         .toList();
@@ -709,7 +761,8 @@ public class FamilyPhotoService {
                 familyPhotoRepository.countAlbumPhotosByUploader(
                                 family,
                                 Role.CHILD,
-                                newPhotoCutoff
+                                newPhotoCutoff,
+                                parent
                         )
                         .stream()
                         .collect(
@@ -751,6 +804,7 @@ public class FamilyPhotoService {
     @Transactional
     public void markPhotoAsViewed(
             User principal,
+            Long seniorId,
             Long familyPhotoId
     ) {
         User parent = userRepository.findById(
@@ -763,19 +817,18 @@ public class FamilyPhotoService {
                 );
 
         if (parent.getRole() != Role.PARENT) {
-            throw new BusinessException(ErrorCode.FORBIDDEN);
-        }
-
-        Family family = parent.getFamily();
-
-        if (family == null) {
             throw new BusinessException(
-                    ErrorCode.FAMILY_NOT_FOUND
+                    ErrorCode.FORBIDDEN
             );
         }
 
+        Family family = resolveAccessibleFamily(
+                parent,
+                seniorId
+        );
+
         FamilyPhoto photo = familyPhotoRepository
-                .findByFamilyPhotoIdAndFamily(
+                .findAccessibleByFamilyPhotoIdAndFamily(
                         familyPhotoId,
                         family
                 )
@@ -785,7 +838,10 @@ public class FamilyPhotoService {
                         )
                 );
 
-        photo.markAsViewedByParent();
+        familyPhotoViewRepository.saveIfAbsent(
+                photo,
+                parent
+        );
     }
 
     @Transactional(readOnly = true)
@@ -806,10 +862,19 @@ public class FamilyPhotoService {
 
         LocalDateTime newPhotoCutoff = LocalDateTime.now().minusHours(NEW_PHOTO_WINDOW_HOURS);
 
+        boolean viewedByCurrentParent =
+                currentUser.getRole() == Role.PARENT
+                        && familyPhotoViewRepository
+                        .existsByFamilyPhoto_FamilyPhotoIdAndParent_UsersId(
+                                photo.getFamilyPhotoId(),
+                                currentUser.getUsersId()
+                        );
+
         return toItemResponse(
                 photo,
                 currentUser,
-                newPhotoCutoff
+                newPhotoCutoff,
+                viewedByCurrentParent
         );
     }
 

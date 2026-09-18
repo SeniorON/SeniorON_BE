@@ -31,6 +31,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 import com.example.senioron.domain.family.dto.request.PhotoGroupConnectRequest;
+import com.example.senioron.domain.family.repository.FamilyPhotoViewRepository;
+import java.time.LocalDateTime;
 
 @Service
 @RequiredArgsConstructor
@@ -41,6 +43,7 @@ public class FamilyService {
     private final UserRepository userRepository;
     private final S3Service s3Service;
     private final FamilyPhotoRepository familyPhotoRepository;
+    private final FamilyPhotoViewRepository familyPhotoViewRepository;
     private final FamilyPhotoPermissionService familyPhotoPermissionService;
     private final FamilyMemberRepository familyMemberRepository;
     private final PhotoGroupRepository photoGroupRepository;
@@ -50,6 +53,7 @@ public class FamilyService {
 
     private static final int RECENT_UPLOADER_COUNT = 3;
     private static final int RECENT_PHOTO_COUNT = 4;
+    private static final int NEW_PHOTO_WINDOW_HOURS = 24;
 
     // 가족 생성 및 시니어 코드 발급 서비스
     public SeniorCodeCreateResponse createFamily(User principal) {
@@ -301,16 +305,37 @@ public class FamilyService {
 
     private FamilyPhotoItemResponse toFamilyPhotoItemResponse(
             FamilyPhoto photo,
-            User currentUser
+            User currentUser,
+            LocalDateTime newPhotoCutoff,
+            boolean viewedByCurrentParent
     ) {
+        boolean newPhoto =
+                currentUser.getRole() == Role.PARENT
+                        && photo.getUser().getRole() == Role.CHILD
+                        && !viewedByCurrentParent
+                        && !photo.getCreatedAt()
+                        .isBefore(newPhotoCutoff);
+
         return FamilyPhotoItemResponse.builder()
                 .familyPhotoId(photo.getFamilyPhotoId())
-                .imageUrl(s3Service.getFileUrl(photo.getImageKey()))
-                .uploaderUserId(photo.getUser().getUsersId())
+                .imageUrl(
+                        s3Service.getFileUrl(
+                                photo.getImageKey()
+                        )
+                )
+                .uploaderUserId(
+                        photo.getUser().getUsersId()
+                )
                 .uploaderName(photo.getUser().getName())
                 .description(photo.getDescription())
-                .canDelete(familyPhotoPermissionService.canDelete(photo, currentUser))
+                .canDelete(
+                        familyPhotoPermissionService.canDelete(
+                                photo,
+                                currentUser
+                        )
+                )
                 .createdAt(photo.getCreatedAt())
+                .newPhoto(newPhoto)
                 .build();
     }
 
@@ -372,9 +397,42 @@ public class FamilyService {
                                 : s3Service.getFileUrl(profileImageKey))
                         .toList();
 
+        Set<Long> viewedPhotoIds;
+
+        if (currentUser.getRole() == Role.PARENT
+                && !recentPhotoEntities.isEmpty()) {
+            List<Long> recentPhotoIds =
+                    recentPhotoEntities.stream()
+                            .map(FamilyPhoto::getFamilyPhotoId)
+                            .toList();
+
+            viewedPhotoIds = Set.copyOf(
+                    familyPhotoViewRepository
+                            .findViewedFamilyPhotoIds(
+                                    currentUser.getUsersId(),
+                                    recentPhotoIds
+                            )
+            );
+        } else {
+            viewedPhotoIds = Set.of();
+        }
+
+        LocalDateTime newPhotoCutoff =
+                LocalDateTime.now()
+                        .minusHours(NEW_PHOTO_WINDOW_HOURS);
+
         List<FamilyPhotoItemResponse> recentPhotos =
                 recentPhotoEntities.stream()
-                        .map(photo -> toFamilyPhotoItemResponse(photo, currentUser))
+                        .map(photo ->
+                                toFamilyPhotoItemResponse(
+                                        photo,
+                                        currentUser,
+                                        newPhotoCutoff,
+                                        viewedPhotoIds.contains(
+                                                photo.getFamilyPhotoId()
+                                        )
+                                )
+                        )
                         .toList();
 
         return FamilyHomeResponse.builder()

@@ -31,6 +31,9 @@ class FamilyPhotoRepositoryTest {
     private FamilyPhotoGroupRepository familyPhotoGroupRepository;
 
     @Autowired
+    private FamilyPhotoViewRepository familyPhotoViewRepository;
+
+    @Autowired
     private FamilyRepository familyRepository;
 
     @Autowired
@@ -222,6 +225,7 @@ class FamilyPhotoRepositoryTest {
     void usesMappedGroupsForAlbumsAndFamilyHomeWithoutDuplicates() {
         Family currentFamily = saveFamily("CURRENT-003");
         Family connectedFamily = saveFamily("CONNECTED-004");
+        User parent = saveUser("album-parent", Role.PARENT);
         User uploader = saveUser("shared-album-uploader");
         saveFamilyMember(uploader, connectedFamily);
 
@@ -262,12 +266,26 @@ class FamilyPhotoRepositoryTest {
         assertThat(familyPhotoRepository.countAlbumPhotosByUploader(
                 currentFamily,
                 Role.CHILD,
-                LocalDateTime.now().minusDays(1)
+                LocalDateTime.now().minusDays(1),
+                parent
         )).singleElement().satisfies(count -> {
             assertThat(count.getUploaderUserId())
                     .isEqualTo(uploader.getUsersId());
             assertThat(count.getPhotoCount()).isEqualTo(1L);
             assertThat(count.getNewPhotoCount()).isEqualTo(1L);
+        });
+
+        familyPhotoViewRepository.saveIfAbsent(photo, parent);
+        familyPhotoViewRepository.flush();
+
+        assertThat(familyPhotoRepository.countAlbumPhotosByUploader(
+                currentFamily,
+                Role.CHILD,
+                LocalDateTime.now().minusDays(1),
+                parent
+        )).singleElement().satisfies(count -> {
+            assertThat(count.getPhotoCount()).isEqualTo(1L);
+            assertThat(count.getNewPhotoCount()).isZero();
         });
     }
 
@@ -313,6 +331,109 @@ class FamilyPhotoRepositoryTest {
                 .isTrue();
     }
 
+    @Test
+    void findsPhotoForFamilyThroughNonRepresentativeMappedGroup() {
+        Family requestedFamily = saveFamily("VIEW-FAMILY-001");
+        Family uploaderFamily = saveFamily("VIEW-UPLOADER-001");
+        User uploader = saveUser("view-photo-uploader");
+
+        saveFamilyMember(uploader, uploaderFamily);
+
+        PhotoGroup representativeGroup =
+                savePhotoGroup("view-representative-group");
+        PhotoGroup sharedGroup =
+                savePhotoGroup("view-shared-group");
+
+        /*
+         * 사진의 대표 그룹은 uploaderFamily에만 연결되어 있으므로
+         * requestedFamily는 대표 그룹을 통해 사진에 접근할 수 없다.
+         */
+        savePhotoGroupFamily(
+                uploaderFamily,
+                representativeGroup
+        );
+
+        /*
+         * 추가 공유 그룹은 두 Family에 연결한다.
+         * requestedFamily는 이 매핑을 통해 사진에 접근할 수 있다.
+         */
+        savePhotoGroupFamily(
+                uploaderFamily,
+                sharedGroup
+        );
+        savePhotoGroupFamily(
+                requestedFamily,
+                sharedGroup
+        );
+
+        FamilyPhoto photo = savePhoto(
+                representativeGroup,
+                uploader,
+                "view-shared-photo.jpg"
+        );
+
+        saveFamilyPhotoGroup(
+                photo,
+                representativeGroup
+        );
+        saveFamilyPhotoGroup(
+                photo,
+                sharedGroup
+        );
+
+        Optional<FamilyPhoto> result =
+                familyPhotoRepository
+                        .findAccessibleByFamilyPhotoIdAndFamily(
+                                photo.getFamilyPhotoId(),
+                                requestedFamily
+                        );
+
+        assertThat(result).contains(photo);
+    }
+
+    @Test
+    void doesNotFindPhotoForFamilyWithoutMappedPhotoGroupAccess() {
+        Family requestedFamily = saveFamily("VIEW-FAMILY-002");
+        Family uploaderFamily = saveFamily("VIEW-UPLOADER-002");
+        User uploader = saveUser("inaccessible-view-uploader");
+
+        saveFamilyMember(uploader, uploaderFamily);
+
+        PhotoGroup uploaderGroup =
+                savePhotoGroup("inaccessible-view-group");
+        PhotoGroup unrelatedGroup =
+                savePhotoGroup("unrelated-family-group");
+
+        savePhotoGroupFamily(
+                uploaderFamily,
+                uploaderGroup
+        );
+        savePhotoGroupFamily(
+                requestedFamily,
+                unrelatedGroup
+        );
+
+        FamilyPhoto photo = savePhoto(
+                uploaderGroup,
+                uploader,
+                "inaccessible-view-photo.jpg"
+        );
+
+        saveFamilyPhotoGroup(
+                photo,
+                uploaderGroup
+        );
+
+        Optional<FamilyPhoto> result =
+                familyPhotoRepository
+                        .findAccessibleByFamilyPhotoIdAndFamily(
+                                photo.getFamilyPhotoId(),
+                                requestedFamily
+                        );
+
+        assertThat(result).isEmpty();
+    }
+
     private Family saveFamily(String seniorCode) {
         return familyRepository.saveAndFlush(
                 Family.builder()
@@ -322,12 +443,16 @@ class FamilyPhotoRepositoryTest {
     }
 
     private User saveUser(String key) {
+        return saveUser(key, Role.CHILD);
+    }
+
+    private User saveUser(String key, Role role) {
         return userRepository.saveAndFlush(
                 User.builder()
                         .loginId(key)
                         .email(key + "@example.com")
                         .name(key)
-                        .role(Role.CHILD)
+                        .role(role)
                         .build()
         );
     }

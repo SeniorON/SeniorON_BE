@@ -102,10 +102,12 @@ public class FamilyPhotoController {
     @PatchMapping("/{familyPhotoId}/viewed")
     public Response<Void> markPhotoAsViewed(
             @AuthenticationPrincipal User user,
-            @PathVariable("familyPhotoId") Long familyPhotoId
+            @PathVariable("familyPhotoId") Long familyPhotoId,
+            @RequestParam Long seniorId
     ) {
         familyPhotoService.markPhotoAsViewed(
                 user,
+                seniorId,
                 familyPhotoId
         );
         return Response.ok();
