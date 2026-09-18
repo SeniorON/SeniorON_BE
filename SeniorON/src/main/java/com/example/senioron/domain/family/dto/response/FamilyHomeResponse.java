@@ -17,4 +17,6 @@ public class FamilyHomeResponse {
 
     // 최근 가족 사진 최대 4장
     private List<FamilyPhotoItemResponse> recentPhotos;
+
+    private Long photoGroupId;
 }

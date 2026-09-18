@@ -286,6 +286,15 @@ public class FamilyService {
                 seniorId
         );
 
+        PhotoGroup defaultPhotoGroup = photoGroupFamilyRepository
+                .findFirstByFamilyOrderByIdAsc(family)
+                .map(PhotoGroupFamily::getPhotoGroup)
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.PHOTO_GROUP_NOT_FOUND
+                        )
+                );
+
         // 가족 구성원 조회
         List<FamilyMember> familyMembers = familyMemberRepository
                 .findAllByFamilyOrderByIdAsc(family);
@@ -328,6 +337,7 @@ public class FamilyService {
                         .toList();
 
         return FamilyHomeResponse.builder()
+                .photoGroupId(defaultPhotoGroup.getId())
                 .members(members)
                 .recentUploaderProfileImageUrls(
                         recentUploaderProfileImageUrls

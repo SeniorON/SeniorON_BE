@@ -116,6 +116,7 @@ public enum ErrorCode implements BaseCode {
     PHOTO_GROUP_CONNECTION_NOT_FOUND(HttpStatus.NOT_FOUND, "PHOTO_GROUP404", "사진 공유 연결을 찾을 수 없습니다."),
     PHOTO_GROUP_SELF_CONNECTION_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "PHOTO_GROUP400", "현재 가족과 동일한 가족은 연결할 수 없습니다."),
     PHOTO_GROUP_ALREADY_CONNECTED(HttpStatus.CONFLICT, "PHOTO_GROUP409", "이미 사진을 공유하고 있는 가족입니다."),
+    PHOTO_GROUP_NOT_FOUND(HttpStatus.NOT_FOUND, "PHOTO_GROUP404_1", "사진 그룹을 찾을 수 없습니다."),
 
     // Photo Error
     UNSUPPORTED_IMAGE_TYPE(HttpStatus.BAD_REQUEST,"IMAGE400_1", "JPG, PNG, WEBP 형식의 이미지만 업로드할 수 있습니다."),
