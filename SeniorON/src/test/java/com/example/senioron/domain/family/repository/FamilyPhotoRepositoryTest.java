@@ -44,19 +44,29 @@ class FamilyPhotoRepositoryTest {
     private UserRepository userRepository;
 
     @Test
-    void findsPhotoWhenAnyUserFamilyIsConnectedToPhotoGroup() {
-        Family firstFamily = saveFamily("FIRST-001");
+    void findsPhotoThroughNonRepresentativeMappedGroup() {
+        Family currentFamily = saveFamily("FIRST-001");
         Family connectedFamily = saveFamily("CONNECTED-001");
         User currentUser = saveUser("current-user");
         User uploader = saveUser("uploader");
 
-        saveFamilyMember(currentUser, firstFamily);
-        saveFamilyMember(currentUser, connectedFamily);
+        saveFamilyMember(currentUser, currentFamily);
         saveFamilyMember(uploader, connectedFamily);
 
-        PhotoGroup photoGroup = savePhotoGroup("connected-group");
-        savePhotoGroupFamily(connectedFamily, photoGroup);
-        FamilyPhoto photo = savePhoto(photoGroup, uploader, "connected-photo.jpg");
+        PhotoGroup representativeGroup =
+                savePhotoGroup("representative-group");
+        PhotoGroup sharedGroup = savePhotoGroup("shared-group");
+        savePhotoGroupFamily(connectedFamily, representativeGroup);
+        savePhotoGroupFamily(currentFamily, sharedGroup);
+        savePhotoGroupFamily(connectedFamily, sharedGroup);
+
+        FamilyPhoto photo = savePhoto(
+                representativeGroup,
+                uploader,
+                "connected-photo.jpg"
+        );
+        saveFamilyPhotoGroup(photo, representativeGroup);
+        saveFamilyPhotoGroup(photo, sharedGroup);
 
         Optional<FamilyPhoto> result =
                 familyPhotoRepository.findAccessibleByFamilyPhotoIdAndUser(
@@ -80,6 +90,7 @@ class FamilyPhotoRepositoryTest {
         PhotoGroup photoGroup = savePhotoGroup("other-group");
         savePhotoGroupFamily(otherFamily, photoGroup);
         FamilyPhoto photo = savePhoto(photoGroup, uploader, "other-photo.jpg");
+        saveFamilyPhotoGroup(photo, photoGroup);
 
         Optional<FamilyPhoto> result =
                 familyPhotoRepository.findAccessibleByFamilyPhotoIdAndUser(
