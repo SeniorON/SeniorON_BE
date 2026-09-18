@@ -20,45 +20,23 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
     // 첫 페이지 조회 메서드
     @EntityGraph(attributePaths = {"user", "photoGroup"})
     @Query("""
-            SELECT fp
-            FROM FamilyPhoto fp
-            WHERE EXISTS (
-                SELECT pgf.id
-                FROM PhotoGroupFamily pgf
-                WHERE pgf.photoGroup = fp.photoGroup
-                  AND pgf.family = :family
-            )
-            ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
-            """)
+    SELECT fp
+    FROM FamilyPhoto fp
+    WHERE EXISTS (
+        SELECT fpg.id
+        FROM FamilyPhotoGroup fpg
+        WHERE fpg.familyPhoto = fp
+          AND EXISTS (
+              SELECT pgf.id
+              FROM PhotoGroupFamily pgf
+              WHERE pgf.photoGroup = fpg.photoGroup
+                AND pgf.family = :family
+          )
+    )
+    ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
+    """)
     List<FamilyPhoto> findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
             @Param("family") Family family,
-            Pageable pageable
-    );
-
-    // 다음 페이지 조회 메서드
-    @EntityGraph(attributePaths = {"user", "photoGroup"})
-    @Query("""
-            SELECT fp
-            FROM FamilyPhoto fp
-            WHERE EXISTS (
-                SELECT pgf.id
-                FROM PhotoGroupFamily pgf
-                WHERE pgf.photoGroup = fp.photoGroup
-                  AND pgf.family = :family
-            )
-              AND (
-                   fp.createdAt < :cursorCreatedAt
-                   OR(
-                      fp.createdAt = :cursorCreatedAt
-                      AND fp.familyPhotoId < :cursorId   
-                   )
-              )
-            ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
-            """)
-    List<FamilyPhoto> findNextPageByCursor(
-            @Param("family") Family family,
-            @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
-            @Param("cursorId") Long cursorId,
             Pageable pageable
     );
 
@@ -81,35 +59,44 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
     );
 
     @Query("""
-        SELECT fp.user
-        FROM FamilyPhoto fp
-        WHERE EXISTS (
+    SELECT fp.user
+    FROM FamilyPhoto fp
+    WHERE EXISTS (
+        SELECT fpg.id
+        FROM FamilyPhotoGroup fpg
+        WHERE fpg.familyPhoto = fp
+          AND EXISTS (
               SELECT pgf.id
               FROM PhotoGroupFamily pgf
-              WHERE pgf.photoGroup = fp.photoGroup
+              WHERE pgf.photoGroup = fpg.photoGroup
                 AND pgf.family = :family
           )
-          AND EXISTS (
-              SELECT fm.id
-              FROM FamilyMember fm
-              WHERE fm.user = fp.user
-                AND fm.family = :family
-          )
-          AND NOT EXISTS (
-              SELECT newer.familyPhotoId
-              FROM FamilyPhoto newer
-              WHERE newer.photoGroup = fp.photoGroup
-                AND newer.user = fp.user
-                AND (
-                    newer.createdAt > fp.createdAt
-                    OR (
-                        newer.createdAt = fp.createdAt
-                        AND newer.familyPhotoId > fp.familyPhotoId
-                    )
+    )
+      AND NOT EXISTS (
+          SELECT newer.familyPhotoId
+          FROM FamilyPhoto newer
+          WHERE newer.user = fp.user
+            AND EXISTS (
+                SELECT newerFpg.id
+                FROM FamilyPhotoGroup newerFpg
+                WHERE newerFpg.familyPhoto = newer
+                  AND EXISTS (
+                      SELECT newerPgf.id
+                      FROM PhotoGroupFamily newerPgf
+                      WHERE newerPgf.photoGroup = newerFpg.photoGroup
+                        AND newerPgf.family = :family
+                  )
+            )
+            AND (
+                newer.createdAt > fp.createdAt
+                OR (
+                    newer.createdAt = fp.createdAt
+                    AND newer.familyPhotoId > fp.familyPhotoId
                 )
-          )
-        ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
-        """)
+            )
+      )
+    ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
+    """)
     List<User> findRecentUploaders(
             @Param("family") Family family,
             Pageable pageable
