@@ -5,9 +5,11 @@ import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.repository.projection.FamilyPhotoAlbumCountProjection;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -40,20 +42,25 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
             Pageable pageable
     );
 
-    // 현재 사용자의 가족에 속한 사진만 조회하여 타 가족 사진 접근 방지
     @EntityGraph(attributePaths = {"user", "photoGroup"})
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
-            SELECT fp
-            FROM FamilyPhoto fp
-            WHERE fp.familyPhotoId = :familyPhotoId
-              AND EXISTS (
-                  SELECT pgf.id
-                  FROM PhotoGroupFamily pgf
-                  WHERE pgf.photoGroup = fp.photoGroup
-                    AND pgf.family = :family
-              )
-            """)
-    Optional<FamilyPhoto> findByFamilyPhotoIdAndFamily(
+        SELECT fp
+        FROM FamilyPhoto fp
+        WHERE fp.familyPhotoId = :familyPhotoId
+          AND EXISTS (
+              SELECT fpg.id
+              FROM FamilyPhotoGroup fpg
+              WHERE fpg.familyPhoto = fp
+                AND EXISTS (
+                    SELECT pgf.id
+                    FROM PhotoGroupFamily pgf
+                    WHERE pgf.photoGroup = fpg.photoGroup
+                      AND pgf.family = :family
+                )
+          )
+        """)
+    Optional<FamilyPhoto> findAccessibleByFamilyPhotoIdAndFamily(
             @Param("familyPhotoId") Long familyPhotoId,
             @Param("family") Family family
     );
@@ -149,35 +156,48 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
     );
 
     @Query("""
-    SELECT fp.user.usersId AS uploaderUserId,
-           COUNT(fp.familyPhotoId) AS photoCount,
-           SUM(
-               CASE
-                   WHEN fp.viewedByParent = false
-                        AND fp.createdAt >= :newPhotoCutoff
-                   THEN 1
-                   ELSE 0
-               END
-           ) AS newPhotoCount
-    FROM FamilyPhoto fp
-    WHERE fp.user.role = :role
-      AND EXISTS (
-          SELECT fpg.id
-          FROM FamilyPhotoGroup fpg
-          WHERE fpg.familyPhoto = fp
-            AND EXISTS (
-                SELECT pgf.id
-                FROM PhotoGroupFamily pgf
-                WHERE pgf.photoGroup = fpg.photoGroup
-                  AND pgf.family = :family
-            )
-      )
-    GROUP BY fp.user.usersId
-    """)
+        SELECT fp.user.usersId AS uploaderUserId,
+               COUNT(fp.familyPhotoId) AS photoCount,
+               SUM(
+                   CASE
+                       WHEN fp.createdAt >= :newPhotoCutoff
+                            AND NOT EXISTS (
+                                SELECT fpv.id
+                                FROM FamilyPhotoView fpv
+                                WHERE fpv.familyPhoto = fp
+                                  AND fpv.parent = :parent
+                            )
+                       THEN 1
+                       ELSE 0
+                   END
+               ) AS newPhotoCount
+        FROM FamilyPhoto fp
+        WHERE fp.user.role = :role
+          AND EXISTS (
+              SELECT fpg.id
+              FROM FamilyPhotoGroup fpg
+              WHERE fpg.familyPhoto = fp
+                AND EXISTS (
+                    SELECT pgf.id
+                    FROM PhotoGroupFamily pgf
+                    WHERE pgf.photoGroup = fpg.photoGroup
+                      AND pgf.family = :family
+                )
+          )
+        GROUP BY fp.user.usersId
+        """)
     List<FamilyPhotoAlbumCountProjection> countAlbumPhotosByUploader(
-            @Param("family") Family family,
-            @Param("role") Role role,
-            @Param("newPhotoCutoff") LocalDateTime newPhotoCutoff
+            @Param("family")
+            Family family,
+
+            @Param("role")
+            Role role,
+
+            @Param("newPhotoCutoff")
+            LocalDateTime newPhotoCutoff,
+
+            @Param("parent")
+            User parent
     );
 
     @EntityGraph(attributePaths = {"photoGroup", "user"})

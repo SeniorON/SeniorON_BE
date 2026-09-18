@@ -14,10 +14,12 @@ import com.example.senioron.domain.family.dto.request.FamilyPrimaryManagerUpdate
 import com.example.senioron.domain.family.dto.request.PhotoGroupConnectRequest;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
+import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.entity.PhotoGroup;
 import com.example.senioron.domain.family.entity.PhotoGroupFamily;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
+import com.example.senioron.domain.family.repository.FamilyPhotoViewRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
 import com.example.senioron.domain.family.repository.PhotoGroupRepository;
@@ -52,6 +54,8 @@ class FamilyServiceTest {
             org.mockito.Mockito.mock(S3Service.class);
     private final FamilyPhotoRepository familyPhotoRepository =
             org.mockito.Mockito.mock(FamilyPhotoRepository.class);
+    private final FamilyPhotoViewRepository familyPhotoViewRepository =
+            org.mockito.Mockito.mock(FamilyPhotoViewRepository.class);
     private final FamilyPhotoPermissionService familyPhotoPermissionService =
             org.mockito.Mockito.mock(FamilyPhotoPermissionService.class);
     private final FamilyMemberRepository familyMemberRepository =
@@ -74,6 +78,7 @@ class FamilyServiceTest {
                 userRepository,
                 s3Service,
                 familyPhotoRepository,
+                familyPhotoViewRepository,
                 familyPhotoPermissionService,
                 familyMemberRepository,
                 photoGroupRepository,
@@ -81,6 +86,83 @@ class FamilyServiceTest {
                 deviceService,
                 seniorRepository
         );
+    }
+
+    @Test
+    void getFamilyHomeCalculatesNewPhotoForCurrentParent() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .build();
+        User parent = User.builder()
+                .usersId(1L)
+                .name("부모")
+                .role(Role.PARENT)
+                .build();
+        User uploader = User.builder()
+                .usersId(2L)
+                .name("자녀")
+                .role(Role.CHILD)
+                .build();
+        Senior senior = Senior.builder()
+                .seniorId(10L)
+                .family(family)
+                .build();
+        PhotoGroup defaultPhotoGroup = PhotoGroup.builder()
+                .id(100L)
+                .name("Family 1")
+                .build();
+        PhotoGroupFamily defaultGroupLink = PhotoGroupFamily.builder()
+                .family(family)
+                .photoGroup(defaultPhotoGroup)
+                .build();
+        FamilyPhoto photo = FamilyPhoto.builder()
+                .familyPhotoId(30L)
+                .photoGroup(defaultPhotoGroup)
+                .user(uploader)
+                .imageKey("photo.jpg")
+                .build();
+        ReflectionTestUtils.setField(
+                photo,
+                "createdAt",
+                LocalDateTime.now()
+        );
+
+        given(userRepository.findById(1L))
+                .willReturn(Optional.of(parent));
+        given(seniorRepository.findById(10L))
+                .willReturn(Optional.of(senior));
+        given(familyMemberRepository.existsByUserAndFamily(parent, family))
+                .willReturn(true);
+        given(photoGroupFamilyRepository.findFirstByFamilyOrderByIdAsc(family))
+                .willReturn(Optional.of(defaultGroupLink));
+        given(familyMemberRepository.findAllByFamilyOrderByIdAsc(family))
+                .willReturn(List.of());
+        given(familyPhotoRepository.findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
+                family,
+                PageRequest.of(0, 4)
+        )).willReturn(List.of(photo));
+        given(familyPhotoRepository.findRecentUploaders(
+                family,
+                PageRequest.of(0, 3)
+        )).willReturn(List.of(uploader));
+        given(familyPhotoViewRepository.findViewedFamilyPhotoIds(
+                1L,
+                List.of(30L)
+        )).willReturn(List.of(), List.of(30L));
+
+        var beforeViewed = familyService.getFamilyHome(parent, 10L);
+        var afterViewed = familyService.getFamilyHome(parent, 10L);
+
+        assertThat(beforeViewed.getRecentPhotos())
+                .singleElement()
+                .satisfies(item ->
+                        assertThat(item.isNewPhoto()).isTrue()
+                );
+        assertThat(afterViewed.getRecentPhotos())
+                .singleElement()
+                .satisfies(item ->
+                        assertThat(item.isNewPhoto()).isFalse()
+                );
     }
 
     @Test
