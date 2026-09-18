@@ -8,6 +8,8 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.AccessLevel;
@@ -39,4 +41,16 @@ public class PhotoGroup extends BaseEntity {
     @OneToMany(mappedBy = "photoGroup")
     @Builder.Default
     private List<FamilyPhoto> familyPhotos = new ArrayList<>();
+
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean active = true;
+
+    @Column(name = "disconnected_at")
+    private LocalDateTime disconnectedAt;
+
+    public void disconnect() {
+        this.active = false;
+        this.disconnectedAt = LocalDateTime.now();
+    }
 }

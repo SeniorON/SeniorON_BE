@@ -113,6 +113,7 @@ public enum ErrorCode implements BaseCode {
     FAMILY_PHOTO_ALREADY_REGISTERED(HttpStatus.CONFLICT, "FAMILY_PHOTO409", "이미 등록 완료된 사진입니다."),
     PRIMARY_MANAGER_MUST_BE_CHILD(HttpStatus.BAD_REQUEST, "FAMILY400_3", "주 담당자는 자녀 계정만 지정할 수 있습니다."),
     PHOTO_GROUP_CONNECTION_FORBIDDEN(HttpStatus.FORBIDDEN, "PHOTO_GROUP403", "사진 공유 연결 권한이 없습니다."),
+    PHOTO_GROUP_CONNECTION_NOT_FOUND(HttpStatus.NOT_FOUND, "PHOTO_GROUP404", "사진 공유 연결을 찾을 수 없습니다."),
     PHOTO_GROUP_SELF_CONNECTION_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "PHOTO_GROUP400", "현재 가족과 동일한 가족은 연결할 수 없습니다."),
     PHOTO_GROUP_ALREADY_CONNECTED(HttpStatus.CONFLICT, "PHOTO_GROUP409", "이미 사진을 공유하고 있는 가족입니다."),
 

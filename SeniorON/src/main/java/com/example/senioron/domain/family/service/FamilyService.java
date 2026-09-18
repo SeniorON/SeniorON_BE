@@ -520,6 +520,53 @@ public class FamilyService {
         );
     }
 
+    @Transactional
+    public void disconnectPhotoGroup(
+            User principal,
+            Long seniorId,
+            Long photoGroupId
+    ) {
+        User currentUser = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.USER_NOT_FOUND)
+                );
+
+        Family currentFamily = resolveAccessibleFamily(
+                currentUser,
+                seniorId
+        );
+
+        FamilyMember currentMember = familyMemberRepository
+                .findByUserAndFamilyForUpdate(
+                        currentUser,
+                        currentFamily
+                )
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.FAMILY_NOT_FOUND)
+                );
+
+        if (currentMember.getManagerType() != ManagerType.PRIMARY) {
+            throw new BusinessException(
+                    ErrorCode.PHOTO_GROUP_CONNECTION_FORBIDDEN
+            );
+        }
+
+        List<PhotoGroupFamily> groupLinks =
+                photoGroupFamilyRepository.findAllSharedLinks(
+                        currentFamily,
+                        photoGroupId
+                );
+
+        if (groupLinks.size() != 2) {
+            throw new BusinessException(
+                    ErrorCode.PHOTO_GROUP_CONNECTION_NOT_FOUND
+            );
+        }
+
+        PhotoGroup photoGroup = groupLinks.get(0).getPhotoGroup();
+        photoGroup.disconnect();
+    }
+
     @Transactional(readOnly = true)
     public List<ConnectedSeniorResponse> getConnectedSeniors(
             User principal,

@@ -1,0 +1,3 @@
+ALTER TABLE photo_group
+    ADD COLUMN active BOOLEAN NOT NULL DEFAULT TRUE,
+    ADD COLUMN disconnected_at DATETIME(6) NULL;
