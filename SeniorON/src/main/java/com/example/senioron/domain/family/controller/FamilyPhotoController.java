@@ -32,7 +32,7 @@ public class FamilyPhotoController {
 
     private final FamilyPhotoService familyPhotoService;
 
-    @Operation(summary = "가족 사진 등록", description = "현재 로그인한 사용자의 가족에 사진을 등록합니다.")
+    @Operation(summary = "가족 사진 등록", description = "선택한 시니어의 가족에서 접근 가능한 여러 사진 공유 그룹에 사진을 등록합니다.")
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Response<FamilyPhotoItemResponse> createPhoto(
             @AuthenticationPrincipal User user,
