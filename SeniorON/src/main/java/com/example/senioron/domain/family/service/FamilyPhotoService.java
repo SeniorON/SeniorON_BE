@@ -674,7 +674,8 @@ public class FamilyPhotoService {
 
     @Transactional(readOnly = true)
     public List<FamilyPhotoAlbumResponse> getPhotoAlbums(
-            User principal
+            User principal,
+            Long seniorId
     ){
         // 인증 객체의 id를 사용해 현재 사용자 정보를 db에서 다시 조회
         User parent = userRepository.findById(principal.getUsersId())
@@ -685,12 +686,10 @@ public class FamilyPhotoService {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
 
-        // 요청으로 familyId 대신 로그인 부모의 가족을 사용
-        Family family = parent.getFamily();
-
-        if (family == null) {
-            throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
-        }
+        Family family = resolveAccessibleFamily(
+                parent,
+                seniorId
+        );
 
         // 현재 시각으로부터 24시간 전을 새로운 사진 판단 기준으로 사용
         LocalDateTime newPhotoCutoff = LocalDateTime.now().minusHours(NEW_PHOTO_WINDOW_HOURS);

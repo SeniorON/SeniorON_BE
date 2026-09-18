@@ -89,14 +89,13 @@ public class FamilyPhotoController {
         return Response.ok(ResultCode.OK, null);
     }
 
-    @Operation(summary = "자녀별 가족 사진 앨범 조회", description = "부모가 같은 가족 자녀의 최신 사진과 전체 사진 수, 새로운 사진 여부를 조회합니다.")
+    @Operation(summary = "자녀별 가족 사진 앨범 조회", description = "선택한 시니어의 가족이 접근 가능한 공유 사진을 자녀별 앨범으로 조회합니다.")
     @GetMapping("/albums")
     public Response<List<FamilyPhotoAlbumResponse>> getPhotoAlbums(
-            @AuthenticationPrincipal User user
-    ){
-        return Response.ok(
-                familyPhotoService.getPhotoAlbums(user)
-        );
+            @AuthenticationPrincipal User user,
+            @RequestParam Long seniorId
+    ) {
+        return Response.ok(familyPhotoService.getPhotoAlbums(user, seniorId));
     }
 
     @Operation(summary = "가족 사진 확인 처리", description = "부모가 사진 상세 화면을 열었을 때 해당 사진 한 장을 확인 처리합니다.")

@@ -117,147 +117,80 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
 
     @EntityGraph(attributePaths = {"user", "photoGroup"})
     @Query("""
-        SELECT fp
-        FROM FamilyPhoto fp
-        WHERE EXISTS (
-              SELECT pgf.id
-              FROM PhotoGroupFamily pgf
-              WHERE pgf.photoGroup = fp.photoGroup
-                AND pgf.family = :family
-          )
-          AND EXISTS (
-              SELECT fm.id
-              FROM FamilyMember fm
-              WHERE fm.user = fp.user
-                AND fm.family = :family
-          )
-          AND fp.user.role = :role
-          AND NOT EXISTS (
-              SELECT newer.familyPhotoId
-              FROM FamilyPhoto newer
-              WHERE newer.photoGroup = fp.photoGroup
-                AND newer.user = fp.user
-                AND (
-                    newer.createdAt > fp.createdAt
-                    OR (
-                        newer.createdAt = fp.createdAt
-                        AND newer.familyPhotoId > fp.familyPhotoId
-                    )
+    SELECT fp
+    FROM FamilyPhoto fp
+    WHERE fp.user.role = :role
+      AND EXISTS (
+          SELECT fpg.id
+          FROM FamilyPhotoGroup fpg
+          WHERE fpg.familyPhoto = fp
+            AND EXISTS (
+                SELECT pgf.id
+                FROM PhotoGroupFamily pgf
+                WHERE pgf.photoGroup = fpg.photoGroup
+                  AND pgf.family = :family
+            )
+      )
+      AND NOT EXISTS (
+          SELECT newer.familyPhotoId
+          FROM FamilyPhoto newer
+          WHERE newer.user = fp.user
+            AND EXISTS (
+                SELECT newerFpg.id
+                FROM FamilyPhotoGroup newerFpg
+                WHERE newerFpg.familyPhoto = newer
+                  AND EXISTS (
+                      SELECT newerPgf.id
+                      FROM PhotoGroupFamily newerPgf
+                      WHERE newerPgf.photoGroup = newerFpg.photoGroup
+                        AND newerPgf.family = :family
+                  )
+            )
+            AND (
+                newer.createdAt > fp.createdAt
+                OR (
+                    newer.createdAt = fp.createdAt
+                    AND newer.familyPhotoId > fp.familyPhotoId
                 )
-          )
-        ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
-        """)
+            )
+      )
+    ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
+    """)
     List<FamilyPhoto> findLatestPhotosByUploader(
             @Param("family") Family family,
             @Param("role") Role role
     );
 
     @Query("""
-        SELECT fp.user.usersId AS uploaderUserId,
-               COUNT(fp.familyPhotoId) AS photoCount,
-               SUM(
-                   CASE
-                       WHEN fp.viewedByParent = false
-                            AND fp.createdAt >= :newPhotoCutoff
-                       THEN 1
-                       ELSE 0
-                   END
-               ) AS newPhotoCount
-        FROM FamilyPhoto fp
-        WHERE EXISTS (
-              SELECT pgf.id
-              FROM PhotoGroupFamily pgf
-              WHERE pgf.photoGroup = fp.photoGroup
-                AND pgf.family = :family
-          )
-          AND EXISTS (
-              SELECT fm.id
-              FROM FamilyMember fm
-              WHERE fm.user = fp.user
-                AND fm.family = :family
-          )
-          AND fp.user.role = :role
-        GROUP BY fp.user.usersId
-        """)
+    SELECT fp.user.usersId AS uploaderUserId,
+           COUNT(fp.familyPhotoId) AS photoCount,
+           SUM(
+               CASE
+                   WHEN fp.viewedByParent = false
+                        AND fp.createdAt >= :newPhotoCutoff
+                   THEN 1
+                   ELSE 0
+               END
+           ) AS newPhotoCount
+    FROM FamilyPhoto fp
+    WHERE fp.user.role = :role
+      AND EXISTS (
+          SELECT fpg.id
+          FROM FamilyPhotoGroup fpg
+          WHERE fpg.familyPhoto = fp
+            AND EXISTS (
+                SELECT pgf.id
+                FROM PhotoGroupFamily pgf
+                WHERE pgf.photoGroup = fpg.photoGroup
+                  AND pgf.family = :family
+            )
+      )
+    GROUP BY fp.user.usersId
+    """)
     List<FamilyPhotoAlbumCountProjection> countAlbumPhotosByUploader(
             @Param("family") Family family,
             @Param("role") Role role,
             @Param("newPhotoCutoff") LocalDateTime newPhotoCutoff
-    );
-
-    @EntityGraph(attributePaths = {"user", "photoGroup"})
-    @Query("""
-            SELECT fp
-            FROM FamilyPhoto fp
-            WHERE fp.user = :uploader
-              AND EXISTS (
-                  SELECT pgf.id
-                  FROM PhotoGroupFamily pgf
-                  WHERE pgf.photoGroup = fp.photoGroup
-                    AND pgf.family = :family
-              )
-            ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
-            """)
-    List<FamilyPhoto> findByFamilyAndUserOrderByCreatedAtDescFamilyPhotoIdDesc(
-            @Param("family") Family family,
-            @Param("uploader") User uploader,
-            Pageable pageable
-    );
-
-    @EntityGraph(attributePaths = {"user", "photoGroup"})
-    @Query("""
-        SELECT fp
-        FROM FamilyPhoto fp
-        WHERE fp.user = :uploader
-          AND EXISTS (
-              SELECT pgf.id
-              FROM PhotoGroupFamily pgf
-              WHERE pgf.photoGroup = fp.photoGroup
-                AND pgf.family = :family
-          )
-          AND (
-              fp.createdAt < :cursorCreatedAt
-              OR (
-                  fp.createdAt = :cursorCreatedAt
-                  AND fp.familyPhotoId < :cursorId
-              )
-          )
-        ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
-        """)
-    List<FamilyPhoto> findNextPageByUploaderAndCursor(
-            @Param("family") Family family,
-            @Param("uploader") User uploader,
-            @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
-            @Param("cursorId") Long cursorId,
-            Pageable pageable
-    );
-
-    @Query("""
-            SELECT COUNT(fp)
-            FROM FamilyPhoto fp
-            WHERE EXISTS (
-                SELECT pgf.id
-                FROM PhotoGroupFamily pgf
-                WHERE pgf.photoGroup = fp.photoGroup
-                  AND pgf.family = :family
-            )
-            """)
-    long countByFamily(@Param("family") Family family);
-
-    @Query("""
-            SELECT COUNT(fp)
-            FROM FamilyPhoto fp
-            WHERE fp.user = :uploader
-              AND EXISTS (
-                  SELECT pgf.id
-                  FROM PhotoGroupFamily pgf
-                  WHERE pgf.photoGroup = fp.photoGroup
-                    AND pgf.family = :family
-              )
-            """)
-    long countByFamilyAndUser(
-            @Param("family") Family family,
-            @Param("uploader") User uploader
     );
 
     @EntityGraph(attributePaths = {"photoGroup", "user"})
