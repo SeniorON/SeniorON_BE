@@ -1,7 +1,7 @@
 package com.example.senioron.domain.family.service;
 
 import com.example.senioron.domain.family.entity.FamilyPhoto;
-import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
+import com.example.senioron.domain.family.repository.FamilyPhotoGroupRepository;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.User;
 import lombok.RequiredArgsConstructor;
@@ -13,7 +13,7 @@ import java.util.Objects;
 @RequiredArgsConstructor
 public class FamilyPhotoPermissionService {
 
-    private final PhotoGroupFamilyRepository photoGroupFamilyRepository;
+    private final FamilyPhotoGroupRepository familyPhotoGroupRepository;
 
     public boolean canDelete(
             FamilyPhoto photo,
@@ -24,17 +24,26 @@ public class FamilyPhotoPermissionService {
                 currentUser.getUsersId()
         );
 
-        boolean uploaderStillInFamily =
-                photo.getUser().getFamily() != null
-                        && photoGroupFamilyRepository.existsByFamilyAndPhotoGroup(
-                        photo.getUser().getFamily(),
-                        photo.getPhotoGroup()
+        if (isUploader) {
+            return true;
+        }
+
+        boolean uploaderStillHasAccess =
+                familyPhotoGroupRepository
+                        .existsAccessibleByFamilyPhotoAndUser(
+                                photo,
+                                photo.getUser()
+                        );
+
+        if (uploaderStillHasAccess) {
+            return false;
+        }
+
+        return familyPhotoGroupRepository
+                .existsAccessibleByFamilyPhotoAndUserAndManagerType(
+                        photo,
+                        currentUser,
+                        ManagerType.PRIMARY
                 );
-
-        boolean isPrimaryManager =
-                currentUser.getManagerType() == ManagerType.PRIMARY;
-
-        return isUploader
-                || (!uploaderStillInFamily && isPrimaryManager);
     }
 }

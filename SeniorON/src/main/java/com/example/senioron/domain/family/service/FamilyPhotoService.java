@@ -341,7 +341,7 @@ public class FamilyPhotoService {
             String idempotencyKey,
             FamilyPhotoCreateRequest request
     ) {
-        User user = userRepository.findByIdWithFamily(principal.getUsersId())
+        User user = userRepository.findById(principal.getUsersId())
                 .orElseThrow(() ->
                         new BusinessException(ErrorCode.USER_NOT_FOUND)
                 );
@@ -350,11 +350,16 @@ public class FamilyPhotoService {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
 
-        Family family = user.getFamily();
+        Family family = resolveAccessibleFamily(
+                user,
+                request.getSeniorId()
+        );
 
-        if (family == null) {
-            throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
-        }
+        List<PhotoGroup> photoGroups =
+                resolveAccessiblePhotoGroups(
+                        family,
+                        request.getPhotoGroupIds()
+                );
 
         LocalDateTime newPhotoCutoff =
                 LocalDateTime.now().minusHours(NEW_PHOTO_WINDOW_HOURS);
@@ -368,6 +373,7 @@ public class FamilyPhotoService {
                         uploadAndCreatePhoto(
                                 user,
                                 family,
+                                photoGroups,
                                 idempotencyKey,
                                 request,
                                 newPhotoCutoff
@@ -378,6 +384,7 @@ public class FamilyPhotoService {
     private FamilyPhotoItemResponse uploadAndCreatePhoto(
             User user,
             Family family,
+            List<PhotoGroup> photoGroups,
             String idempotencyKey,
             FamilyPhotoCreateRequest request,
             LocalDateTime newPhotoCutoff
@@ -397,7 +404,8 @@ public class FamilyPhotoService {
                     user.getUsersId(),
                     imageKey,
                     idempotencyKey,
-                    request.getDescription()
+                    request.getDescription(),
+                    photoGroups
             );
 
         } catch (DataIntegrityViolationException exception) {
@@ -624,15 +632,16 @@ public class FamilyPhotoService {
         User currentUser = userRepository.findById(principal.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        Family family = currentUser.getFamily();
-
-        if (family == null) {
-            throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
-        }
-
         FamilyPhoto photo = familyPhotoRepository
-                .findByFamilyPhotoIdAndFamily(familyPhotoId, family)
-                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_PHOTO_NOT_FOUND));
+                .findAccessibleByFamilyPhotoIdAndUser(
+                        familyPhotoId,
+                        currentUser
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.FAMILY_PHOTO_NOT_FOUND
+                        )
+                );
 
         if (!familyPhotoPermissionService.canDelete(photo, currentUser)) {
             throw new BusinessException(ErrorCode.FAMILY_PHOTO_DELETE_FORBIDDEN);
@@ -665,7 +674,8 @@ public class FamilyPhotoService {
 
     @Transactional(readOnly = true)
     public List<FamilyPhotoAlbumResponse> getPhotoAlbums(
-            User principal
+            User principal,
+            Long seniorId
     ){
         // 인증 객체의 id를 사용해 현재 사용자 정보를 db에서 다시 조회
         User parent = userRepository.findById(principal.getUsersId())
@@ -676,12 +686,10 @@ public class FamilyPhotoService {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
 
-        // 요청으로 familyId 대신 로그인 부모의 가족을 사용
-        Family family = parent.getFamily();
-
-        if (family == null) {
-            throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
-        }
+        Family family = resolveAccessibleFamily(
+                parent,
+                seniorId
+        );
 
         // 현재 시각으로부터 24시간 전을 새로운 사진 판단 기준으로 사용
         LocalDateTime newPhotoCutoff = LocalDateTime.now().minusHours(NEW_PHOTO_WINDOW_HOURS);

@@ -1,5 +1,6 @@
 package com.example.senioron.domain.family.service;
 
+import com.example.senioron.domain.family.dto.request.FamilyPhotoCreateRequest;
 import com.example.senioron.domain.family.dto.request.FamilyPhotoUploadCompleteRequest;
 import com.example.senioron.domain.family.dto.request.FamilyPhotoUploadUrlRequest;
 import com.example.senioron.domain.family.dto.response.FamilyPhotoItemResponse;
@@ -23,6 +24,7 @@ import com.example.senioron.global.storage.S3Service;
 import com.example.senioron.global.storage.StoredObjectInfo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockMultipartFile;
 
 import java.util.List;
 import java.util.Optional;
@@ -356,6 +358,90 @@ class FamilyPhotoPresignedUploadServiceTest {
         verifyNoInteractions(
                 s3Service,
                 familyPhotoRepository
+        );
+    }
+
+    @Test
+    void createsMultipartPhotoInSelectedPhotoGroups() {
+        Family family = createFamily();
+        PhotoGroup firstGroup = createPhotoGroup();
+        PhotoGroup secondGroup = PhotoGroup.builder()
+                .id(31L)
+                .name("연결 가족 그룹")
+                .build();
+        User child = createChild(family);
+        Senior senior = Senior.builder()
+                .seniorId(SENIOR_ID)
+                .family(family)
+                .build();
+        FamilyPhotoCreateRequest request =
+                new FamilyPhotoCreateRequest();
+        request.setSeniorId(SENIOR_ID);
+        request.setPhotoGroupIds(List.of(30L, 31L));
+        request.setDescription("여러 가족 공유 사진");
+        request.setImage(new MockMultipartFile(
+                "image",
+                "family-photo.jpg",
+                "image/jpeg",
+                new byte[]{1}
+        ));
+        String idempotencyKey =
+                "45c20ce1-c7d2-48ac-aa80-5031eedc09ad";
+        FamilyPhoto savedPhoto = FamilyPhoto.builder()
+                .familyPhotoId(23L)
+                .photoGroup(firstGroup)
+                .user(child)
+                .imageKey(IMAGE_KEY)
+                .description(request.getDescription())
+                .idempotencyKey(idempotencyKey)
+                .build();
+
+        given(userRepository.findById(USER_ID))
+                .willReturn(Optional.of(child));
+        given(seniorRepository.findById(SENIOR_ID))
+                .willReturn(Optional.of(senior));
+        given(familyMemberRepository.existsByUserAndFamily(child, family))
+                .willReturn(true);
+        given(photoGroupFamilyRepository.findAllByFamilyAndPhotoGroupIds(
+                family,
+                List.of(30L, 31L)
+        )).willReturn(List.of(
+                PhotoGroupFamily.builder()
+                        .family(family)
+                        .photoGroup(firstGroup)
+                        .build(),
+                PhotoGroupFamily.builder()
+                        .family(family)
+                        .photoGroup(secondGroup)
+                        .build()
+        ));
+        given(persistenceService.findExisting(USER_ID, idempotencyKey))
+                .willReturn(Optional.empty());
+        given(s3Service.upload(
+                request.getImage(),
+                "family-photos/" + FAMILY_ID
+        )).willReturn(IMAGE_KEY);
+        given(persistenceService.create(
+                USER_ID,
+                IMAGE_KEY,
+                idempotencyKey,
+                request.getDescription(),
+                List.of(firstGroup, secondGroup)
+        )).willReturn(savedPhoto);
+
+        FamilyPhotoItemResponse response = familyPhotoService.createPhoto(
+                child,
+                idempotencyKey,
+                request
+        );
+
+        assertThat(response.getFamilyPhotoId()).isEqualTo(23L);
+        verify(persistenceService).create(
+                USER_ID,
+                IMAGE_KEY,
+                idempotencyKey,
+                "여러 가족 공유 사진",
+                List.of(firstGroup, secondGroup)
         );
     }
 

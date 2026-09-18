@@ -274,12 +274,17 @@ public class FamilyService {
     }
 
     @Transactional(readOnly = true)
-    public FamilyHomeResponse getFamilyHome(User user) {
-        Family family = user.getFamily();
+    public FamilyHomeResponse getFamilyHome(User user, Long seniorId) {
 
-        if (family == null) {
-            throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
-        }
+        User currentUser = userRepository.findById(user.getUsersId())
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.USER_NOT_FOUND)
+                );
+
+        Family family = resolveAccessibleFamily(
+                currentUser,
+                seniorId
+        );
 
         // 가족 구성원 조회
         List<FamilyMember> familyMembers = familyMemberRepository
@@ -302,11 +307,10 @@ public class FamilyService {
         // 가족 구성원 응답 생성
         List<FamilyMemberResponse> members = familyMembers.stream()
                 .sorted(Comparator.comparing(member -> !Objects.equals(
-                                member.getUser().getUsersId(),
-                                user.getUsersId()
+                                member.getUser().getUsersId(), currentUser.getUsersId()
                         )
                 ))
-                .map(member -> toFamilyMemberResponse(member, user))
+                .map(member -> toFamilyMemberResponse(member, currentUser))
                 .toList();
 
         // 최근 업로더 프로필 최대 3개 생성
@@ -320,7 +324,7 @@ public class FamilyService {
 
         List<FamilyPhotoItemResponse> recentPhotos =
                 recentPhotoEntities.stream()
-                        .map(photo -> toFamilyPhotoItemResponse(photo, user))
+                        .map(photo -> toFamilyPhotoItemResponse(photo, currentUser))
                         .toList();
 
         return FamilyHomeResponse.builder()
