@@ -83,6 +83,33 @@ class PhotoGroupFamilyRepositoryTest {
         assertThat(result.get(0).getFamily()).isEqualTo(targetFamily);
     }
 
+    @Test
+    void excludesDisconnectedGroupFromConnectionAndUploadQueries() {
+        Family currentFamily = saveFamily("CURRENT1");
+        Family targetFamily = saveFamily("TARGET-1");
+        PhotoGroup disconnectedGroup = savePhotoGroup("disconnected-group");
+        savePhotoGroupFamily(currentFamily, disconnectedGroup);
+        savePhotoGroupFamily(targetFamily, disconnectedGroup);
+        disconnectedGroup.disconnect();
+        photoGroupRepository.saveAndFlush(disconnectedGroup);
+
+        assertThat(photoGroupFamilyRepository.existsSharedPhotoGroup(
+                currentFamily,
+                targetFamily
+        )).isFalse();
+        assertThat(photoGroupFamilyRepository.findConnectedFamilyLinks(
+                currentFamily
+        )).isEmpty();
+        assertThat(photoGroupFamilyRepository.findAllByFamilyAndPhotoGroupIds(
+                currentFamily,
+                List.of(disconnectedGroup.getId())
+        )).isEmpty();
+        assertThat(photoGroupFamilyRepository.findAllSharedLinks(
+                currentFamily,
+                disconnectedGroup.getId()
+        )).isEmpty();
+    }
+
     private Family saveFamily(String seniorCode) {
         return familyRepository.saveAndFlush(
                 Family.builder()
