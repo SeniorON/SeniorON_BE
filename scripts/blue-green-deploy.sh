@@ -44,11 +44,11 @@ wait_for_health() {
     echo ""
     echo "Waiting for $service health..."
 
-    for i in $(seq 1 75); do
+    for i in $(seq 1 120); do
         local status
         status=$(get_health_status "$service")
 
-        echo "[$i/75] $service health=$status"
+        echo "[$i/120] $service health=$status"
 
         if [[ "$status" == "healthy" ]]; then
             echo "$service is healthy."
@@ -70,14 +70,16 @@ wait_for_health() {
 cleanup_service() {
     local service="$1"
 
-    echo "Stopping $service..."
+    echo "Stopping and removing $service..."
 
-    if ! docker compose stop "$service"; then
-        echo "ERROR: Failed to stop $service."
-        return 1
+    if ! docker compose stop -t 10 "$service"; then
+        echo "WARNING: Graceful stop failed for $service, killing..."
+        docker compose kill "$service" || true
     fi
 
-    echo "$service stopped."
+    docker compose rm -f "$service" || true
+
+    echo "$service cleaned up."
     return 0
 }
 
@@ -241,6 +243,9 @@ docker compose pull "$NEXT_SERVICE"
 echo ""
 echo "[2/7] Starting $NEXT_SERVICE..."
 
+# 혹시 이전 배포 실패 등으로 남아있는 컨테이너 강제 정리
+docker compose rm -f -s "$NEXT_SERVICE" 2>/dev/null || true
+
 IMAGE_TAG="$IMAGE_TAG" \
 docker compose up -d --remove-orphans "$NEXT_SERVICE"
 
@@ -256,7 +261,12 @@ if ! wait_for_health "$NEXT_SERVICE"; then
     echo ""
     echo "ERROR: New application failed health check."
 
-    docker compose logs --tail=100 "$NEXT_SERVICE" || true
+    echo "--- System Memory Status ---"
+    free -m 2>/dev/null || true
+    echo "--- Docker Stats ---"
+    docker stats --no-stream 2>/dev/null || true
+    echo "--- Application Logs ---"
+    docker compose logs --tail=150 "$NEXT_SERVICE" || true
 
     if ! cleanup_service "$NEXT_SERVICE"; then
         echo "WARNING: Failed to cleanup failed deployment."
@@ -399,7 +409,8 @@ echo "Smoke test passed."
 # --------------------------------------------------
 
 echo ""
-echo "[6/7] Stopping old application..."
+echo "[6/7] Stopping old application (Grace period: 5s)..."
+sleep 5
 
 if ! cleanup_service "$CURRENT_SERVICE"; then
     echo ""
@@ -419,6 +430,9 @@ if [[ -n "$(get_container_id "$CURRENT_SERVICE")" ]]; then
 fi
 
 echo "$NEXT_COLOR:$IMAGE_TAG" > "$STATE_FILE"
+
+# 디스크 부족 방지를 위한 미사용 댕글링 이미지 정리
+docker image prune -f 2>/dev/null || true
 
 echo ""
 echo "[7/7] Deployment state updated."

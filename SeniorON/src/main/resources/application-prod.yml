@@ -44,7 +44,7 @@ management:
       show-details: never
 
 springdoc:
-  pre-loading-enabled: true
+  pre-loading-enabled: false
 
 app:
   cors:
