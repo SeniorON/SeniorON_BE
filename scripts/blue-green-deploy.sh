@@ -70,8 +70,15 @@ wait_for_health() {
 cleanup_service() {
     local service="$1"
 
-    docker compose stop "$service" || true
-    docker compose rm -f "$service" || true
+    echo "Stopping $service..."
+
+    if ! docker compose stop "$service"; then
+        echo "ERROR: Failed to stop $service."
+        return 1
+    fi
+
+    echo "$service stopped."
+    return 0
 }
 
 switch_upstream() {
@@ -251,7 +258,9 @@ if ! wait_for_health "$NEXT_SERVICE"; then
 
     docker compose logs --tail=100 "$NEXT_SERVICE" || true
 
-    cleanup_service "$NEXT_SERVICE"
+    if ! cleanup_service "$NEXT_SERVICE"; then
+        echo "WARNING: Failed to cleanup failed deployment."
+    fi
 
     exit 1
 fi
@@ -284,7 +293,9 @@ if [[ "$CURRENT_COLOR" == "none" ]]; then
     if ! docker compose exec -T nginx nginx -t; then
         echo "ERROR: Initial Nginx configuration test failed."
 
-        cleanup_service "$NEXT_SERVICE"
+        if ! cleanup_service "$NEXT_SERVICE"; then
+            echo "WARNING: Failed to cleanup failed deployment."
+        fi
 
         exit 1
     fi
@@ -294,7 +305,9 @@ if [[ "$CURRENT_COLOR" == "none" ]]; then
     if ! docker compose exec -T nginx nginx -s reload; then
         echo "ERROR: Initial Nginx reload failed."
 
-        cleanup_service "$NEXT_SERVICE"
+        if ! cleanup_service "$NEXT_SERVICE"; then
+            echo "WARNING: Failed to cleanup failed deployment."
+        fi
 
         exit 1
     fi
@@ -306,7 +319,9 @@ if [[ "$CURRENT_COLOR" == "none" ]]; then
         echo ""
         echo "ERROR: Initial bootstrap smoke test failed."
 
-        cleanup_service "$NEXT_SERVICE"
+        if ! cleanup_service "$NEXT_SERVICE"; then
+            echo "WARNING: Failed to cleanup failed deployment."
+        fi
 
         exit 1
     fi
@@ -342,7 +357,9 @@ if ! switch_upstream "$NEXT_COLOR"; then
         echo "Manual intervention is required."
     fi
 
-    cleanup_service "$NEXT_SERVICE"
+    if ! cleanup_service "$NEXT_SERVICE"; then
+        echo "WARNING: Failed to cleanup new application."
+    fi
 
     exit 1
 fi
@@ -368,7 +385,9 @@ if ! smoke_test; then
         echo "Manual intervention is required."
     fi
 
-    cleanup_service "$NEXT_SERVICE"
+    if ! cleanup_service "$NEXT_SERVICE"; then
+        echo "WARNING: Failed to cleanup new application."
+    fi
 
     exit 1
 fi
@@ -376,18 +395,33 @@ fi
 echo "Smoke test passed."
 
 # --------------------------------------------------
-# 7. 운영 상태 기록 및 이전 환경 종료
+# 7. 이전 환경 종료 및 운영 상태 기록
 # --------------------------------------------------
 
 echo ""
-echo "[6/7] Updating deployment state..."
+echo "[6/7] Stopping old application..."
+
+if ! cleanup_service "$CURRENT_SERVICE"; then
+    echo ""
+    echo "ERROR: Failed to cleanup old application."
+    echo "New application is currently serving traffic."
+    echo "Manual intervention is required."
+    exit 1
+fi
+
+echo ""
+echo "Verifying old application is stopped..."
+
+if [[ -n "$(get_container_id "$CURRENT_SERVICE")" ]]; then
+    echo "ERROR: $CURRENT_SERVICE is still running."
+    echo "Manual intervention is required."
+    exit 1
+fi
 
 echo "$NEXT_COLOR:$IMAGE_TAG" > "$STATE_FILE"
 
 echo ""
-echo "[7/7] Stopping old application..."
-
-cleanup_service "$CURRENT_SERVICE"
+echo "[7/7] Deployment state updated."
 
 echo ""
 echo "=========================================="
