@@ -821,6 +821,54 @@ class FamilyServiceTest {
     }
 
     @Test
+    void removeFamilyMemberRejectsSeniorParentUser() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .build();
+        User currentUser = createUser(1L, "주 담당자");
+        User seniorParentUser = User.builder()
+                .usersId(2L)
+                .name("시니어 본인")
+                .role(Role.PARENT)
+                .build();
+        Senior senior = Senior.builder()
+                .seniorId(10L)
+                .family(family)
+                .parentUser(seniorParentUser)
+                .build();
+        FamilyMember primaryMember = createMember(
+                1L,
+                currentUser,
+                family,
+                ManagerType.PRIMARY
+        );
+
+        given(userRepository.findByIdForUpdate(1L))
+                .willReturn(Optional.of(currentUser));
+        given(seniorRepository.findById(10L))
+                .willReturn(Optional.of(senior));
+        given(familyMemberRepository.existsByUserAndFamily(currentUser, family))
+                .willReturn(true);
+        given(familyMemberRepository.findByUserAndFamilyForUpdate(currentUser, family))
+                .willReturn(Optional.of(primaryMember));
+        given(userRepository.findByIdForUpdate(2L))
+                .willReturn(Optional.of(seniorParentUser));
+        given(familyMemberRepository.existsByUserAndFamily(seniorParentUser, family))
+                .willReturn(true);
+
+        assertThatThrownBy(() ->
+                familyService.removeFamilyMember(currentUser, 10L, 2L)
+        )
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.CANNOT_REMOVE_SENIOR_PARENT);
+
+        verify(familyMemberRepository, never())
+                .deleteByUserAndFamily(seniorParentUser, family);
+    }
+
+    @Test
     void removeFamilyMemberDeletesMemberOnlyFromSelectedSeniorFamily() {
         Family firstFamily = Family.builder()
                 .familyId(1L)

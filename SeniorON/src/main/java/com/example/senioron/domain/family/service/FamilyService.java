@@ -201,36 +201,77 @@ public class FamilyService {
     }
 
     // 가족 구성원 제거 메서드
-    public void removeFamilyMember(User principal, Long seniorId, Long targetUserId) {
-        // 로그인한 사용자 조회
-        User currentUser = userRepository.findByIdForUpdate(principal.getUsersId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+    public void removeFamilyMember(
+            User principal,
+            Long seniorId,
+            Long targetUserId
+    ) {
+        User currentUser = userRepository
+                .findByIdForUpdate(principal.getUsersId())
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.USER_NOT_FOUND)
+                );
 
-        Family family = resolveAccessibleFamily(currentUser, seniorId);
+        Senior senior = resolveAccessibleSenior(
+                currentUser,
+                seniorId
+        );
 
-        // 주 담당자만 가족 구성원을 제외할 수 있음
+        Family family = senior.getFamily();
+
         FamilyMember currentMember = familyMemberRepository
-                .findByUserAndFamilyForUpdate(currentUser, family)
-                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND));
+                .findByUserAndFamilyForUpdate(
+                        currentUser,
+                        family
+                )
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.FAMILY_NOT_FOUND)
+                );
 
         if (currentMember.getManagerType() != ManagerType.PRIMARY) {
-            throw new BusinessException(ErrorCode.FAMILY_MEMBER_REMOVE_FORBIDDEN);
+            throw new BusinessException(
+                    ErrorCode.FAMILY_MEMBER_REMOVE_FORBIDDEN
+            );
         }
 
-        // 제외할 사용자 조회
-        User targetUser = userRepository.findByIdForUpdate(targetUserId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        User targetUser = userRepository
+                .findByIdForUpdate(targetUserId)
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.USER_NOT_FOUND)
+                );
 
-        // 대상자가 요청자와 같은 가족인지 확인
-        if (!familyMemberRepository.existsByUserAndFamily(targetUser, family)) {
-            throw new BusinessException(ErrorCode.FAMILY_MEMBER_NOT_FOUND);
+        if (!familyMemberRepository.existsByUserAndFamily(
+                targetUser,
+                family
+        )) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_MEMBER_NOT_FOUND
+            );
         }
 
-        if (Objects.equals(currentUser.getUsersId(), targetUser.getUsersId())) {
-            throw new BusinessException(ErrorCode.CANNOT_REMOVE_SELF);
+        if (Objects.equals(
+                currentUser.getUsersId(),
+                targetUser.getUsersId()
+        )) {
+            throw new BusinessException(
+                    ErrorCode.CANNOT_REMOVE_SELF
+            );
         }
 
-        familyMemberRepository.deleteByUserAndFamily(targetUser, family);
+        if (senior.getParentUser() != null
+                && Objects.equals(
+                senior.getParentUser().getUsersId(),
+                targetUser.getUsersId()
+        )) {
+            throw new BusinessException(
+                    ErrorCode.CANNOT_REMOVE_SENIOR_PARENT
+            );
+        }
+
+        familyMemberRepository.deleteByUserAndFamily(
+                targetUser,
+                family
+        );
     }
 
     private FamilyMemberResponse toFamilyMemberResponse(
@@ -434,20 +475,33 @@ public class FamilyService {
             User user,
             Long seniorId
     ) {
+        return resolveAccessibleSenior(
+                user,
+                seniorId
+        ).getFamily();
+    }
+
+    private Senior resolveAccessibleSenior(
+            User user,
+            Long seniorId
+    ) {
         Senior senior = seniorRepository.findById(seniorId)
                 .orElseThrow(() ->
-                        new BusinessException(ErrorCode.SENIOR_NOT_FOUND)
+                        new BusinessException(
+                                ErrorCode.SENIOR_NOT_FOUND
+                        )
                 );
 
-        Family family = senior.getFamily();
-
-        if (!familyMemberRepository.existsByUserAndFamily(user, family)) {
+        if (!familyMemberRepository.existsByUserAndFamily(
+                user,
+                senior.getFamily()
+        )) {
             throw new BusinessException(
                     ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED
             );
         }
 
-        return family;
+        return senior;
     }
 
     public void connectPhotoGroup(
