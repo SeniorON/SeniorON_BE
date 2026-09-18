@@ -632,15 +632,16 @@ public class FamilyPhotoService {
         User currentUser = userRepository.findById(principal.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        Family family = currentUser.getFamily();
-
-        if (family == null) {
-            throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
-        }
-
         FamilyPhoto photo = familyPhotoRepository
-                .findByFamilyPhotoIdAndFamily(familyPhotoId, family)
-                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_PHOTO_NOT_FOUND));
+                .findAccessibleByFamilyPhotoIdAndUser(
+                        familyPhotoId,
+                        currentUser
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.FAMILY_PHOTO_NOT_FOUND
+                        )
+                );
 
         if (!familyPhotoPermissionService.canDelete(photo, currentUser)) {
             throw new BusinessException(ErrorCode.FAMILY_PHOTO_DELETE_FORBIDDEN);
