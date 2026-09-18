@@ -8,10 +8,12 @@ import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.entity.FamilyPhotoGroup;
 import com.example.senioron.domain.family.entity.PhotoGroup;
 import com.example.senioron.domain.family.entity.PhotoGroupFamily;
+import com.example.senioron.domain.family.service.FamilyPhotoPermissionService;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -184,6 +186,101 @@ class FamilyPhotoRepositoryTest {
         )).isEqualTo(1L);
     }
 
+    @Test
+    void usesMappedGroupsForAlbumsAndFamilyHomeWithoutDuplicates() {
+        Family currentFamily = saveFamily("CURRENT-003");
+        Family connectedFamily = saveFamily("CONNECTED-004");
+        User uploader = saveUser("shared-album-uploader");
+        saveFamilyMember(uploader, connectedFamily);
+
+        PhotoGroup representativeGroup =
+                savePhotoGroup("album-representative-group");
+        PhotoGroup firstSharedGroup =
+                savePhotoGroup("album-first-shared-group");
+        PhotoGroup secondSharedGroup =
+                savePhotoGroup("album-second-shared-group");
+        savePhotoGroupFamily(connectedFamily, representativeGroup);
+        savePhotoGroupFamily(currentFamily, firstSharedGroup);
+        savePhotoGroupFamily(connectedFamily, firstSharedGroup);
+        savePhotoGroupFamily(currentFamily, secondSharedGroup);
+        savePhotoGroupFamily(connectedFamily, secondSharedGroup);
+
+        FamilyPhoto photo = savePhoto(
+                representativeGroup,
+                uploader,
+                "shared-album-photo.jpg"
+        );
+        saveFamilyPhotoGroup(photo, representativeGroup);
+        saveFamilyPhotoGroup(photo, firstSharedGroup);
+        saveFamilyPhotoGroup(photo, secondSharedGroup);
+
+        assertThat(familyPhotoRepository
+                .findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
+                        currentFamily,
+                        PageRequest.of(0, 4)
+                )).containsExactly(photo);
+        assertThat(familyPhotoRepository.findRecentUploaders(
+                currentFamily,
+                PageRequest.of(0, 3)
+        )).containsExactly(uploader);
+        assertThat(familyPhotoRepository.findLatestPhotosByUploader(
+                currentFamily,
+                Role.CHILD
+        )).containsExactly(photo);
+        assertThat(familyPhotoRepository.countAlbumPhotosByUploader(
+                currentFamily,
+                Role.CHILD,
+                LocalDateTime.now().minusDays(1)
+        )).singleElement().satisfies(count -> {
+            assertThat(count.getUploaderUserId())
+                    .isEqualTo(uploader.getUsersId());
+            assertThat(count.getPhotoCount()).isEqualTo(1L);
+            assertThat(count.getNewPhotoCount()).isEqualTo(1L);
+        });
+    }
+
+    @Test
+    void allowsPrimaryManagerToDeleteOnlyAfterUploaderLosesGroupAccess() {
+        Family currentFamily = saveFamily("CURRENT-004");
+        Family uploaderFamily = saveFamily("UPLOADER-001");
+        User primaryManager = saveUser("primary-manager");
+        User uploader = saveUser("orphan-photo-uploader");
+        saveFamilyMember(
+                primaryManager,
+                currentFamily,
+                ManagerType.PRIMARY
+        );
+        saveFamilyMember(uploader, uploaderFamily);
+
+        PhotoGroup sharedGroup = savePhotoGroup("delete-shared-group");
+        savePhotoGroupFamily(currentFamily, sharedGroup);
+        savePhotoGroupFamily(uploaderFamily, sharedGroup);
+        FamilyPhoto photo = savePhoto(
+                sharedGroup,
+                uploader,
+                "delete-shared-photo.jpg"
+        );
+        saveFamilyPhotoGroup(photo, sharedGroup);
+
+        FamilyPhotoPermissionService permissionService =
+                new FamilyPhotoPermissionService(
+                        familyPhotoGroupRepository
+                );
+
+        assertThat(permissionService.canDelete(photo, uploader)).isTrue();
+        assertThat(permissionService.canDelete(photo, primaryManager))
+                .isFalse();
+
+        familyMemberRepository.deleteByUserAndFamily(
+                uploader,
+                uploaderFamily
+        );
+        familyMemberRepository.flush();
+
+        assertThat(permissionService.canDelete(photo, primaryManager))
+                .isTrue();
+    }
+
     private Family saveFamily(String seniorCode) {
         return familyRepository.saveAndFlush(
                 Family.builder()
@@ -204,11 +301,19 @@ class FamilyPhotoRepositoryTest {
     }
 
     private void saveFamilyMember(User user, Family family) {
+        saveFamilyMember(user, family, ManagerType.SUB);
+    }
+
+    private void saveFamilyMember(
+            User user,
+            Family family,
+            ManagerType managerType
+    ) {
         familyMemberRepository.saveAndFlush(
                 FamilyMember.builder()
                         .user(user)
                         .family(family)
-                        .managerType(ManagerType.SUB)
+                        .managerType(managerType)
                         .build()
         );
     }
