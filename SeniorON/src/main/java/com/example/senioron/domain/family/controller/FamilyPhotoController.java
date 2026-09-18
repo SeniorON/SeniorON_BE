@@ -61,10 +61,12 @@ public class FamilyPhotoController {
         return Response.ok(familyPhotoService.completePhotoUpload(user, idempotencyKey.toString(), request));
     }
 
-    @Operation(summary = "가족 사진 목록 조회", description = "현재 사용자가 속한 가족의 사진을 최신순으로 조회합니다. " + "uploaderUserId를 전달하면 해당 자녀의 사진만 조회합니다.")
+    @Operation(summary = "가족 사진 목록 조회", description = "선택한 시니어의 Family와 연결된 사진 공유 그룹의 사진을 최신순으로 조회합니다. "
+            + "uploaderUserId를 전달하면 해당 자녀가 공유한 사진만 조회합니다.")
     @GetMapping
     public Response<FamilyPhotoListResponse> getPhotos(
             @AuthenticationPrincipal User user,
+            @RequestParam Long seniorId,
             @RequestParam(name = "uploaderUserId", required = false) Long uploaderUserId,
             @RequestParam(name = "cursorCreatedAt", required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime cursorCreatedAt,
@@ -72,7 +74,7 @@ public class FamilyPhotoController {
             @RequestParam(name = "size", defaultValue = "10") int size
     ) {
         return Response.ok(
-                familyPhotoService.getPhotos(user, uploaderUserId, cursorCreatedAt, cursorId, size)
+                familyPhotoService.getPhotos(user, seniorId, uploaderUserId, cursorCreatedAt, cursorId, size)
         );
     }
 
