@@ -39,6 +39,7 @@ import java.util.stream.StreamSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class FamilyServiceTest {
@@ -80,6 +81,87 @@ class FamilyServiceTest {
                 deviceService,
                 seniorRepository
         );
+    }
+
+    @Test
+    void getFamilyHomeReturnsDefaultPhotoGroupId() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .build();
+        User currentUser = User.builder()
+                .usersId(1L)
+                .name("자녀")
+                .role(Role.CHILD)
+                .build();
+        Senior senior = Senior.builder()
+                .seniorId(10L)
+                .family(family)
+                .build();
+        PhotoGroup defaultPhotoGroup = PhotoGroup.builder()
+                .id(100L)
+                .name("Family 1")
+                .build();
+        PhotoGroupFamily defaultGroupLink = PhotoGroupFamily.builder()
+                .family(family)
+                .photoGroup(defaultPhotoGroup)
+                .build();
+
+        given(userRepository.findById(1L))
+                .willReturn(Optional.of(currentUser));
+        given(seniorRepository.findById(10L))
+                .willReturn(Optional.of(senior));
+        given(familyMemberRepository.existsByUserAndFamily(currentUser, family))
+                .willReturn(true);
+        given(photoGroupFamilyRepository.findFirstByFamilyOrderByIdAsc(family))
+                .willReturn(Optional.of(defaultGroupLink));
+        given(familyMemberRepository.findAllByFamilyOrderByIdAsc(family))
+                .willReturn(List.of());
+        given(familyPhotoRepository.findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
+                family,
+                PageRequest.of(0, 4)
+        )).willReturn(List.of());
+        given(familyPhotoRepository.findRecentUploaders(
+                family,
+                PageRequest.of(0, 3)
+        )).willReturn(List.of());
+
+        var response = familyService.getFamilyHome(currentUser, 10L);
+
+        assertThat(response.getPhotoGroupId()).isEqualTo(100L);
+    }
+
+    @Test
+    void getFamilyHomeRejectsFamilyWithoutDefaultPhotoGroup() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .build();
+        User currentUser = User.builder()
+                .usersId(1L)
+                .name("자녀")
+                .role(Role.CHILD)
+                .build();
+        Senior senior = Senior.builder()
+                .seniorId(10L)
+                .family(family)
+                .build();
+
+        given(userRepository.findById(1L))
+                .willReturn(Optional.of(currentUser));
+        given(seniorRepository.findById(10L))
+                .willReturn(Optional.of(senior));
+        given(familyMemberRepository.existsByUserAndFamily(currentUser, family))
+                .willReturn(true);
+        given(photoGroupFamilyRepository.findFirstByFamilyOrderByIdAsc(family))
+                .willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> familyService.getFamilyHome(currentUser, 10L))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.PHOTO_GROUP_NOT_FOUND);
+
+        verify(familyMemberRepository, never())
+                .findAllByFamilyOrderByIdAsc(family);
     }
 
     @Test
@@ -736,6 +818,54 @@ class FamilyServiceTest {
                 .family(family)
                 .managerType(managerType)
                 .build();
+    }
+
+    @Test
+    void removeFamilyMemberRejectsSeniorParentUser() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .build();
+        User currentUser = createUser(1L, "주 담당자");
+        User seniorParentUser = User.builder()
+                .usersId(2L)
+                .name("시니어 본인")
+                .role(Role.PARENT)
+                .build();
+        Senior senior = Senior.builder()
+                .seniorId(10L)
+                .family(family)
+                .parentUser(seniorParentUser)
+                .build();
+        FamilyMember primaryMember = createMember(
+                1L,
+                currentUser,
+                family,
+                ManagerType.PRIMARY
+        );
+
+        given(userRepository.findByIdForUpdate(1L))
+                .willReturn(Optional.of(currentUser));
+        given(seniorRepository.findById(10L))
+                .willReturn(Optional.of(senior));
+        given(familyMemberRepository.existsByUserAndFamily(currentUser, family))
+                .willReturn(true);
+        given(familyMemberRepository.findByUserAndFamilyForUpdate(currentUser, family))
+                .willReturn(Optional.of(primaryMember));
+        given(userRepository.findByIdForUpdate(2L))
+                .willReturn(Optional.of(seniorParentUser));
+        given(familyMemberRepository.existsByUserAndFamily(seniorParentUser, family))
+                .willReturn(true);
+
+        assertThatThrownBy(() ->
+                familyService.removeFamilyMember(currentUser, 10L, 2L)
+        )
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.CANNOT_REMOVE_SENIOR_PARENT);
+
+        verify(familyMemberRepository, never())
+                .deleteByUserAndFamily(seniorParentUser, family);
     }
 
     @Test
