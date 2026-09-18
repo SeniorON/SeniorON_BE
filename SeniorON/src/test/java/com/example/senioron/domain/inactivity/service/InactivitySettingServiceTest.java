@@ -11,6 +11,8 @@ import com.example.senioron.domain.inactivity.repository.InactivitySettingReposi
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import java.util.Optional;
@@ -24,9 +26,12 @@ class InactivitySettingServiceTest {
     private final InactivitySettingRepository inactivitySettingRepository =
             org.mockito.Mockito.mock(InactivitySettingRepository.class);
     private final UserRepository userRepository = org.mockito.Mockito.mock(UserRepository.class);
+    private final SeniorRepository seniorRepository = org.mockito.Mockito.mock(SeniorRepository.class);
+    private final FamilyMemberRepository familyMemberRepository = org.mockito.Mockito.mock(FamilyMemberRepository.class);
 
     private final InactivitySettingService service =
-            new InactivitySettingService(inactivitySettingRepository, userRepository);
+            new InactivitySettingService(inactivitySettingRepository, userRepository,
+                    seniorRepository, familyMemberRepository);
 
     // 부모(시니어) 기기가 자신의 임계 시간을 폴링으로 조회할 수 있어야 한다.
     @Test
@@ -43,7 +48,7 @@ class InactivitySettingServiceTest {
         assertThat(response.getIsEnabled()).isTrue();
     }
 
-    // 자녀 계정은 이 self-조회 API를 쓸 수 없어야 한다 (자녀는 targetUserId로 조회하는 별도 API를 쓴다).
+    // 자녀 계정은 self-조회 대신 seniorId 기반 조회 API를 사용한다.
     @Test
     void childCannotUseSelfLookup() {
         User child = User.builder().usersId(CHILD_ID).role(Role.CHILD).build();
