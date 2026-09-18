@@ -366,6 +366,130 @@ class FamilyServiceTest {
     }
 
     @Test
+    void disconnectPhotoGroupDeactivatesGroupAndKeepsFamilyLinks() {
+        Family currentFamily = Family.builder()
+                .familyId(1L)
+                .build();
+        Family targetFamily = Family.builder()
+                .familyId(2L)
+                .build();
+        User currentUser = createUser(1L, "주 담당자");
+        Senior currentSenior = Senior.builder()
+                .seniorId(10L)
+                .family(currentFamily)
+                .build();
+        FamilyMember primaryMember = createMember(
+                1L,
+                currentUser,
+                currentFamily,
+                ManagerType.PRIMARY
+        );
+        PhotoGroup photoGroup = PhotoGroup.builder()
+                .id(100L)
+                .name("Shared Family 1-2")
+                .build();
+        List<PhotoGroupFamily> groupLinks = List.of(
+                PhotoGroupFamily.builder()
+                        .family(currentFamily)
+                        .photoGroup(photoGroup)
+                        .build(),
+                PhotoGroupFamily.builder()
+                        .family(targetFamily)
+                        .photoGroup(photoGroup)
+                        .build()
+        );
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
+        given(seniorRepository.findById(10L)).willReturn(Optional.of(currentSenior));
+        given(familyMemberRepository.existsByUserAndFamily(currentUser, currentFamily))
+                .willReturn(true);
+        given(familyMemberRepository.findByUserAndFamilyForUpdate(currentUser, currentFamily))
+                .willReturn(Optional.of(primaryMember));
+        given(photoGroupFamilyRepository.findAllSharedLinks(currentFamily, 100L))
+                .willReturn(groupLinks);
+
+        familyService.disconnectPhotoGroup(currentUser, 10L, 100L);
+
+        assertThat(photoGroup.isActive()).isFalse();
+        assertThat(photoGroup.getDisconnectedAt()).isNotNull();
+        verify(photoGroupFamilyRepository, never()).deleteAllInBatch(any());
+    }
+
+    @Test
+    void disconnectPhotoGroupRejectsNonPrimaryMember() {
+        Family currentFamily = Family.builder()
+                .familyId(1L)
+                .build();
+        User currentUser = createUser(1L, "부 담당자");
+        Senior currentSenior = Senior.builder()
+                .seniorId(10L)
+                .family(currentFamily)
+                .build();
+        FamilyMember subMember = createMember(
+                1L,
+                currentUser,
+                currentFamily,
+                ManagerType.SUB
+        );
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
+        given(seniorRepository.findById(10L)).willReturn(Optional.of(currentSenior));
+        given(familyMemberRepository.existsByUserAndFamily(currentUser, currentFamily))
+                .willReturn(true);
+        given(familyMemberRepository.findByUserAndFamilyForUpdate(currentUser, currentFamily))
+                .willReturn(Optional.of(subMember));
+
+        assertThatThrownBy(() ->
+                familyService.disconnectPhotoGroup(currentUser, 10L, 100L)
+        )
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.PHOTO_GROUP_CONNECTION_FORBIDDEN);
+
+        verify(photoGroupFamilyRepository, never())
+                .findAllSharedLinks(currentFamily, 100L);
+        verify(photoGroupFamilyRepository, never()).deleteAllInBatch(any());
+    }
+
+    @Test
+    void disconnectPhotoGroupRejectsUnknownConnection() {
+        Family currentFamily = Family.builder()
+                .familyId(1L)
+                .build();
+        User currentUser = createUser(1L, "주 담당자");
+        Senior currentSenior = Senior.builder()
+                .seniorId(10L)
+                .family(currentFamily)
+                .build();
+        FamilyMember primaryMember = createMember(
+                1L,
+                currentUser,
+                currentFamily,
+                ManagerType.PRIMARY
+        );
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
+        given(seniorRepository.findById(10L)).willReturn(Optional.of(currentSenior));
+        given(familyMemberRepository.existsByUserAndFamily(currentUser, currentFamily))
+                .willReturn(true);
+        given(familyMemberRepository.findByUserAndFamilyForUpdate(currentUser, currentFamily))
+                .willReturn(Optional.of(primaryMember));
+        given(photoGroupFamilyRepository.findAllSharedLinks(currentFamily, 100L))
+                .willReturn(List.of());
+
+        assertThatThrownBy(() ->
+                familyService.disconnectPhotoGroup(currentUser, 10L, 100L)
+        )
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.PHOTO_GROUP_CONNECTION_NOT_FOUND);
+
+        verify(photoGroupFamilyRepository, never()).deleteAllInBatch(any());
+    }
+
+    @Test
     void getConnectedSeniorsReturnsDirectConnectionWithPhotoGroupId() {
         Family currentFamily = Family.builder()
                 .familyId(1L)

@@ -97,6 +97,18 @@ public class FamilyController {
         return Response.ok();
     }
 
+    @Operation(summary = "사진 공유 시니어 연결 해제", description = "현재 선택한 시니어 가족의 주 담당자가 연결된 사진 공유 관계를 해제합니다.")
+    @DeleteMapping("/photo-groups/connections/{photoGroupId}")
+    public Response<Void> disconnectPhotoGroup(
+            @AuthenticationPrincipal User user,
+            @RequestParam Long seniorId,
+            @PathVariable Long photoGroupId
+    ) {
+        familyService.disconnectPhotoGroup(user, seniorId, photoGroupId);
+
+        return Response.ok();
+    }
+
     @Operation(summary = "연결된 시니어 조회", description = "선택한 시니어 가족과 사진 공유 그룹으로 직접 연결된 시니어 목록을 조회합니다.")
     @GetMapping("/photo-groups/connections")
     public Response<List<ConnectedSeniorResponse>> getConnectedSeniors(

@@ -80,6 +80,38 @@ class FamilyPhotoRepositoryTest {
     }
 
     @Test
+    void keepsPreviouslySharedPhotoAccessibleAfterGroupIsDisconnected() {
+        Family currentFamily = saveFamily("CURRENT-OLD");
+        Family connectedFamily = saveFamily("CONNECTED-OLD");
+        User currentUser = saveUser("current-old-user");
+        User uploader = saveUser("old-photo-uploader");
+        saveFamilyMember(currentUser, currentFamily);
+        saveFamilyMember(uploader, connectedFamily);
+
+        PhotoGroup sharedGroup = savePhotoGroup("disconnected-shared-group");
+        savePhotoGroupFamily(currentFamily, sharedGroup);
+        savePhotoGroupFamily(connectedFamily, sharedGroup);
+        FamilyPhoto photo = savePhoto(
+                sharedGroup,
+                uploader,
+                "previously-shared-photo.jpg"
+        );
+        saveFamilyPhotoGroup(photo, sharedGroup);
+
+        sharedGroup.disconnect();
+        photoGroupRepository.saveAndFlush(sharedGroup);
+
+        assertThat(familyPhotoRepository.findAccessibleByFamilyPhotoIdAndUser(
+                photo.getFamilyPhotoId(),
+                currentUser
+        )).contains(photo);
+        assertThat(familyPhotoRepository.findAllAccessibleByFamily(
+                currentFamily,
+                PageRequest.of(0, 10)
+        )).containsExactly(photo);
+    }
+
+    @Test
     void doesNotFindPhotoWhenNoUserFamilyIsConnectedToPhotoGroup() {
         Family userFamily = saveFamily("USER-001");
         Family otherFamily = saveFamily("OTHER-001");
