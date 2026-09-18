@@ -38,9 +38,9 @@ services:
     env_file:
       - .env
 
-    mem_limit: 1024m
+    mem_limit: 768m
     environment:
-      JAVA_TOOL_OPTIONS: "-Djava.net.preferIPv4Stack=true -Xms384m -Xmx512m -XX:+UseG1GC"
+      JAVA_TOOL_OPTIONS: "-Djava.net.preferIPv4Stack=true -Xms256m -Xmx384m -XX:+UseG1GC"
       SPRING_PROFILES_ACTIVE: prod
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
@@ -61,8 +61,8 @@ services:
         ]
       interval: 5s
       timeout: 5s
-      retries: 20
-      start_period: 90s
+      retries: 30
+      start_period: 60s
 
     restart: unless-stopped
 
@@ -75,9 +75,9 @@ services:
     env_file:
       - .env
 
-    mem_limit: 1024m
+    mem_limit: 768m
     environment:
-      JAVA_TOOL_OPTIONS: "-Djava.net.preferIPv4Stack=true -Xms384m -Xmx512m -XX:+UseG1GC"
+      JAVA_TOOL_OPTIONS: "-Djava.net.preferIPv4Stack=true -Xms256m -Xmx384m -XX:+UseG1GC"
       SPRING_PROFILES_ACTIVE: prod
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
@@ -99,8 +99,8 @@ services:
 
       interval: 5s
       timeout: 5s
-      retries: 20
-      start_period: 90s
+      retries: 30
+      start_period: 60s
 
     restart: unless-stopped
 
