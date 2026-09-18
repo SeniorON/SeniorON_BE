@@ -25,6 +25,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
 
@@ -66,7 +67,7 @@ class InactivitySettingControllerIntegrationTest {
         Family familyB = family("B");
         member(child, familyA, ManagerType.PRIMARY);
         member(parentA, familyA, ManagerType.NONE);
-        member(child, familyB, ManagerType.NONE);
+        member(child, familyB, ManagerType.SUB);
         member(parentB, familyB, ManagerType.NONE);
         seniorA = senior(familyA, parentA);
         seniorB = senior(familyB, parentB);
@@ -80,6 +81,10 @@ class InactivitySettingControllerIntegrationTest {
 
     @Test
     void childCanReadAndUpdateSecondFamilyWithoutChangingFirstParent() throws Exception {
+        User persistedChild = users.findById(child.getUsersId()).orElseThrow();
+        assertThat(ReflectionTestUtils.getField(persistedChild, "family")).isNull();
+        assertThat(persistedChild.getFamily().getFamilyId()).isEqualTo(seniorA.getFamily().getFamilyId());
+        assertThat(parentB.getUsersId()).isNotEqualTo(seniorB.getSeniorId());
         mvc.perform(get(path(seniorB)).header("Authorization", childAuth))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.usersId").value(parentB.getUsersId().intValue()))
@@ -96,14 +101,24 @@ class InactivitySettingControllerIntegrationTest {
         assertThat(settings.findById(parentB.getUsersId()).orElseThrow().getThresholdHours()).isEqualTo(9);
         mvc.perform(get(path(seniorA)).header("Authorization", childAuth))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.thresholdHours").value(6));
+        mvc.perform(patch(path(seniorA)).header("Authorization", childAuth)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"thresholdHours\":1}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.thresholdHours").value(1));
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(settings.findById(parentA.getUsersId()).orElseThrow().getThresholdHours()).isEqualTo(1);
+        assertThat(settings.findById(parentB.getUsersId()).orElseThrow().getThresholdHours()).isEqualTo(9);
     }
 
     @Test
     void unrelatedChildCannotReadOrUpdateSettings() throws Exception {
-        String outsiderAuth = auth(user("outsider", Role.CHILD));
+        User outsider = user("outsider", Role.CHILD);
+        member(outsider, families.findById(seniorA.getFamily().getFamilyId()).orElseThrow(), ManagerType.PRIMARY);
+        entityManager.flush();
+        String outsiderAuth = auth(outsider);
         mvc.perform(get(path(seniorB)).header("Authorization", outsiderAuth))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value(ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED.getCode()));
+                .andExpect(jsonPath("$.code").value(ErrorCode.FORBIDDEN.getCode()));
         mvc.perform(patch(path(seniorB)).header("Authorization", outsiderAuth)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"thresholdHours\":9}"))
                 .andExpect(status().isForbidden());
@@ -111,25 +126,75 @@ class InactivitySettingControllerIntegrationTest {
     }
 
     @Test
-    void missingSeniorReturnsNotFound() throws Exception {
-        mvc.perform(get("/api/inactivity-settings/{seniorId}", Long.MAX_VALUE)
-                        .header("Authorization", childAuth))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value(ErrorCode.SENIOR_NOT_FOUND.getCode()));
+    void removedMemberCannotAccessEvenWithStaleLegacyFamily() throws Exception {
+        mvc.perform(get(path(seniorB)).header("Authorization", childAuth)).andExpect(status().isOk());
+        User persistedChild = users.findById(child.getUsersId()).orElseThrow();
+        Family targetFamily = families.findById(seniorB.getFamily().getFamilyId()).orElseThrow();
+        members.deleteByUserAndFamily(persistedChild, targetFamily);
+        entityManager.flush();
+        entityManager.clear();
+        // 탈퇴 후에도 레거시 캐시에 같은 가족이 남아 있어도 실제 멤버십을 우선한다.
+        users.findById(child.getUsersId()).orElseThrow().updateFamily(targetFamily);
+        mvc.perform(get(path(seniorB)).header("Authorization", childAuth))
+                .andExpect(status().isForbidden());
+        mvc.perform(patch(path(seniorB)).header("Authorization", childAuth)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"thresholdHours\":9}"))
+                .andExpect(status().isForbidden());
+        assertThat(settings.findById(parentB.getUsersId()).orElseThrow().getThresholdHours()).isEqualTo(10);
     }
 
     @Test
-    void authorizedChildGetsExplicitErrorForUnlinkedParent() throws Exception {
+    void noneMemberKeepsExistingAccessAndParentLegacyFamilyIsNotRequired() throws Exception {
+        User anotherChild = user("none-child", Role.CHILD);
+        Family targetFamily = families.findById(seniorB.getFamily().getFamilyId()).orElseThrow();
+        member(anotherChild, targetFamily, ManagerType.NONE);
+        members.deleteByUserAndFamily(users.findById(parentB.getUsersId()).orElseThrow(), targetFamily);
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(users.findById(parentB.getUsersId()).orElseThrow().getFamily()).isNull();
+        String auth = auth(anotherChild);
+        mvc.perform(get(path(seniorB)).header("Authorization", auth)).andExpect(status().isOk());
+        mvc.perform(patch(path(seniorB)).header("Authorization", auth)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"thresholdHours\":24}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.thresholdHours").value(24));
+    }
+
+    @Test
+    void childTargetCannotBeReadOrUpdated() throws Exception {
+        String targetPath = "/api/inactivity-settings/" + child.getUsersId();
+        mvc.perform(get(targetPath).header("Authorization", childAuth))
+                .andExpect(status().isForbidden());
+        mvc.perform(patch(targetPath).header("Authorization", childAuth)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"thresholdHours\":8}"))
+                .andExpect(status().isForbidden());
+        assertThat(settings.findById(child.getUsersId())).isEmpty();
+    }
+
+    @Test
+    void missingTargetUserReturnsNotFound() throws Exception {
+        mvc.perform(get("/api/inactivity-settings/{targetUserId}", Long.MAX_VALUE)
+                        .header("Authorization", childAuth))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(ErrorCode.USER_NOT_FOUND.getCode()));
+    }
+
+    @Test
+    void parentWithoutLinkedSeniorReturnsExplicitError() throws Exception {
         Family unlinkedFamily = family("unlinked");
         member(child, unlinkedFamily, ManagerType.SUB);
-        Senior unlinkedSenior = senior(unlinkedFamily, null);
+        User unlinkedParent = user("unlinked-parent", Role.PARENT);
+        member(unlinkedParent, unlinkedFamily, ManagerType.NONE);
+        senior(unlinkedFamily, null);
         entityManager.flush();
-        mvc.perform(get(path(unlinkedSenior)).header("Authorization", childAuth))
+        String targetPath = "/api/inactivity-settings/" + unlinkedParent.getUsersId();
+        mvc.perform(get(targetPath).header("Authorization", childAuth))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value(ErrorCode.SENIOR_PARENT_USER_NOT_FOUND.getCode()));
-        mvc.perform(patch(path(unlinkedSenior)).header("Authorization", childAuth)
+                .andExpect(jsonPath("$.code").value(ErrorCode.SENIOR_NOT_FOUND.getCode()));
+        mvc.perform(patch(targetPath).header("Authorization", childAuth)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"thresholdHours\":8}"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(ErrorCode.SENIOR_NOT_FOUND.getCode()));
+        assertThat(settings.findById(unlinkedParent.getUsersId())).isEmpty();
     }
 
     @Test
@@ -147,29 +212,29 @@ class InactivitySettingControllerIntegrationTest {
     }
 
     @Test
-    void lookupCreatesDefaultUsingSame24HoursAsSignup() throws Exception {
+    void lookupPreservesExistingFourHourLazyDefault() throws Exception {
         settings.deleteById(parentB.getUsersId());
         entityManager.flush();
         entityManager.clear();
         mvc.perform(get(path(seniorB)).header("Authorization", childAuth))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.thresholdHours").value(24))
+                .andExpect(jsonPath("$.data.thresholdHours").value(4))
                 .andExpect(jsonPath("$.data.isEnabled").value(true));
         entityManager.flush();
         entityManager.clear();
-        assertThat(settings.findById(parentB.getUsersId()).orElseThrow().getThresholdHours()).isEqualTo(24);
+        assertThat(settings.findById(parentB.getUsersId()).orElseThrow().getThresholdHours()).isEqualTo(4);
         assertThat(settings.findById(parentA.getUsersId()).orElseThrow().getThresholdHours()).isEqualTo(6);
     }
 
     @Test
-    void parentSelfLookupCreatesSame24HourDefault() throws Exception {
+    void parentSelfLookupPreservesFourHourLazyDefault() throws Exception {
         settings.deleteById(parentB.getUsersId());
         entityManager.flush();
         entityManager.clear();
         mvc.perform(get("/api/inactivity-settings/me").header("Authorization", auth(parentB)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.usersId").value(parentB.getUsersId().intValue()))
-                .andExpect(jsonPath("$.data.thresholdHours").value(24));
+                .andExpect(jsonPath("$.data.thresholdHours").value(4));
     }
 
     @Test
@@ -222,6 +287,6 @@ class InactivitySettingControllerIntegrationTest {
     }
 
     private String path(Senior senior) {
-        return "/api/inactivity-settings/" + senior.getSeniorId();
+        return "/api/inactivity-settings/" + senior.getParentUser().getUsersId();
     }
 }
