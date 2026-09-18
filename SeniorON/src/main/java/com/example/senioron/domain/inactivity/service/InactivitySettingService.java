@@ -40,6 +40,8 @@ public class InactivitySettingService {
         try {
             InactivitySetting setting = InactivitySetting.builder()
                     .user(targetUser)
+                    .isEnabled(true)
+                    .thresholdHours(4)
                     .build();
             return inactivitySettingRepository.saveAndFlush(setting);
         } catch (DataIntegrityViolationException e) {
@@ -50,8 +52,8 @@ public class InactivitySettingService {
     }
 
     @Transactional
-    public InactivitySettingResponse getSetting(User principal, Long seniorId) {
-        User targetUser = resolveSeniorParent(principal, seniorId);
+    public InactivitySettingResponse getSetting(User principal, Long targetUserId) {
+        User targetUser = resolveTargetUser(principal, targetUserId);
 
         InactivitySetting setting = inactivitySettingRepository.findById(targetUser.getUsersId())
                 .orElseGet(() -> createDefaultInternal(targetUser));   // 없으면 즉석에서 생성
@@ -72,8 +74,8 @@ public class InactivitySettingService {
     }
 
     // 가족 구성원(대상자)의 무활동 감지 설정 수정
-    public InactivitySettingResponse updateSetting(User principal, Long seniorId, InactivitySettingRequest request) {
-        User targetUser = resolveSeniorParent(principal, seniorId);
+    public InactivitySettingResponse updateSetting(User principal, Long targetUserId, InactivitySettingRequest request) {
+        User targetUser = resolveTargetUser(principal, targetUserId);
 
         InactivitySetting setting = inactivitySettingRepository.findById(targetUser.getUsersId())
                 .orElseGet(() -> createDefaultInternal(targetUser));
@@ -82,24 +84,25 @@ public class InactivitySettingService {
         return InactivitySettingResponse.from(setting);
     }
 
-    // 선택한 Senior의 가족 멤버십으로 접근 권한을 검증한다.
-    private User resolveSeniorParent(User principal, Long seniorId) {
+    // 경로 ID는 부모 usersId이며, 해당 부모와 연결된 Senior의 가족 멤버십으로 검증한다.
+    private User resolveTargetUser(User principal, Long targetUserId) {
         User currentUser = resolveCurrentUser(principal);
         if (currentUser.getRole() != Role.CHILD) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
 
-        Senior senior = seniorRepository.findById(seniorId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.SENIOR_NOT_FOUND));
-        if (senior.getFamily() == null
-                || !familyMemberRepository.existsByUserAndFamily(currentUser, senior.getFamily())) {
-            throw new BusinessException(ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED);
-        }
-        User targetUser = senior.getParentUser();
-        if (targetUser == null) {
-            throw new BusinessException(ErrorCode.SENIOR_PARENT_USER_NOT_FOUND);
-        }
+        User targetUser = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         if (targetUser.getRole() != Role.PARENT) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+
+        Senior senior = seniorRepository.findByParentUser(targetUser)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SENIOR_NOT_FOUND));
+        if (senior.getFamily() == null) {
+            throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
+        }
+        if (!familyMemberRepository.existsByUserAndFamily(currentUser, senior.getFamily())) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
 
