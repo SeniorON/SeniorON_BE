@@ -441,15 +441,13 @@ public class FamilyPhotoService {
         }
     }
 
-    private User findFamilyChildUploader(
-            Long uploaderUserId,
-            Family family
+    private User findChildUploader(
+            Long uploaderUserId
     ) {
         User uploader = userRepository.findById(uploaderUserId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_MEMBER_NOT_FOUND));
 
-        if (!familyMemberRepository.existsByUserAndFamily(uploader, family)
-                || uploader.getRole() != Role.CHILD) {
+        if (uploader.getRole() != Role.CHILD) {
             throw new BusinessException(ErrorCode.FAMILY_MEMBER_NOT_FOUND);
         }
 
@@ -487,6 +485,7 @@ public class FamilyPhotoService {
     @Transactional(readOnly = true)
     public FamilyPhotoListResponse getPhotos(
             User principal,
+            Long seniorId,
             Long uploaderUserId,
             LocalDateTime cursorCreatedAt,
             Long cursorId,
@@ -513,13 +512,10 @@ public class FamilyPhotoService {
                         )
                 );
 
-        Family family = currentUser.getFamily();
-
-        if (family == null) {
-            throw new BusinessException(
-                    ErrorCode.FAMILY_NOT_FOUND
-            );
-        }
+        Family family = resolveAccessibleFamily(
+                currentUser,
+                seniorId
+        );
 
         /*
          * uploaderUserId를 사용한 자녀 앨범 조회는
@@ -532,9 +528,8 @@ public class FamilyPhotoService {
 
         User uploader = uploaderUserId == null
                 ? null
-                : findFamilyChildUploader(
-                uploaderUserId,
-                family
+                : findChildUploader(
+                uploaderUserId
         );
 
         Pageable pageable = PageRequest.of(0, size + 1);
@@ -544,13 +539,13 @@ public class FamilyPhotoService {
         if (uploader == null) {
             if (cursorCreatedAt == null) {
                 fetchedPhotos = familyPhotoRepository
-                        .findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
+                        .findAllAccessibleByFamily(
                                 family,
                                 pageable
                         );
             } else {
-                fetchedPhotos =
-                        familyPhotoRepository.findNextPageByCursor(
+                fetchedPhotos = familyPhotoRepository
+                        .findNextAccessiblePageByFamily(
                                 family,
                                 cursorCreatedAt,
                                 cursorId,
@@ -560,14 +555,14 @@ public class FamilyPhotoService {
         } else {
             if (cursorCreatedAt == null) {
                 fetchedPhotos = familyPhotoRepository
-                        .findByFamilyAndUserOrderByCreatedAtDescFamilyPhotoIdDesc(
+                        .findAllAccessibleByFamilyAndUploader(
                                 family,
                                 uploader,
                                 pageable
                         );
             } else {
                 fetchedPhotos = familyPhotoRepository
-                        .findNextPageByUploaderAndCursor(
+                        .findNextAccessiblePageByFamilyAndUploader(
                                 family,
                                 uploader,
                                 cursorCreatedAt,
@@ -610,8 +605,8 @@ public class FamilyPhotoService {
                         .toList();
 
         long totalCount = uploader == null
-                ? familyPhotoRepository.countByFamily(family)
-                : familyPhotoRepository.countByFamilyAndUser(
+                ? familyPhotoRepository.countAccessibleByFamily(family)
+                : familyPhotoRepository.countAccessibleByFamilyAndUploader(
                 family,
                 uploader
         );

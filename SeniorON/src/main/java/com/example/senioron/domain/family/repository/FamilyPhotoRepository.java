@@ -289,4 +289,154 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
             @Param("familyPhotoId") Long familyPhotoId,
             @Param("user") User user
     );
+
+    @EntityGraph(attributePaths = {"user", "photoGroup"})
+    @Query("""
+        SELECT fp
+        FROM FamilyPhoto fp
+        WHERE EXISTS (
+            SELECT fpg.id
+            FROM FamilyPhotoGroup fpg
+            WHERE fpg.familyPhoto = fp
+              AND EXISTS (
+                  SELECT pgf.id
+                  FROM PhotoGroupFamily pgf
+                  WHERE pgf.photoGroup = fpg.photoGroup
+                    AND pgf.family = :family
+              )
+        )
+        ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
+        """)
+    List<FamilyPhoto> findAllAccessibleByFamily(
+            @Param("family") Family family,
+            Pageable pageable
+    );
+
+    @EntityGraph(attributePaths = {"user", "photoGroup"})
+    @Query("""
+        SELECT fp
+        FROM FamilyPhoto fp
+        WHERE EXISTS (
+            SELECT fpg.id
+            FROM FamilyPhotoGroup fpg
+            WHERE fpg.familyPhoto = fp
+              AND EXISTS (
+                  SELECT pgf.id
+                  FROM PhotoGroupFamily pgf
+                  WHERE pgf.photoGroup = fpg.photoGroup
+                    AND pgf.family = :family
+              )
+        )
+          AND (
+              fp.createdAt < :cursorCreatedAt
+              OR (
+                  fp.createdAt = :cursorCreatedAt
+                  AND fp.familyPhotoId < :cursorId
+              )
+          )
+        ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
+        """)
+    List<FamilyPhoto> findNextAccessiblePageByFamily(
+            @Param("family") Family family,
+            @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
+            @Param("cursorId") Long cursorId,
+            Pageable pageable
+    );
+
+    @EntityGraph(attributePaths = {"user", "photoGroup"})
+    @Query("""
+        SELECT fp
+        FROM FamilyPhoto fp
+        WHERE fp.user = :uploader
+          AND EXISTS (
+              SELECT fpg.id
+              FROM FamilyPhotoGroup fpg
+              WHERE fpg.familyPhoto = fp
+                AND EXISTS (
+                    SELECT pgf.id
+                    FROM PhotoGroupFamily pgf
+                    WHERE pgf.photoGroup = fpg.photoGroup
+                      AND pgf.family = :family
+                )
+          )
+        ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
+        """)
+    List<FamilyPhoto> findAllAccessibleByFamilyAndUploader(
+            @Param("family") Family family,
+            @Param("uploader") User uploader,
+            Pageable pageable
+    );
+
+    @EntityGraph(attributePaths = {"user", "photoGroup"})
+    @Query("""
+        SELECT fp
+        FROM FamilyPhoto fp
+        WHERE fp.user = :uploader
+          AND EXISTS (
+              SELECT fpg.id
+              FROM FamilyPhotoGroup fpg
+              WHERE fpg.familyPhoto = fp
+                AND EXISTS (
+                    SELECT pgf.id
+                    FROM PhotoGroupFamily pgf
+                    WHERE pgf.photoGroup = fpg.photoGroup
+                      AND pgf.family = :family
+                )
+          )
+          AND (
+              fp.createdAt < :cursorCreatedAt
+              OR (
+                  fp.createdAt = :cursorCreatedAt
+                  AND fp.familyPhotoId < :cursorId
+              )
+          )
+        ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
+        """)
+    List<FamilyPhoto> findNextAccessiblePageByFamilyAndUploader(
+            @Param("family") Family family,
+            @Param("uploader") User uploader,
+            @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
+            @Param("cursorId") Long cursorId,
+            Pageable pageable
+    );
+
+    @Query("""
+        SELECT COUNT(fp)
+        FROM FamilyPhoto fp
+        WHERE EXISTS (
+            SELECT fpg.id
+            FROM FamilyPhotoGroup fpg
+            WHERE fpg.familyPhoto = fp
+              AND EXISTS (
+                  SELECT pgf.id
+                  FROM PhotoGroupFamily pgf
+                  WHERE pgf.photoGroup = fpg.photoGroup
+                    AND pgf.family = :family
+              )
+        )
+        """)
+    long countAccessibleByFamily(
+            @Param("family") Family family
+    );
+
+    @Query("""
+        SELECT COUNT(fp)
+        FROM FamilyPhoto fp
+        WHERE fp.user = :uploader
+          AND EXISTS (
+              SELECT fpg.id
+              FROM FamilyPhotoGroup fpg
+              WHERE fpg.familyPhoto = fp
+                AND EXISTS (
+                    SELECT pgf.id
+                    FROM PhotoGroupFamily pgf
+                    WHERE pgf.photoGroup = fpg.photoGroup
+                      AND pgf.family = :family
+                )
+          )
+        """)
+    long countAccessibleByFamilyAndUploader(
+            @Param("family") Family family,
+            @Param("uploader") User uploader
+    );
 }
