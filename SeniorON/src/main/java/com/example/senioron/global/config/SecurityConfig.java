@@ -44,6 +44,8 @@ public class SecurityConfig {
                 )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        // 브라우저는 STOMP CONNECT의 Authorization 헤더로 인증한다.
+                        .requestMatchers(HttpMethod.GET, "/ws").permitAll()
                         .requestMatchers(
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",
