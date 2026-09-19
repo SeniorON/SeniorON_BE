@@ -258,6 +258,60 @@ class NotificationServiceTest {
     }
 
     @Test
+    void outingReturnIsDisabledAndNotDispatchedUntilHomeLocationIsRegistered() {
+        given(familyMemberRepository.findAllBySeniorIdAndUserRole(SENIOR_ID, Role.CHILD))
+                .willReturn(List.of(familyMember(child, ManagerType.PRIMARY)));
+
+        var home = notificationService.getHomeSettings(CHILD_ID, SENIOR_ID);
+        var outing = home.getItems().stream()
+                .filter(item -> item.getType() == NotificationType.OUTING_RETURN)
+                .findFirst().orElseThrow();
+        assertThat(outing.isEnabled()).isFalse();
+        assertThat(home.getEnabledCount()).isEqualTo(3);
+
+        Event event = Event.builder().eventId(200L).triggeredUser(parent).user(parent)
+                .senior(senior).eventType(EventType.OUTING_RETURN).build();
+        var result = notificationService.createFormEvent(event);
+        assertThat(result.notificationStatus()).isEqualTo(
+                com.example.senioron.domain.notification.dto.NotificationPreparationResult.Status.NOT_DISPATCHED);
+        assertThat(result.reason()).isEqualTo("HOME_LOCATION_NOT_REGISTERED");
+        verify(notificationRepository, org.mockito.Mockito.never()).saveAll(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void outingReturnCanOnlyBeEnabledAfterHomeLocationRegistration() {
+        assertThatThrownBy(() -> notificationService.updateSetting(
+                CHILD_ID, SENIOR_ID, NotificationSettingType.OUTING_RETURN, true
+        ))
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_HOME_LOCATION_NOT_FOUND);
+        org.mockito.Mockito.verifyNoInteractions(deviceRepository);
+
+        senior = Senior.builder().seniorId(SENIOR_ID).family(family).registeredBy(child)
+                .parentUser(parent).latitude(37.5665).longitude(126.9780).build();
+        given(seniorRepository.findById(SENIOR_ID)).willReturn(Optional.of(senior));
+        given(deviceRepository.findAllByUserIn(List.of(parent))).willReturn(List.of(
+                Device.builder().connectionStatus(DeviceStatus.ONLINE).build()));
+
+        var response = notificationService.updateSetting(
+                CHILD_ID, SENIOR_ID, NotificationSettingType.OUTING_RETURN, true);
+        assertThat(response.getEnabled()).isTrue();
+        assertThat(notificationService.isEnabled(senior, NotificationType.OUTING_RETURN)).isTrue();
+    }
+
+    @Test
+    void outingReturnCanBeTurnedOffWithoutHomeLocation() {
+        given(deviceRepository.findAllByUserIn(List.of(parent))).willReturn(List.of(
+                Device.builder().connectionStatus(DeviceStatus.ONLINE).build()));
+
+        var response = notificationService.updateSetting(
+                CHILD_ID, SENIOR_ID, NotificationSettingType.OUTING_RETURN, false);
+
+        assertThat(response.getEnabled()).isFalse();
+    }
+
+    @Test
     void updateSettingRejectsSeniorFromDifferentFamily() {
         Family otherFamily = Family.builder().familyId(20L).build();
         Senior otherSenior = Senior.builder()

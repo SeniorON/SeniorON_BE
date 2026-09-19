@@ -244,6 +244,10 @@ public class NotificationService {
 
         NotificationType type = resolveType(event.getEventType());
 
+        if (type == NotificationType.OUTING_RETURN && !hasRegisteredHomeLocation(senior)) {
+            return notDispatched(event, "HOME_LOCATION_NOT_REGISTERED");
+        }
+
         // 같은 가족에 부모가 여러 명이어도 실제 이벤트 발신 부모의 설정을 적용한다.
         if (!isEnabled(senior, type)) {
             return notDispatched(event, "SETTING_DISABLED");
@@ -443,6 +447,9 @@ public class NotificationService {
         if (type == NotificationType.SOS) {
             return true; // SOS 알림은 필수 알림이라 끌 수 없음
         }
+        if (type == NotificationType.OUTING_RETURN && !hasRegisteredHomeLocation(senior)) {
+            return false;
+        }
         User parent = senior.getParentUser();
         if (parent == null) {
             log.warn("시니어에 연결된 부모 계정이 없어 기본 알림 설정을 적용합니다. seniorId={}",
@@ -544,7 +551,9 @@ public class NotificationService {
                 NotificationHomeResponse.of(NotificationType.SOS, true, latestByType.get(NotificationType.SOS)), // SOS 알림은 필수 알림이라 항상 on으로 표시
                 NotificationHomeResponse.of(NotificationType.INACTIVITY, setting.getInactivityEnabled(), latestByType.get(NotificationType.INACTIVITY)),
                 NotificationHomeResponse.of(NotificationType.RISK_LINK, setting.getRiskLinkEnabled(), latestByType.get(NotificationType.RISK_LINK)),
-                NotificationHomeResponse.of(NotificationType.OUTING_RETURN, setting.getOutingReturnEnabled(), latestByType.get(NotificationType.OUTING_RETURN))
+                NotificationHomeResponse.of(NotificationType.OUTING_RETURN,
+                        setting.getOutingReturnEnabled() && hasRegisteredHomeLocation(senior),
+                        latestByType.get(NotificationType.OUTING_RETURN))
         );
         return NotificationHomeListResponse.of(items);
     }
@@ -565,7 +574,13 @@ public class NotificationService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        User parent = resolveManagedSeniorParent(resolveManagedSenior(user, seniorId));
+        Senior senior = resolveManagedSenior(user, seniorId);
+        User parent = resolveManagedSeniorParent(senior);
+        if (type == NotificationSettingType.OUTING_RETURN
+                && Boolean.TRUE.equals(enabled)
+                && !hasRegisteredHomeLocation(senior)) {
+            throw new BusinessException(ErrorCode.SENIOR_HOME_LOCATION_NOT_FOUND);
+        }
         // 선택한 시니어의 부모님 기기가 전부 오프라인이면 변경을 차단한다 (fail-safe).
         if (!isAnyDeviceOnline(findParentDeviceStatuses(List.of(parent)))) {
             throw new BusinessException(ErrorCode.PARENT_DEVICE_OFFLINE);
@@ -581,6 +596,10 @@ public class NotificationService {
         }
 
         return NotificationSettingResponse.from(type, enabled);
+    }
+
+    private boolean hasRegisteredHomeLocation(Senior senior) {
+        return senior.getLatitude() != null && senior.getLongitude() != null;
     }
 
     // 자녀가 부모님 기기의 온/오프라인 상태만 조회. 기기 중 하나라도 온라인이면 온라인으로 본다.

@@ -154,7 +154,8 @@ class NotificationHomeWebSocketIntegrationTest {
         User parent = user(Role.PARENT);
         members.save(FamilyMember.builder().user(manager).family(family).managerType(ManagerType.PRIMARY).build());
         return seniors.save(Senior.builder().name("시니어").birth(LocalDate.of(1950, 1, 1))
-                .phoneNumber("01012345678").family(family).parentUser(parent).registeredBy(manager).build());
+                .phoneNumber("01012345678").address("서울특별시").latitude(37.5665).longitude(126.9780)
+                .family(family).parentUser(parent).registeredBy(manager).build());
     }
 
     private Long createEvent(Senior senior, EventType type) {
