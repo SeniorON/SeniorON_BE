@@ -3,6 +3,7 @@ package com.example.senioron.domain.event.service;
 import com.example.senioron.domain.event.dto.SosAddressLookupRequested;
 import com.example.senioron.domain.event.repository.EventRepository;
 import com.example.senioron.domain.event.util.GeocodingClient;
+import com.example.senioron.domain.notification.service.NotificationHomeWebSocketService;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -22,15 +23,18 @@ public class SosAddressLookupService {
     private final GeocodingClient geocodingClient;
     private final EventRepository eventRepository;
     private final Executor executor;
+    private final NotificationHomeWebSocketService notificationHomeWebSocketService;
 
     public SosAddressLookupService(
             GeocodingClient geocodingClient,
             EventRepository eventRepository,
-            @Qualifier("sosAddressExecutor") Executor executor
+            @Qualifier("sosAddressExecutor") Executor executor,
+            NotificationHomeWebSocketService notificationHomeWebSocketService
     ) {
         this.geocodingClient = geocodingClient;
         this.eventRepository = eventRepository;
         this.executor = executor;
+        this.notificationHomeWebSocketService = notificationHomeWebSocketService;
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -61,7 +65,9 @@ public class SosAddressLookupService {
 
         try {
             // 이 UPDATE만 별도 트랜잭션으로 실행한다. 삭제된 이벤트는 다시 만들지 않는다.
-            eventRepository.updateAddressByEventId(request.eventId(), address);
+            if (eventRepository.updateAddressByEventId(request.eventId(), address) > 0) {
+                notificationHomeWebSocketService.notifyAddressUpdated(request.eventId());
+            }
         } catch (Exception e) {
             log.warn("SOS 주소 저장 실패. eventId={}", request.eventId(), e);
         }

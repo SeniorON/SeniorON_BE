@@ -82,6 +82,7 @@ public class NotificationService {
     private final DeviceRepository deviceRepository;
     private final FcmSender fcmSender;
     private final MeterRegistry meterRegistry;
+    private final NotificationHomeWebSocketService notificationHomeWebSocketService;
     // SOS는 일반 알림 발송 적체(backlog)에 영향받지 않도록 별도 풀에서 처리한다.
     private final ThreadPoolExecutor sosDispatchExecutor = new ThreadPoolExecutor(
             SOS_DISPATCH_POOL_SIZE, SOS_DISPATCH_POOL_SIZE, 0L, TimeUnit.MILLISECONDS,
@@ -263,6 +264,7 @@ public class NotificationService {
                         .build())
                 .toList();
         notificationRepository.saveAll(notifications); // 레포 저장
+        notificationHomeWebSocketService.notifyCreated(notifications);
 
         //수신자들의 기기 토큰을 미리 한 번에 조회
         Map<Long, List<String>> deviceTokensByUserId = deviceRepository.findAllByUserIn(receivers).stream()

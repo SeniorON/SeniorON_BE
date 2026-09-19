@@ -42,7 +42,8 @@ class EventNotificationPolicyTest {
     private final SimpleMeterRegistry metrics = new SimpleMeterRegistry();
     private final NotificationService notificationService = new NotificationService(
             notifications, mock(NotificationSettingRepository.class), mock(UserRepository.class),
-            seniors, members, mock(DeviceRepository.class), mock(FcmSender.class), metrics);
+            seniors, members, mock(DeviceRepository.class), mock(FcmSender.class), metrics,
+            mock(com.example.senioron.domain.notification.service.NotificationHomeWebSocketService.class));
     private final EventService service = new EventService(events, notificationService,
             geocoding, safeBrowsing, context, mock(UserRepository.class), seniors, members,
             mock(DeviceRepository.class), metrics);

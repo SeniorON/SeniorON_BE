@@ -77,7 +77,8 @@ class NotificationServiceTest {
                 familyMemberRepository,
                 deviceRepository,
                 fcmSender,
-                meterRegistry
+                meterRegistry,
+                org.mockito.Mockito.mock(NotificationHomeWebSocketService.class)
         );
 
         family = Family.builder().familyId(10L).build();

@@ -17,6 +17,8 @@ class SosAddressLookupServiceTest {
 
     private final GeocodingClient geocodingClient = mock(GeocodingClient.class);
     private final EventRepository eventRepository = mock(EventRepository.class);
+    private final com.example.senioron.domain.notification.service.NotificationHomeWebSocketService homeUpdates =
+            mock(com.example.senioron.domain.notification.service.NotificationHomeWebSocketService.class);
     private final SosAddressLookupRequested request = new SosAddressLookupRequested(
             1L, new BigDecimal("37.5665"), new BigDecimal("126.9780"));
 
@@ -24,7 +26,7 @@ class SosAddressLookupServiceTest {
     void fullQueueDoesNotRunLookupOnRequestThreadOrFailCommittedSos() {
         var service = new SosAddressLookupService(geocodingClient, eventRepository, task -> {
             throw new RejectedExecutionException("full");
-        });
+        }, homeUpdates);
 
         assertThatCode(() -> service.onAddressLookupRequested(request)).doesNotThrowAnyException();
         verifyNoInteractions(geocodingClient, eventRepository);
@@ -35,9 +37,21 @@ class SosAddressLookupServiceTest {
         given(geocodingClient.reverseGeocode(request.latitude(), request.longitude())).willReturn("서울특별시 중구");
         given(eventRepository.updateAddressByEventId(1L, "서울특별시 중구"))
                 .willThrow(new IllegalStateException("DB unavailable"));
-        var service = new SosAddressLookupService(geocodingClient, eventRepository, Runnable::run);
+        var service = new SosAddressLookupService(geocodingClient, eventRepository, Runnable::run, homeUpdates);
 
         assertThatCode(() -> service.onAddressLookupRequested(request)).doesNotThrowAnyException();
         verify(eventRepository).updateAddressByEventId(1L, "서울특별시 중구");
+        verifyNoInteractions(homeUpdates);
+    }
+
+    @Test
+    void successfulAddressUpdateNotifiesHomeButDeletedEventDoesNot() {
+        given(geocodingClient.reverseGeocode(request.latitude(), request.longitude())).willReturn("서울");
+        var service = new SosAddressLookupService(geocodingClient, eventRepository, Runnable::run, homeUpdates);
+        service.onAddressLookupRequested(request);
+        verifyNoInteractions(homeUpdates);
+        given(eventRepository.updateAddressByEventId(1L, "서울")).willReturn(1);
+        service.onAddressLookupRequested(request);
+        verify(homeUpdates).notifyAddressUpdated(1L);
     }
 }

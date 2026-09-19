@@ -38,7 +38,8 @@ class NotificationServiceSosDispatchTest {
     private final NotificationService service = new NotificationService(
             mock(NotificationRepository.class), mock(NotificationSettingRepository.class),
             mock(UserRepository.class), mock(SeniorRepository.class), mock(FamilyMemberRepository.class),
-            mock(DeviceRepository.class), fcmSender, meterRegistry);
+            mock(DeviceRepository.class), fcmSender, meterRegistry,
+            mock(NotificationHomeWebSocketService.class));
     private final ExecutorService requestExecutor = Executors.newSingleThreadExecutor();
 
     @AfterEach
