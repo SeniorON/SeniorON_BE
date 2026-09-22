@@ -141,4 +141,22 @@ public class DeviceController {
 
         return ResponseEntity.noContent().build();
     }
+
+    @Operation(
+            summary = "시니어 본인 기기 연결 해제",
+            description = "시니어가 본인의 기기 연결을 해제"
+    )
+    @DeleteMapping("/connection/me")
+    public ResponseEntity<Void> disconnectOwnDevice(
+            Authentication authentication
+    ) {
+        User currentUser =
+                (User) authentication.getPrincipal();
+
+        deviceService.disconnectOwnDevice(
+                currentUser
+        );
+
+        return ResponseEntity.noContent().build();
+    }
 }

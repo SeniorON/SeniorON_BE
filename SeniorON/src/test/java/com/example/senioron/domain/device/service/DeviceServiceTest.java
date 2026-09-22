@@ -329,6 +329,28 @@ class DeviceServiceTest {
     }
 
     @Test
+    void disconnectOwnDeviceDisconnectsAllDevicesOfCurrentSenior() {
+        User parent = saveUser("parent", Role.PARENT);
+
+        deviceService().updateFcmToken(
+                parent,
+                "fcm-token-A",
+                "device-A"
+        );
+        deviceService().updateFcmToken(
+                parent,
+                "fcm-token-B",
+                "device-B"
+        );
+
+        deviceService().disconnectOwnDevice(parent);
+
+        assertThat(deviceRepository.findAllByUser(parent))
+                .extracting(Device::getConnectionStatus)
+                .containsOnly(DeviceStatus.DISCONNECTED);
+    }
+
+    @Test
     void reconnectDeviceWithoutRegisteredDeviceDoesNothing() {
         User parent = saveUser("parent", Role.PARENT);
 

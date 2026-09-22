@@ -1,8 +1,6 @@
 package com.example.senioron.domain.device.repository;
 
 import com.example.senioron.domain.device.entity.Device;
-import com.example.senioron.domain.family.entity.Family;
-import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -17,12 +15,6 @@ public interface DeviceRepository
 
     Optional<Device> findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
             User user
-    );
-
-    // 병원 도메인에서 아직 사용 중 - 병원 ERD 변경 후 제거 예정
-    List<Device> findAllByUser_FamilyAndUser_Role(
-            Family family,
-            Role role
     );
 
     Optional<Device>
