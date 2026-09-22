@@ -1,11 +1,13 @@
 package com.example.senioron.domain.permission.service;
 
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
+import com.example.senioron.domain.permission.dto.request.SeniorPermissionSettingUpdateRequest;
 import com.example.senioron.domain.permission.dto.response.SeniorPermissionSettingResponse;
 import com.example.senioron.domain.permission.entity.SeniorPermissionSetting;
 import com.example.senioron.domain.permission.repository.SeniorPermissionSettingRepository;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
+import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
@@ -38,6 +40,28 @@ public class SeniorPermissionSettingService {
 
         SeniorPermissionSetting setting = seniorPermissionSettingRepository.findById(senior.getSeniorId())
                 .orElseGet(() -> createDefaultSetting(senior));
+        return SeniorPermissionSettingResponse.from(setting);
+    }
+
+    @Transactional
+    public SeniorPermissionSettingResponse updateMySetting(
+            User principal,
+            SeniorPermissionSettingUpdateRequest request
+    ) {
+        User user = resolveCurrentUser(principal);
+        if (user.getRole() != Role.PARENT) {
+            throw new BusinessException(ErrorCode.SENIOR_PERMISSION_SETTING_PARENT_ONLY);
+        }
+        if (request == null || !request.hasAnyValue()) {
+            throw new BusinessException(ErrorCode.SENIOR_PERMISSION_SETTING_UPDATE_EMPTY);
+        }
+
+        Senior senior = seniorRepository.findByParentUser(user)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SENIOR_NOT_FOUND));
+        SeniorPermissionSetting setting = seniorPermissionSettingRepository.findById(senior.getSeniorId())
+                .orElseGet(() -> createDefaultSetting(senior));
+
+        setting.update(request.getLocationEnabled(), request.getInactivityDetectionEnabled());
         return SeniorPermissionSettingResponse.from(setting);
     }
 

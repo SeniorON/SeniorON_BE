@@ -40,4 +40,13 @@ public class SeniorPermissionSetting extends BaseEntity {
     @Builder.Default
     @Column(name = "inactivity_detection_enabled", nullable = false)
     private Boolean inactivityDetectionEnabled = true;
+
+    public void update(Boolean locationEnabled, Boolean inactivityDetectionEnabled) {
+        if (locationEnabled != null) {
+            this.locationEnabled = locationEnabled;
+        }
+        if (inactivityDetectionEnabled != null) {
+            this.inactivityDetectionEnabled = inactivityDetectionEnabled;
+        }
+    }
 }
