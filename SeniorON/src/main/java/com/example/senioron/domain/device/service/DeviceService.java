@@ -287,6 +287,43 @@ public class DeviceService {
     }
 
     @Transactional
+    public void disconnectOwnDevice(
+            User currentUser
+    ) {
+        if (currentUser.getRole() != Role.PARENT) {
+            throw new BusinessException(
+                    ErrorCode.SENIOR_DEVICE_ACCESS_DENIED
+            );
+        }
+
+        List<Device> devices =
+                deviceRepository.findAllByUser(
+                        currentUser
+                );
+
+        if (devices.isEmpty()) {
+            throw new BusinessException(
+                    ErrorCode.DEVICE_NOT_CONNECTED
+            );
+        }
+
+        boolean alreadyDisconnected =
+                devices.stream()
+                        .allMatch(device ->
+                                device.getConnectionStatus()
+                                        == DeviceStatus.DISCONNECTED
+                        );
+
+        if (alreadyDisconnected) {
+            throw new BusinessException(
+                    ErrorCode.DEVICE_NOT_CONNECTED
+            );
+        }
+
+        devices.forEach(Device::disconnect);
+    }
+
+    @Transactional
     public void reconnectDevice(
             User seniorUser
     ) {
