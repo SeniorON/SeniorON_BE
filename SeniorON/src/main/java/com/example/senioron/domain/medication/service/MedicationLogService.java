@@ -13,10 +13,12 @@ import com.example.senioron.domain.medication.repository.MedicationLogRepository
 import com.example.senioron.domain.medication.repository.MedicationRepository;
 import com.example.senioron.domain.medication.support.MedicationFamilyAuthorization;
 import com.example.senioron.domain.medication.support.MedicationWeekdayUtils;
+import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
+import jakarta.persistence.EntityManager;
 import java.time.DateTimeException;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -62,6 +64,7 @@ public class MedicationLogService {
     private final ApplicationEventPublisher eventPublisher;
     private final MedicationFamilyAuthorization medicationFamilyAuthorization;
     private final HomeWebSocketService homeWebSocketService;
+    private final EntityManager entityManager;
 
     public List<MedicationScheduleResponse> getOwnDailyMedicationSchedules(
             Long requesterUserId,
@@ -87,7 +90,7 @@ public class MedicationLogService {
 
     public List<MedicationScheduleResponse> getParentDailyMedicationSchedules(
             Long requesterUserId,
-            Long parentUserId,
+            Long seniorId,
             LocalDate date
     ) {
         User requester =
@@ -102,11 +105,10 @@ public class MedicationLogService {
                 );
 
         User parentUser =
-                medicationFamilyAuthorization
-                        .getSameFamilyParentOrThrow(
-                                requester,
-                                parentUserId
-                        );
+                getSameFamilyParentBySeniorIdOrThrow(
+                        requester,
+                        seniorId
+                );
 
         return getDailyMedicationSchedules(
                 parentUser,
@@ -117,7 +119,7 @@ public class MedicationLogService {
     @Transactional
     public MedicationMonthlyScheduleResponse getParentMonthlyMedicationSchedules(
             Long requesterUserId,
-            Long parentUserId,
+            Long seniorId,
             Integer year,
             Integer month
     ) {
@@ -133,17 +135,86 @@ public class MedicationLogService {
                 );
 
         User parentUser =
-                medicationFamilyAuthorization
-                        .getSameFamilyParentOrThrow(
-                                requester,
-                                parentUserId
-                        );
+                getSameFamilyParentBySeniorIdOrThrow(
+                        requester,
+                        seniorId
+                );
 
         return getMonthlyMedicationSchedules(
                 parentUser,
                 year,
                 month
         );
+    }
+
+    private User getSameFamilyParentBySeniorIdOrThrow(
+            User requester,
+            Long seniorId
+    ) {
+        Senior senior =
+                entityManager.createQuery(
+                                """
+                                SELECT senior
+                                FROM Senior senior
+                                JOIN FETCH senior.family
+                                LEFT JOIN FETCH senior.parentUser
+                                WHERE senior.seniorId = :seniorId
+                                """,
+                                Senior.class
+                        )
+                        .setParameter(
+                                "seniorId",
+                                seniorId
+                        )
+                        .getResultStream()
+                        .findFirst()
+                        .orElseThrow(() ->
+                                new BusinessException(
+                                        ErrorCode.FAMILY_MEMBER_NOT_FOUND
+                                )
+                        );
+
+        Long familyId =
+                senior.getFamily()
+                        .getFamilyId();
+
+        Long sameFamilyCount =
+                entityManager.createQuery(
+                                """
+                                SELECT COUNT(familyMember)
+                                FROM FamilyMember familyMember
+                                WHERE familyMember.user.usersId = :requesterUserId
+                                AND familyMember.family.familyId = :familyId
+                                """,
+                                Long.class
+                        )
+                        .setParameter(
+                                "requesterUserId",
+                                requester.getUsersId()
+                        )
+                        .setParameter(
+                                "familyId",
+                                familyId
+                        )
+                        .getSingleResult();
+
+        if (sameFamilyCount == 0) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_MEMBER_NOT_FOUND
+            );
+        }
+
+        User parentUser =
+                senior.getParentUser();
+
+        if (parentUser == null
+                || parentUser.getRole() != Role.PARENT) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_MEMBER_NOT_FOUND
+            );
+        }
+
+        return parentUser;
     }
 
     private List<MedicationScheduleResponse> getDailyMedicationSchedules(
@@ -615,7 +686,6 @@ public class MedicationLogService {
 
     @Transactional
     public void createMedicationLogsForNextThirtyDaysForAllMedicationOwners() {
-
         LocalDate startDate =
                 LocalDate.now(
                         KOREA_ZONE_ID
@@ -668,7 +738,6 @@ public class MedicationLogService {
 
     @Transactional
     public void createTodayMedicationLogsForAllMedicationOwners() {
-
         LocalDate today =
                 LocalDate.now(
                         KOREA_ZONE_ID
