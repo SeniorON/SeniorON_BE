@@ -104,6 +104,8 @@ public enum ErrorCode implements BaseCode {
     SENIOR_RELOGIN_REQUEST_EXPIRED(HttpStatus.BAD_REQUEST, "SENIOR4002", "재로그인 요청이 만료되었습니다."),
     SENIOR_RELOGIN_REQUEST_DEVICE_MISMATCH(HttpStatus.CONFLICT, "SENIOR409_5", "재로그인 요청의 기기 정보가 시니어와 일치하지 않습니다."),
     SENIOR_RELOGIN_REQUEST_NOT_APPROVED(HttpStatus.CONFLICT, "SENIOR409_6", "재활성화 가능한 승인 상태의 재로그인 요청이 아닙니다."),
+    SENIOR_PERMISSION_SETTING_PARENT_ONLY(HttpStatus.FORBIDDEN, "SENIOR_PERMISSION403", "부모 계정만 시니어 권한 설정을 변경할 수 있습니다."),
+    SENIOR_PERMISSION_SETTING_UPDATE_EMPTY(HttpStatus.BAD_REQUEST, "SENIOR_PERMISSION400", "변경할 권한 설정을 하나 이상 입력해 주세요."),
 
     // Family Error
     FAMILY_NOT_FOUND(HttpStatus.NOT_FOUND, "FAMILY404", "가족 정보를 찾을 수 없습니다."),
