@@ -11,16 +11,21 @@ import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.user.entity.Role;
+import com.example.senioron.domain.user.entity.RefreshToken;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
+import com.example.senioron.domain.user.repository.RefreshTokenRepository;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.domain.device.dto.request.DeviceStatusUpdateRequest;
 import com.example.senioron.domain.user.entity.ManagerType;
+import java.time.LocalDateTime;
 import java.util.UUID;
 import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 /**
  * 같은 기기(device_identifier)에서 부모 로그아웃 후 자녀가 로그인해도
@@ -35,6 +40,9 @@ class DeviceServiceTest {
     private UserRepository userRepository;
 
     @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
+
+    @Autowired
     private DeviceRepository deviceRepository;
 
     @Autowired
@@ -47,16 +55,150 @@ class DeviceServiceTest {
     private FamilyMemberRepository familyMemberRepository;
 
     private DeviceService deviceService;
+    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     private DeviceService deviceService() {
         if (deviceService == null) {
             deviceService = new DeviceService(
                     deviceRepository,
                     seniorRepository,
-                    familyMemberRepository
+                    familyMemberRepository,
+                    passwordEncoder
             );
         }
         return deviceService;
+    }
+
+    @Test
+    void registerDeviceIssuesDeviceAuthTokenWhenCredentialIsMissing() {
+        User parent = saveUser("parent", Role.PARENT);
+
+        DeviceCredentialIssueResult result = deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+
+        assertThat(result.deviceAuthToken()).isNotBlank();
+        Device device = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow();
+        assertThat(device.getDeviceAuthTokenHash()).isNotBlank();
+    }
+
+    @Test
+    void deviceAuthTokenStoresOnlyHashInsteadOfRawToken() {
+        User parent = saveUser("parent", Role.PARENT);
+
+        DeviceCredentialIssueResult result = deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+
+        Device device = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow();
+        assertThat(device.getDeviceAuthTokenHash()).isNotEqualTo(result.deviceAuthToken());
+        assertThat(passwordEncoder.matches(result.deviceAuthToken(), device.getDeviceAuthTokenHash())).isTrue();
+    }
+
+    @Test
+    void verifyDeviceCredentialSucceedsWithCorrectDeviceIdentifierAndToken() {
+        User parent = saveUser("parent", Role.PARENT);
+        DeviceCredentialIssueResult result = deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+
+        boolean verified = deviceService().verifyDeviceCredential(DEVICE_IDENTIFIER, result.deviceAuthToken());
+
+        assertThat(verified).isTrue();
+    }
+
+    @Test
+    void verifyDeviceCredentialFailsWithWrongToken() {
+        User parent = saveUser("parent", Role.PARENT);
+        deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+
+        boolean verified = deviceService().verifyDeviceCredential(DEVICE_IDENTIFIER, "wrong-device-auth-token");
+
+        assertThat(verified).isFalse();
+    }
+
+    @Test
+    void verifyDeviceCredentialFailsWhenTokenBelongsToAnotherDevice() {
+        User parent = saveUser("parent", Role.PARENT);
+        DeviceCredentialIssueResult deviceA = deviceService().registerDevice(parent, "device-A");
+        deviceService().registerDevice(parent, "device-B");
+
+        boolean verified = deviceService().verifyDeviceCredential("device-B", deviceA.deviceAuthToken());
+
+        assertThat(verified).isFalse();
+    }
+
+    @Test
+    void registerDeviceDoesNotReissueDeviceAuthTokenWhenCredentialAlreadyExists() {
+        User parent = saveUser("parent", Role.PARENT);
+        DeviceCredentialIssueResult first = deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+        Device device = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow();
+        String firstHash = device.getDeviceAuthTokenHash();
+
+        DeviceCredentialIssueResult second = deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+
+        assertThat(first.deviceAuthToken()).isNotBlank();
+        assertThat(second.deviceAuthToken()).isNull();
+        assertThat(deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow().getDeviceAuthTokenHash())
+                .isEqualTo(firstHash);
+    }
+
+    @Test
+    void registerDeviceIssuesDeviceAuthTokenForExistingDeviceWithoutCredential() {
+        User parent = saveUser("parent", Role.PARENT);
+        deviceRepository.saveAndFlush(Device.builder()
+                .user(parent)
+                .deviceIdentifier(DEVICE_IDENTIFIER)
+                .build());
+
+        DeviceCredentialIssueResult result = deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+
+        Device device = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow();
+        assertThat(result.deviceAuthToken()).isNotBlank();
+        assertThat(device.getDeviceAuthTokenHash()).isNotBlank();
+        assertThat(deviceService().verifyDeviceCredential(DEVICE_IDENTIFIER, result.deviceAuthToken())).isTrue();
+    }
+
+    @Test
+    void updateFcmTokenRegistersDeviceAndStoresFcmToken() {
+        User parent = saveUser("parent", Role.PARENT);
+
+        deviceService().updateFcmToken(parent, "fcm-token-parent", DEVICE_IDENTIFIER);
+
+        Device device = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow();
+        assertThat(device.getUser().getUsersId()).isEqualTo(parent.getUsersId());
+        assertThat(device.getDeviceIdentifier()).isEqualTo(DEVICE_IDENTIFIER);
+        assertThat(device.getDeviceToken()).isEqualTo("fcm-token-parent");
+        assertThat(device.getConnectionStatus()).isEqualTo(DeviceStatus.ONLINE);
+    }
+
+    @Test
+    void registerDeviceRegistersDeviceWithoutFcmToken() {
+        User parent = saveUser("parent", Role.PARENT);
+
+        deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+
+        Device device = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow();
+        assertThat(device.getUser().getUsersId()).isEqualTo(parent.getUsersId());
+        assertThat(device.getDeviceIdentifier()).isEqualTo(DEVICE_IDENTIFIER);
+        assertThat(device.getDeviceToken()).isNull();
+    }
+
+    @Test
+    void registerDeviceDoesNotCreateDuplicateRowForSameDeviceIdentifier() {
+        User parent = saveUser("parent", Role.PARENT);
+
+        deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+        deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+
+        assertThat(deviceRepository.count()).isEqualTo(1L);
+        assertThat(deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER)).isPresent();
+    }
+
+    @Test
+    void sameUserCanRegisterMultipleDevices() {
+        User parent = saveUser("parent", Role.PARENT);
+
+        deviceService().registerDevice(parent, "device-A");
+        deviceService().registerDevice(parent, "device-B");
+
+        assertThat(deviceRepository.findAllByUser(parent))
+                .extracting(Device::getDeviceIdentifier)
+                .containsExactlyInAnyOrder("device-A", "device-B");
     }
 
     @Test
@@ -70,6 +212,50 @@ class DeviceServiceTest {
 
         assertThat(device.getDeviceToken()).isNull();
         assertThat(device.getConnectionStatus()).isEqualTo(DeviceStatus.ONLINE);
+    }
+
+    @Test
+    void logoutKeepsDeviceRowAndUserDeviceIdentifierRelation() {
+        User parent = saveUser("parent", Role.PARENT);
+        DeviceCredentialIssueResult result = deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+        deviceService().updateFcmToken(parent, "fcm-token-parent", DEVICE_IDENTIFIER);
+        String deviceAuthTokenHash = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER)
+                .orElseThrow()
+                .getDeviceAuthTokenHash();
+
+        deviceService().clearToken(parent, DEVICE_IDENTIFIER);
+
+        Device device = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow();
+        assertThat(device.getUser().getUsersId()).isEqualTo(parent.getUsersId());
+        assertThat(device.getDeviceIdentifier()).isEqualTo(DEVICE_IDENTIFIER);
+        assertThat(device.getDeviceToken()).isNull();
+        assertThat(device.getConnectionStatus()).isEqualTo(DeviceStatus.ONLINE);
+        assertThat(device.getDeviceAuthTokenHash()).isEqualTo(deviceAuthTokenHash);
+        assertThat(deviceService().verifyDeviceCredential(DEVICE_IDENTIFIER, result.deviceAuthToken())).isTrue();
+    }
+
+    @Test
+    void deletingRefreshTokenDoesNotDeleteRegisteredDevice() {
+        User parent = saveUser("parent", Role.PARENT);
+        DeviceCredentialIssueResult result = deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+        String deviceAuthTokenHash = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER)
+                .orElseThrow()
+                .getDeviceAuthTokenHash();
+        refreshTokenRepository.saveAndFlush(RefreshToken.builder()
+                .user(parent)
+                .deviceIdentifier(DEVICE_IDENTIFIER)
+                .tokenHash("refresh-token-hash-" + UUID.randomUUID())
+                .expiresAt(LocalDateTime.now().minusMinutes(1))
+                .build());
+
+        refreshTokenRepository.deleteByExpiresAtBefore(LocalDateTime.now());
+
+        assertThat(refreshTokenRepository.count()).isZero();
+        Device device = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow();
+        assertThat(device.getUser().getUsersId()).isEqualTo(parent.getUsersId());
+        assertThat(device.getDeviceIdentifier()).isEqualTo(DEVICE_IDENTIFIER);
+        assertThat(device.getDeviceAuthTokenHash()).isEqualTo(deviceAuthTokenHash);
+        assertThat(deviceService().verifyDeviceCredential(DEVICE_IDENTIFIER, result.deviceAuthToken())).isTrue();
     }
 
     @Test
@@ -120,9 +306,9 @@ class DeviceServiceTest {
 
 
     // 기기 A에서 부모 로그인 → 로그아웃 → 같은 기기 A에서 자녀 로그인.
-// 로그아웃 시 FCM 토큰만 제거하고 연결 상태는 유지한다.
-// 같은 기기에서 다른 계정이 로그인하면 기기 row의 소유자와 FCM 토큰이
-// 새 계정으로 변경되고 연결 상태는 ONLINE을 유지한다.
+    // 로그아웃 시 FCM 토큰만 제거하고 연결 상태는 유지한다.
+    // 같은 기기에서 다른 계정이 로그인하면 기기 row의 소유자와 FCM 토큰이
+    // 새 계정으로 변경되고 연결 상태는 ONLINE을 유지한다.
     @Test
     void reloginWithDifferentAccountOnSameDeviceLeavesOnlyOneActiveTokenOwnedByNewAccount() {
         User parent = saveUser("parent", Role.PARENT);

@@ -1,6 +1,7 @@
 package com.example.senioron.domain.socialaccount.service;
 
 import com.example.senioron.domain.device.service.DeviceService;
+import com.example.senioron.domain.device.service.DeviceCredentialIssueResult;
 import com.example.senioron.domain.socialaccount.dto.google.request.GoogleLoginRequest;
 import com.example.senioron.domain.socialaccount.dto.google.response.GoogleLoginResponse;
 import com.example.senioron.domain.socialaccount.entity.LoginProvider;
@@ -44,7 +45,9 @@ public class GoogleLoginTransactionService {
             throw new BusinessException(ErrorCode.WITHDRAWN_USER);
         }
 
-        registerFcmTokenIfPresent(user, request.getFcmToken(), request.getDeviceIdentifier());
+        DeviceCredentialIssueResult deviceCredentialIssueResult =
+                registerDevice(user, request.getDeviceIdentifier());
+        updateFcmTokenIfPresent(user, request.getFcmToken(), request.getDeviceIdentifier());
 
         String accessToken = jwtUtil.createAccessToken(user);
         String refreshToken = jwtUtil.createRefreshToken(user);
@@ -53,6 +56,7 @@ public class GoogleLoginTransactionService {
         return GoogleLoginResponse.builder()
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
+                .deviceAuthToken(deviceAuthToken(deviceCredentialIssueResult))
                 .usersId(user.getUsersId())
                 .name(user.getName())
                 .role(user.getRole())
@@ -71,9 +75,17 @@ public class GoogleLoginTransactionService {
                 .build();
     }
 
-    private void registerFcmTokenIfPresent(User user, String fcmToken, String deviceIdentifier) {
+    private DeviceCredentialIssueResult registerDevice(User user, String deviceIdentifier) {
+        return deviceService.registerDevice(user, deviceIdentifier);
+    }
+
+    private void updateFcmTokenIfPresent(User user, String fcmToken, String deviceIdentifier) {
         if (fcmToken != null && !fcmToken.isBlank()) {
-            deviceService.registerToken(user, fcmToken, deviceIdentifier);
+            deviceService.updateFcmToken(user, fcmToken, deviceIdentifier);
         }
+    }
+
+    private String deviceAuthToken(DeviceCredentialIssueResult deviceCredentialIssueResult) {
+        return deviceCredentialIssueResult == null ? null : deviceCredentialIssueResult.deviceAuthToken();
     }
 }

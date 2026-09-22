@@ -44,6 +44,15 @@ public class SecurityConfig {
                 )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        // 시니어 재로그인 요청 생성은 JWT 없이 호출 가능
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/seniors/relogin-requests"
+                        ).permitAll()
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/seniors/relogin-requests/*/reactivate"
+                        ).permitAll()
                         // 브라우저는 STOMP CONNECT의 Authorization 헤더로 인증한다.
                         .requestMatchers(HttpMethod.GET, "/ws").permitAll()
                         .requestMatchers(

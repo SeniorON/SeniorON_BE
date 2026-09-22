@@ -58,7 +58,7 @@ public class DeviceController {
         User currentUser =
                 (User) authentication.getPrincipal();
 
-        deviceService.registerToken(
+        deviceService.updateFcmToken(
                 currentUser,
                 request.deviceToken(),
                 request.deviceIdentifier()

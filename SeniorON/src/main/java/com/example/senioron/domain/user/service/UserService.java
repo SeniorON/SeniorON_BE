@@ -16,6 +16,7 @@ import com.example.senioron.domain.senior.entity.SeniorRelation;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.entity.RefreshToken;
 import com.example.senioron.domain.user.entity.SignupEmailVerificationCode;
+import com.example.senioron.domain.device.service.DeviceCredentialIssueResult;
 import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.inactivity.service.InactivitySettingService;
 import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
@@ -218,8 +219,11 @@ public class UserService {
             throw new BusinessException(ErrorCode.INVALID_PASSWORD);
         }
 
+        DeviceCredentialIssueResult deviceCredentialIssueResult =
+                deviceService.registerDevice(user, request.getDeviceIdentifier());
+
         if(request.getFcmToken() != null && !request.getFcmToken().isBlank()){
-            deviceService.registerToken(user, request.getFcmToken(), request.getDeviceIdentifier());
+            deviceService.updateFcmToken(user, request.getFcmToken(), request.getDeviceIdentifier());
         }
 
         String accessToken = jwtUtil.createAccessToken(user);
@@ -233,13 +237,15 @@ public class UserService {
                 .role(user.getRole())
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
+                .deviceAuthToken(deviceAuthToken(deviceCredentialIssueResult))
                 .build();
     }
 
     // 로그아웃 서비스: 같은 기기에서 다른 계정이 로그인해도 이전 계정으로 알림이 가지 않도록
-    // 로그아웃하는 기기의 FCM 토큰을 비활성화한다.
+    // 로그아웃하는 기기의 FCM 토큰을 비활성화하고 Refresh Token을 revoke한다.
     public void logout(User user, String deviceIdentifier) {
         deviceService.clearToken(user, deviceIdentifier);
+        refreshTokenService.revoke(user, deviceIdentifier);
     }
 
     public OnboardingStatusResponse getOnboardingStatus(User principal) {
@@ -382,6 +388,10 @@ public class UserService {
 
     private String generateVerificationCode() {
         return String.format("%06d", SECURE_RANDOM.nextInt(VERIFICATION_CODE_BOUND));
+    }
+
+    private String deviceAuthToken(DeviceCredentialIssueResult deviceCredentialIssueResult) {
+        return deviceCredentialIssueResult == null ? null : deviceCredentialIssueResult.deviceAuthToken();
     }
 
     private void validateActiveUser(User user) {

@@ -69,4 +69,6 @@ public interface FamilyMemberRepository extends JpaRepository<FamilyMember, Long
             @Param("seniorId") Long seniorId,
             @Param("role") Role role
     );
+
+    List<FamilyMember> findAllByUser(User user);
 }

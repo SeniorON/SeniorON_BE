@@ -33,6 +33,9 @@ public class Device extends BaseEntity {
 
     private String deviceToken;
 
+    @Column(name = "device_auth_token_hash")
+    private String deviceAuthTokenHash;
+
     private String deviceName;
 
     @Enumerated(EnumType.STRING)
@@ -76,6 +79,14 @@ public class Device extends BaseEntity {
 
     public void updateDeviceToken(String deviceToken) {
         this.deviceToken = deviceToken;
+    }
+
+    public boolean hasDeviceAuthToken() {
+        return deviceAuthTokenHash != null && !deviceAuthTokenHash.isBlank();
+    }
+
+    public void issueDeviceAuthTokenHash(String deviceAuthTokenHash) {
+        this.deviceAuthTokenHash = deviceAuthTokenHash;
     }
 
     public void reassignOwner(User user) {

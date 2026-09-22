@@ -31,6 +31,14 @@ public class RefreshTokenService {
                 );
     }
 
+    public void revoke(User user, String deviceIdentifier) {
+        refreshTokenRepository.findByUserAndDeviceIdentifier(user, deviceIdentifier)
+                .ifPresent(refreshToken -> {
+                    refreshToken.revoke();
+                    refreshTokenRepository.saveAndFlush(refreshToken);
+                });
+    }
+
     private void saveNewOrRetry(
             User user,
             String deviceIdentifier,

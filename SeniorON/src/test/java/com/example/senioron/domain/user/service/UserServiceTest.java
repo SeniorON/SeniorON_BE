@@ -5,12 +5,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.example.senioron.domain.device.repository.DeviceRepository;
+import com.example.senioron.domain.device.service.DeviceCredentialIssueResult;
 import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
@@ -59,6 +62,9 @@ class UserServiceTest {
 
     private static final String EMAIL = "test@example.com";
     private static final String VERIFICATION_CODE = "123456";
+    private static final String FCM_TOKEN = "fcm-token";
+    private static final String DEVICE_IDENTIFIER = "device-1";
+    private static final String DEVICE_AUTH_TOKEN = "device-auth-token";
 
     private final UserRepository userRepository = mock(UserRepository.class);
     private final RefreshTokenRepository refreshTokenRepository = mock(RefreshTokenRepository.class);
@@ -68,6 +74,7 @@ class UserServiceTest {
             mock(SignupEmailVerificationCodeIssuer.class);
     private final SocialAccountRepository socialAccountRepository = mock(SocialAccountRepository.class);
     private final DeviceRepository deviceRepository = mock(DeviceRepository.class);
+    private final DeviceService deviceService = mock(DeviceService.class);
     private final SeniorRepository seniorRepository = mock(SeniorRepository.class);
     private final FamilyMemberRepository familyMemberRepository = mock(FamilyMemberRepository.class);
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
@@ -94,7 +101,7 @@ class UserServiceTest {
                 passwordEncoder,
                 jwtUtil,
                 mock(InactivitySettingService.class),
-                mock(DeviceService.class),
+                deviceService,
                 eventPublisher,
                 emailVerificationRateLimitService
         );
@@ -207,6 +214,42 @@ class UserServiceTest {
     }
 
     @Test
+    void loginRegistersDeviceAndUpdatesFcmTokenWhenFcmTokenIsProvided() {
+        User user = createUser(1L);
+        given(userRepository.findByLoginId("testId")).willReturn(Optional.of(user));
+        given(refreshTokenRepository.findByUserAndDeviceIdentifier(user, DEVICE_IDENTIFIER)).willReturn(Optional.empty());
+        given(deviceService.registerDevice(user, DEVICE_IDENTIFIER))
+                .willReturn(DeviceCredentialIssueResult.issued(DEVICE_AUTH_TOKEN));
+
+        UserLoginResponse response = userService.login(createLoginRequest(FCM_TOKEN, DEVICE_IDENTIFIER));
+
+        assertThat(response.getAccessToken()).isNotBlank();
+        assertThat(response.getRefreshToken()).isNotBlank();
+        assertThat(response.getDeviceAuthToken()).isEqualTo(DEVICE_AUTH_TOKEN);
+        verify(deviceService).registerDevice(user, DEVICE_IDENTIFIER);
+        verify(deviceService).updateFcmToken(user, FCM_TOKEN, DEVICE_IDENTIFIER);
+        verify(refreshTokenRepository).saveAndFlush(any(RefreshToken.class));
+    }
+
+    @Test
+    void loginRegistersDeviceEvenWhenFcmTokenIsMissing() {
+        User user = createUser(1L);
+        given(userRepository.findByLoginId("testId")).willReturn(Optional.of(user));
+        given(refreshTokenRepository.findByUserAndDeviceIdentifier(user, DEVICE_IDENTIFIER)).willReturn(Optional.empty());
+        given(deviceService.registerDevice(user, DEVICE_IDENTIFIER))
+                .willReturn(DeviceCredentialIssueResult.issued(DEVICE_AUTH_TOKEN));
+
+        UserLoginResponse response = userService.login(createLoginRequest(null, DEVICE_IDENTIFIER));
+
+        assertThat(response.getAccessToken()).isNotBlank();
+        assertThat(response.getRefreshToken()).isNotBlank();
+        assertThat(response.getDeviceAuthToken()).isEqualTo(DEVICE_AUTH_TOKEN);
+        verify(deviceService).registerDevice(user, DEVICE_IDENTIFIER);
+        verify(deviceService, never()).updateFcmToken(eq(user), anyString(), eq(DEVICE_IDENTIFIER));
+        verify(refreshTokenRepository).saveAndFlush(any(RefreshToken.class));
+    }
+
+    @Test
     void refreshTokenRotatesRefreshTokenAndReturnsNewTokens() {
         User user = User.builder()
                 .usersId(1L)
@@ -231,7 +274,56 @@ class UserServiceTest {
         assertThat(response.getAccessToken()).isNotBlank();
         assertThat(response.getRefreshToken()).isNotBlank();
         assertThat(response.getRefreshToken()).isNotEqualTo(loginResponse.getRefreshToken());
+        assertThat(savedRefreshToken.isRevoked()).isFalse();
         assertThat(savedRefreshToken.getTokenHash()).isNotEqualTo(previousTokenHash);
+    }
+
+    @Test
+    void refreshTokenFailsWhenRefreshTokenIsRevoked() {
+        User user = createUser(1L);
+        String refreshToken = jwtUtil.createRefreshToken(user);
+        RefreshToken savedRefreshToken = createRefreshToken(user, "device-1", refreshToken);
+        savedRefreshToken.revoke();
+        given(refreshTokenRepository.findByTokenHash(savedRefreshToken.getTokenHash()))
+                .willReturn(Optional.of(savedRefreshToken));
+
+        assertThatThrownBy(() -> userService.refreshToken(createTokenRefreshRequest(refreshToken, "device-1")))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.INVALID_REFRESH_TOKEN);
+    }
+
+    @Test
+    void logoutRevokesRefreshTokenForRequestedDeviceOnly() {
+        User user = createUser(1L);
+        RefreshToken deviceOneRefreshToken = createRefreshToken(user, "device-1", "refresh-token-1");
+        RefreshToken deviceTwoRefreshToken = createRefreshToken(user, "device-2", "refresh-token-2");
+        given(refreshTokenRepository.findByUserAndDeviceIdentifier(user, "device-1"))
+                .willReturn(Optional.of(deviceOneRefreshToken));
+
+        userService.logout(user, "device-1");
+
+        assertThat(deviceOneRefreshToken.isRevoked()).isTrue();
+        assertThat(deviceTwoRefreshToken.isRevoked()).isFalse();
+        verify(deviceService).clearToken(user, "device-1");
+        verify(refreshTokenRepository).saveAndFlush(deviceOneRefreshToken);
+    }
+
+    @Test
+    void logoutSucceedsWhenRefreshTokenIsAlreadyRevoked() {
+        User user = createUser(1L);
+        RefreshToken savedRefreshToken = createRefreshToken(user, "device-1", "refresh-token");
+        savedRefreshToken.revoke();
+        given(refreshTokenRepository.findByUserAndDeviceIdentifier(user, "device-1"))
+                .willReturn(Optional.of(savedRefreshToken));
+
+        userService.logout(user, "device-1");
+        userService.logout(user, "device-1");
+
+        assertThat(savedRefreshToken.isRevoked()).isTrue();
+        verify(deviceService, times(2)).clearToken(user, "device-1");
+        verify(refreshTokenRepository, times(2)).saveAndFlush(savedRefreshToken);
     }
 
     @Test
@@ -645,15 +737,26 @@ class UserServiceTest {
     }
 
     private UserLoginRequest createLoginRequest() {
+        return createLoginRequest(null, null);
+    }
+
+    private UserLoginRequest createLoginRequest(String fcmToken, String deviceIdentifier) {
         UserLoginRequest request = new UserLoginRequest();
         ReflectionTestUtils.setField(request, "loginId", "testId");
         ReflectionTestUtils.setField(request, "password", "password123!");
+        ReflectionTestUtils.setField(request, "fcmToken", fcmToken);
+        ReflectionTestUtils.setField(request, "deviceIdentifier", deviceIdentifier);
         return request;
     }
 
     private TokenRefreshRequest createTokenRefreshRequest(String refreshToken) {
+        return createTokenRefreshRequest(refreshToken, null);
+    }
+
+    private TokenRefreshRequest createTokenRefreshRequest(String refreshToken, String deviceIdentifier) {
         TokenRefreshRequest request = new TokenRefreshRequest();
         ReflectionTestUtils.setField(request, "refreshToken", refreshToken);
+        ReflectionTestUtils.setField(request, "deviceIdentifier", deviceIdentifier);
         return request;
     }
 
@@ -679,6 +782,18 @@ class UserServiceTest {
                 .build();
     }
 
+    private User createUser(Long usersId) {
+        return User.builder()
+                .usersId(usersId)
+                .loginId("testId")
+                .email(EMAIL)
+                .password(passwordEncoder.encode("password123!"))
+                .name("test")
+                .role(Role.PARENT)
+                .status(UserStatus.ACTIVE)
+                .build();
+    }
+
     private User createChild(Long usersId, Family family, ManagerType managerType) {
         return User.builder()
                 .usersId(usersId)
@@ -701,6 +816,15 @@ class UserServiceTest {
                 .phoneNumber("01012345678")
                 .family(family)
                 .registeredBy(registeredBy)
+                .build();
+    }
+
+    private RefreshToken createRefreshToken(User user, String deviceIdentifier, String refreshToken) {
+        return RefreshToken.builder()
+                .user(user)
+                .deviceIdentifier(deviceIdentifier)
+                .tokenHash(refreshTokenService.hashToken(refreshToken))
+                .expiresAt(LocalDateTime.now().plusDays(14))
                 .build();
     }
 

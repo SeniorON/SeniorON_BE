@@ -11,6 +11,7 @@ public class KakaoLoginResponse {
 
     private String accessToken;
     private String refreshToken;
+    private String deviceAuthToken;
     private Long usersId;
     private String name;
     private Role role;
