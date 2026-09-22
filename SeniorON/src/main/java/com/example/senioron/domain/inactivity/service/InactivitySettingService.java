@@ -1,6 +1,8 @@
 package com.example.senioron.domain.inactivity.service;
 
-import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
+import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.inactivity.dto.request.InactivitySettingRequest;
 import com.example.senioron.domain.inactivity.dto.response.InactivitySettingResponse;
 import com.example.senioron.domain.inactivity.entity.InactivitySetting;
@@ -15,8 +17,6 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Objects;
-
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -24,6 +24,8 @@ public class InactivitySettingService {
 
     private final InactivitySettingRepository inactivitySettingRepository;
     private final UserRepository userRepository;
+    private final SeniorRepository seniorRepository;
+    private final FamilyMemberRepository familyMemberRepository;
 
     // 회원가입 시 디폴트 무활동 감지 설정 생성
     public void createDefaultSetting(User user) {
@@ -50,8 +52,8 @@ public class InactivitySettingService {
     }
 
     @Transactional
-    public InactivitySettingResponse getSetting(User principal, Long targetId) {
-        User targetUser = resolveTargetUser(principal,targetId);
+    public InactivitySettingResponse getSetting(User principal, Long targetUserId) {
+        User targetUser = resolveTargetUser(principal, targetUserId);
 
         InactivitySetting setting = inactivitySettingRepository.findById(targetUser.getUsersId())
                 .orElseGet(() -> createDefaultInternal(targetUser));   // 없으면 즉석에서 생성
@@ -61,8 +63,7 @@ public class InactivitySettingService {
     // 부모(시니어) 기기가 폴링으로 자신의 무활동 감지 설정을 직접 조회
     @Transactional
     public InactivitySettingResponse getMySetting(User principal) {
-        User currentUser = userRepository.findById(principal.getUsersId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        User currentUser = resolveCurrentUser(principal);
         if (currentUser.getRole() != Role.PARENT) {
             throw new BusinessException(ErrorCode.INACTIVITY_SETTING_PARENT_ONLY);
         }
@@ -83,28 +84,36 @@ public class InactivitySettingService {
         return InactivitySettingResponse.from(setting);
     }
 
-    // 요청자가 자식이고 대상자가 같은 가족인지 검증
+    // 경로 ID는 부모 usersId이며, 해당 부모와 연결된 Senior의 가족 멤버십으로 검증한다.
     private User resolveTargetUser(User principal, Long targetUserId) {
-        User currentUser = userRepository.findById(principal.getUsersId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        User currentUser = resolveCurrentUser(principal);
         if (currentUser.getRole() != Role.CHILD) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
 
-        Family family = currentUser.getFamily();
-        if (family == null) {
-            throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
-        }
         User targetUser = userRepository.findById(targetUserId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         if (targetUser.getRole() != Role.PARENT) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
 
-        if (targetUser.getFamily() == null || !Objects.equals(family.getFamilyId(), targetUser.getFamily().getFamilyId())) {
+        Senior senior = seniorRepository.findByParentUser(targetUser)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SENIOR_NOT_FOUND));
+        if (senior.getFamily() == null) {
+            throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
+        }
+        if (!familyMemberRepository.existsByUserAndFamily(currentUser, senior.getFamily())) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
 
         return targetUser;
+    }
+
+    private User resolveCurrentUser(User principal) {
+        if (principal == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
+        }
+        return userRepository.findById(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
     }
 }

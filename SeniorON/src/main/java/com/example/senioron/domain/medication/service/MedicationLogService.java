@@ -18,11 +18,11 @@ import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
+import jakarta.persistence.EntityManager;
 import java.time.DateTimeException;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
@@ -50,7 +50,10 @@ public class MedicationLogService {
     private static final ZoneId KOREA_ZONE_ID =
             ZoneId.of("Asia/Seoul");
 
-    private static final long MISSED_DELAY_MINUTES =
+    private static final long MISSED_STATUS_DELAY_MINUTES =
+            1L;
+
+    private static final long MEDICATION_CHECK_WINDOW_MINUTES =
             120L;
 
     private static final int ROLLING_WINDOW_DAYS =
@@ -61,6 +64,7 @@ public class MedicationLogService {
     private final ApplicationEventPublisher eventPublisher;
     private final MedicationFamilyAuthorization medicationFamilyAuthorization;
     private final HomeWebSocketService homeWebSocketService;
+    private final EntityManager entityManager;
 
     public List<MedicationScheduleResponse> getOwnDailyMedicationSchedules(
             Long requesterUserId,
@@ -95,23 +99,16 @@ public class MedicationLogService {
                                 requesterUserId
                         );
 
-        Senior senior =
-                medicationFamilyAuthorization
-                        .getSeniorOrThrow(
-                                seniorId
-                        );
-
         medicationFamilyAuthorization
-                .validateChildAccessToSenior(
-                        requester,
-                        senior
+                .validateChild(
+                        requester
                 );
 
         User parentUser =
-                medicationFamilyAuthorization
-                        .getParentUserOrThrow(
-                                senior
-                        );
+                getSameFamilyParentBySeniorIdOrThrow(
+                        requester,
+                        seniorId
+                );
 
         return getDailyMedicationSchedules(
                 parentUser,
@@ -132,29 +129,92 @@ public class MedicationLogService {
                                 requesterUserId
                         );
 
-        Senior senior =
-                medicationFamilyAuthorization
-                        .getSeniorOrThrow(
-                                seniorId
-                        );
-
         medicationFamilyAuthorization
-                .validateChildAccessToSenior(
-                        requester,
-                        senior
+                .validateChild(
+                        requester
                 );
 
         User parentUser =
-                medicationFamilyAuthorization
-                        .getParentUserOrThrow(
-                                senior
-                        );
+                getSameFamilyParentBySeniorIdOrThrow(
+                        requester,
+                        seniorId
+                );
 
         return getMonthlyMedicationSchedules(
                 parentUser,
                 year,
                 month
         );
+    }
+
+    private User getSameFamilyParentBySeniorIdOrThrow(
+            User requester,
+            Long seniorId
+    ) {
+        Senior senior =
+                entityManager.createQuery(
+                                """
+                                SELECT senior
+                                FROM Senior senior
+                                JOIN FETCH senior.family
+                                LEFT JOIN FETCH senior.parentUser
+                                WHERE senior.seniorId = :seniorId
+                                """,
+                                Senior.class
+                        )
+                        .setParameter(
+                                "seniorId",
+                                seniorId
+                        )
+                        .getResultStream()
+                        .findFirst()
+                        .orElseThrow(() ->
+                                new BusinessException(
+                                        ErrorCode.FAMILY_MEMBER_NOT_FOUND
+                                )
+                        );
+
+        Long familyId =
+                senior.getFamily()
+                        .getFamilyId();
+
+        Long sameFamilyCount =
+                entityManager.createQuery(
+                                """
+                                SELECT COUNT(familyMember)
+                                FROM FamilyMember familyMember
+                                WHERE familyMember.user.usersId = :requesterUserId
+                                AND familyMember.family.familyId = :familyId
+                                """,
+                                Long.class
+                        )
+                        .setParameter(
+                                "requesterUserId",
+                                requester.getUsersId()
+                        )
+                        .setParameter(
+                                "familyId",
+                                familyId
+                        )
+                        .getSingleResult();
+
+        if (sameFamilyCount == 0) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_MEMBER_NOT_FOUND
+            );
+        }
+
+        User parentUser =
+                senior.getParentUser();
+
+        if (parentUser == null
+                || parentUser.getRole() != Role.PARENT) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_MEMBER_NOT_FOUND
+            );
+        }
+
+        return parentUser;
     }
 
     private List<MedicationScheduleResponse> getDailyMedicationSchedules(
@@ -339,9 +399,6 @@ public class MedicationLogService {
         LocalDate today =
                 now.toLocalDate();
 
-        LocalTime currentTime =
-                now.toLocalTime();
-
         List<MedicationLog> medicationLogs =
                 medicationLogRepository
                         .findByUserUsersIdAndPlannedDateOrderByPlannedTimeAsc(
@@ -366,7 +423,7 @@ public class MedicationLogService {
         MedicationLog nearestMedicationLog =
                 findNearestUntakenMedicationLog(
                         medicationLogs,
-                        currentTime
+                        now
                 )
                         .orElseThrow(() ->
                                 new BusinessException(
@@ -433,6 +490,15 @@ public class MedicationLogService {
             );
         }
 
+        if (!Boolean.TRUE.equals(
+                medicationLog.getIsTaken()
+        )) {
+            validateMedicationCheckWindow(
+                    medicationLog,
+                    now
+            );
+        }
+
         return markMedicationAsTaken(
                 medicationLog,
                 now
@@ -441,7 +507,7 @@ public class MedicationLogService {
 
     private Optional<MedicationLog> findNearestUntakenMedicationLog(
             List<MedicationLog> medicationLogs,
-            LocalTime currentTime
+            LocalDateTime now
     ) {
         return deduplicateMedicationLogs(
                 medicationLogs
@@ -452,13 +518,31 @@ public class MedicationLogService {
                                 medicationLog.getIsTaken()
                         )
                 )
-                .filter(medicationLog ->
-                        !medicationLog
-                                .getPlannedTime()
-                                .isAfter(
-                                        currentTime
-                                )
-                )
+                .filter(medicationLog -> {
+                    LocalDateTime plannedAt =
+                            LocalDateTime.of(
+                                    medicationLog.getPlannedDate(),
+                                    medicationLog.getPlannedTime()
+                            );
+
+                    return !plannedAt.isAfter(
+                            now
+                    );
+                })
+                .filter(medicationLog -> {
+                    LocalDateTime checkDeadline =
+                            LocalDateTime.of(
+                                            medicationLog.getPlannedDate(),
+                                            medicationLog.getPlannedTime()
+                                    )
+                                    .plusMinutes(
+                                            MEDICATION_CHECK_WINDOW_MINUTES
+                                    );
+
+                    return !now.isAfter(
+                            checkDeadline
+                    );
+                })
                 .max(
                         Comparator
                                 .comparing(
@@ -468,6 +552,30 @@ public class MedicationLogService {
                                         MedicationLog::getMedicationLogId
                                 )
                 );
+    }
+
+    private void validateMedicationCheckWindow(
+            MedicationLog medicationLog,
+            LocalDateTime now
+    ) {
+        LocalDateTime plannedAt =
+                LocalDateTime.of(
+                        medicationLog.getPlannedDate(),
+                        medicationLog.getPlannedTime()
+                );
+
+        LocalDateTime checkDeadline =
+                plannedAt.plusMinutes(
+                        MEDICATION_CHECK_WINDOW_MINUTES
+                );
+
+        if (now.isAfter(
+                checkDeadline
+        )) {
+            throw new BusinessException(
+                    ErrorCode.BAD_REQUEST
+            );
+        }
     }
 
     private MedicationCheckResponse markMedicationAsTaken(
@@ -578,7 +686,6 @@ public class MedicationLogService {
 
     @Transactional
     public void createMedicationLogsForNextThirtyDaysForAllMedicationOwners() {
-
         LocalDate startDate =
                 LocalDate.now(
                         KOREA_ZONE_ID
@@ -631,7 +738,6 @@ public class MedicationLogService {
 
     @Transactional
     public void createTodayMedicationLogsForAllMedicationOwners() {
-
         LocalDate today =
                 LocalDate.now(
                         KOREA_ZONE_ID
@@ -1021,7 +1127,7 @@ public class MedicationLogService {
                                 medicationLog.getPlannedTime()
                         )
                         .plusMinutes(
-                                MISSED_DELAY_MINUTES
+                                MISSED_STATUS_DELAY_MINUTES
                         );
 
         if (!now.isBefore(

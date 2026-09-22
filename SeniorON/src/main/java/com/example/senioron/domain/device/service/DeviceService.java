@@ -147,7 +147,10 @@ public class DeviceService {
             return;
         }
 
-        deviceRepository.clearTokenIfOwnedBy(deviceIdentifier, user.getUsersId(), DeviceStatus.DISCONNECTED);
+        deviceRepository.clearTokenIfOwnedBy(
+                deviceIdentifier,
+                user.getUsersId()
+        );
     }
 
     @Transactional

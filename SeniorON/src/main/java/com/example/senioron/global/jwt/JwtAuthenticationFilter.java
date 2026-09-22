@@ -32,6 +32,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final Set<String> PUBLIC_PATHS = Set.of(
             "/swagger-ui.html",
+            "/v3/api-docs",
             "/api/users/signup",
             "/api/users/signup/email/verification-code",
             "/api/users/signup/email/verification-code/verify",

@@ -34,9 +34,16 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
+import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
+import com.example.senioron.domain.family.entity.PhotoGroup;
+import com.example.senioron.domain.family.entity.PhotoGroupFamily;
+import com.example.senioron.domain.family.repository.FamilyPhotoViewRepository;
 
 @Slf4j
 @Service
@@ -44,11 +51,14 @@ import java.util.stream.Collectors;
 public class FamilyPhotoService {
 
     private final FamilyPhotoRepository familyPhotoRepository;
+    private final FamilyPhotoViewRepository familyPhotoViewRepository;
     private final UserRepository userRepository;
     private final S3Service s3Service;
     private final FamilyPhotoPermissionService familyPhotoPermissionService;
     private final FamilyPhotoPersistenceService photoPersistenceService;
     private final FamilyMemberRepository familyMemberRepository;
+    private final SeniorRepository seniorRepository;
+    private final PhotoGroupFamilyRepository photoGroupFamilyRepository;
 
     private static final int NEW_PHOTO_WINDOW_HOURS = 24;
     private static final long MAX_FAMILY_PHOTO_SIZE = 10L * 1024 * 1024;
@@ -76,7 +86,7 @@ public class FamilyPhotoService {
             FamilyPhotoUploadUrlRequest request
     ) {
         User user = userRepository
-                .findByIdWithFamily(principal.getUsersId())
+                .findById(principal.getUsersId())
                 .orElseThrow(() ->
                         new BusinessException(
                                 ErrorCode.USER_NOT_FOUND
@@ -89,13 +99,10 @@ public class FamilyPhotoService {
             );
         }
 
-        Family family = user.getFamily();
-
-        if (family == null) {
-            throw new BusinessException(
-                    ErrorCode.FAMILY_NOT_FOUND
-            );
-        }
+        Family family = resolveAccessibleFamily(
+                user,
+                request.getSeniorId()
+        );
 
         String directory = "family-photos/"
                 + family.getFamilyId()
@@ -123,7 +130,7 @@ public class FamilyPhotoService {
             FamilyPhotoUploadCompleteRequest request
     ) {
         User user = userRepository
-                .findByIdWithFamily(principal.getUsersId())
+                .findById(principal.getUsersId())
                 .orElseThrow(() ->
                         new BusinessException(
                                 ErrorCode.USER_NOT_FOUND
@@ -136,13 +143,16 @@ public class FamilyPhotoService {
             );
         }
 
-        Family family = user.getFamily();
+        Family family = resolveAccessibleFamily(
+                user,
+                request.getSeniorId()
+        );
 
-        if (family == null) {
-            throw new BusinessException(
-                    ErrorCode.FAMILY_NOT_FOUND
-            );
-        }
+        List<PhotoGroup> photoGroups =
+                resolveAccessiblePhotoGroups(
+                        family,
+                        request.getPhotoGroupIds()
+                );
 
         LocalDateTime newPhotoCutoff =
                 LocalDateTime.now()
@@ -166,7 +176,8 @@ public class FamilyPhotoService {
             return toItemResponse(
                     existingByIdempotencyKey,
                     user,
-                    newPhotoCutoff
+                    newPhotoCutoff,
+                    false
             );
         }
 
@@ -205,13 +216,15 @@ public class FamilyPhotoService {
                             user.getUsersId(),
                             imageKey,
                             idempotencyKey,
-                            request.getDescription()
+                            request.getDescription(),
+                            photoGroups
                     );
 
             return toItemResponse(
                     savedPhoto,
                     user,
-                    newPhotoCutoff
+                    newPhotoCutoff,
+                    false
             );
         } catch (DataIntegrityViolationException exception) {
             /*
@@ -230,7 +243,8 @@ public class FamilyPhotoService {
                 return toItemResponse(
                         existingPhoto,
                         user,
-                        newPhotoCutoff
+                        newPhotoCutoff,
+                        false
                 );
             }
 
@@ -333,7 +347,7 @@ public class FamilyPhotoService {
             String idempotencyKey,
             FamilyPhotoCreateRequest request
     ) {
-        User user = userRepository.findByIdWithFamily(principal.getUsersId())
+        User user = userRepository.findById(principal.getUsersId())
                 .orElseThrow(() ->
                         new BusinessException(ErrorCode.USER_NOT_FOUND)
                 );
@@ -342,11 +356,16 @@ public class FamilyPhotoService {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
 
-        Family family = user.getFamily();
+        Family family = resolveAccessibleFamily(
+                user,
+                request.getSeniorId()
+        );
 
-        if (family == null) {
-            throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
-        }
+        List<PhotoGroup> photoGroups =
+                resolveAccessiblePhotoGroups(
+                        family,
+                        request.getPhotoGroupIds()
+                );
 
         LocalDateTime newPhotoCutoff =
                 LocalDateTime.now().minusHours(NEW_PHOTO_WINDOW_HOURS);
@@ -354,12 +373,18 @@ public class FamilyPhotoService {
         return photoPersistenceService
                 .findExisting(user.getUsersId(), idempotencyKey)
                 .map(photo ->
-                        toItemResponse(photo, user, newPhotoCutoff)
+                        toItemResponse(
+                                photo,
+                                user,
+                                newPhotoCutoff,
+                                false
+                        )
                 )
                 .orElseGet(() ->
                         uploadAndCreatePhoto(
                                 user,
                                 family,
+                                photoGroups,
                                 idempotencyKey,
                                 request,
                                 newPhotoCutoff
@@ -370,6 +395,7 @@ public class FamilyPhotoService {
     private FamilyPhotoItemResponse uploadAndCreatePhoto(
             User user,
             Family family,
+            List<PhotoGroup> photoGroups,
             String idempotencyKey,
             FamilyPhotoCreateRequest request,
             LocalDateTime newPhotoCutoff
@@ -389,7 +415,8 @@ public class FamilyPhotoService {
                     user.getUsersId(),
                     imageKey,
                     idempotencyKey,
-                    request.getDescription()
+                    request.getDescription(),
+                    photoGroups
             );
 
         } catch (DataIntegrityViolationException exception) {
@@ -406,7 +433,8 @@ public class FamilyPhotoService {
             return toItemResponse(
                     existingPhoto,
                     user,
-                    newPhotoCutoff
+                    newPhotoCutoff,
+                    false
             );
 
         } catch (RuntimeException exception) {
@@ -417,7 +445,8 @@ public class FamilyPhotoService {
         return toItemResponse(
                 savedPhoto,
                 user,
-                newPhotoCutoff
+                newPhotoCutoff,
+                false
         );
     }
 
@@ -433,15 +462,13 @@ public class FamilyPhotoService {
         }
     }
 
-    private User findFamilyChildUploader(
-            Long uploaderUserId,
-            Family family
+    private User findChildUploader(
+            Long uploaderUserId
     ) {
         User uploader = userRepository.findById(uploaderUserId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_MEMBER_NOT_FOUND));
 
-        if (!familyMemberRepository.existsByUserAndFamily(uploader, family)
-                || uploader.getRole() != Role.CHILD) {
+        if (uploader.getRole() != Role.CHILD) {
             throw new BusinessException(ErrorCode.FAMILY_MEMBER_NOT_FOUND);
         }
 
@@ -451,18 +478,26 @@ public class FamilyPhotoService {
     private FamilyPhotoItemResponse toItemResponse(
             FamilyPhoto photo,
             User currentUser,
-            LocalDateTime newPhotoCutoff
+            LocalDateTime newPhotoCutoff,
+            boolean viewedByCurrentParent
     ) {
         boolean newPhoto =
                 currentUser.getRole() == Role.PARENT
                         && photo.getUser().getRole() == Role.CHILD
-                        && !photo.isViewedByParent()
-                        && !photo.getCreatedAt().isBefore(newPhotoCutoff);
+                        && !viewedByCurrentParent
+                        && !photo.getCreatedAt()
+                        .isBefore(newPhotoCutoff);
 
         return FamilyPhotoItemResponse.builder()
                 .familyPhotoId(photo.getFamilyPhotoId())
-                .imageUrl(s3Service.getFileUrl(photo.getImageKey()))
-                .uploaderUserId(photo.getUser().getUsersId())
+                .imageUrl(
+                        s3Service.getFileUrl(
+                                photo.getImageKey()
+                        )
+                )
+                .uploaderUserId(
+                        photo.getUser().getUsersId()
+                )
                 .uploaderName(photo.getUser().getName())
                 .description(photo.getDescription())
                 .canDelete(
@@ -476,9 +511,32 @@ public class FamilyPhotoService {
                 .build();
     }
 
+    private Set<Long> findViewedPhotoIds(
+            User currentUser,
+            List<FamilyPhoto> photos
+    ) {
+        if (currentUser.getRole() != Role.PARENT
+                || photos.isEmpty()) {
+            return Set.of();
+        }
+
+        List<Long> familyPhotoIds = photos.stream()
+                .map(FamilyPhoto::getFamilyPhotoId)
+                .toList();
+
+        return Set.copyOf(
+                familyPhotoViewRepository
+                        .findViewedFamilyPhotoIds(
+                                currentUser.getUsersId(),
+                                familyPhotoIds
+                        )
+        );
+    }
+
     @Transactional(readOnly = true)
     public FamilyPhotoListResponse getPhotos(
             User principal,
+            Long seniorId,
             Long uploaderUserId,
             LocalDateTime cursorCreatedAt,
             Long cursorId,
@@ -505,13 +563,10 @@ public class FamilyPhotoService {
                         )
                 );
 
-        Family family = currentUser.getFamily();
-
-        if (family == null) {
-            throw new BusinessException(
-                    ErrorCode.FAMILY_NOT_FOUND
-            );
-        }
+        Family family = resolveAccessibleFamily(
+                currentUser,
+                seniorId
+        );
 
         /*
          * uploaderUserId를 사용한 자녀 앨범 조회는
@@ -524,9 +579,8 @@ public class FamilyPhotoService {
 
         User uploader = uploaderUserId == null
                 ? null
-                : findFamilyChildUploader(
-                uploaderUserId,
-                family
+                : findChildUploader(
+                uploaderUserId
         );
 
         Pageable pageable = PageRequest.of(0, size + 1);
@@ -536,13 +590,13 @@ public class FamilyPhotoService {
         if (uploader == null) {
             if (cursorCreatedAt == null) {
                 fetchedPhotos = familyPhotoRepository
-                        .findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
+                        .findAllAccessibleByFamily(
                                 family,
                                 pageable
                         );
             } else {
-                fetchedPhotos =
-                        familyPhotoRepository.findNextPageByCursor(
+                fetchedPhotos = familyPhotoRepository
+                        .findNextAccessiblePageByFamily(
                                 family,
                                 cursorCreatedAt,
                                 cursorId,
@@ -552,14 +606,14 @@ public class FamilyPhotoService {
         } else {
             if (cursorCreatedAt == null) {
                 fetchedPhotos = familyPhotoRepository
-                        .findByFamilyAndUserOrderByCreatedAtDescFamilyPhotoIdDesc(
+                        .findAllAccessibleByFamilyAndUploader(
                                 family,
                                 uploader,
                                 pageable
                         );
             } else {
                 fetchedPhotos = familyPhotoRepository
-                        .findNextPageByUploaderAndCursor(
+                        .findNextAccessiblePageByFamilyAndUploader(
                                 family,
                                 uploader,
                                 cursorCreatedAt,
@@ -590,20 +644,29 @@ public class FamilyPhotoService {
         LocalDateTime newPhotoCutoff =
                 LocalDateTime.now().minusHours(NEW_PHOTO_WINDOW_HOURS);
 
+        Set<Long> viewedPhotoIds =
+                findViewedPhotoIds(
+                        currentUser,
+                        pagePhotos
+                );
+
         List<FamilyPhotoItemResponse> photoResponses =
                 pagePhotos.stream()
                         .map(photo ->
                                 toItemResponse(
                                         photo,
                                         currentUser,
-                                        newPhotoCutoff
+                                        newPhotoCutoff,
+                                        viewedPhotoIds.contains(
+                                                photo.getFamilyPhotoId()
+                                        )
                                 )
                         )
                         .toList();
 
         long totalCount = uploader == null
-                ? familyPhotoRepository.countByFamily(family)
-                : familyPhotoRepository.countByFamilyAndUser(
+                ? familyPhotoRepository.countAccessibleByFamily(family)
+                : familyPhotoRepository.countAccessibleByFamilyAndUploader(
                 family,
                 uploader
         );
@@ -621,15 +684,16 @@ public class FamilyPhotoService {
         User currentUser = userRepository.findById(principal.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        Family family = currentUser.getFamily();
-
-        if (family == null) {
-            throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
-        }
-
         FamilyPhoto photo = familyPhotoRepository
-                .findByFamilyPhotoIdAndFamily(familyPhotoId, family)
-                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_PHOTO_NOT_FOUND));
+                .findAccessibleByFamilyPhotoIdAndUser(
+                        familyPhotoId,
+                        currentUser
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.FAMILY_PHOTO_NOT_FOUND
+                        )
+                );
 
         if (!familyPhotoPermissionService.canDelete(photo, currentUser)) {
             throw new BusinessException(ErrorCode.FAMILY_PHOTO_DELETE_FORBIDDEN);
@@ -662,7 +726,8 @@ public class FamilyPhotoService {
 
     @Transactional(readOnly = true)
     public List<FamilyPhotoAlbumResponse> getPhotoAlbums(
-            User principal
+            User principal,
+            Long seniorId
     ){
         // 인증 객체의 id를 사용해 현재 사용자 정보를 db에서 다시 조회
         User parent = userRepository.findById(principal.getUsersId())
@@ -673,12 +738,10 @@ public class FamilyPhotoService {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
 
-        // 요청으로 familyId 대신 로그인 부모의 가족을 사용
-        Family family = parent.getFamily();
-
-        if (family == null) {
-            throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
-        }
+        Family family = resolveAccessibleFamily(
+                parent,
+                seniorId
+        );
 
         // 현재 시각으로부터 24시간 전을 새로운 사진 판단 기준으로 사용
         LocalDateTime newPhotoCutoff = LocalDateTime.now().minusHours(NEW_PHOTO_WINDOW_HOURS);
@@ -698,7 +761,8 @@ public class FamilyPhotoService {
                 familyPhotoRepository.countAlbumPhotosByUploader(
                                 family,
                                 Role.CHILD,
-                                newPhotoCutoff
+                                newPhotoCutoff,
+                                parent
                         )
                         .stream()
                         .collect(
@@ -740,6 +804,7 @@ public class FamilyPhotoService {
     @Transactional
     public void markPhotoAsViewed(
             User principal,
+            Long seniorId,
             Long familyPhotoId
     ) {
         User parent = userRepository.findById(
@@ -752,19 +817,18 @@ public class FamilyPhotoService {
                 );
 
         if (parent.getRole() != Role.PARENT) {
-            throw new BusinessException(ErrorCode.FORBIDDEN);
-        }
-
-        Family family = parent.getFamily();
-
-        if (family == null) {
             throw new BusinessException(
-                    ErrorCode.FAMILY_NOT_FOUND
+                    ErrorCode.FORBIDDEN
             );
         }
 
+        Family family = resolveAccessibleFamily(
+                parent,
+                seniorId
+        );
+
         FamilyPhoto photo = familyPhotoRepository
-                .findByFamilyPhotoIdAndFamily(
+                .findAccessibleByFamilyPhotoIdAndFamily(
                         familyPhotoId,
                         family
                 )
@@ -774,7 +838,10 @@ public class FamilyPhotoService {
                         )
                 );
 
-        photo.markAsViewedByParent();
+        familyPhotoViewRepository.saveIfAbsent(
+                photo,
+                parent
+        );
     }
 
     @Transactional(readOnly = true)
@@ -783,28 +850,78 @@ public class FamilyPhotoService {
             Long familyPhotoId
     ) {
         User currentUser = userRepository
-                .findByIdWithFamily(principal.getUsersId())
+                .findById(principal.getUsersId())
                 .orElseThrow(()-> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        Family family = currentUser.getFamily();
-
-        if(family == null) {
-            throw new BusinessException(ErrorCode.FAMILY_NOT_FOUND);
-        }
-
         FamilyPhoto photo = familyPhotoRepository
-                .findByFamilyPhotoIdAndFamily(
+                .findAccessibleByFamilyPhotoIdAndUser(
                         familyPhotoId,
-                        family
+                        currentUser
                 )
                 .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_PHOTO_NOT_FOUND));
 
         LocalDateTime newPhotoCutoff = LocalDateTime.now().minusHours(NEW_PHOTO_WINDOW_HOURS);
 
+        boolean viewedByCurrentParent =
+                currentUser.getRole() == Role.PARENT
+                        && familyPhotoViewRepository
+                        .existsByFamilyPhoto_FamilyPhotoIdAndParent_UsersId(
+                                photo.getFamilyPhotoId(),
+                                currentUser.getUsersId()
+                        );
+
         return toItemResponse(
                 photo,
                 currentUser,
-                newPhotoCutoff
+                newPhotoCutoff,
+                viewedByCurrentParent
         );
+    }
+
+    private Family resolveAccessibleFamily(
+            User user,
+            Long seniorId
+    ) {
+        Senior senior = seniorRepository.findById(seniorId)
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.SENIOR_NOT_FOUND)
+                );
+
+        Family family = senior.getFamily();
+
+        if (!familyMemberRepository.existsByUserAndFamily(user, family)) {
+            throw new BusinessException(
+                    ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED
+            );
+        }
+
+        return family;
+    }
+
+    private List<PhotoGroup> resolveAccessiblePhotoGroups(
+            Family family,
+            List<Long> requestedPhotoGroupIds
+    ) {
+        List<Long> distinctPhotoGroupIds =
+                requestedPhotoGroupIds.stream()
+                        .distinct()
+                        .toList();
+
+        List<PhotoGroupFamily> groupLinks =
+                photoGroupFamilyRepository
+                        .findAllByFamilyAndPhotoGroupIds(
+                                family,
+                                distinctPhotoGroupIds
+                        );
+
+        if (groupLinks.size() != distinctPhotoGroupIds.size()) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN
+            );
+        }
+
+        return groupLinks.stream()
+                .map(PhotoGroupFamily::getPhotoGroup)
+                .toList();
     }
 }

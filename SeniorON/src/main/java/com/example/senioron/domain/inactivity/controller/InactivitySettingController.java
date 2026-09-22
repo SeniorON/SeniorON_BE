@@ -33,7 +33,7 @@ public class InactivitySettingController {
         return Response.ok(inactivitySettingService.getMySetting(user));
     }
 
-    @Operation(summary = "무활동 감지 설정 조회", description = "자녀가 같은 가족의 대상자(부모님)의 무활동 감지 설정을 조회합니다")
+    @Operation(summary = "무활동 감지 설정 조회", description = "대상 부모와 연결된 시니어의 가족 구성원인 자녀가 무활동 감지 설정을 조회합니다. targetUserId는 부모(PARENT) 계정의 usersId입니다.")
     @GetMapping("/{targetUserId}")
     public Response<InactivitySettingResponse> getSetting(
             @AuthenticationPrincipal User user,
@@ -42,7 +42,7 @@ public class InactivitySettingController {
         return Response.ok(inactivitySettingService.getSetting(user, targetUserId));
     }
 
-    @Operation(summary = "무활동 감지 설정 수정", description = "자녀가 같은 가족의 대상자(부모님)의 무활동 감지 임계 시간을 수정합니다")
+    @Operation(summary = "무활동 감지 설정 수정", description = "대상 부모와 연결된 시니어의 가족 구성원인 자녀가 임계 시간을 수정합니다. targetUserId는 부모(PARENT) 계정의 usersId이며 thresholdHours는 1~24시간입니다.")
     @PatchMapping("/{targetUserId}")
     public Response<InactivitySettingResponse> updateSetting(
             @AuthenticationPrincipal User user,

@@ -77,7 +77,8 @@ class NotificationServiceTest {
                 familyMemberRepository,
                 deviceRepository,
                 fcmSender,
-                meterRegistry
+                meterRegistry,
+                org.mockito.Mockito.mock(NotificationHomeWebSocketService.class)
         );
 
         family = Family.builder().familyId(10L).build();
@@ -133,7 +134,11 @@ class NotificationServiceTest {
 
         TransactionSynchronizationManager.initSynchronization();
         try {
-            notificationService.createFormEvent(event);
+            var result = notificationService.createFormEvent(event);
+            assertThat(result.notificationStatus().name()).isEqualTo("NOT_DISPATCHED");
+            assertThat(result.reason()).isEqualTo("NO_DEVICE_TOKEN");
+            assertThat(result.receiverCount()).isEqualTo(1);
+            assertThat(result.targets().get(0).seniorId()).isEqualTo(SENIOR_ID);
 
             verify(notificationRepository).saveAll(
                     org.mockito.ArgumentMatchers.argThat(items -> {
@@ -143,6 +148,30 @@ class NotificationServiceTest {
                                 && saved.get(0).getReceiverUser() == child;
                     })
             );
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void generalPushIncludesSeniorIdAndStartsOnlyAfterCommit() {
+        given(familyMemberRepository.findAllBySeniorIdAndUserRole(SENIOR_ID, Role.CHILD))
+                .willReturn(List.of(FamilyMember.builder().user(child).family(family)
+                        .managerType(ManagerType.NONE).build()));
+        given(deviceRepository.findAllByUserIn(List.of(child)))
+                .willReturn(List.of(Device.builder().user(child).deviceToken("child-token").build()));
+        Event event = Event.builder().eventId(100L).triggeredUser(parent).user(parent)
+                .senior(senior).eventType(EventType.INACTIVITY).build();
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            var result = notificationService.createFormEvent(event);
+            assertThat(result.notificationStatus().name()).isEqualTo("DISPATCH_REQUESTED");
+            assertThat(result.reason()).isNull();
+            org.mockito.Mockito.verifyNoInteractions(fcmSender);
+            TransactionSynchronizationManager.getSynchronizations().forEach(
+                    org.springframework.transaction.support.TransactionSynchronization::afterCommit);
+            org.mockito.Mockito.verify(fcmSender, org.mockito.Mockito.timeout(2000))
+                    .send("child-token", "무활동 감지 알림", "무활동 감지됨", 100L, SENIOR_ID);
         } finally {
             TransactionSynchronizationManager.clearSynchronization();
         }
@@ -226,6 +255,60 @@ class NotificationServiceTest {
         assertThat(response.getType()).isEqualTo(NotificationSettingType.INACTIVITY);
         assertThat(response.getEnabled()).isTrue();
         verify(notificationSettingRepository).findById(PARENT_ID);
+    }
+
+    @Test
+    void outingReturnIsDisabledAndNotDispatchedUntilHomeLocationIsRegistered() {
+        given(familyMemberRepository.findAllBySeniorIdAndUserRole(SENIOR_ID, Role.CHILD))
+                .willReturn(List.of(familyMember(child, ManagerType.PRIMARY)));
+
+        var home = notificationService.getHomeSettings(CHILD_ID, SENIOR_ID);
+        var outing = home.getItems().stream()
+                .filter(item -> item.getType() == NotificationType.OUTING_RETURN)
+                .findFirst().orElseThrow();
+        assertThat(outing.isEnabled()).isFalse();
+        assertThat(home.getEnabledCount()).isEqualTo(3);
+
+        Event event = Event.builder().eventId(200L).triggeredUser(parent).user(parent)
+                .senior(senior).eventType(EventType.OUTING_RETURN).build();
+        var result = notificationService.createFormEvent(event);
+        assertThat(result.notificationStatus()).isEqualTo(
+                com.example.senioron.domain.notification.dto.NotificationPreparationResult.Status.NOT_DISPATCHED);
+        assertThat(result.reason()).isEqualTo("HOME_LOCATION_NOT_REGISTERED");
+        verify(notificationRepository, org.mockito.Mockito.never()).saveAll(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void outingReturnCanOnlyBeEnabledAfterHomeLocationRegistration() {
+        assertThatThrownBy(() -> notificationService.updateSetting(
+                CHILD_ID, SENIOR_ID, NotificationSettingType.OUTING_RETURN, true
+        ))
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_HOME_LOCATION_NOT_FOUND);
+        org.mockito.Mockito.verifyNoInteractions(deviceRepository);
+
+        senior = Senior.builder().seniorId(SENIOR_ID).family(family).registeredBy(child)
+                .parentUser(parent).latitude(37.5665).longitude(126.9780).build();
+        given(seniorRepository.findById(SENIOR_ID)).willReturn(Optional.of(senior));
+        given(deviceRepository.findAllByUserIn(List.of(parent))).willReturn(List.of(
+                Device.builder().connectionStatus(DeviceStatus.ONLINE).build()));
+
+        var response = notificationService.updateSetting(
+                CHILD_ID, SENIOR_ID, NotificationSettingType.OUTING_RETURN, true);
+        assertThat(response.getEnabled()).isTrue();
+        assertThat(notificationService.isEnabled(senior, NotificationType.OUTING_RETURN)).isTrue();
+    }
+
+    @Test
+    void outingReturnCanBeTurnedOffWithoutHomeLocation() {
+        given(deviceRepository.findAllByUserIn(List.of(parent))).willReturn(List.of(
+                Device.builder().connectionStatus(DeviceStatus.ONLINE).build()));
+
+        var response = notificationService.updateSetting(
+                CHILD_ID, SENIOR_ID, NotificationSettingType.OUTING_RETURN, false);
+
+        assertThat(response.getEnabled()).isFalse();
     }
 
     @Test

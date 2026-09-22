@@ -202,15 +202,16 @@ class DeviceServiceTest {
     }
 
     @Test
-    void logoutClearsDeviceTokenForThatDevice() {
+    void logoutClearsDeviceTokenButKeepsConnectionStatus() {
         User parent = saveUser("parent", Role.PARENT);
 
         deviceService().registerToken(parent, "fcm-token-parent", DEVICE_IDENTIFIER);
         deviceService().clearToken(parent, DEVICE_IDENTIFIER);
 
         Device device = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow();
+
         assertThat(device.getDeviceToken()).isNull();
-        assertThat(device.getConnectionStatus()).isEqualTo(DeviceStatus.DISCONNECTED);
+        assertThat(device.getConnectionStatus()).isEqualTo(DeviceStatus.ONLINE);
     }
 
     @Test
@@ -228,7 +229,7 @@ class DeviceServiceTest {
         assertThat(device.getUser().getUsersId()).isEqualTo(parent.getUsersId());
         assertThat(device.getDeviceIdentifier()).isEqualTo(DEVICE_IDENTIFIER);
         assertThat(device.getDeviceToken()).isNull();
-        assertThat(device.getConnectionStatus()).isEqualTo(DeviceStatus.DISCONNECTED);
+        assertThat(device.getConnectionStatus()).isEqualTo(DeviceStatus.ONLINE);
         assertThat(device.getDeviceAuthTokenHash()).isEqualTo(deviceAuthTokenHash);
         assertThat(deviceService().verifyDeviceCredential(DEVICE_IDENTIFIER, result.deviceAuthToken())).isTrue();
     }
@@ -305,8 +306,9 @@ class DeviceServiceTest {
 
 
     // 기기 A에서 부모 로그인 → 로그아웃 → 같은 기기 A에서 자녀 로그인.
-    // 기기 row와 토큰 소유자는 자녀 계정으로 변경되지만,
-    // 로그인만으로는 기기 연결 상태가 복구되지 않아 DISCONNECTED를 유지한다.
+    // 로그아웃 시 FCM 토큰만 제거하고 연결 상태는 유지한다.
+    // 같은 기기에서 다른 계정이 로그인하면 기기 row의 소유자와 FCM 토큰이
+    // 새 계정으로 변경되고 연결 상태는 ONLINE을 유지한다.
     @Test
     void reloginWithDifferentAccountOnSameDeviceLeavesOnlyOneActiveTokenOwnedByNewAccount() {
         User parent = saveUser("parent", Role.PARENT);
@@ -319,10 +321,11 @@ class DeviceServiceTest {
         assertThat(deviceRepository.count()).isEqualTo(1L);
 
         Device device = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow();
+
         assertThat(device.getUser().getUsersId()).isEqualTo(child.getUsersId());
         assertThat(device.getDeviceToken()).isEqualTo("fcm-token-child");
         assertThat(device.getConnectionStatus())
-                .isEqualTo(DeviceStatus.DISCONNECTED);
+                .isEqualTo(DeviceStatus.ONLINE);
     }
 
     @Test

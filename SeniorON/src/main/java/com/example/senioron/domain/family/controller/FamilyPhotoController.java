@@ -32,7 +32,7 @@ public class FamilyPhotoController {
 
     private final FamilyPhotoService familyPhotoService;
 
-    @Operation(summary = "가족 사진 등록", description = "현재 로그인한 사용자의 가족에 사진을 등록합니다.")
+    @Operation(summary = "가족 사진 등록", description = "선택한 시니어의 가족에서 접근 가능한 여러 사진 공유 그룹에 사진을 등록합니다.")
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Response<FamilyPhotoItemResponse> createPhoto(
             @AuthenticationPrincipal User user,
@@ -42,7 +42,7 @@ public class FamilyPhotoController {
         return Response.ok(familyPhotoService.createPhoto(user, idempotencyKey.toString(), request));
     }
 
-    @Operation(summary = "가족사진 업로드 URL 발급", description = "가족사진을 S3에 직접 업로드할 수 있는 Presigned PUT URL을 발급합니다.")
+    @Operation(summary = "가족사진 업로드 URL 발급", description = "선택한 시니어의 가족에 사진을 업로드할 수 있는 Presigned PUT URL을 발급합니다.")
     @PostMapping(value = "/upload-url", consumes = MediaType.APPLICATION_JSON_VALUE)
     public Response<FamilyPhotoUploadUrlResponse> createPhotoUploadUrl(
             @AuthenticationPrincipal User user,
@@ -51,7 +51,7 @@ public class FamilyPhotoController {
         return Response.ok(familyPhotoService.createPhotoUploadUrl(user, request));
     }
 
-    @Operation(summary = "가족사진 업로드 완료", description = "S3에 직접 업로드한 가족사진을 검증하고 등록합니다.")
+    @Operation(summary = "가족사진 업로드 완료", description = "업로드한 가족사진을 검증하고 선택한 여러 사진 공유 그룹에 등록합니다.")
     @PostMapping(value = "/complete", consumes = MediaType.APPLICATION_JSON_VALUE)
     public Response<FamilyPhotoItemResponse> completePhotoUpload(
             @AuthenticationPrincipal User user,
@@ -61,10 +61,12 @@ public class FamilyPhotoController {
         return Response.ok(familyPhotoService.completePhotoUpload(user, idempotencyKey.toString(), request));
     }
 
-    @Operation(summary = "가족 사진 목록 조회", description = "현재 사용자가 속한 가족의 사진을 최신순으로 조회합니다. " + "uploaderUserId를 전달하면 해당 자녀의 사진만 조회합니다.")
+    @Operation(summary = "가족 사진 목록 조회", description = "선택한 시니어의 Family와 연결된 사진 공유 그룹의 사진을 최신순으로 조회합니다. "
+            + "uploaderUserId를 전달하면 해당 자녀가 공유한 사진만 조회합니다.")
     @GetMapping
     public Response<FamilyPhotoListResponse> getPhotos(
             @AuthenticationPrincipal User user,
+            @RequestParam Long seniorId,
             @RequestParam(name = "uploaderUserId", required = false) Long uploaderUserId,
             @RequestParam(name = "cursorCreatedAt", required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime cursorCreatedAt,
@@ -72,7 +74,7 @@ public class FamilyPhotoController {
             @RequestParam(name = "size", defaultValue = "10") int size
     ) {
         return Response.ok(
-                familyPhotoService.getPhotos(user, uploaderUserId, cursorCreatedAt, cursorId, size)
+                familyPhotoService.getPhotos(user, seniorId, uploaderUserId, cursorCreatedAt, cursorId, size)
         );
     }
 
@@ -87,24 +89,25 @@ public class FamilyPhotoController {
         return Response.ok(ResultCode.OK, null);
     }
 
-    @Operation(summary = "자녀별 가족 사진 앨범 조회", description = "부모가 같은 가족 자녀의 최신 사진과 전체 사진 수, 새로운 사진 여부를 조회합니다.")
+    @Operation(summary = "자녀별 가족 사진 앨범 조회", description = "선택한 시니어의 가족이 접근 가능한 공유 사진을 자녀별 앨범으로 조회합니다.")
     @GetMapping("/albums")
     public Response<List<FamilyPhotoAlbumResponse>> getPhotoAlbums(
-            @AuthenticationPrincipal User user
-    ){
-        return Response.ok(
-                familyPhotoService.getPhotoAlbums(user)
-        );
+            @AuthenticationPrincipal User user,
+            @RequestParam Long seniorId
+    ) {
+        return Response.ok(familyPhotoService.getPhotoAlbums(user, seniorId));
     }
 
     @Operation(summary = "가족 사진 확인 처리", description = "부모가 사진 상세 화면을 열었을 때 해당 사진 한 장을 확인 처리합니다.")
     @PatchMapping("/{familyPhotoId}/viewed")
     public Response<Void> markPhotoAsViewed(
             @AuthenticationPrincipal User user,
-            @PathVariable("familyPhotoId") Long familyPhotoId
+            @PathVariable("familyPhotoId") Long familyPhotoId,
+            @RequestParam Long seniorId
     ) {
         familyPhotoService.markPhotoAsViewed(
                 user,
+                seniorId,
                 familyPhotoId
         );
         return Response.ok();

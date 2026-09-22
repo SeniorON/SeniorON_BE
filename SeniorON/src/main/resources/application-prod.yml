@@ -43,6 +43,9 @@ management:
     health:
       show-details: never
 
+springdoc:
+  pre-loading-enabled: false
+
 app:
   cors:
     allowed-origins: https://senioron.site

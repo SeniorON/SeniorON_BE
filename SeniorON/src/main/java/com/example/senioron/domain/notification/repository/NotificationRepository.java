@@ -2,6 +2,8 @@ package com.example.senioron.domain.notification.repository;
 
 import com.example.senioron.domain.notification.entity.Notification;
 import com.example.senioron.domain.notification.entity.NotificationType;
+import com.example.senioron.domain.user.entity.Role;
+import com.example.senioron.domain.user.entity.UserStatus;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -12,6 +14,19 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
+    // 주소 갱신은 실제 알림 수신자 중 지금도 해당 가족에 소속된 활성 보호자에게만 전달한다.
+    @Query("""
+    SELECT n FROM Notification n
+    JOIN FETCH n.event e
+    JOIN FETCH e.senior s
+    JOIN FETCH n.receiverUser receiver
+    WHERE e.eventId = :eventId
+    AND receiver.role = :role AND receiver.status = :status
+    AND EXISTS (SELECT fm.id FROM FamilyMember fm WHERE fm.user = receiver AND fm.family = s.family)
+    """)
+    List<Notification> findHomeUpdateRecipients(@Param("eventId") Long eventId,
+            @Param("role") Role role, @Param("status") UserStatus status);
+
     // 홈 화면 카드용. 타입별로 따로 조회하지 않고 한 번에 가져와, 자바에서 타입별 최신 1건만 뽑는다.
     // sendUser/event는 카드에 바로 필요해서 지연 로딩 대신 같이 가져온다.
     @Query("""

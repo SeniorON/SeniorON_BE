@@ -106,7 +106,7 @@ class SosAddressLookupIntegrationTest {
                     .deviceToken("child-token").connectionStatus(DeviceStatus.ONLINE).build());
             return parent;
         });
-        given(fcmSender.sendHighPriority(anyString(), anyString(), anyString(), anyLong())).willReturn(true);
+        given(fcmSender.sendHighPriority(anyString(), anyString(), anyString(), anyLong(), anyLong())).willReturn(true);
     }
 
     @AfterEach
@@ -125,6 +125,21 @@ class SosAddressLookupIntegrationTest {
             userRepository.deleteAllInBatch();
             familyRepository.deleteAllInBatch();
         });
+    }
+
+    @Test
+    void unlinkedParentSosCommitsEventAndReturnsNotDispatched() {
+        User unlinked = transactionTemplate.execute(status -> userRepository.save(
+                User.builder().loginId("unlinked-parent").name("미연결 부모").role(Role.PARENT).build()));
+        var response = eventService.createSosEvent(unlinked, sosRequest());
+        assertThat(response.getNotificationStatus().name()).isEqualTo("NOT_DISPATCHED");
+        assertThat(response.getReason()).isEqualTo("SENIOR_NOT_LINKED");
+        assertThat(response.getSeniorId()).isNull();
+        assertThat(response.getReceiverCount()).isZero();
+        // 요청 트랜잭션 종료 후에도 실제로 저장된 이벤트를 조회할 수 있다.
+        assertThat(eventRepository.findById(response.getId())).isPresent();
+        assertThat(notificationRepository.count()).isZero();
+        verifyNoInteractions(fcmSender);
     }
 
     @Test
@@ -150,8 +165,10 @@ class SosAddressLookupIntegrationTest {
         assertThat(response.getLatitude()).isEqualByComparingTo(LATITUDE);
         assertThat(response.getLongitude()).isEqualByComparingTo(LONGITUDE);
         assertThat(response.getReceiverCount()).isEqualTo(1);
+        assertThat(response.getSeniorId()).isNotNull();
+        assertThat(response.getNotificationStatus().name()).isEqualTo("DISPATCH_REQUESTED");
         await().atMost(Duration.ofSeconds(3)).untilAsserted(() ->
-                verify(fcmSender).sendHighPriority("child-token", "SOS 알림", "도움이 필요해요", response.getId()));
+                verify(fcmSender).sendHighPriority("child-token", "SOS 알림", "도움이 필요해요", response.getId(), response.getSeniorId()));
         assertThat(lookupHeldTransaction).isFalse();
         assertThat(eventWasCommitted).isTrue();
 
@@ -165,7 +182,7 @@ class SosAddressLookupIntegrationTest {
         // 주소 갱신으로 SOS 이벤트나 푸시를 중복 생성하지 않는다.
         assertThat(eventRepository.count()).isEqualTo(1);
         assertThat(notificationRepository.count()).isEqualTo(1);
-        verify(fcmSender).sendHighPriority("child-token", "SOS 알림", "도움이 필요해요", response.getId());
+        verify(fcmSender).sendHighPriority("child-token", "SOS 알림", "도움이 필요해요", response.getId(), response.getSeniorId());
     }
 
     @Test
@@ -187,7 +204,7 @@ class SosAddressLookupIntegrationTest {
         CountDownLatch sendStarted = new CountDownLatch(1);
         CountDownLatch releaseSend = new CountDownLatch(1);
         AtomicBoolean committed = new AtomicBoolean();
-        given(fcmSender.sendHighPriority(anyString(), anyString(), anyString(), anyLong())).willAnswer(call -> {
+        given(fcmSender.sendHighPriority(anyString(), anyString(), anyString(), anyLong(), anyLong())).willAnswer(call -> {
             committed.set(eventRepository.count() == 1 && notificationRepository.count() == 1);
             sendStarted.countDown();
             if (!releaseSend.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("FCM test latch timed out");
