@@ -21,6 +21,7 @@ import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.inactivity.service.InactivitySettingService;
 import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
 import com.example.senioron.domain.user.entity.ManagerType;
+import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.entity.UserStatus;
 import com.example.senioron.domain.user.event.SignupEmailVerificationCodeSendEvent;
@@ -262,15 +263,19 @@ public class UserService {
         boolean seniorProfileCompleted = false;
         SeniorRelation relation = null;
 
-        if (hasFamily) {
-            Optional<Senior> familySenior =
-                    seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(family);
+        Optional<Senior> onboardingSenior = Optional.empty();
+        if (user.getRole() == Role.PARENT) {
+            onboardingSenior = seniorRepository.findByParentUser(user);
+        } else if (hasFamily) {
+            onboardingSenior = seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(family);
+        }
 
-            seniorId = familySenior
+        if (onboardingSenior.isPresent()) {
+            seniorId = onboardingSenior
                     .map(Senior::getSeniorId)
                     .orElse(null);
-            seniorProfileCompleted = familySenior.isPresent();
-            relation = familySenior
+            seniorProfileCompleted = true;
+            relation = onboardingSenior
                     .map(Senior::getRelation)
                     .orElse(null);
         }
