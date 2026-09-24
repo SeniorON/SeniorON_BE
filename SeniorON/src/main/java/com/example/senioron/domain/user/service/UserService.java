@@ -280,17 +280,27 @@ public class UserService {
                     .orElse(null);
         }
 
-        boolean onboardingCompleted =
-                hasFamily
-                        && user.getManagerType() != null
-                        && user.getManagerType() != ManagerType.NONE
-                        && seniorId != null
-                        && seniorProfileCompleted
-                        && relation != null;
+        boolean onboardingCompleted;
+        if (user.getRole() == Role.PARENT) {
+            onboardingCompleted =
+                    hasFamily
+                            && seniorId != null
+                            && seniorProfileCompleted
+                            && relation != null;
+        } else {
+            onboardingCompleted =
+                    hasFamily
+                            && user.getManagerType() != null
+                            && user.getManagerType() != ManagerType.NONE
+                            && seniorId != null
+                            && seniorProfileCompleted
+                            && relation != null;
+        }
 
         return OnboardingStatusResponse.builder()
                 .hasFamily(hasFamily)
                 .managerType(user.getManagerType())
+                .currentUserRole(user.getRole())
                 .seniorId(seniorId)
                 .seniorProfileCompleted(seniorProfileCompleted)
                 .relation(relation)
