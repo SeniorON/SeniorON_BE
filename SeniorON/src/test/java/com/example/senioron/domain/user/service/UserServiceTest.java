@@ -438,6 +438,7 @@ class UserServiceTest {
         assertThat(response.getManagerType()).isEqualTo(ManagerType.NONE);
         assertThat(response.getCurrentUserRole()).isEqualTo(Role.CHILD);
         assertThat(response.getSeniorId()).isNull();
+        assertThat(response.getParentUserId()).isNull();
         assertThat(response.isSeniorProfileCompleted()).isFalse();
         assertThat(response.getRelation()).isNull();
         assertThat(response.isOnboardingCompleted()).isFalse();
@@ -460,6 +461,7 @@ class UserServiceTest {
         assertThat(response.getManagerType()).isEqualTo(ManagerType.SUB);
         assertThat(response.getCurrentUserRole()).isEqualTo(Role.CHILD);
         assertThat(response.getSeniorId()).isEqualTo(123L);
+        assertThat(response.getParentUserId()).isNull();
         assertThat(response.isSeniorProfileCompleted()).isTrue();
         assertThat(response.getRelation()).isNull();
         assertThat(response.isOnboardingCompleted()).isFalse();
@@ -473,7 +475,9 @@ class UserServiceTest {
                 .seniorCode("ABC123")
                 .build();
         User user = createChild(1L, family, ManagerType.PRIMARY);
+        User parent = createParentWithFamilyMember(2L, family);
         Senior senior = createSenior(123L, family, user);
+        senior.linkParentUser(parent);
         senior.updateRelation(SeniorRelation.MOTHER, null);
         given(userRepository.findById(1L)).willReturn(Optional.of(user));
         given(seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(family)).willReturn(Optional.of(senior));
@@ -484,6 +488,7 @@ class UserServiceTest {
         assertThat(response.getManagerType()).isEqualTo(ManagerType.PRIMARY);
         assertThat(response.getCurrentUserRole()).isEqualTo(Role.CHILD);
         assertThat(response.getSeniorId()).isEqualTo(123L);
+        assertThat(response.getParentUserId()).isEqualTo(2L);
         assertThat(response.isSeniorProfileCompleted()).isTrue();
         assertThat(response.getRelation()).isEqualTo(SeniorRelation.MOTHER);
         assertThat(response.isOnboardingCompleted()).isTrue();
@@ -509,6 +514,7 @@ class UserServiceTest {
         assertThat(response.getManagerType()).isEqualTo(ManagerType.NONE);
         assertThat(response.getCurrentUserRole()).isEqualTo(Role.PARENT);
         assertThat(response.getSeniorId()).isEqualTo(222L);
+        assertThat(response.getParentUserId()).isEqualTo(2L);
         assertThat(response.isSeniorProfileCompleted()).isTrue();
         assertThat(response.getRelation()).isEqualTo(SeniorRelation.FATHER);
         assertThat(response.isOnboardingCompleted()).isTrue();
@@ -533,6 +539,7 @@ class UserServiceTest {
         OnboardingStatusResponse response = userService.getOnboardingStatus(parent);
 
         assertThat(response.getSeniorId()).isEqualTo(222L);
+        assertThat(response.getParentUserId()).isEqualTo(2L);
         assertThat(response.getCurrentUserRole()).isEqualTo(Role.PARENT);
         verify(seniorRepository).findByParentUser(parent);
         verify(seniorRepository, never()).findFirstByFamilyOrderBySeniorIdAsc(family);
@@ -554,6 +561,7 @@ class UserServiceTest {
         assertThat(response.getManagerType()).isEqualTo(ManagerType.NONE);
         assertThat(response.getCurrentUserRole()).isEqualTo(Role.PARENT);
         assertThat(response.getSeniorId()).isNull();
+        assertThat(response.getParentUserId()).isNull();
         assertThat(response.isSeniorProfileCompleted()).isFalse();
         assertThat(response.getRelation()).isNull();
         assertThat(response.isOnboardingCompleted()).isFalse();

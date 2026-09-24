@@ -260,6 +260,7 @@ public class UserService {
         Family family = user.getFamily();
         boolean hasFamily = family != null;
         Long seniorId = null;
+        Long parentUserId = null;
         boolean seniorProfileCompleted = false;
         SeniorRelation relation = null;
 
@@ -273,6 +274,10 @@ public class UserService {
         if (onboardingSenior.isPresent()) {
             seniorId = onboardingSenior
                     .map(Senior::getSeniorId)
+                    .orElse(null);
+            parentUserId = onboardingSenior
+                    .map(Senior::getParentUser)
+                    .map(User::getUsersId)
                     .orElse(null);
             seniorProfileCompleted = true;
             relation = onboardingSenior
@@ -302,6 +307,7 @@ public class UserService {
                 .managerType(user.getManagerType())
                 .currentUserRole(user.getRole())
                 .seniorId(seniorId)
+                .parentUserId(parentUserId)
                 .seniorProfileCompleted(seniorProfileCompleted)
                 .relation(relation)
                 .onboardingCompleted(onboardingCompleted)

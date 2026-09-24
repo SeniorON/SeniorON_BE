@@ -14,6 +14,7 @@ public class OnboardingStatusResponse {
     private ManagerType managerType;
     private Role currentUserRole;
     private Long seniorId;
+    private Long parentUserId;
     private boolean seniorProfileCompleted;
     private SeniorRelation relation;
     private boolean onboardingCompleted;
