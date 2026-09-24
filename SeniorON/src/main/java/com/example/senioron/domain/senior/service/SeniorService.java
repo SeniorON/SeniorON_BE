@@ -79,6 +79,9 @@ public class SeniorService {
         if (user == null) {
             throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
         }
+        if (user.getRole() == Role.PARENT) {
+            throw new BusinessException(ErrorCode.SENIOR_CREATE_CHILD_ONLY);
+        }
 
         validateCustomRelation(request);
 
