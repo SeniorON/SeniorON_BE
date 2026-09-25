@@ -290,6 +290,7 @@ public class UserService {
                         : senior.getParentUser().getUsersId())
                 .relation(senior == null ? null : senior.getRelation())
                 .seniorId(senior == null ? null : senior.getSeniorId())
+                .seniorName(senior == null ? null : senior.getName())
                 .seniorProfileCompleted(senior != null)
                 .build();
     }
