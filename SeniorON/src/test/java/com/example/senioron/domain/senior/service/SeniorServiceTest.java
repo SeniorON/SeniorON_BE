@@ -13,6 +13,7 @@ import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.senior.dto.request.SeniorCreateRequest;
+import com.example.senioron.domain.senior.dto.response.ManagedSeniorResponse;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
@@ -23,6 +24,7 @@ import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -56,22 +58,18 @@ class SeniorServiceTest {
     void getManagedSeniorsReturnsSeniorsThroughFamilyMembers() {
         Family family = Family.builder().familyId(1L).build();
         User user = createChild(1L, family, ManagerType.PRIMARY);
-        addFamilyMember(user, family, ManagerType.PRIMARY);
-        Senior senior = createSenior(10L, family, user);
 
-        given(userRepository.findByIdWithFamily(1L)).willReturn(Optional.of(user));
-        given(seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(family))
-                .willReturn(Optional.of(senior));
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(familyMemberRepository.findManagedSeniorResponsesByUserId(1L))
+                .willReturn(List.of(new ManagedSeniorResponse(1L, 10L)));
 
         var response = seniorService.getManagedSeniors(user);
 
         assertThat(response).hasSize(1);
-        assertThat(response.get(0).seniorId()).isEqualTo(10L);
         assertThat(response.get(0).familyId()).isEqualTo(1L);
-        assertThat(response.get(0).parentUserId()).isNull();
-        assertThat(response.get(0).name()).isEqualTo("김영희");
-        assertThat(response.get(0).relation()).isEqualTo(SeniorRelation.MOTHER);
-        assertThat(response.get(0).customRelation()).isNull();
+        assertThat(response.get(0).seniorId()).isEqualTo(10L);
+        verify(familyMemberRepository).findManagedSeniorResponsesByUserId(1L);
+        verify(seniorRepository, never()).findFirstByFamilyOrderBySeniorIdAsc(any());
     }
 
     @Test
@@ -81,6 +79,19 @@ class SeniorServiceTest {
                 .asInstanceOf(type(BusinessException.class))
                 .extracting(BusinessException::getCode)
                 .isEqualTo(ErrorCode.USER_NOT_AUTHENTICATED);
+    }
+
+    @Test
+    void getManagedSeniorsReturnsEmptyWhenUserHasNoFamily() {
+        User user = createChild(1L, null, ManagerType.NONE);
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(familyMemberRepository.findManagedSeniorResponsesByUserId(1L))
+                .willReturn(List.of());
+
+        var response = seniorService.getManagedSeniors(user);
+
+        assertThat(response).isEmpty();
     }
 
     @Test
