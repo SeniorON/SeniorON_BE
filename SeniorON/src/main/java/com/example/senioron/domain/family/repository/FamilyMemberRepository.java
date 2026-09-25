@@ -2,6 +2,7 @@ package com.example.senioron.domain.family.repository;
 
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
+import com.example.senioron.domain.senior.dto.response.ManagedSeniorResponse;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import jakarta.persistence.LockModeType;
@@ -71,4 +72,32 @@ public interface FamilyMemberRepository extends JpaRepository<FamilyMember, Long
     );
 
     List<FamilyMember> findAllByUser(User user);
+
+    @Query("""
+            SELECT fm
+            FROM FamilyMember fm
+            JOIN FETCH fm.family f
+            LEFT JOIN FETCH f.senior s
+            LEFT JOIN FETCH s.parentUser
+            WHERE fm.user = :user
+            ORDER BY fm.id ASC
+            """)
+    List<FamilyMember> findAllByUserWithFamilyAndSeniorOrderByIdAsc(
+            @Param("user") User user
+    );
+
+    @Query("""
+            SELECT new com.example.senioron.domain.senior.dto.response.ManagedSeniorResponse(
+                f.familyId,
+                s.seniorId
+            )
+            FROM FamilyMember fm
+            JOIN fm.family f
+            LEFT JOIN f.senior s
+            WHERE fm.user.usersId = :userId
+            ORDER BY fm.id ASC
+            """)
+    List<ManagedSeniorResponse> findManagedSeniorResponsesByUserId(
+            @Param("userId") Long userId
+    );
 }

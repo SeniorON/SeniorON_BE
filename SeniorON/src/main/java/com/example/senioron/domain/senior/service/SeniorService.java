@@ -6,6 +6,7 @@ import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.senior.dto.request.SeniorCreateRequest;
 import com.example.senioron.domain.senior.dto.response.ManagedSeniorResponse;
+import com.example.senioron.domain.senior.dto.response.ParentSeniorProfileResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorCreateResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorFamilyResponse;
 import com.example.senioron.domain.senior.entity.Senior;
@@ -22,7 +23,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -39,16 +39,12 @@ public class SeniorService {
             throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
         }
 
-        User foundUser = userRepository.findByIdWithFamily(user.getUsersId())
+        User foundUser = userRepository.findById(user.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        return foundUser.getFamilyMembers()
-                .stream()
-                .map(FamilyMember::getFamily)
-                .map(seniorRepository::findFirstByFamilyOrderBySeniorIdAsc)
-                .flatMap(Optional::stream)
-                .map(ManagedSeniorResponse::from)
-                .toList();
+        return familyMemberRepository.findManagedSeniorResponsesByUserId(
+                foundUser.getUsersId()
+        );
     }
 
     public List<SeniorFamilyResponse> getFamilySeniors(User principal, Long familyId) {
@@ -66,6 +62,22 @@ public class SeniorService {
                 .stream()
                 .map(SeniorFamilyResponse::from)
                 .toList();
+    }
+
+    public ParentSeniorProfileResponse getParentSeniorProfile(User principal) {
+        if (principal == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
+        }
+
+        User user = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        if (user.getRole() != Role.PARENT) {
+            throw new BusinessException(ErrorCode.SENIOR_PARENT_LINK_PARENT_ONLY);
+        }
+
+        Senior senior = seniorRepository.findByParentUser(user)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SENIOR_NOT_FOUND));
+        return ParentSeniorProfileResponse.from(senior);
     }
 
     /**
