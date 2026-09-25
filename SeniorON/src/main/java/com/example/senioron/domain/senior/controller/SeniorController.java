@@ -2,6 +2,7 @@ package com.example.senioron.domain.senior.controller;
 
 import com.example.senioron.domain.senior.dto.request.SeniorCreateRequest;
 import com.example.senioron.domain.senior.dto.response.ManagedSeniorResponse;
+import com.example.senioron.domain.senior.dto.response.ParentSeniorProfileResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorCreateResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorFamilyResponse;
 import com.example.senioron.domain.senior.service.SeniorService;
@@ -42,6 +43,16 @@ public class SeniorController {
     ) {
         return Response.ok(
                 seniorService.getFamilySeniors(user, familyId)
+        );
+    }
+
+    @Operation(summary = "내 시니어 프로필 ID 조회", description = "현재 로그인한 부모 계정과 연결된 시니어 프로필의 ID를 조회합니다.")
+    @GetMapping("/me/profile")
+    public Response<ParentSeniorProfileResponse> getParentSeniorProfile(
+            @AuthenticationPrincipal User user
+    ) {
+        return Response.ok(
+                seniorService.getParentSeniorProfile(user)
         );
     }
 
