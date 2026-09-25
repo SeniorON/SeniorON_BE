@@ -10,9 +10,9 @@ import com.example.senioron.domain.user.dto.request.UserWithdrawalRequest;
 import com.example.senioron.domain.user.dto.response.*;
 import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.senior.entity.Senior;
-import com.example.senioron.domain.senior.entity.SeniorRelation;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.entity.RefreshToken;
 import com.example.senioron.domain.user.entity.SignupEmailVerificationCode;
@@ -35,6 +35,7 @@ import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -257,61 +258,58 @@ public class UserService {
         User user = userRepository.findById(principal.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        Family family = user.getFamily();
-        boolean hasFamily = family != null;
-        Long seniorId = null;
-        Long parentUserId = null;
-        boolean seniorProfileCompleted = false;
-        SeniorRelation relation = null;
-
-        Optional<Senior> onboardingSenior = Optional.empty();
-        if (user.getRole() == Role.PARENT) {
-            onboardingSenior = seniorRepository.findByParentUser(user);
-        } else if (hasFamily) {
-            onboardingSenior = seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(family);
-        }
-
-        if (onboardingSenior.isPresent()) {
-            seniorId = onboardingSenior
-                    .map(Senior::getSeniorId)
-                    .orElse(null);
-            parentUserId = onboardingSenior
-                    .map(Senior::getParentUser)
-                    .map(User::getUsersId)
-                    .orElse(null);
-            seniorProfileCompleted = true;
-            relation = onboardingSenior
-                    .map(Senior::getRelation)
-                    .orElse(null);
-        }
-
-        boolean onboardingCompleted;
-        if (user.getRole() == Role.PARENT) {
-            onboardingCompleted =
-                    hasFamily
-                            && seniorId != null
-                            && seniorProfileCompleted
-                            && relation != null;
-        } else {
-            onboardingCompleted =
-                    hasFamily
-                            && user.getManagerType() != null
-                            && user.getManagerType() != ManagerType.NONE
-                            && seniorId != null
-                            && seniorProfileCompleted
-                            && relation != null;
-        }
+        List<OnboardingStatusResponse.FamilyStatus> families =
+                familyMemberRepository.findAllByUserWithFamilyAndSeniorOrderByIdAsc(user)
+                        .stream()
+                        .map(this::toOnboardingFamilyStatus)
+                        .toList();
+        boolean hasFamily = !families.isEmpty();
+        boolean onboardingCompleted = hasFamily
+                && families.stream()
+                .anyMatch(family -> isOnboardingCompleted(user, family));
 
         return OnboardingStatusResponse.builder()
-                .hasFamily(hasFamily)
-                .managerType(user.getManagerType())
                 .currentUserRole(user.getRole())
-                .seniorId(seniorId)
-                .parentUserId(parentUserId)
-                .seniorProfileCompleted(seniorProfileCompleted)
-                .relation(relation)
+                .hasFamily(hasFamily)
                 .onboardingCompleted(onboardingCompleted)
+                .families(families)
                 .build();
+    }
+
+    private OnboardingStatusResponse.FamilyStatus toOnboardingFamilyStatus(
+            FamilyMember familyMember
+    ) {
+        Family family = familyMember.getFamily();
+        Senior senior = family.getSenior();
+
+        return OnboardingStatusResponse.FamilyStatus.builder()
+                .familyId(family.getFamilyId())
+                .managerType(familyMember.getManagerType())
+                .parentUserId(senior == null || senior.getParentUser() == null
+                        ? null
+                        : senior.getParentUser().getUsersId())
+                .relation(senior == null ? null : senior.getRelation())
+                .seniorId(senior == null ? null : senior.getSeniorId())
+                .seniorProfileCompleted(senior != null)
+                .build();
+    }
+
+    private boolean isOnboardingCompleted(
+            User user,
+            OnboardingStatusResponse.FamilyStatus family
+    ) {
+        if (user.getRole() == Role.PARENT) {
+            return Objects.equals(family.getParentUserId(), user.getUsersId())
+                    && family.getSeniorId() != null
+                    && family.isSeniorProfileCompleted()
+                    && family.getRelation() != null;
+        }
+
+        return family.getManagerType() != null
+                && family.getManagerType() != ManagerType.NONE
+                && family.getSeniorId() != null
+                && family.isSeniorProfileCompleted()
+                && family.getRelation() != null;
     }
 
     public TokenRefreshResponse refreshToken(TokenRefreshRequest request) {

@@ -12,6 +12,7 @@ import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
+import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +32,9 @@ class FamilyMemberRepositoryTest {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private EntityManager entityManager;
 
     @Test
     void findsFamilyAndSeniorWhenUserBelongsToFamilyWithSenior() {
@@ -117,13 +121,57 @@ class FamilyMemberRepositoryTest {
         assertThat(result).isEmpty();
     }
 
+    @Test
+    void findsFamilyMembersWithFamilySeniorAndParentUser() {
+        User child = saveUser("onboarding-child");
+        User parent = saveUser("onboarding-parent", Role.PARENT);
+        Family firstFamily = saveFamily("MANAGED7");
+        Family secondFamily = saveFamily("MANAGED8");
+        saveFamilyMember(child, firstFamily, ManagerType.PRIMARY);
+        saveFamilyMember(child, secondFamily, ManagerType.SUB);
+        Senior senior = saveSenior(firstFamily, child, parent);
+        entityManager.flush();
+        entityManager.clear();
+
+        var result = familyMemberRepository.findAllByUserWithFamilyAndSeniorOrderByIdAsc(
+                child
+        );
+
+        assertThat(result).hasSize(2);
+        assertThat(result)
+                .extracting(
+                        member -> member.getFamily().getFamilyId(),
+                        FamilyMember::getManagerType,
+                        member -> member.getFamily().getSenior() == null
+                                ? null
+                                : member.getFamily().getSenior().getSeniorId(),
+                        member -> member.getFamily().getSenior() == null
+                                || member.getFamily().getSenior().getParentUser() == null
+                                ? null
+                                : member.getFamily().getSenior().getParentUser().getUsersId()
+                )
+                .containsExactly(
+                        tuple(
+                                firstFamily.getFamilyId(),
+                                ManagerType.PRIMARY,
+                                senior.getSeniorId(),
+                                parent.getUsersId()
+                        ),
+                        tuple(secondFamily.getFamilyId(), ManagerType.SUB, null, null)
+                );
+    }
+
     private User saveUser(String key) {
+        return saveUser(key, Role.CHILD);
+    }
+
+    private User saveUser(String key, Role role) {
         return userRepository.saveAndFlush(
                 User.builder()
                         .loginId(key)
                         .email(key + "@example.com")
                         .name(key)
-                        .role(Role.CHILD)
+                        .role(role)
                         .build()
         );
     }
@@ -137,16 +185,24 @@ class FamilyMemberRepositoryTest {
     }
 
     private void saveFamilyMember(User user, Family family) {
+        saveFamilyMember(user, family, ManagerType.NONE);
+    }
+
+    private void saveFamilyMember(User user, Family family, ManagerType managerType) {
         familyMemberRepository.saveAndFlush(
                 FamilyMember.builder()
                         .user(user)
                         .family(family)
-                        .managerType(ManagerType.NONE)
+                        .managerType(managerType)
                         .build()
         );
     }
 
     private Senior saveSenior(Family family, User user) {
+        return saveSenior(family, user, null);
+    }
+
+    private Senior saveSenior(Family family, User user, User parentUser) {
         return seniorRepository.saveAndFlush(
                 Senior.builder()
                         .name("김영희")
@@ -155,6 +211,7 @@ class FamilyMemberRepositoryTest {
                         .phoneNumber("01012345678")
                         .family(family)
                         .registeredBy(user)
+                        .parentUser(parentUser)
                         .build()
         );
     }

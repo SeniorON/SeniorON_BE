@@ -74,6 +74,19 @@ public interface FamilyMemberRepository extends JpaRepository<FamilyMember, Long
     List<FamilyMember> findAllByUser(User user);
 
     @Query("""
+            SELECT fm
+            FROM FamilyMember fm
+            JOIN FETCH fm.family f
+            LEFT JOIN FETCH f.senior s
+            LEFT JOIN FETCH s.parentUser
+            WHERE fm.user = :user
+            ORDER BY fm.id ASC
+            """)
+    List<FamilyMember> findAllByUserWithFamilyAndSeniorOrderByIdAsc(
+            @Param("user") User user
+    );
+
+    @Query("""
             SELECT new com.example.senioron.domain.senior.dto.response.ManagedSeniorResponse(
                 f.familyId,
                 s.seniorId
