@@ -48,8 +48,22 @@ class FamilyMemberRepositoryTest {
         );
 
         assertThat(result)
-                .extracting("familyId", "seniorId")
-                .containsExactly(tuple(family.getFamilyId(), senior.getSeniorId()));
+                .extracting(
+                        "familyId",
+                        "seniorId",
+                        "seniorName",
+                        "relation",
+                        "customRelation",
+                        "seniorProfileCompleted"
+                )
+                .containsExactly(tuple(
+                        family.getFamilyId(),
+                        senior.getSeniorId(),
+                        "김영희",
+                        SeniorRelation.MOTHER,
+                        null,
+                        true
+                ));
     }
 
     @Test
@@ -63,8 +77,22 @@ class FamilyMemberRepositoryTest {
         );
 
         assertThat(result)
-                .extracting("familyId", "seniorId")
-                .containsExactly(tuple(family.getFamilyId(), null));
+                .extracting(
+                        "familyId",
+                        "seniorId",
+                        "seniorName",
+                        "relation",
+                        "customRelation",
+                        "seniorProfileCompleted"
+                )
+                .containsExactly(tuple(
+                        family.getFamilyId(),
+                        null,
+                        null,
+                        null,
+                        null,
+                        false
+                ));
     }
 
     @Test
@@ -81,10 +109,24 @@ class FamilyMemberRepositoryTest {
         );
 
         assertThat(result)
-                .extracting("familyId", "seniorId")
+                .extracting(
+                        "familyId",
+                        "seniorId",
+                        "seniorName",
+                        "relation",
+                        "customRelation",
+                        "seniorProfileCompleted"
+                )
                 .containsExactly(
-                        tuple(firstFamily.getFamilyId(), senior.getSeniorId()),
-                        tuple(secondFamily.getFamilyId(), null)
+                        tuple(
+                                firstFamily.getFamilyId(),
+                                senior.getSeniorId(),
+                                "김영희",
+                                SeniorRelation.MOTHER,
+                                null,
+                                true
+                        ),
+                        tuple(secondFamily.getFamilyId(), null, null, null, null, false)
                 );
     }
 
@@ -103,10 +145,31 @@ class FamilyMemberRepositoryTest {
         );
 
         assertThat(result)
-                .extracting("familyId", "seniorId")
+                .extracting(
+                        "familyId",
+                        "seniorId",
+                        "seniorName",
+                        "relation",
+                        "customRelation",
+                        "seniorProfileCompleted"
+                )
                 .containsExactly(
-                        tuple(firstFamily.getFamilyId(), firstSenior.getSeniorId()),
-                        tuple(secondFamily.getFamilyId(), secondSenior.getSeniorId())
+                        tuple(
+                                firstFamily.getFamilyId(),
+                                firstSenior.getSeniorId(),
+                                "김영희",
+                                SeniorRelation.MOTHER,
+                                null,
+                                true
+                        ),
+                        tuple(
+                                secondFamily.getFamilyId(),
+                                secondSenior.getSeniorId(),
+                                "김영희",
+                                SeniorRelation.MOTHER,
+                                null,
+                                true
+                        )
                 );
     }
 

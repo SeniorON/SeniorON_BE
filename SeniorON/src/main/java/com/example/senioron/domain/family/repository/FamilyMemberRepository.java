@@ -89,7 +89,11 @@ public interface FamilyMemberRepository extends JpaRepository<FamilyMember, Long
     @Query("""
             SELECT new com.example.senioron.domain.senior.dto.response.ManagedSeniorResponse(
                 f.familyId,
-                s.seniorId
+                s.seniorId,
+                s.name,
+                s.relation,
+                s.customRelation,
+                CASE WHEN s IS NULL THEN false ELSE true END
             )
             FROM FamilyMember fm
             JOIN fm.family f

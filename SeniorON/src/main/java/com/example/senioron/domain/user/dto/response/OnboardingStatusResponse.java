@@ -31,6 +31,7 @@ public class OnboardingStatusResponse {
             "parentUserId",
             "relation",
             "seniorId",
+            "seniorName",
             "seniorProfileCompleted"
     })
     public static class FamilyStatus {
@@ -40,6 +41,7 @@ public class OnboardingStatusResponse {
         private Long parentUserId;
         private SeniorRelation relation;
         private Long seniorId;
+        private String seniorName;
         private boolean seniorProfileCompleted;
     }
 }

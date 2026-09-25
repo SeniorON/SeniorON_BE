@@ -471,6 +471,7 @@ class UserServiceTest {
         assertThat(familyStatus.getFamilyId()).isEqualTo(1L);
         assertThat(familyStatus.getManagerType()).isEqualTo(ManagerType.PRIMARY);
         assertThat(familyStatus.getSeniorId()).isEqualTo(123L);
+        assertThat(familyStatus.getSeniorName()).isEqualTo("시니어");
         assertThat(familyStatus.getParentUserId()).isEqualTo(2L);
         assertThat(familyStatus.getRelation()).isEqualTo(SeniorRelation.MOTHER);
         assertThat(familyStatus.isSeniorProfileCompleted()).isTrue();
@@ -501,6 +502,7 @@ class UserServiceTest {
         assertThat(familyStatus.getFamilyId()).isEqualTo(1L);
         assertThat(familyStatus.getManagerType()).isEqualTo(ManagerType.SUB);
         assertThat(familyStatus.getSeniorId()).isNull();
+        assertThat(familyStatus.getSeniorName()).isNull();
         assertThat(familyStatus.getParentUserId()).isNull();
         assertThat(familyStatus.getRelation()).isNull();
         assertThat(familyStatus.isSeniorProfileCompleted()).isFalse();
@@ -536,10 +538,28 @@ class UserServiceTest {
         assertThat(response.isOnboardingCompleted()).isTrue();
         assertThat(response.getFamilies()).hasSize(2);
         assertThat(response.getFamilies())
-                .extracting("familyId", "managerType", "seniorId", "seniorProfileCompleted")
+                .extracting(
+                        "familyId",
+                        "managerType",
+                        "seniorId",
+                        "seniorName",
+                        "seniorProfileCompleted"
+                )
                 .containsExactly(
-                        org.assertj.core.api.Assertions.tuple(1L, ManagerType.PRIMARY, 123L, true),
-                        org.assertj.core.api.Assertions.tuple(2L, ManagerType.SUB, null, false)
+                        org.assertj.core.api.Assertions.tuple(
+                                1L,
+                                ManagerType.PRIMARY,
+                                123L,
+                                "시니어",
+                                true
+                        ),
+                        org.assertj.core.api.Assertions.tuple(
+                                2L,
+                                ManagerType.SUB,
+                                null,
+                                null,
+                                false
+                        )
                 );
     }
 
@@ -566,6 +586,7 @@ class UserServiceTest {
         assertThat(response.getCurrentUserRole()).isEqualTo(Role.CHILD);
         assertThat(response.isOnboardingCompleted()).isTrue();
         assertThat(familyStatus.getSeniorId()).isEqualTo(123L);
+        assertThat(familyStatus.getSeniorName()).isEqualTo("시니어");
         assertThat(familyStatus.getParentUserId()).isNull();
         assertThat(familyStatus.getRelation()).isEqualTo(SeniorRelation.FATHER);
         assertThat(familyStatus.isSeniorProfileCompleted()).isTrue();

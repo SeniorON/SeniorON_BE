@@ -62,13 +62,24 @@ class SeniorServiceTest {
 
         given(userRepository.findById(1L)).willReturn(Optional.of(user));
         given(familyMemberRepository.findManagedSeniorResponsesByUserId(1L))
-                .willReturn(List.of(new ManagedSeniorResponse(1L, 10L)));
+                .willReturn(List.of(new ManagedSeniorResponse(
+                        1L,
+                        10L,
+                        "김영희",
+                        SeniorRelation.MOTHER,
+                        null,
+                        true
+                )));
 
         var response = seniorService.getManagedSeniors(user);
 
         assertThat(response).hasSize(1);
         assertThat(response.get(0).familyId()).isEqualTo(1L);
         assertThat(response.get(0).seniorId()).isEqualTo(10L);
+        assertThat(response.get(0).seniorName()).isEqualTo("김영희");
+        assertThat(response.get(0).relation()).isEqualTo(SeniorRelation.MOTHER);
+        assertThat(response.get(0).customRelation()).isNull();
+        assertThat(response.get(0).seniorProfileCompleted()).isTrue();
         verify(familyMemberRepository).findManagedSeniorResponsesByUserId(1L);
         verify(seniorRepository, never()).findFirstByFamilyOrderBySeniorIdAsc(any());
     }
