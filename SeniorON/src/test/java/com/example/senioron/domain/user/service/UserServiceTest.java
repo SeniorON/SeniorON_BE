@@ -16,6 +16,7 @@ import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.device.service.DeviceCredentialIssueResult;
 import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.inactivity.service.InactivitySettingService;
 import com.example.senioron.domain.senior.entity.Senior;
@@ -435,7 +436,9 @@ class UserServiceTest {
 
         assertThat(response.isHasFamily()).isFalse();
         assertThat(response.getManagerType()).isEqualTo(ManagerType.NONE);
+        assertThat(response.getCurrentUserRole()).isEqualTo(Role.CHILD);
         assertThat(response.getSeniorId()).isNull();
+        assertThat(response.getParentUserId()).isNull();
         assertThat(response.isSeniorProfileCompleted()).isFalse();
         assertThat(response.getRelation()).isNull();
         assertThat(response.isOnboardingCompleted()).isFalse();
@@ -456,10 +459,13 @@ class UserServiceTest {
 
         assertThat(response.isHasFamily()).isTrue();
         assertThat(response.getManagerType()).isEqualTo(ManagerType.SUB);
+        assertThat(response.getCurrentUserRole()).isEqualTo(Role.CHILD);
         assertThat(response.getSeniorId()).isEqualTo(123L);
+        assertThat(response.getParentUserId()).isNull();
         assertThat(response.isSeniorProfileCompleted()).isTrue();
         assertThat(response.getRelation()).isNull();
         assertThat(response.isOnboardingCompleted()).isFalse();
+        verify(seniorRepository, never()).findByParentUser(user);
     }
 
     @Test
@@ -469,7 +475,9 @@ class UserServiceTest {
                 .seniorCode("ABC123")
                 .build();
         User user = createChild(1L, family, ManagerType.PRIMARY);
+        User parent = createParentWithFamilyMember(2L, family);
         Senior senior = createSenior(123L, family, user);
+        senior.linkParentUser(parent);
         senior.updateRelation(SeniorRelation.MOTHER, null);
         given(userRepository.findById(1L)).willReturn(Optional.of(user));
         given(seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(family)).willReturn(Optional.of(senior));
@@ -478,10 +486,86 @@ class UserServiceTest {
 
         assertThat(response.isHasFamily()).isTrue();
         assertThat(response.getManagerType()).isEqualTo(ManagerType.PRIMARY);
+        assertThat(response.getCurrentUserRole()).isEqualTo(Role.CHILD);
         assertThat(response.getSeniorId()).isEqualTo(123L);
+        assertThat(response.getParentUserId()).isEqualTo(2L);
         assertThat(response.isSeniorProfileCompleted()).isTrue();
         assertThat(response.getRelation()).isEqualTo(SeniorRelation.MOTHER);
         assertThat(response.isOnboardingCompleted()).isTrue();
+    }
+
+    @Test
+    void getOnboardingStatusReturnsParentLinkedSenior() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .seniorCode("ABC123")
+                .build();
+        User parent = createParentWithFamilyMember(2L, family);
+        User child = createChild(1L, family, ManagerType.PRIMARY);
+        Senior linkedSenior = createSenior(222L, family, child);
+        linkedSenior.linkParentUser(parent);
+        linkedSenior.updateRelation(SeniorRelation.FATHER, null);
+        given(userRepository.findById(2L)).willReturn(Optional.of(parent));
+        given(seniorRepository.findByParentUser(parent)).willReturn(Optional.of(linkedSenior));
+
+        OnboardingStatusResponse response = userService.getOnboardingStatus(parent);
+
+        assertThat(response.isHasFamily()).isTrue();
+        assertThat(response.getManagerType()).isEqualTo(ManagerType.NONE);
+        assertThat(response.getCurrentUserRole()).isEqualTo(Role.PARENT);
+        assertThat(response.getSeniorId()).isEqualTo(222L);
+        assertThat(response.getParentUserId()).isEqualTo(2L);
+        assertThat(response.isSeniorProfileCompleted()).isTrue();
+        assertThat(response.getRelation()).isEqualTo(SeniorRelation.FATHER);
+        assertThat(response.isOnboardingCompleted()).isTrue();
+        verify(seniorRepository, never()).findFirstByFamilyOrderBySeniorIdAsc(family);
+    }
+
+    @Test
+    void getOnboardingStatusUsesParentUserSeniorEvenWhenFamilySeniorExists() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .seniorCode("ABC123")
+                .build();
+        User parent = createParentWithFamilyMember(2L, family);
+        User child = createChild(1L, family, ManagerType.PRIMARY);
+        Senior linkedSenior = createSenior(222L, family, child);
+        linkedSenior.linkParentUser(parent);
+        Senior familySenior = createSenior(111L, family, child);
+        given(userRepository.findById(2L)).willReturn(Optional.of(parent));
+        given(seniorRepository.findByParentUser(parent)).willReturn(Optional.of(linkedSenior));
+        given(seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(family)).willReturn(Optional.of(familySenior));
+
+        OnboardingStatusResponse response = userService.getOnboardingStatus(parent);
+
+        assertThat(response.getSeniorId()).isEqualTo(222L);
+        assertThat(response.getParentUserId()).isEqualTo(2L);
+        assertThat(response.getCurrentUserRole()).isEqualTo(Role.PARENT);
+        verify(seniorRepository).findByParentUser(parent);
+        verify(seniorRepository, never()).findFirstByFamilyOrderBySeniorIdAsc(family);
+    }
+
+    @Test
+    void getOnboardingStatusReturnsEmptySeniorStateWhenParentLinkedSeniorIsMissing() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .seniorCode("ABC123")
+                .build();
+        User parent = createParentWithFamilyMember(2L, family);
+        given(userRepository.findById(2L)).willReturn(Optional.of(parent));
+        given(seniorRepository.findByParentUser(parent)).willReturn(Optional.empty());
+
+        OnboardingStatusResponse response = userService.getOnboardingStatus(parent);
+
+        assertThat(response.isHasFamily()).isTrue();
+        assertThat(response.getManagerType()).isEqualTo(ManagerType.NONE);
+        assertThat(response.getCurrentUserRole()).isEqualTo(Role.PARENT);
+        assertThat(response.getSeniorId()).isNull();
+        assertThat(response.getParentUserId()).isNull();
+        assertThat(response.isSeniorProfileCompleted()).isFalse();
+        assertThat(response.getRelation()).isNull();
+        assertThat(response.isOnboardingCompleted()).isFalse();
+        verify(seniorRepository, never()).findFirstByFamilyOrderBySeniorIdAsc(family);
     }
 
     @Test
@@ -806,6 +890,27 @@ class UserServiceTest {
                 .managerType(managerType)
                 .status(UserStatus.ACTIVE)
                 .build();
+    }
+
+    private User createParentWithFamilyMember(Long usersId, Family family) {
+        User parent = User.builder()
+                .usersId(usersId)
+                .loginId("parent" + usersId)
+                .email("parent" + usersId + "@example.com")
+                .password("encoded")
+                .name("부모")
+                .role(Role.PARENT)
+                .status(UserStatus.ACTIVE)
+                .build();
+        parent.getFamilyMembers().add(
+                FamilyMember.builder()
+                        .id(1L)
+                        .user(parent)
+                        .family(family)
+                        .managerType(ManagerType.NONE)
+                        .build()
+        );
+        return parent;
     }
 
     private Senior createSenior(Long seniorId, Family family, User registeredBy) {

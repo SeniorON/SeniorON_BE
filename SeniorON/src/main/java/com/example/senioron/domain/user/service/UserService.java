@@ -21,6 +21,7 @@ import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.inactivity.service.InactivitySettingService;
 import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
 import com.example.senioron.domain.user.entity.ManagerType;
+import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.entity.UserStatus;
 import com.example.senioron.domain.user.event.SignupEmailVerificationCodeSendEvent;
@@ -259,34 +260,54 @@ public class UserService {
         Family family = user.getFamily();
         boolean hasFamily = family != null;
         Long seniorId = null;
+        Long parentUserId = null;
         boolean seniorProfileCompleted = false;
         SeniorRelation relation = null;
 
-        if (hasFamily) {
-            Optional<Senior> familySenior =
-                    seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(family);
+        Optional<Senior> onboardingSenior = Optional.empty();
+        if (user.getRole() == Role.PARENT) {
+            onboardingSenior = seniorRepository.findByParentUser(user);
+        } else if (hasFamily) {
+            onboardingSenior = seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(family);
+        }
 
-            seniorId = familySenior
+        if (onboardingSenior.isPresent()) {
+            seniorId = onboardingSenior
                     .map(Senior::getSeniorId)
                     .orElse(null);
-            seniorProfileCompleted = familySenior.isPresent();
-            relation = familySenior
+            parentUserId = onboardingSenior
+                    .map(Senior::getParentUser)
+                    .map(User::getUsersId)
+                    .orElse(null);
+            seniorProfileCompleted = true;
+            relation = onboardingSenior
                     .map(Senior::getRelation)
                     .orElse(null);
         }
 
-        boolean onboardingCompleted =
-                hasFamily
-                        && user.getManagerType() != null
-                        && user.getManagerType() != ManagerType.NONE
-                        && seniorId != null
-                        && seniorProfileCompleted
-                        && relation != null;
+        boolean onboardingCompleted;
+        if (user.getRole() == Role.PARENT) {
+            onboardingCompleted =
+                    hasFamily
+                            && seniorId != null
+                            && seniorProfileCompleted
+                            && relation != null;
+        } else {
+            onboardingCompleted =
+                    hasFamily
+                            && user.getManagerType() != null
+                            && user.getManagerType() != ManagerType.NONE
+                            && seniorId != null
+                            && seniorProfileCompleted
+                            && relation != null;
+        }
 
         return OnboardingStatusResponse.builder()
                 .hasFamily(hasFamily)
                 .managerType(user.getManagerType())
+                .currentUserRole(user.getRole())
                 .seniorId(seniorId)
+                .parentUserId(parentUserId)
                 .seniorProfileCompleted(seniorProfileCompleted)
                 .relation(relation)
                 .onboardingCompleted(onboardingCompleted)

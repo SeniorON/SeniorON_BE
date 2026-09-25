@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.example.senioron.domain.family.entity.Family;
@@ -166,6 +167,23 @@ class SeniorServiceTest {
         ArgumentCaptor<Senior> seniorCaptor = ArgumentCaptor.forClass(Senior.class);
         verify(seniorRepository).saveAndFlush(seniorCaptor.capture());
         assertThat(seniorCaptor.getValue().getParentUser()).isEqualTo(parent);
+    }
+
+    @Test
+    void createSeniorRejectsParentUser() {
+        Family family = Family.builder().familyId(1L).build();
+        User parent = createParent(2L, family);
+
+        assertThatThrownBy(() -> seniorService.createSenior(
+                parent,
+                createRequest(SeniorRelation.MOTHER, null)
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_CREATE_CHILD_ONLY);
+        verify(familyRepository, never()).findByIdForUpdate(1L);
+        verify(seniorRepository, never()).saveAndFlush(any(Senior.class));
     }
 
     @Test
