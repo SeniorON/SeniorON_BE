@@ -180,20 +180,10 @@ public class DeviceService {
             );
         }
 
-        Device device = deviceRepository
-                .findByDeviceIdentifier(
-                        request.deviceIdentifier()
-                )
-                .orElseGet(() ->
-                        Device.builder()
-                                .user(user)
-                                .deviceIdentifier(
-                                        request.deviceIdentifier()
-                                )
-                                .build()
-                );
-
-        device.reassignOwner(user);
+        Device device = findOrCreateDevice(
+                user,
+                request.deviceIdentifier()
+        );
 
         device.updateDeviceInfo(
                 request.deviceName(),
