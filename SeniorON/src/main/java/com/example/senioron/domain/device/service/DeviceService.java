@@ -9,6 +9,7 @@ import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.device.dto.request.DeviceLocationUpdateRequest;
 import com.example.senioron.domain.device.dto.response.DeviceLocationResponse;
 import com.example.senioron.domain.device.dto.response.HomeLocationResponse;
+import com.example.senioron.domain.device.dto.response.DeviceReconnectionStatusResponse;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
@@ -321,6 +322,38 @@ public class DeviceService {
         }
 
         devices.forEach(Device::disconnect);
+    }
+
+    @Transactional(readOnly = true)
+    public DeviceReconnectionStatusResponse getReconnectionStatus(
+            User currentUser
+    ) {
+        if (currentUser.getRole() != Role.PARENT) {
+            throw new BusinessException(
+                    ErrorCode.SENIOR_DEVICE_ACCESS_DENIED
+            );
+        }
+
+        boolean familyConnected =
+                !familyMemberRepository
+                        .findAllByUser(currentUser)
+                        .isEmpty();
+
+        boolean deviceDisconnected =
+                deviceRepository
+                        .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
+                                currentUser
+                        )
+                        .map(device ->
+                                device.getConnectionStatus()
+                                        == DeviceStatus.DISCONNECTED
+                        )
+                        .orElse(false);
+
+        return new DeviceReconnectionStatusResponse(
+                familyConnected,
+                deviceDisconnected
+        );
     }
 
     @Transactional
