@@ -19,6 +19,7 @@ import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import org.junit.jupiter.api.*;
 import org.mockito.ArgumentCaptor;
@@ -94,6 +95,44 @@ class EventNotificationPolicyTest {
         assertThat(outing.getNotificationStatus().name()).isEqualTo("NOT_DISPATCHED");
         verify(events, times(2)).save(any(Event.class));
         verifyNoInteractions(notifications);
+    }
+
+    @Test
+    void inactivityWithoutLocationSkipsGeocodingAndIsSaved() {
+        InactivityRequest request = new InactivityRequest();
+        ReflectionTestUtils.setField(request, "deviceBattery", 80);
+        ReflectionTestUtils.setField(request, "lastSeenAt", LocalDateTime.now().minusMinutes(10));
+
+        var response = service.createInactivityEvent(parent, request);
+
+        assertThat(response.getId()).isEqualTo(123L);
+        ArgumentCaptor<Event> saved = ArgumentCaptor.forClass(Event.class);
+        verify(events).save(saved.capture());
+        assertThat(saved.getValue().getLatitude()).isNull();
+        assertThat(saved.getValue().getLongitude()).isNull();
+        assertThat(saved.getValue().getAddress()).isNull();
+        verifyNoInteractions(geocoding);
+    }
+
+    @Test
+    void inactivityWithLocationUsesGeocodedAddress() {
+        InactivityRequest request = new InactivityRequest();
+        BigDecimal latitude = new BigDecimal("37.5665");
+        BigDecimal longitude = new BigDecimal("126.9780");
+        ReflectionTestUtils.setField(request, "latitude", latitude);
+        ReflectionTestUtils.setField(request, "longitude", longitude);
+        ReflectionTestUtils.setField(request, "deviceBattery", 80);
+        ReflectionTestUtils.setField(request, "lastSeenAt", LocalDateTime.now().minusMinutes(10));
+        given(geocoding.reverseGeocode(latitude, longitude)).willReturn("서울특별시 중구");
+
+        service.createInactivityEvent(parent, request);
+
+        ArgumentCaptor<Event> saved = ArgumentCaptor.forClass(Event.class);
+        verify(events).save(saved.capture());
+        assertThat(saved.getValue().getLatitude()).isEqualByComparingTo(latitude);
+        assertThat(saved.getValue().getLongitude()).isEqualByComparingTo(longitude);
+        assertThat(saved.getValue().getAddress()).isEqualTo("서울특별시 중구");
+        verify(geocoding).reverseGeocode(latitude, longitude);
     }
 
     @Test

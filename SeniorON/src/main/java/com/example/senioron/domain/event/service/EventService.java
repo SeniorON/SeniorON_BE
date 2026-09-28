@@ -103,7 +103,9 @@ public class EventService {
 
     public InactivityResponse createInactivityEvent(User user, InactivityRequest req){
         validateParent(user);
-        String address = geocodingClient.reverseGeocode(req.getLatitude(), req.getLongitude());
+        String address = req.getLatitude() != null && req.getLongitude() != null
+                ? geocodingClient.reverseGeocode(req.getLatitude(), req.getLongitude())
+                : null;
         EventService self = applicationContext.getBean(EventService.class);
         return self.saveInactivityEvent(address, user, req);
     }
