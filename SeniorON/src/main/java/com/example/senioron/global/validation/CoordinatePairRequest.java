@@ -2,7 +2,7 @@ package com.example.senioron.global.validation;
 
 public interface CoordinatePairRequest {
 
-    Double latitude();
+    Number latitude();
 
-    Double longitude();
+    Number longitude();
 }
