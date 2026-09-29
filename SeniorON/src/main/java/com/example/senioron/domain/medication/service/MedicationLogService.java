@@ -590,7 +590,7 @@ public class MedicationLogService {
             );
         }
 
-        Long userId =
+        Long parentUserId =
                 medicationLog.getUser()
                         .getUsersId();
 
@@ -615,17 +615,30 @@ public class MedicationLogService {
         if (updatedRows > 0) {
             eventPublisher.publishEvent(
                     new MedicationCheckedEvent(
-                            userId,
+                            parentUserId,
                             userName,
                             medicationLogId,
                             medicineName
                     )
             );
 
-            homeWebSocketService
-                    .notifyMedicationUpdated(
-                            userId
+            Long seniorId =
+                    findSeniorIdByParentUserId(
+                            parentUserId
                     );
+
+            if (seniorId != null) {
+                homeWebSocketService
+                        .notifyMedicationUpdated(
+                                seniorId
+                        );
+            } else {
+                log.warn(
+                        "복용 완료 WebSocket 대상 Senior를 찾을 수 없습니다. parentUserId: {}, medicationLogId: {}",
+                        parentUserId,
+                        medicationLogId
+                );
+            }
         }
 
         MedicationLog updatedMedicationLog =
@@ -642,6 +655,27 @@ public class MedicationLogService {
         return MedicationCheckResponse.from(
                 updatedMedicationLog
         );
+    }
+
+    private Long findSeniorIdByParentUserId(
+            Long parentUserId
+    ) {
+        return entityManager.createQuery(
+                        """
+                        SELECT senior.seniorId
+                        FROM Senior senior
+                        WHERE senior.parentUser IS NOT NULL
+                          AND senior.parentUser.usersId = :parentUserId
+                        """,
+                        Long.class
+                )
+                .setParameter(
+                        "parentUserId",
+                        parentUserId
+                )
+                .getResultStream()
+                .findFirst()
+                .orElse(null);
     }
 
     @Transactional

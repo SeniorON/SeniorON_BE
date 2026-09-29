@@ -3,6 +3,7 @@ package com.example.senioron.domain.medication.scheduler;
 import com.example.senioron.domain.device.entity.Device;
 import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.event.util.FcmSender;
+import com.example.senioron.domain.home.service.HomeWebSocketService;
 import com.example.senioron.domain.medication.entity.MedicationLog;
 import com.example.senioron.domain.medication.repository.MedicationLogRepository;
 import com.example.senioron.domain.user.entity.Role;
@@ -31,13 +32,14 @@ public class MedicationNotificationScheduler {
             ZoneId.of("Asia/Seoul");
 
     private static final long MISSED_DELAY_MINUTES =
-            120L;
+            1L;
 
     private final MedicationLogRepository medicationLogRepository;
     private final DeviceRepository deviceRepository;
     private final FcmSender fcmSender;
     private final PlatformTransactionManager transactionManager;
     private final EntityManager entityManager;
+    private final HomeWebSocketService homeWebSocketService;
 
     @Scheduled(
             cron = "0 * * * * *",
@@ -314,12 +316,21 @@ public class MedicationNotificationScheduler {
                 );
             }
 
+            List<Long> parentUserIds =
+                    new ArrayList<>(
+                            parentUsersById.keySet()
+                    );
+
+            Map<Long, Long>
+                    seniorIdByParentUserId =
+                    findSeniorIdsByParentUserIds(
+                            parentUserIds
+                    );
+
             Map<Long, List<Long>>
                     familyIdsByParentUserId =
                     findFamilyIdsByUserIds(
-                            new ArrayList<>(
-                                    parentUsersById.keySet()
-                            )
+                            parentUserIds
                     );
 
             if (familyIdsByParentUserId.isEmpty()) {
@@ -384,10 +395,18 @@ public class MedicationNotificationScheduler {
                 User parentUser =
                         medicationLog.getUser();
 
+                Long parentUserId =
+                        parentUser.getUsersId();
+
+                Long seniorId =
+                        seniorIdByParentUserId.get(
+                                parentUserId
+                        );
+
                 List<Long> familyIds =
                         familyIdsByParentUserId
                                 .getOrDefault(
-                                        parentUser.getUsersId(),
+                                        parentUserId,
                                         List.of()
                                 );
 
@@ -464,7 +483,8 @@ public class MedicationNotificationScheduler {
 
                 notifications.add(
                         new ChildMissedNotification(
-                                parentUser.getUsersId(),
+                                seniorId,
+                                parentUserId,
                                 medicationLog
                                         .getMedicationLogId(),
                                 List.copyOf(
@@ -478,6 +498,49 @@ public class MedicationNotificationScheduler {
 
             return notifications;
         });
+    }
+
+    private Map<Long, Long> findSeniorIdsByParentUserIds(
+            List<Long> parentUserIds
+    ) {
+        Map<Long, Long> seniorIdByParentUserId =
+                new LinkedHashMap<>();
+
+        if (parentUserIds.isEmpty()) {
+            return seniorIdByParentUserId;
+        }
+
+        List<Object[]> rows =
+                entityManager.createQuery(
+                                """
+                                SELECT senior.parentUser.usersId,
+                                       senior.seniorId
+                                FROM Senior senior
+                                WHERE senior.parentUser IS NOT NULL
+                                AND senior.parentUser.usersId IN :parentUserIds
+                                """,
+                                Object[].class
+                        )
+                        .setParameter(
+                                "parentUserIds",
+                                parentUserIds
+                        )
+                        .getResultList();
+
+        for (Object[] row : rows) {
+            Long parentUserId =
+                    (Long) row[0];
+
+            Long seniorId =
+                    (Long) row[1];
+
+            seniorIdByParentUserId.put(
+                    parentUserId,
+                    seniorId
+            );
+        }
+
+        return seniorIdByParentUserId;
     }
 
     private Map<Long, List<Long>> findFamilyIdsByUserIds(
@@ -590,12 +653,27 @@ public class MedicationNotificationScheduler {
             )) {
                 log.info(
                         "이미 복용 완료되어 자녀 미복용 알림 발송을 건너뜁니다. "
-                                + "parentUserId={}, medicationLogId={}",
+                                + "seniorId={}, parentUserId={}, medicationLogId={}",
+                        notification.seniorId(),
                         notification.parentUserId(),
                         notification.medicationLogId()
                 );
 
                 continue;
+            }
+
+            if (notification.seniorId() != null) {
+                homeWebSocketService
+                        .notifyMedicationUpdated(
+                                notification.seniorId()
+                        );
+            } else {
+                log.warn(
+                        "미복용 WebSocket 대상 Senior를 찾을 수 없습니다. "
+                                + "parentUserId={}, medicationLogId={}",
+                        notification.parentUserId(),
+                        notification.medicationLogId()
+                );
             }
 
             int successCount = 0;
@@ -657,9 +735,10 @@ public class MedicationNotificationScheduler {
 
             log.info(
                     "자녀 미복용 푸시 요청 처리 종료. "
-                            + "parentUserId={}, medicationLogId={}, "
+                            + "seniorId={}, parentUserId={}, medicationLogId={}, "
                             + "childDeviceCount={}, requestSuccessCount={}, "
                             + "requestFailureCount={}, skippedCount={}",
+                    notification.seniorId(),
                     notification.parentUserId(),
                     notification.medicationLogId(),
                     notification.devices().size(),
@@ -763,6 +842,7 @@ public class MedicationNotificationScheduler {
     }
 
     private record ChildMissedNotification(
+            Long seniorId,
             Long parentUserId,
             Long medicationLogId,
             List<DeviceTarget> devices,
