@@ -178,7 +178,7 @@ public class MedicationService {
 
         homeWebSocketService
                 .notifyMedicationUpdated(
-                        parentUser.getUsersId()
+                        seniorId
                 );
 
         List<Long> medicationIds =
@@ -410,7 +410,7 @@ public class MedicationService {
 
         homeWebSocketService
                 .notifyMedicationUpdated(
-                        parentUser.getUsersId()
+                        seniorId
                 );
 
         log.info(
@@ -468,7 +468,7 @@ public class MedicationService {
 
         homeWebSocketService
                 .notifyMedicationUpdated(
-                        parentUser.getUsersId()
+                        seniorId
                 );
 
         log.info(
