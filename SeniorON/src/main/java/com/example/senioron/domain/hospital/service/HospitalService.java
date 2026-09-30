@@ -105,7 +105,7 @@ public class HospitalService {
 
         homeWebSocketService
                 .notifyScheduleUpdated(
-                        seniorId
+                        parentUser.getUsersId()
                 );
 
         return HospitalCreateResponse.builder()
@@ -212,7 +212,7 @@ public class HospitalService {
 
         homeWebSocketService
                 .notifyScheduleUpdated(
-                        seniorId
+                        parentUser.getUsersId()
                 );
     }
 
@@ -264,7 +264,7 @@ public class HospitalService {
 
         homeWebSocketService
                 .notifyScheduleUpdated(
-                        seniorId
+                        parentUser.getUsersId()
                 );
     }
 

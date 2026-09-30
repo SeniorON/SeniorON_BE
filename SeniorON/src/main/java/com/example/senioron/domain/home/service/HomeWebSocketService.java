@@ -94,7 +94,7 @@ public class HomeWebSocketService {
 
     private void sendMedicationUpdated(Long seniorId) {
         messagingTemplate.convertAndSend(
-                "/topic/senior/" + seniorId + "/home",
+                "/topic/senior/" + seniorId + "/medication",
                 "MEDICATION_UPDATED"
         );
 
