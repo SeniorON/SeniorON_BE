@@ -6,6 +6,7 @@ import com.example.senioron.domain.event.util.FcmSender;
 import com.example.senioron.domain.home.service.HomeWebSocketService;
 import com.example.senioron.domain.medication.entity.MedicationLog;
 import com.example.senioron.domain.medication.repository.MedicationLogRepository;
+import com.example.senioron.domain.medication.service.MedicationWebSocketService;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import jakarta.persistence.EntityManager;
@@ -40,6 +41,7 @@ public class MedicationNotificationScheduler {
     private final PlatformTransactionManager transactionManager;
     private final EntityManager entityManager;
     private final HomeWebSocketService homeWebSocketService;
+    private final MedicationWebSocketService medicationWebSocketService;
 
     @Scheduled(
             cron = "0 * * * * *",
@@ -220,8 +222,8 @@ public class MedicationNotificationScheduler {
             int failureCount = 0;
             int skippedCount = 0;
 
-            for (DeviceTarget device
-                    : notification.devices()) {
+            for (DeviceTarget device :
+                    notification.devices()) {
 
                 if (!isMedicationStillUntaken(
                         notification.medicationLogId()
@@ -259,6 +261,7 @@ public class MedicationNotificationScheduler {
                     } else {
                         failureCount++;
                     }
+
                 } catch (RuntimeException exception) {
                     failureCount++;
 
@@ -316,21 +319,20 @@ public class MedicationNotificationScheduler {
                 );
             }
 
-            List<Long> parentUserIds =
-                    new ArrayList<>(
-                            parentUsersById.keySet()
+            Map<Long, List<Long>>
+                    familyIdsByParentUserId =
+                    findFamilyIdsByUserIds(
+                            new ArrayList<>(
+                                    parentUsersById.keySet()
+                            )
                     );
 
             Map<Long, Long>
                     seniorIdByParentUserId =
                     findSeniorIdsByParentUserIds(
-                            parentUserIds
-                    );
-
-            Map<Long, List<Long>>
-                    familyIdsByParentUserId =
-                    findFamilyIdsByUserIds(
-                            parentUserIds
+                            new ArrayList<>(
+                                    parentUsersById.keySet()
+                            )
                     );
 
             if (familyIdsByParentUserId.isEmpty()) {
@@ -395,18 +397,10 @@ public class MedicationNotificationScheduler {
                 User parentUser =
                         medicationLog.getUser();
 
-                Long parentUserId =
-                        parentUser.getUsersId();
-
-                Long seniorId =
-                        seniorIdByParentUserId.get(
-                                parentUserId
-                        );
-
                 List<Long> familyIds =
                         familyIdsByParentUserId
                                 .getOrDefault(
-                                        parentUserId,
+                                        parentUser.getUsersId(),
                                         List.of()
                                 );
 
@@ -424,6 +418,7 @@ public class MedicationNotificationScheduler {
                                     familyId,
                                     List.of()
                             )) {
+
                         familyChildUsersById.putIfAbsent(
                                 childUser.getUsersId(),
                                 childUser
@@ -441,11 +436,13 @@ public class MedicationNotificationScheduler {
 
                 for (User childUser :
                         familyChildUsersById.values()) {
+
                     for (DeviceTarget device :
                             devicesByUserId.getOrDefault(
                                     childUser.getUsersId(),
                                     List.of()
                             )) {
+
                         familyChildDevicesById.putIfAbsent(
                                 device.deviceId(),
                                 device
@@ -483,8 +480,10 @@ public class MedicationNotificationScheduler {
 
                 notifications.add(
                         new ChildMissedNotification(
-                                seniorId,
-                                parentUserId,
+                                seniorIdByParentUserId.get(
+                                        parentUser.getUsersId()
+                                ),
+                                parentUser.getUsersId(),
                                 medicationLog
                                         .getMedicationLogId(),
                                 List.copyOf(
@@ -517,7 +516,7 @@ public class MedicationNotificationScheduler {
                                        senior.seniorId
                                 FROM Senior senior
                                 WHERE senior.parentUser IS NOT NULL
-                                AND senior.parentUser.usersId IN :parentUserIds
+                                  AND senior.parentUser.usersId IN :parentUserIds
                                 """,
                                 Object[].class
                         )
@@ -528,15 +527,9 @@ public class MedicationNotificationScheduler {
                         .getResultList();
 
         for (Object[] row : rows) {
-            Long parentUserId =
-                    (Long) row[0];
-
-            Long seniorId =
-                    (Long) row[1];
-
             seniorIdByParentUserId.put(
-                    parentUserId,
-                    seniorId
+                    (Long) row[0],
+                    (Long) row[1]
             );
         }
 
@@ -607,7 +600,7 @@ public class MedicationNotificationScheduler {
                                        familyMember.user
                                 FROM FamilyMember familyMember
                                 WHERE familyMember.family.familyId IN :familyIds
-                                AND familyMember.user.role = :role
+                                  AND familyMember.user.role = :role
                                 """,
                                 Object[].class
                         )
@@ -645,16 +638,15 @@ public class MedicationNotificationScheduler {
     private void sendChildMissedNotifications(
             List<ChildMissedNotification> notifications
     ) {
-        for (ChildMissedNotification notification
-                : notifications) {
+        for (ChildMissedNotification notification :
+                notifications) {
 
             if (!isMedicationStillUntaken(
                     notification.medicationLogId()
             )) {
                 log.info(
                         "이미 복용 완료되어 자녀 미복용 알림 발송을 건너뜁니다. "
-                                + "seniorId={}, parentUserId={}, medicationLogId={}",
-                        notification.seniorId(),
+                                + "parentUserId={}, medicationLogId={}",
                         notification.parentUserId(),
                         notification.medicationLogId()
                 );
@@ -662,15 +654,19 @@ public class MedicationNotificationScheduler {
                 continue;
             }
 
+            homeWebSocketService
+                    .notifyMedicationUpdated(
+                            notification.parentUserId()
+                    );
+
             if (notification.seniorId() != null) {
-                homeWebSocketService
+                medicationWebSocketService
                         .notifyMedicationUpdated(
                                 notification.seniorId()
                         );
             } else {
                 log.warn(
-                        "미복용 WebSocket 대상 Senior를 찾을 수 없습니다. "
-                                + "parentUserId={}, medicationLogId={}",
+                        "미복용 복약 WebSocket 대상 Senior를 찾을 수 없습니다. parentUserId={}, medicationLogId={}",
                         notification.parentUserId(),
                         notification.medicationLogId()
                 );
@@ -680,8 +676,8 @@ public class MedicationNotificationScheduler {
             int failureCount = 0;
             int skippedCount = 0;
 
-            for (DeviceTarget device
-                    : notification.devices()) {
+            for (DeviceTarget device :
+                    notification.devices()) {
 
                 if (!isMedicationStillUntaken(
                         notification.medicationLogId()
@@ -720,6 +716,7 @@ public class MedicationNotificationScheduler {
                     } else {
                         failureCount++;
                     }
+
                 } catch (RuntimeException exception) {
                     failureCount++;
 
@@ -735,10 +732,9 @@ public class MedicationNotificationScheduler {
 
             log.info(
                     "자녀 미복용 푸시 요청 처리 종료. "
-                            + "seniorId={}, parentUserId={}, medicationLogId={}, "
+                            + "parentUserId={}, medicationLogId={}, "
                             + "childDeviceCount={}, requestSuccessCount={}, "
                             + "requestFailureCount={}, skippedCount={}",
-                    notification.seniorId(),
                     notification.parentUserId(),
                     notification.medicationLogId(),
                     notification.devices().size(),

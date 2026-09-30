@@ -49,7 +49,7 @@ public class MedicationWebSocketAuthorizationService {
                                 SELECT COUNT(senior)
                                 FROM Senior senior
                                 WHERE senior.seniorId = :seniorId
-                                AND senior.parentUser.usersId = :userId
+                                  AND senior.parentUser.usersId = :userId
                                 """,
                                 Long.class
                         )
@@ -76,11 +76,11 @@ public class MedicationWebSocketAuthorizationService {
                                 SELECT COUNT(familyMember)
                                 FROM FamilyMember familyMember
                                 WHERE familyMember.user.usersId = :userId
-                                AND familyMember.family.familyId IN (
-                                    SELECT senior.family.familyId
-                                    FROM Senior senior
-                                    WHERE senior.seniorId = :seniorId
-                                )
+                                  AND familyMember.family.familyId IN (
+                                      SELECT senior.family.familyId
+                                      FROM Senior senior
+                                      WHERE senior.seniorId = :seniorId
+                                  )
                                 """,
                                 Long.class
                         )
