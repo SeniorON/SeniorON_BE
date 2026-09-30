@@ -54,4 +54,17 @@ class SosAddressLookupServiceTest {
         service.onAddressLookupRequested(request);
         verify(homeUpdates).notifyAddressUpdated(1L);
     }
+
+    @Test
+    void missingCoordinatesSkipGeocodingAndStoreUnavailableAddress() {
+        var requestWithoutCoordinates = new SosAddressLookupRequested(1L, null, null);
+        given(eventRepository.updateAddressByEventId(1L, "위치정보를 확인할 수 없어요")).willReturn(1);
+        var service = new SosAddressLookupService(geocodingClient, eventRepository, Runnable::run, homeUpdates);
+
+        service.onAddressLookupRequested(requestWithoutCoordinates);
+
+        verifyNoInteractions(geocodingClient);
+        verify(eventRepository).updateAddressByEventId(1L, "위치정보를 확인할 수 없어요");
+        verify(homeUpdates).notifyAddressUpdated(1L);
+    }
 }

@@ -51,14 +51,18 @@ public class SosAddressLookupService {
         long startedAt = System.nanoTime();
         String address;
         // 외부 API를 기다리는 동안 DB 트랜잭션/연결을 점유하지 않는다.
-        try {
-            address = geocodingClient.reverseGeocode(request.latitude(), request.longitude());
-            if (address == null || address.isBlank()) {
+        if (request.latitude() == null || request.longitude() == null) {
+            address = UNAVAILABLE_ADDRESS;
+        } else {
+            try {
+                address = geocodingClient.reverseGeocode(request.latitude(), request.longitude());
+                if (address == null || address.isBlank()) {
+                    address = UNAVAILABLE_ADDRESS;
+                }
+            } catch (Exception e) {
+                log.warn("SOS 주소 조회 실패. eventId={}", request.eventId(), e);
                 address = UNAVAILABLE_ADDRESS;
             }
-        } catch (Exception e) {
-            log.warn("SOS 주소 조회 실패. eventId={}", request.eventId(), e);
-            address = UNAVAILABLE_ADDRESS;
         }
         long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
         log.info("SOS 주소 조회 소요시간={}ms, eventId={}", elapsedMillis, request.eventId());
