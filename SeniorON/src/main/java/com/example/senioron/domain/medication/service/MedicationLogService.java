@@ -64,6 +64,7 @@ public class MedicationLogService {
     private final ApplicationEventPublisher eventPublisher;
     private final MedicationFamilyAuthorization medicationFamilyAuthorization;
     private final HomeWebSocketService homeWebSocketService;
+    private final MedicationWebSocketService medicationWebSocketService;
     private final EntityManager entityManager;
 
     public List<MedicationScheduleResponse> getOwnDailyMedicationSchedules(
@@ -590,7 +591,7 @@ public class MedicationLogService {
             );
         }
 
-        Long parentUserId =
+        Long userId =
                 medicationLog.getUser()
                         .getUsersId();
 
@@ -615,27 +616,32 @@ public class MedicationLogService {
         if (updatedRows > 0) {
             eventPublisher.publishEvent(
                     new MedicationCheckedEvent(
-                            parentUserId,
+                            userId,
                             userName,
                             medicationLogId,
                             medicineName
                     )
             );
 
+            homeWebSocketService
+                    .notifyMedicationUpdated(
+                            userId
+                    );
+
             Long seniorId =
                     findSeniorIdByParentUserId(
-                            parentUserId
+                            userId
                     );
 
             if (seniorId != null) {
-                homeWebSocketService
+                medicationWebSocketService
                         .notifyMedicationUpdated(
                                 seniorId
                         );
             } else {
                 log.warn(
                         "복용 완료 WebSocket 대상 Senior를 찾을 수 없습니다. parentUserId: {}, medicationLogId: {}",
-                        parentUserId,
+                        userId,
                         medicationLogId
                 );
             }
@@ -655,27 +661,6 @@ public class MedicationLogService {
         return MedicationCheckResponse.from(
                 updatedMedicationLog
         );
-    }
-
-    private Long findSeniorIdByParentUserId(
-            Long parentUserId
-    ) {
-        return entityManager.createQuery(
-                        """
-                        SELECT senior.seniorId
-                        FROM Senior senior
-                        WHERE senior.parentUser IS NOT NULL
-                          AND senior.parentUser.usersId = :parentUserId
-                        """,
-                        Long.class
-                )
-                .setParameter(
-                        "parentUserId",
-                        parentUserId
-                )
-                .getResultStream()
-                .findFirst()
-                .orElse(null);
     }
 
     @Transactional
@@ -1131,7 +1116,6 @@ public class MedicationLogService {
                     medication.getMedicationGroupId();
 
         } else {
-
             medicationIdentifier =
                     String.valueOf(
                             medication.getMedication_id()
@@ -1143,6 +1127,27 @@ public class MedicationLogService {
                 + plannedDate
                 + "|"
                 + medication.getMedicineTime();
+    }
+
+    private Long findSeniorIdByParentUserId(
+            Long parentUserId
+    ) {
+        return entityManager.createQuery(
+                        """
+                        SELECT senior.seniorId
+                        FROM Senior senior
+                        WHERE senior.parentUser IS NOT NULL
+                          AND senior.parentUser.usersId = :parentUserId
+                        """,
+                        Long.class
+                )
+                .setParameter(
+                        "parentUserId",
+                        parentUserId
+                )
+                .getResultStream()
+                .findFirst()
+                .orElse(null);
     }
 
     private MedicationScheduleStatus determineMedicationStatus(

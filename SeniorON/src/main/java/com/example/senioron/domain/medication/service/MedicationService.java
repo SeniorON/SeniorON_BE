@@ -50,6 +50,7 @@ public class MedicationService {
     private final MedicationLogService medicationLogService;
     private final MedicationFamilyAuthorization medicationFamilyAuthorization;
     private final HomeWebSocketService homeWebSocketService;
+    private final MedicationWebSocketService medicationWebSocketService;
 
     @Transactional
     public MedicationCreateResponse createMedication(
@@ -177,6 +178,11 @@ public class MedicationService {
                 );
 
         homeWebSocketService
+                .notifyMedicationUpdated(
+                        parentUser.getUsersId()
+                );
+
+        medicationWebSocketService
                 .notifyMedicationUpdated(
                         seniorId
                 );
@@ -410,6 +416,11 @@ public class MedicationService {
 
         homeWebSocketService
                 .notifyMedicationUpdated(
+                        parentUser.getUsersId()
+                );
+
+        medicationWebSocketService
+                .notifyMedicationUpdated(
                         seniorId
                 );
 
@@ -467,6 +478,11 @@ public class MedicationService {
                 );
 
         homeWebSocketService
+                .notifyMedicationUpdated(
+                        parentUser.getUsersId()
+                );
+
+        medicationWebSocketService
                 .notifyMedicationUpdated(
                         seniorId
                 );
