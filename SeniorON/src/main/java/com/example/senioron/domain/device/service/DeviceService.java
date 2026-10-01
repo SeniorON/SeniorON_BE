@@ -44,6 +44,8 @@ public class DeviceService {
 
     private final PasswordEncoder passwordEncoder;
 
+    private final DeviceStatusWebSocketService deviceStatusWebSocketService;
+
     @Transactional
     public DeviceCredentialIssueResult registerDevice(User user, String deviceIdentifier) {
         if (deviceIdentifier == null || deviceIdentifier.isBlank()) {
@@ -185,6 +187,9 @@ public class DeviceService {
                 request.deviceIdentifier()
         );
 
+        Boolean previousLocationPermission =
+                device.getLocationPermissionGranted();
+
         device.updateDeviceInfo(
                 request.deviceName(),
                 DeviceStatus.ONLINE,
@@ -201,6 +206,15 @@ public class DeviceService {
         );
 
         deviceRepository.save(device);
+
+        if (!java.util.Objects.equals(
+                previousLocationPermission,
+                request.locationPermissionGranted()
+        )) {
+            seniorRepository.findByParentUser(user)
+                    .map(Senior::getSeniorId)
+                    .ifPresent(deviceStatusWebSocketService::notifyStatusUpdated);
+        }
     }
 
     @Transactional

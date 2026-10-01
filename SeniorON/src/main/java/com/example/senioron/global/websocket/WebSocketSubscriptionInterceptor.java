@@ -1,6 +1,5 @@
 package com.example.senioron.global.websocket;
 
-import com.example.senioron.domain.medication.service.MedicationWebSocketAuthorizationService;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.UserStatus;
@@ -34,18 +33,19 @@ public class WebSocketSubscriptionInterceptor implements ChannelInterceptor {
     private static final Pattern SENIOR_MEDICATION_TOPIC_PATTERN =
             Pattern.compile("^/topic/senior/(\\d+)/medication$");
 
+    private static final Pattern SENIOR_DEVICE_TOPIC_PATTERN =
+            Pattern.compile("^/topic/senior/(\\d+)/device$");
+
     private final JwtUtil jwtUtil;
     private final UserRepository users;
 
-    private MedicationWebSocketAuthorizationService
-            medicationWebSocketAuthorizationService;
+    private SeniorTopicAuthorizationService seniorTopicAuthorizationService;
 
     @Autowired
-    public void setMedicationWebSocketAuthorizationService(
-            MedicationWebSocketAuthorizationService medicationWebSocketAuthorizationService
+    public void setSeniorTopicAuthorizationService(
+            SeniorTopicAuthorizationService seniorTopicAuthorizationService
     ) {
-        this.medicationWebSocketAuthorizationService =
-                medicationWebSocketAuthorizationService;
+        this.seniorTopicAuthorizationService = seniorTopicAuthorizationService;
     }
 
     @Override
@@ -73,31 +73,12 @@ public class WebSocketSubscriptionInterceptor implements ChannelInterceptor {
                 return message;
             }
 
-            var medicationMatcher =
-                    SENIOR_MEDICATION_TOPIC_PATTERN.matcher(
-                            destination == null ? "" : destination
-                    );
-
-            if (medicationMatcher.matches()) {
-                Long seniorId;
-
-                try {
-                    seniorId =
-                            Long.valueOf(
-                                    medicationMatcher.group(1)
-                            );
-                } catch (NumberFormatException exception) {
+            Long seniorTopicId = matchSeniorTopicId(destination);
+            if (seniorTopicId != null) {
+                if (seniorTopicAuthorizationService == null
+                        || !seniorTopicAuthorizationService.canSubscribe(user, seniorTopicId)) {
                     throw denied();
                 }
-
-                if (medicationWebSocketAuthorizationService == null
-                        || !medicationWebSocketAuthorizationService.canSubscribe(
-                        user,
-                        seniorId
-                )) {
-                    throw denied();
-                }
-
                 return message;
             }
 
@@ -145,5 +126,23 @@ public class WebSocketSubscriptionInterceptor implements ChannelInterceptor {
 
     private static AccessDeniedException denied() {
         return new AccessDeniedException("WebSocket 인증 또는 채널 접근 권한이 없습니다.");
+    }
+
+    private static Long matchSeniorTopicId(String destination) {
+        String resolvedDestination = destination == null ? "" : destination;
+        for (Pattern pattern : List.of(
+                SENIOR_MEDICATION_TOPIC_PATTERN,
+                SENIOR_DEVICE_TOPIC_PATTERN
+        )) {
+            var matcher = pattern.matcher(resolvedDestination);
+            if (matcher.matches()) {
+                try {
+                    return Long.valueOf(matcher.group(1));
+                } catch (NumberFormatException exception) {
+                    throw denied();
+                }
+            }
+        }
+        return null;
     }
 }

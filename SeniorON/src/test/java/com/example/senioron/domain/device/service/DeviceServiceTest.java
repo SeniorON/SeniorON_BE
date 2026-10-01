@@ -57,6 +57,8 @@ class DeviceServiceTest {
 
     private DeviceService deviceService;
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    private final DeviceStatusWebSocketService deviceStatusWebSocketService =
+            org.mockito.Mockito.mock(DeviceStatusWebSocketService.class);
 
     private DeviceService deviceService() {
         if (deviceService == null) {
@@ -64,7 +66,8 @@ class DeviceServiceTest {
                     deviceRepository,
                     seniorRepository,
                     familyMemberRepository,
-                    passwordEncoder
+                    passwordEncoder,
+                    deviceStatusWebSocketService
             );
         }
         return deviceService;
@@ -302,6 +305,47 @@ class DeviceServiceTest {
         assertThat(device.getNotificationPermissionGranted()).isTrue();
         assertThat(device.getAppExecutionMaintained()).isTrue();
         assertThat(device.getLastConnectedAt()).isNotNull();
+    }
+
+    @Test
+    void locationPermissionChangeNotifiesLinkedSenior() {
+        Family family = familyRepository.saveAndFlush(
+                Family.builder()
+                        .seniorCode("family-" + UUID.randomUUID())
+                        .build()
+        );
+        User parent = saveUser("parent", Role.PARENT, family);
+        User child = saveUser("child", Role.CHILD, family);
+        Senior senior = seniorRepository.saveAndFlush(
+                senior("senior", family, child, parent, 37.1, 127.1)
+        );
+
+        DeviceStatusUpdateRequest permissionOff = deviceStatusRequest(false);
+        DeviceStatusUpdateRequest permissionOn = deviceStatusRequest(true);
+
+        deviceService().updateDeviceStatus(parent, permissionOff);
+        org.mockito.Mockito.clearInvocations(deviceStatusWebSocketService);
+        deviceService().updateDeviceStatus(parent, permissionOn);
+        deviceService().updateDeviceStatus(parent, permissionOn);
+
+        org.mockito.Mockito.verify(deviceStatusWebSocketService)
+                .notifyStatusUpdated(senior.getSeniorId());
+    }
+
+    private DeviceStatusUpdateRequest deviceStatusRequest(boolean locationPermissionGranted) {
+        return new DeviceStatusUpdateRequest(
+                DEVICE_IDENTIFIER,
+                "Galaxy S24",
+                72,
+                true,
+                true,
+                true,
+                true,
+                locationPermissionGranted,
+                true,
+                true,
+                true
+        );
     }
 
 

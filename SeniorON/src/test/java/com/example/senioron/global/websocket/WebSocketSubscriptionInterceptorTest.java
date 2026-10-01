@@ -81,6 +81,40 @@ class WebSocketSubscriptionInterceptorTest {
         assertThatThrownBy(() -> send(notifications)).isInstanceOf(AccessDeniedException.class);
     }
 
+    @Test
+    void deviceTopicUsesSeniorScopedAuthorization() {
+        SeniorTopicAuthorizationService authorization =
+                mock(SeniorTopicAuthorizationService.class);
+        interceptor.setSeniorTopicAuthorizationService(authorization);
+
+        var allowed = frame(StompCommand.SUBSCRIBE, "/topic/senior/7/device");
+        allowed.setUser(new UsernamePasswordAuthenticationToken(child, null, java.util.List.of()));
+        when(authorization.canSubscribe(child, 7L)).thenReturn(true);
+
+        assertThatCode(() -> send(allowed)).doesNotThrowAnyException();
+
+        var denied = frame(StompCommand.SUBSCRIBE, "/topic/senior/8/device");
+        denied.setUser(new UsernamePasswordAuthenticationToken(child, null, java.util.List.of()));
+        assertThatThrownBy(() -> send(denied)).isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void medicationTopicStillUsesSeniorScopedAuthorization() {
+        SeniorTopicAuthorizationService authorization =
+                mock(SeniorTopicAuthorizationService.class);
+        interceptor.setSeniorTopicAuthorizationService(authorization);
+
+        var allowed = frame(StompCommand.SUBSCRIBE, "/topic/senior/7/medication");
+        allowed.setUser(new UsernamePasswordAuthenticationToken(child, null, java.util.List.of()));
+        when(authorization.canSubscribe(child, 7L)).thenReturn(true);
+
+        assertThatCode(() -> send(allowed)).doesNotThrowAnyException();
+
+        var denied = frame(StompCommand.SUBSCRIBE, "/topic/senior/8/medication");
+        denied.setUser(new UsernamePasswordAuthenticationToken(child, null, java.util.List.of()));
+        assertThatThrownBy(() -> send(denied)).isInstanceOf(AccessDeniedException.class);
+    }
+
     private StompHeaderAccessor frame(StompCommand command, String destination) {
         var frame = StompHeaderAccessor.create(command);
         if (destination != null) frame.setDestination(destination);

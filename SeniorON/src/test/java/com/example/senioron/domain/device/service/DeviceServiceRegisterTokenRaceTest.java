@@ -41,7 +41,8 @@ class DeviceServiceRegisterTokenRaceTest {
             deviceRepository,
             seniorRepository,
             familyMemberRepository,
-            new BCryptPasswordEncoder()
+            new BCryptPasswordEncoder(),
+            mock(DeviceStatusWebSocketService.class)
     );
 
     @Test

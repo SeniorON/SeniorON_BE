@@ -8,6 +8,7 @@ import com.example.senioron.domain.device.entity.Device;
 import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.device.service.DeviceCredentialIssueResult;
 import com.example.senioron.domain.device.service.DeviceService;
+import com.example.senioron.domain.device.service.DeviceStatusWebSocketService;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
@@ -544,7 +545,8 @@ class SeniorReloginRequestServiceTest {
                     deviceRepository,
                     seniorRepository,
                     familyMemberRepository,
-                    passwordEncoder
+                    passwordEncoder,
+                    org.mockito.Mockito.mock(DeviceStatusWebSocketService.class)
             );
         }
         return deviceService;
