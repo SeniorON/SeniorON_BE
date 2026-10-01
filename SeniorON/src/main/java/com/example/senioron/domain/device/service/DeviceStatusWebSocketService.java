@@ -2,6 +2,7 @@ package com.example.senioron.domain.device.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.messaging.MessagingException;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -22,7 +23,15 @@ public class DeviceStatusWebSocketService {
                     new TransactionSynchronization() {
                         @Override
                         public void afterCommit() {
-                            sendStatusUpdated(seniorId);
+                            try {
+                                sendStatusUpdated(seniorId);
+                            } catch (MessagingException e) {
+                                log.error(
+                                        "[WebSocket] DEVICE_STATUS_UPDATED 전송 실패. seniorId: {}",
+                                        seniorId,
+                                        e
+                                );
+                            }
                         }
                     }
             );
