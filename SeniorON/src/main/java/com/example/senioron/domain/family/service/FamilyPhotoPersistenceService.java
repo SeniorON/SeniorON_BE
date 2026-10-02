@@ -2,12 +2,14 @@ package com.example.senioron.domain.family.service;
 
 import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.entity.PhotoGroup;
+import com.example.senioron.domain.family.event.FamilyPhotoSharedEvent;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
@@ -24,6 +26,7 @@ public class FamilyPhotoPersistenceService {
     private final FamilyPhotoRepository familyPhotoRepository;
     private final UserRepository userRepository;
     private final FamilyPhotoGroupRepository familyPhotoGroupRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public FamilyPhoto create(
@@ -69,6 +72,10 @@ public class FamilyPhotoPersistenceService {
                         .toList();
 
         familyPhotoGroupRepository.saveAllAndFlush(mappings);
+
+        eventPublisher.publishEvent(
+                new FamilyPhotoSharedEvent(savedPhoto.getFamilyPhotoId())
+        );
 
         return savedPhoto;
     }
