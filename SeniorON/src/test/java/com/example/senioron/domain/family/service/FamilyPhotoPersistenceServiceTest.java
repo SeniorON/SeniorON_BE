@@ -1,14 +1,19 @@
 package com.example.senioron.domain.family.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.entity.FamilyPhotoGroup;
 import com.example.senioron.domain.family.entity.PhotoGroup;
+import com.example.senioron.domain.family.event.FamilyPhotoSharedEvent;
 import com.example.senioron.domain.family.repository.FamilyPhotoGroupRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.user.entity.User;
@@ -18,6 +23,9 @@ import java.util.Optional;
 import java.util.stream.StreamSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class FamilyPhotoPersistenceServiceTest {
 
@@ -27,6 +35,8 @@ class FamilyPhotoPersistenceServiceTest {
             org.mockito.Mockito.mock(UserRepository.class);
     private final FamilyPhotoGroupRepository familyPhotoGroupRepository =
             org.mockito.Mockito.mock(FamilyPhotoGroupRepository.class);
+    private final ApplicationEventPublisher eventPublisher =
+            org.mockito.Mockito.mock(ApplicationEventPublisher.class);
 
     private FamilyPhotoPersistenceService persistenceService;
 
@@ -35,7 +45,8 @@ class FamilyPhotoPersistenceServiceTest {
         persistenceService = new FamilyPhotoPersistenceService(
                 familyPhotoRepository,
                 userRepository,
-                familyPhotoGroupRepository
+                familyPhotoGroupRepository,
+                eventPublisher
         );
     }
 
@@ -57,7 +68,11 @@ class FamilyPhotoPersistenceServiceTest {
         given(userRepository.findById(2L))
                 .willReturn(Optional.of(user));
         given(familyPhotoRepository.saveAndFlush(any(FamilyPhoto.class)))
-                .willAnswer(invocation -> invocation.getArgument(0));
+                .willAnswer(invocation -> {
+                    FamilyPhoto photo = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(photo, "familyPhotoId", 10L);
+                    return photo;
+                });
 
         FamilyPhoto savedPhoto = persistenceService.create(
                 2L,
@@ -86,5 +101,25 @@ class FamilyPhotoPersistenceServiceTest {
                             .equals(List.of(firstGroup, secondGroup));
                 })
         );
+        var ordered = inOrder(familyPhotoGroupRepository, eventPublisher);
+        ordered.verify(familyPhotoGroupRepository).saveAllAndFlush(any());
+        ordered.verify(eventPublisher).publishEvent(new FamilyPhotoSharedEvent(10L));
+        ordered.verifyNoMoreInteractions();
+    }
+
+    @Test
+    void doesNotPublishWhenSavingSharedGroupMappingsFails() {
+        User user = User.builder().usersId(2L).name("업로더").build();
+        PhotoGroup group = PhotoGroup.builder().id(3L).name("가족").build();
+        given(userRepository.findById(2L)).willReturn(Optional.of(user));
+        given(familyPhotoRepository.saveAndFlush(any(FamilyPhoto.class)))
+                .willAnswer(invocation -> invocation.getArgument(0));
+        doThrow(new DataIntegrityViolationException("mapping failed"))
+                .when(familyPhotoGroupRepository).saveAllAndFlush(any());
+
+        assertThatThrownBy(() -> persistenceService.create(
+                2L, "photo.jpg", "key", "설명", List.of(group)
+        )).isInstanceOf(DataIntegrityViolationException.class);
+        verifyNoInteractions(eventPublisher);
     }
 }
