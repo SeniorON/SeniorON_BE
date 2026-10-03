@@ -21,6 +21,7 @@ import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.storage.PresignedUploadInfo;
 import com.example.senioron.global.storage.S3Service;
 import com.example.senioron.global.storage.StoredObjectInfo;
+import com.example.senioron.global.storage.ThumbnailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -54,6 +55,7 @@ public class FamilyPhotoService {
     private final FamilyPhotoViewRepository familyPhotoViewRepository;
     private final UserRepository userRepository;
     private final S3Service s3Service;
+    private final ThumbnailService thumbnailService;
     private final FamilyPhotoPermissionService familyPhotoPermissionService;
     private final FamilyPhotoPersistenceService photoPersistenceService;
     private final FamilyMemberRepository familyMemberRepository;
@@ -210,35 +212,26 @@ public class FamilyPhotoService {
                 imageKey
         );
 
-        try {
-            FamilyPhoto savedPhoto =
-                    photoPersistenceService.create(
-                            user.getUsersId(),
-                            imageKey,
-                            idempotencyKey,
-                            request.getDescription(),
-                            photoGroups
-                    );
+        String thumbnailKey = createThumbnailOrNull(imageKey);
+        FamilyPhoto savedPhoto;
 
-            return toItemResponse(
-                    savedPhoto,
-                    user,
-                    newPhotoCutoff,
-                    false
+        try {
+            savedPhoto = photoPersistenceService.create(
+                    user.getUsersId(),
+                    imageKey,
+                    thumbnailKey,
+                    idempotencyKey,
+                    request.getDescription(),
+                    photoGroups
             );
         } catch (DataIntegrityViolationException exception) {
-            /*
-             * 동일 멱등키 요청이 동시에 실행된 경우,
-             * 먼저 저장된 결과를 반환한다.
-             */
-            FamilyPhoto existingPhoto =
-                    photoPersistenceService
-                            .findExisting(
-                                    user.getUsersId(),
-                                    idempotencyKey
-                            )
-                            .orElse(null);
+            deleteUploadedObjectSafely(thumbnailKey);
 
+            FamilyPhoto existingPhoto = photoPersistenceService
+                    .findExisting(user.getUsersId(), idempotencyKey)
+                    .orElse(null);
+
+            // 동일 멱등키로 먼저 저장된 결과가 있으면 반환
             if (existingPhoto != null) {
                 return toItemResponse(
                         existingPhoto,
@@ -248,19 +241,25 @@ public class FamilyPhotoService {
                 );
             }
 
-            /*
-             * 서로 다른 멱등키로 동일 imageKey를
-             * 동시에 완료한 경우 409를 반환한다.
-             */
-            if (familyPhotoRepository
-                    .existsByImageKey(imageKey)) {
+            // 다른 멱등키로 같은 원본이 먼저 등록됐다면 충돌 처리
+            if (familyPhotoRepository.existsByImageKey(imageKey)) {
                 throw new BusinessException(
                         ErrorCode.FAMILY_PHOTO_ALREADY_REGISTERED
                 );
             }
 
             throw exception;
+        } catch (RuntimeException exception) {
+            deleteUploadedObjectSafely(thumbnailKey);
+            throw exception;
         }
+
+        return toItemResponse(
+                savedPhoto,
+                user,
+                newPhotoCutoff,
+                false
+        );
     }
 
     private StoredObjectInfo validateUploadedObject(
@@ -408,12 +407,15 @@ public class FamilyPhotoService {
                 directory
         );
 
+        String thumbnailKey = createThumbnailOrNull(imageKey);
+
         FamilyPhoto savedPhoto;
 
         try {
             savedPhoto = photoPersistenceService.create(
                     user.getUsersId(),
                     imageKey,
+                    thumbnailKey,
                     idempotencyKey,
                     request.getDescription(),
                     photoGroups
@@ -421,6 +423,7 @@ public class FamilyPhotoService {
 
         } catch (DataIntegrityViolationException exception) {
             deleteUploadedObjectSafely(imageKey);
+            deleteUploadedObjectSafely(thumbnailKey);
 
             FamilyPhoto existingPhoto =
                     photoPersistenceService
@@ -439,6 +442,7 @@ public class FamilyPhotoService {
 
         } catch (RuntimeException exception) {
             deleteUploadedObjectSafely(imageKey);
+            deleteUploadedObjectSafely(thumbnailKey);
             throw exception;
         }
 
@@ -451,6 +455,11 @@ public class FamilyPhotoService {
     }
 
     private void deleteUploadedObjectSafely(String imageKey) {
+
+        if (imageKey == null || imageKey.isBlank()) {
+            return;
+        }
+
         try {
             s3Service.delete(imageKey);
         } catch (RuntimeException exception) {
@@ -488,13 +497,17 @@ public class FamilyPhotoService {
                         && !photo.getCreatedAt()
                         .isBefore(newPhotoCutoff);
 
+        String imageUrl = s3Service.getFileUrl(photo.getImageKey());
+        String thumbnailKey = photo.getThumbnailKey();
+
+        String thumbnailUrl = thumbnailKey == null || thumbnailKey.isBlank()
+                ? imageUrl
+                : s3Service.getFileUrl(thumbnailKey);
+
         return FamilyPhotoItemResponse.builder()
                 .familyPhotoId(photo.getFamilyPhotoId())
-                .imageUrl(
-                        s3Service.getFileUrl(
-                                photo.getImageKey()
-                        )
-                )
+                .imageUrl(imageUrl)
+                .thumbnailUrl(thumbnailUrl)
                 .uploaderUserId(
                         photo.getUser().getUsersId()
                 )
@@ -685,7 +698,7 @@ public class FamilyPhotoService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         FamilyPhoto photo = familyPhotoRepository
-                .findAccessibleByFamilyPhotoIdAndUser(
+                .findAccessibleForDeletionByFamilyPhotoIdAndUser(
                         familyPhotoId,
                         currentUser
                 )
@@ -700,12 +713,19 @@ public class FamilyPhotoService {
         }
 
         String imageKey = photo.getImageKey();
+        String thumbnailKey = photo.getThumbnailKey();
 
         familyPhotoRepository.delete(photo);
         registerS3DeleteAfterCommit(imageKey);
+        registerS3DeleteAfterCommit(thumbnailKey);
     }
 
     private void registerS3DeleteAfterCommit(String imageKey){
+
+        if (imageKey == null || imageKey.isBlank()) {
+            return;
+        }
+
         TransactionSynchronizationManager.registerSynchronization(
                 new TransactionSynchronization(){
                     @Override
@@ -923,5 +943,21 @@ public class FamilyPhotoService {
         return groupLinks.stream()
                 .map(PhotoGroupFamily::getPhotoGroup)
                 .toList();
+    }
+
+    private String createThumbnailOrNull(String imageKey) {
+        try {
+            byte[] originalBytes = s3Service.download(imageKey);
+            byte[] thumbnailBytes = thumbnailService.create(originalBytes);
+
+            return s3Service.uploadThumbnail(thumbnailBytes);
+        } catch (RuntimeException exception) {
+            log.warn(
+                    "가족사진 썸네일 생성 실패, imageKey={}",
+                    imageKey,
+                    exception
+            );
+            return null;
+        }
     }
 }

@@ -23,8 +23,12 @@ import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.storage.PresignedUploadInfo;
 import com.example.senioron.global.storage.S3Service;
 import com.example.senioron.global.storage.StoredObjectInfo;
+import com.example.senioron.global.storage.ThumbnailService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.util.List;
@@ -53,6 +57,9 @@ class FamilyPhotoPresignedUploadServiceTest {
             "https://example-bucket.s3.amazonaws.com/"
                     + IMAGE_KEY;
 
+    private static final String THUMBNAIL_KEY =
+            "family-photos/thumbnails/family-photo.jpg";
+
     private final FamilyPhotoRepository familyPhotoRepository =
             mock(FamilyPhotoRepository.class);
     private final FamilyPhotoViewRepository familyPhotoViewRepository =
@@ -63,6 +70,8 @@ class FamilyPhotoPresignedUploadServiceTest {
 
     private final S3Service s3Service =
             mock(S3Service.class);
+    private final ThumbnailService thumbnailService =
+            mock(ThumbnailService.class);
 
     private final FamilyPhotoPermissionService permissionService =
             mock(FamilyPhotoPermissionService.class);
@@ -85,6 +94,7 @@ class FamilyPhotoPresignedUploadServiceTest {
                 familyPhotoViewRepository,
                 userRepository,
                 s3Service,
+                thumbnailService,
                 permissionService,
                 persistenceService,
                 familyMemberRepository,
@@ -365,8 +375,9 @@ class FamilyPhotoPresignedUploadServiceTest {
         );
     }
 
-    @Test
-    void createsMultipartPhotoInSelectedPhotoGroups() {
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void createsMultipartPhotoInSelectedPhotoGroups(boolean thumbnailGenerated) {
         Family family = createFamily();
         PhotoGroup firstGroup = createPhotoGroup();
         PhotoGroup secondGroup = PhotoGroup.builder()
@@ -425,9 +436,21 @@ class FamilyPhotoPresignedUploadServiceTest {
                 request.getImage(),
                 "family-photos/" + FAMILY_ID
         )).willReturn(IMAGE_KEY);
+        byte[] originalBytes = {1};
+        byte[] thumbnailBytes = {2};
+        String expectedThumbnailKey = thumbnailGenerated ? THUMBNAIL_KEY : null;
+        given(s3Service.download(IMAGE_KEY)).willReturn(originalBytes);
+        if (thumbnailGenerated) {
+            given(thumbnailService.create(originalBytes)).willReturn(thumbnailBytes);
+            given(s3Service.uploadThumbnail(thumbnailBytes)).willReturn(THUMBNAIL_KEY);
+        } else {
+            given(thumbnailService.create(originalBytes))
+                    .willThrow(new IllegalStateException("thumbnail generation failed"));
+        }
         given(persistenceService.create(
                 USER_ID,
                 IMAGE_KEY,
+                expectedThumbnailKey,
                 idempotencyKey,
                 request.getDescription(),
                 List.of(firstGroup, secondGroup)
@@ -440,17 +463,69 @@ class FamilyPhotoPresignedUploadServiceTest {
         );
 
         assertThat(response.getFamilyPhotoId()).isEqualTo(23L);
+        verify(s3Service).download(IMAGE_KEY);
+        verify(thumbnailService).create(originalBytes);
+        if (thumbnailGenerated) {
+            verify(s3Service).uploadThumbnail(thumbnailBytes);
+        } else {
+            verify(s3Service, never()).uploadThumbnail(
+                    org.mockito.ArgumentMatchers.any(byte[].class)
+            );
+        }
         verify(persistenceService).create(
                 USER_ID,
                 IMAGE_KEY,
+                expectedThumbnailKey,
                 idempotencyKey,
                 "여러 가족 공유 사진",
                 List.of(firstGroup, secondGroup)
         );
     }
 
-    @Test
-    void completesUploadedPhoto() {
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void deletesOriginalAndThumbnailWhenMultipartPersistenceFails(boolean integrityViolation) {
+        Family family = createFamily();
+        PhotoGroup photoGroup = createPhotoGroup();
+        User child = createChild(family);
+        FamilyPhotoCreateRequest request = new FamilyPhotoCreateRequest();
+        request.setSeniorId(SENIOR_ID);
+        request.setPhotoGroupIds(List.of(30L));
+        request.setDescription("저장 실패 사진");
+        request.setImage(new MockMultipartFile(
+                "image", "family-photo.jpg", "image/jpeg", new byte[]{1}
+        ));
+        String idempotencyKey = "failed-multipart-upload";
+        byte[] originalBytes = {1};
+        byte[] thumbnailBytes = {2};
+        RuntimeException failure = integrityViolation
+                ? new DataIntegrityViolationException("saving failed")
+                : new IllegalStateException("saving failed");
+
+        stubAccessibleUploadContext(family, child, photoGroup);
+        given(persistenceService.findExisting(USER_ID, idempotencyKey))
+                .willReturn(Optional.empty());
+        given(s3Service.upload(request.getImage(), "family-photos/" + FAMILY_ID))
+                .willReturn(IMAGE_KEY);
+        given(s3Service.download(IMAGE_KEY)).willReturn(originalBytes);
+        given(thumbnailService.create(originalBytes)).willReturn(thumbnailBytes);
+        given(s3Service.uploadThumbnail(thumbnailBytes)).willReturn(THUMBNAIL_KEY);
+        given(persistenceService.create(
+                USER_ID, IMAGE_KEY, THUMBNAIL_KEY, idempotencyKey,
+                request.getDescription(), List.of(photoGroup)
+        )).willThrow(failure);
+
+        assertThatThrownBy(() -> familyPhotoService.createPhoto(
+                child, idempotencyKey, request
+        )).isSameAs(failure);
+
+        verify(s3Service).delete(IMAGE_KEY);
+        verify(s3Service).delete(THUMBNAIL_KEY);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void completesUploadedPhoto(boolean thumbnailGenerated) {
         Family family = createFamily();
         PhotoGroup photoGroup = createPhotoGroup();
         User child = createChild(family);
@@ -458,11 +533,13 @@ class FamilyPhotoPresignedUploadServiceTest {
                 "ee3641b6-7f46-4ca7-a666-17b008f6f486";
         FamilyPhotoUploadCompleteRequest request =
                 createCompleteRequest("오늘 찍은 사진");
+        String expectedThumbnailKey = thumbnailGenerated ? THUMBNAIL_KEY : null;
         FamilyPhoto savedPhoto = FamilyPhoto.builder()
                 .familyPhotoId(21L)
                 .photoGroup(photoGroup)
                 .user(child)
                 .imageKey(IMAGE_KEY)
+                .thumbnailKey(expectedThumbnailKey)
                 .description(request.getDescription())
                 .idempotencyKey(idempotencyKey)
                 .build();
@@ -479,9 +556,20 @@ class FamilyPhotoPresignedUploadServiceTest {
                                 "image/jpeg"
                         )
                 ));
+        byte[] originalBytes = {1};
+        byte[] thumbnailBytes = {2};
+        given(s3Service.download(IMAGE_KEY)).willReturn(originalBytes);
+        if (thumbnailGenerated) {
+            given(thumbnailService.create(originalBytes)).willReturn(thumbnailBytes);
+            given(s3Service.uploadThumbnail(thumbnailBytes)).willReturn(THUMBNAIL_KEY);
+        } else {
+            given(thumbnailService.create(originalBytes))
+                    .willThrow(new IllegalStateException("thumbnail generation failed"));
+        }
         given(persistenceService.create(
                 USER_ID,
                 IMAGE_KEY,
+                expectedThumbnailKey,
                 idempotencyKey,
                 request.getDescription(),
                 List.of(photoGroup)
@@ -506,13 +594,111 @@ class FamilyPhotoPresignedUploadServiceTest {
         assertThat(response.isCanDelete()).isTrue();
 
         verify(s3Service).findObjectInfo(IMAGE_KEY);
+        verify(s3Service).download(IMAGE_KEY);
+        verify(thumbnailService).create(originalBytes);
+        if (thumbnailGenerated) {
+            verify(s3Service).uploadThumbnail(thumbnailBytes);
+        } else {
+            verify(s3Service, never()).uploadThumbnail(
+                    org.mockito.ArgumentMatchers.any(byte[].class)
+            );
+        }
         verify(persistenceService).create(
                 USER_ID,
                 IMAGE_KEY,
+                expectedThumbnailKey,
                 idempotencyKey,
                 "오늘 찍은 사진",
                 List.of(photoGroup)
         );
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"runtime", "integrity", "idempotency", "imageKey"})
+    void cleansOnlyNewThumbnailWhenPresignedPersistenceFails(String failureCase) {
+        Family family = createFamily();
+        PhotoGroup photoGroup = createPhotoGroup();
+        User child = createChild(family);
+        String idempotencyKey = "failed-presigned-upload";
+        FamilyPhotoUploadCompleteRequest request = createCompleteRequest("저장 실패 사진");
+        FamilyPhoto existingPhoto = FamilyPhoto.builder()
+                .familyPhotoId(24L)
+                .photoGroup(photoGroup)
+                .user(child)
+                .imageKey(IMAGE_KEY)
+                .thumbnailKey("family-photos/thumbnails/existing-photo.jpg")
+                .build();
+        RuntimeException failure = failureCase.equals("runtime")
+                ? new IllegalStateException("saving failed")
+                : new DataIntegrityViolationException("saving failed");
+
+        stubAccessibleUploadContext(family, child, photoGroup);
+        given(persistenceService.findExisting(USER_ID, idempotencyKey))
+                .willReturn(Optional.empty(), failureCase.equals("idempotency")
+                        ? Optional.of(existingPhoto) : Optional.empty());
+        given(familyPhotoRepository.existsByImageKey(IMAGE_KEY))
+                .willReturn(false, failureCase.equals("imageKey"));
+        stubUploadedObjectAndThumbnail();
+        given(persistenceService.create(
+                USER_ID, IMAGE_KEY, THUMBNAIL_KEY, idempotencyKey,
+                request.getDescription(), List.of(photoGroup)
+        )).willThrow(failure);
+
+        if (failureCase.equals("idempotency")) {
+            FamilyPhotoItemResponse response = familyPhotoService.completePhotoUpload(
+                    child, idempotencyKey, request
+            );
+            assertThat(response.getFamilyPhotoId()).isEqualTo(24L);
+        } else if (failureCase.equals("imageKey")) {
+            assertThatThrownBy(() -> familyPhotoService.completePhotoUpload(
+                    child, idempotencyKey, request
+            ))
+                    .isInstanceOf(BusinessException.class)
+                    .asInstanceOf(type(BusinessException.class))
+                    .extracting(BusinessException::getCode)
+                    .isEqualTo(ErrorCode.FAMILY_PHOTO_ALREADY_REGISTERED);
+        } else {
+            assertThatThrownBy(() -> familyPhotoService.completePhotoUpload(
+                    child, idempotencyKey, request
+            )).isSameAs(failure);
+        }
+
+        verify(s3Service).delete(THUMBNAIL_KEY);
+        verify(s3Service, never()).delete(IMAGE_KEY);
+        verify(s3Service, never()).delete(existingPhoto.getThumbnailKey());
+    }
+
+    @Test
+    void preservesSavedObjectsWhenPresignedResponseCreationFails() {
+        Family family = createFamily();
+        PhotoGroup photoGroup = createPhotoGroup();
+        User child = createChild(family);
+        String idempotencyKey = "response-failure";
+        FamilyPhotoUploadCompleteRequest request = createCompleteRequest("응답 실패 사진");
+        FamilyPhoto savedPhoto = FamilyPhoto.builder()
+                .familyPhotoId(25L)
+                .photoGroup(photoGroup)
+                .user(child)
+                .imageKey(IMAGE_KEY)
+                .thumbnailKey(THUMBNAIL_KEY)
+                .build();
+        RuntimeException failure = new IllegalStateException("URL generation failed");
+
+        stubAccessibleUploadContext(family, child, photoGroup);
+        given(persistenceService.findExisting(USER_ID, idempotencyKey))
+                .willReturn(Optional.empty());
+        stubUploadedObjectAndThumbnail();
+        given(persistenceService.create(
+                USER_ID, IMAGE_KEY, THUMBNAIL_KEY, idempotencyKey,
+                request.getDescription(), List.of(photoGroup)
+        )).willReturn(savedPhoto);
+        given(s3Service.getFileUrl(IMAGE_KEY)).willThrow(failure);
+
+        assertThatThrownBy(() -> familyPhotoService.completePhotoUpload(
+                child, idempotencyKey, request
+        )).isSameAs(failure);
+
+        verify(s3Service, never()).delete(org.mockito.ArgumentMatchers.anyString());
     }
 
     @Test
@@ -548,6 +734,7 @@ class FamilyPhotoPresignedUploadServiceTest {
         verify(persistenceService, never()).create(
                 USER_ID,
                 IMAGE_KEY,
+                null,
                 idempotencyKey,
                 request.getDescription(),
                 List.of(photoGroup)
@@ -593,6 +780,7 @@ class FamilyPhotoPresignedUploadServiceTest {
         verify(persistenceService, never()).create(
                 USER_ID,
                 IMAGE_KEY,
+                null,
                 idempotencyKey,
                 request.getDescription(),
                 List.of(photoGroup)
@@ -634,9 +822,12 @@ class FamilyPhotoPresignedUploadServiceTest {
         assertThat(response.getDescription()).isEqualTo("처음 저장된 설명");
 
         verify(s3Service, never()).findObjectInfo(IMAGE_KEY);
+        verify(s3Service, never()).download(IMAGE_KEY);
+        verifyNoInteractions(thumbnailService);
         verify(persistenceService, never()).create(
                 USER_ID,
                 IMAGE_KEY,
+                null,
                 idempotencyKey,
                 request.getDescription(),
                 List.of(photoGroup)
@@ -676,6 +867,16 @@ class FamilyPhotoPresignedUploadServiceTest {
         request.setImageKey(IMAGE_KEY);
         request.setDescription(description);
         return request;
+    }
+
+    private void stubUploadedObjectAndThumbnail() {
+        byte[] originalBytes = {1};
+        byte[] thumbnailBytes = {2};
+        given(s3Service.findObjectInfo(IMAGE_KEY))
+                .willReturn(Optional.of(new StoredObjectInfo(1024L, "image/jpeg")));
+        given(s3Service.download(IMAGE_KEY)).willReturn(originalBytes);
+        given(thumbnailService.create(originalBytes)).willReturn(thumbnailBytes);
+        given(s3Service.uploadThumbnail(thumbnailBytes)).willReturn(THUMBNAIL_KEY);
     }
 
     private void stubAccessibleUploadContext(

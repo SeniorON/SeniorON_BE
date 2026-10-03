@@ -77,12 +77,15 @@ class FamilyPhotoPersistenceServiceTest {
         FamilyPhoto savedPhoto = persistenceService.create(
                 2L,
                 "family-photos/1/multi-group-photo.jpg",
+                "family-photos/thumbnails/multi-group-photo.jpg",
                 "multi-group-idempotency-key",
                 "여러 그룹 공유",
                 List.of(firstGroup, secondGroup)
         );
 
         assertThat(savedPhoto.getPhotoGroup()).isSameAs(firstGroup);
+        assertThat(savedPhoto.getThumbnailKey())
+                .isEqualTo("family-photos/thumbnails/multi-group-photo.jpg");
         verify(familyPhotoGroupRepository).saveAllAndFlush(
                 argThat(mappings -> {
                     List<FamilyPhotoGroup> savedMappings =
@@ -118,7 +121,7 @@ class FamilyPhotoPersistenceServiceTest {
                 .when(familyPhotoGroupRepository).saveAllAndFlush(any());
 
         assertThatThrownBy(() -> persistenceService.create(
-                2L, "photo.jpg", "key", "설명", List.of(group)
+                2L, "photo.jpg", null, "key", "설명", List.of(group)
         )).isInstanceOf(DataIntegrityViolationException.class);
         verifyNoInteractions(eventPublisher);
     }
