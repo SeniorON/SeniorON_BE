@@ -218,4 +218,51 @@ public class S3Service {
             );
         }
     }
+
+    // 저장된 원본 이미지 읽기
+    public byte[] download(String imageKey) {
+        GetObjectRequest request = GetObjectRequest.builder()
+                .bucket(bucket)
+                .key(imageKey)
+                .build();
+
+        try {
+            return s3Client.getObjectAsBytes(request).asByteArray();
+        } catch (SdkException exception) {
+            throw new IllegalStateException(
+                    "원본 이미지 다운로드에 실패했습니다.",
+                    exception
+            );
+        }
+    }
+
+    // 생성된 JPEG 썸네일 저장
+    public String uploadThumbnail(byte[] thumbnailBytes) {
+        if (thumbnailBytes == null || thumbnailBytes.length == 0) {
+            throw new IllegalArgumentException("썸네일 이미지가 필요합니다.");
+        }
+
+        String thumbnailKey = "family-photos/thumbnails/"
+                + UUID.randomUUID()
+                + ".jpg";
+
+        PutObjectRequest request = PutObjectRequest.builder()
+                .bucket(bucket)
+                .key(thumbnailKey)
+                .contentType("image/jpeg")
+                .build();
+
+        try {
+            s3Client.putObject(
+                    request,
+                    RequestBody.fromBytes(thumbnailBytes)
+            );
+            return thumbnailKey;
+        } catch (SdkException exception) {
+            throw new IllegalStateException(
+                    "썸네일 저장에 실패했습니다.",
+                    exception
+            );
+        }
+    }
 }

@@ -32,6 +32,7 @@ public class FamilyPhotoPersistenceService {
     public FamilyPhoto create(
             Long userId,
             String imageKey,
+            String thumbnailKey,
             String idempotencyKey,
             String description,
             List<PhotoGroup> photoGroups
@@ -54,6 +55,7 @@ public class FamilyPhotoPersistenceService {
                 .photoGroup(representativePhotoGroup)
                 .user(user)
                 .imageKey(imageKey)
+                .thumbnailKey(thumbnailKey)
                 .idempotencyKey(idempotencyKey)
                 .description(description)
                 .build();
@@ -90,5 +92,17 @@ public class FamilyPhotoPersistenceService {
                         userId,
                         idempotencyKey
                 );
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean attachThumbnail(Long photoId, String thumbnailKey) {
+        if (thumbnailKey == null || thumbnailKey.isBlank()) {
+            throw new IllegalArgumentException("썸네일 키가 필요합니다.");
+        }
+
+        return familyPhotoRepository.updateThumbnailIfAbsent(
+                photoId,
+                thumbnailKey
+        ) == 1;
     }
 }
