@@ -123,10 +123,10 @@ public class DeviceController {
     }
 
     @Operation(
-            summary = "시니어 기기 연결 해제",
-            description = "주담당자 또는 보조담당자가 seniorId로 선택한 시니어 기기 연결을 해제"
+            summary = "보조담당자 시니어 연결 해제",
+            description = "보조담당자가 seniorId로 선택한 시니어와의 연결 관계를 해제합니다. " +
+                    "주담당자는 연결 해제할 수 없으며, 시니어 및 다른 담당자의 연결 관계는 유지됩니다."
     )
-
     @DeleteMapping("/connection")
     public ResponseEntity<Void> disconnectDevice(
             @RequestParam Long seniorId,
