@@ -31,6 +31,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
+import org.springframework.context.ApplicationEventPublisher;
+import com.example.senioron.domain.family.event.FamilyPhotoDeletedEvent;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
@@ -64,6 +66,10 @@ class FamilyPhotoServiceTest {
             org.mockito.Mockito.mock(PhotoGroupFamilyRepository.class);
 
     private FamilyPhotoService familyPhotoService;
+    private final FamilyPhotoPushTargetService familyPhotoPushTargetService =
+            org.mockito.Mockito.mock(FamilyPhotoPushTargetService.class);
+    private final ApplicationEventPublisher eventPublisher =
+            org.mockito.Mockito.mock(ApplicationEventPublisher.class);
 
     @BeforeEach
     void setUp() {
@@ -77,7 +83,9 @@ class FamilyPhotoServiceTest {
                 photoPersistenceService,
                 familyMemberRepository,
                 seniorRepository,
-                photoGroupFamilyRepository
+                photoGroupFamilyRepository,
+                familyPhotoPushTargetService,
+                eventPublisher
         );
     }
 
@@ -383,6 +391,7 @@ class FamilyPhotoServiceTest {
             familyPhotoService.deletePhoto(child, 40L);
 
             verify(familyPhotoRepository).delete(photo);
+            verifyNoInteractions(eventPublisher);
             verifyNoInteractions(s3Service);
             TransactionSynchronizationManager.getSynchronizations()
                     .forEach(TransactionSynchronization::afterCommit);
@@ -447,7 +456,28 @@ class FamilyPhotoServiceTest {
                 .isEqualTo(ErrorCode.FAMILY_PHOTO_DELETE_FORBIDDEN);
 
         verify(familyPhotoRepository, never()).delete(any(FamilyPhoto.class));
-        verifyNoInteractions(s3Service);
+        verifyNoInteractions(s3Service, familyPhotoPushTargetService, eventPublisher);
+    }
+
+    @Test
+    void capturesRecipientsBeforeDeletionAndPublishesDeletionEvent() {
+        User child = User.builder().usersId(10L).role(Role.CHILD).build();
+        FamilyPhoto photo = stubDeletablePhoto(child, "thumbnail.jpg");
+        given(familyPhotoPushTargetService.loadDeletionTokens(40L))
+                .willReturn(List.of("first-parent", "second-parent"));
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            familyPhotoService.deletePhoto(child, 40L);
+
+            var order = org.mockito.Mockito.inOrder(
+                    familyPhotoPushTargetService, familyPhotoRepository, eventPublisher);
+            order.verify(familyPhotoPushTargetService).loadDeletionTokens(40L);
+            order.verify(familyPhotoRepository).delete(photo);
+            order.verify(eventPublisher).publishEvent(new FamilyPhotoDeletedEvent(
+                    40L, List.of("first-parent", "second-parent")));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     private FamilyPhoto stubDeletablePhoto(User child, String thumbnailKey) {

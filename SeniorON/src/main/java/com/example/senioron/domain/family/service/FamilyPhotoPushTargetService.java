@@ -82,4 +82,28 @@ public class FamilyPhotoPushTargetService {
 
     public record PushTarget(String body, List<String> tokens) {
     }
+
+    @Transactional(readOnly = true)
+    public List<String> loadDeletionTokens(Long familyPhotoId) {
+        var parents = familyPhotoGroupRepository.findPhotoRecipientParents(
+                familyPhotoId,
+                Role.PARENT,
+                UserStatus.ACTIVE
+        );
+
+        if (parents.isEmpty()) {
+            return List.of();
+        }
+
+        return deviceRepository.findAllByUserIn(parents)
+                .stream()
+                .filter(device ->
+                        device.getConnectionStatus() != DeviceStatus.DISCONNECTED
+                                && device.getConnectionStatus() != DeviceStatus.LOGIN_EXPIRED
+                )
+                .map(Device::getDeviceToken)
+                .filter(token -> token != null && !token.isBlank())
+                .distinct()
+                .toList();
+    }
 }

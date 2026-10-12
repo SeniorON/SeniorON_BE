@@ -15,6 +15,7 @@ import com.example.senioron.domain.family.service.FamilyPhotoPushTargetService;
 import com.example.senioron.global.config.FamilyPhotoAsyncConfig;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -36,7 +37,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate;
 
 @DataJpaTest(showSql = false)
-@Import({FamilyPhotoAsyncConfig.class, FamilyPhotoSharedEventListener.class, FamilyPhotoPushService.class})
+@Import({FamilyPhotoAsyncConfig.class, FamilyPhotoSharedEventListener.class,
+        FamilyPhotoDeletedEventListener.class, FamilyPhotoPushService.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @Timeout(15)
 class FamilyPhotoPushIntegrationTest {
@@ -83,12 +85,36 @@ class FamilyPhotoPushIntegrationTest {
     }
 
     @Test
+    void sendsDeletionOnlyAfterCommitOnAsyncWorkerUsingCapturedTokens() throws Exception {
+        CountDownLatch sent = new CountDownLatch(1);
+        AtomicReference<String> workerThread = new AtomicReference<>();
+        given(fcmSender.sendData(anyString(), anyMap())).willAnswer(invocation -> {
+            workerThread.set(Thread.currentThread().getName());
+            sent.countDown();
+            return true;
+        });
+
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            events.publishEvent(new FamilyPhotoDeletedEvent(10L, List.of("captured-token")));
+            verifyNoInteractions(targets, fcmSender);
+        });
+
+        assertThat(sent.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(workerThread.get()).startsWith("family-photo-push-");
+        verify(fcmSender).sendData("captured-token", Map.of(
+                "type", "FAMILY_PHOTO_DELETED", "familyPhotoId", "10"));
+        verifyNoInteractions(targets);
+    }
+
+    @Test
     void doesNotSendForRolledBackOrNonTransactionalEvents() {
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
             events.publishEvent(new FamilyPhotoSharedEvent(10L));
+            events.publishEvent(new FamilyPhotoDeletedEvent(10L, List.of("token")));
             status.setRollbackOnly();
         });
         events.publishEvent(new FamilyPhotoSharedEvent(11L));
+        events.publishEvent(new FamilyPhotoDeletedEvent(11L, List.of("token")));
         verifyNoInteractions(targets, fcmSender);
     }
 
@@ -115,8 +141,10 @@ class FamilyPhotoPushIntegrationTest {
             }
             assertThat(executor.getQueueSize()).isEqualTo(100);
 
-            assertThatCode(() -> new TransactionTemplate(transactionManager).executeWithoutResult(status ->
-                    events.publishEvent(new FamilyPhotoSharedEvent(10L))))
+            assertThatCode(() -> new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                    events.publishEvent(new FamilyPhotoSharedEvent(10L));
+                    events.publishEvent(new FamilyPhotoDeletedEvent(10L, List.of("token")));
+                }))
                     .doesNotThrowAnyException();
             verifyNoInteractions(targets, fcmSender);
         } finally {

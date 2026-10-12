@@ -25,6 +25,7 @@ import com.example.senioron.global.storage.S3Service;
 import com.example.senioron.global.storage.StoredObjectInfo;
 import com.example.senioron.global.storage.ThumbnailService;
 import org.junit.jupiter.api.BeforeEach;
+import org.springframework.context.ApplicationEventPublisher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -86,6 +87,10 @@ class FamilyPhotoPresignedUploadServiceTest {
             mock(PhotoGroupFamilyRepository.class);
 
     private FamilyPhotoService familyPhotoService;
+    private final FamilyPhotoPushTargetService familyPhotoPushTargetService =
+            mock(FamilyPhotoPushTargetService.class);
+    private final ApplicationEventPublisher eventPublisher =
+            mock(ApplicationEventPublisher.class);
 
     @BeforeEach
     void setUp() {
@@ -99,7 +104,9 @@ class FamilyPhotoPresignedUploadServiceTest {
                 persistenceService,
                 familyMemberRepository,
                 seniorRepository,
-                photoGroupFamilyRepository
+                photoGroupFamilyRepository,
+                familyPhotoPushTargetService,
+                eventPublisher
         );
     }
 
