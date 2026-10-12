@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -63,6 +64,42 @@ public class FamilyPhotoPushService {
 
         log.info(
                 "[FamilyPhotoPush] 발송 처리 종료. familyPhotoId={}, "
+                        + "fcmAcceptedCount={}, failureCount={}",
+                familyPhotoId,
+                successCount,
+                failureCount
+        );
+    }
+
+    @Async("familyPhotoPushExecutor")
+    public void sendDeleted(Long familyPhotoId, List<String> tokens) {
+        Map<String, String> data = Map.of(
+                "type", "FAMILY_PHOTO_DELETED",
+                "familyPhotoId", familyPhotoId.toString()
+        );
+
+        int successCount = 0;
+        int failureCount = 0;
+
+        for (String token : tokens) {
+            try {
+                if (fcmSender.sendData(token, data)) {
+                    successCount++;
+                } else {
+                    failureCount++;
+                }
+            } catch (RuntimeException exception) {
+                failureCount++;
+                log.error(
+                        "[FamilyPhotoDeleted] 발송 예외. familyPhotoId={}",
+                        familyPhotoId,
+                        exception
+                );
+            }
+        }
+
+        log.info(
+                "[FamilyPhotoDeleted] 발송 종료. familyPhotoId={}, "
                         + "fcmAcceptedCount={}, failureCount={}",
                 familyPhotoId,
                 successCount,

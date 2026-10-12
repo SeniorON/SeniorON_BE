@@ -48,6 +48,25 @@ class FamilyPhotoPushServiceTest {
     }
 
     @Test
+    void sendsDeletionSignalWithoutNotificationTextAndContinuesAfterFailures() {
+        given(fcmSender.sendData(eq("rejected"), anyMap())).willReturn(false);
+        given(fcmSender.sendData(eq("exception"), anyMap()))
+                .willThrow(new IllegalStateException("FCM unavailable"));
+        given(fcmSender.sendData(eq("accepted"), anyMap())).willReturn(true);
+
+        assertThatCode(() -> service.sendDeleted(
+                10L, List.of("rejected", "exception", "accepted")))
+                .doesNotThrowAnyException();
+
+        Map<String, String> payload = Map.of(
+                "type", "FAMILY_PHOTO_DELETED", "familyPhotoId", "10");
+        for (String token : List.of("rejected", "exception", "accepted")) {
+            verify(fcmSender).sendData(token, payload);
+        }
+        verifyNoInteractions(targets);
+    }
+
+    @Test
     void containsRecipientLookupFailure() {
         given(targets.load(10L)).willThrow(new IllegalStateException("DB unavailable"));
         assertThatCode(() -> service.send(10L)).doesNotThrowAnyException();

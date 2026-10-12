@@ -87,6 +87,34 @@ class FamilyPhotoPushTargetServiceTest {
         return parents;
     }
 
+    @Test
+    void deletionTokensIncludeBothParentsAndExcludeUnavailableOrDuplicateTokens() {
+        var parents = List.of(User.builder().usersId(2L).build(),
+                User.builder().usersId(3L).build());
+        given(groups.findPhotoRecipientParents(10L, Role.PARENT, UserStatus.ACTIVE))
+                .willReturn(parents);
+        given(devices.findAllByUserIn(parents)).willReturn(List.of(
+                device("first-parent", DeviceStatus.ONLINE),
+                device("first-parent", DeviceStatus.ONLINE),
+                device("second-parent", DeviceStatus.OFFLINE),
+                device("disconnected", DeviceStatus.DISCONNECTED),
+                device("expired", DeviceStatus.LOGIN_EXPIRED),
+                device(null, DeviceStatus.ONLINE),
+                device("  ", DeviceStatus.ONLINE)));
+
+        assertThat(service.loadDeletionTokens(10L))
+                .containsExactly("first-parent", "second-parent");
+        verifyNoInteractions(photos);
+    }
+
+    @Test
+    void deletionWithoutRecipientsSkipsDeviceLookup() {
+        given(groups.findPhotoRecipientParents(10L, Role.PARENT, UserStatus.ACTIVE))
+                .willReturn(List.of());
+        assertThat(service.loadDeletionTokens(10L)).isEmpty();
+        verifyNoInteractions(photos, devices);
+    }
+
     private Device device(String token, DeviceStatus status) {
         return Device.builder().deviceToken(token).connectionStatus(status).build();
     }

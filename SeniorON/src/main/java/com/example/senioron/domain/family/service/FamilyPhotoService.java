@@ -45,6 +45,8 @@ import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
 import com.example.senioron.domain.family.entity.PhotoGroup;
 import com.example.senioron.domain.family.entity.PhotoGroupFamily;
 import com.example.senioron.domain.family.repository.FamilyPhotoViewRepository;
+import com.example.senioron.domain.family.event.FamilyPhotoDeletedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 
 @Slf4j
 @Service
@@ -61,6 +63,8 @@ public class FamilyPhotoService {
     private final FamilyMemberRepository familyMemberRepository;
     private final SeniorRepository seniorRepository;
     private final PhotoGroupFamilyRepository photoGroupFamilyRepository;
+    private final FamilyPhotoPushTargetService familyPhotoPushTargetService;
+    private final ApplicationEventPublisher eventPublisher;
 
     private static final int NEW_PHOTO_WINDOW_HOURS = 24;
     private static final long MAX_FAMILY_PHOTO_SIZE = 10L * 1024 * 1024;
@@ -715,9 +719,18 @@ public class FamilyPhotoService {
         String imageKey = photo.getImageKey();
         String thumbnailKey = photo.getThumbnailKey();
 
+        List<String> tokens =
+                familyPhotoPushTargetService.loadDeletionTokens(familyPhotoId);
+
         familyPhotoRepository.delete(photo);
         registerS3DeleteAfterCommit(imageKey);
         registerS3DeleteAfterCommit(thumbnailKey);
+
+        if (!tokens.isEmpty()) {
+            eventPublisher.publishEvent(
+                    new FamilyPhotoDeletedEvent(familyPhotoId, tokens)
+            );
+        }
     }
 
     private void registerS3DeleteAfterCommit(String imageKey){
