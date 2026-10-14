@@ -40,8 +40,6 @@ public class InactivitySettingService {
         try {
             InactivitySetting setting = InactivitySetting.builder()
                     .user(targetUser)
-                    .isEnabled(true)
-                    .thresholdHours(4)
                     .build();
             return inactivitySettingRepository.saveAndFlush(setting);
         } catch (DataIntegrityViolationException e) {
