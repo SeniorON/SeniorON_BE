@@ -47,7 +47,7 @@ class EventNotificationPolicyTest {
             mock(com.example.senioron.domain.notification.service.NotificationHomeWebSocketService.class));
     private final EventService service = new EventService(events, notificationService,
             geocoding, safeBrowsing, context, mock(UserRepository.class), seniors, members,
-            mock(DeviceRepository.class), metrics);
+            metrics);
     private final User parent = User.builder().usersId(10L).role(Role.PARENT).build();
 
     @BeforeEach
