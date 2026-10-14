@@ -778,6 +778,7 @@ class FamilyServiceTest {
                 .build();
         User currentUser = createUser(1L, "현재 사용자");
         currentUser.updateFamily(firstFamily);
+        currentUser.updateManagerType(ManagerType.SUB);
         Senior selectedSenior = Senior.builder()
                 .seniorId(20L)
                 .family(selectedFamily)
@@ -789,6 +790,10 @@ class FamilyServiceTest {
                 .willReturn(Optional.of(selectedSenior));
         given(familyMemberRepository.existsByUserAndFamily(currentUser, selectedFamily))
                 .willReturn(true);
+        given(familyMemberRepository.findByUserAndFamily(currentUser, selectedFamily))
+                .willReturn(Optional.of(createMember(
+                        1L, currentUser, selectedFamily, ManagerType.PRIMARY
+                )));
         given(familyMemberRepository.countByFamily(selectedFamily))
                 .willReturn(3L);
 
@@ -798,6 +803,59 @@ class FamilyServiceTest {
         assertThat(response.getFamilyMemberCount()).isEqualTo(3L);
         verify(familyMemberRepository).countByFamily(selectedFamily);
         verify(familyMemberRepository, never()).countByFamily(firstFamily);
+    }
+
+    @Test
+    void getSeniorCodeRejectsSelectedFamilySubManagerEvenWhenPrimaryElsewhere() {
+        Family firstFamily = Family.builder().familyId(1L).build();
+        Family selectedFamily = Family.builder().familyId(2L).build();
+        User currentUser = createUser(1L, "다른 가족의 주 담당자");
+        currentUser.updateFamily(firstFamily);
+        currentUser.updateManagerType(ManagerType.PRIMARY);
+        Senior selectedSenior = Senior.builder()
+                .seniorId(20L)
+                .family(selectedFamily)
+                .build();
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
+        given(seniorRepository.findById(20L)).willReturn(Optional.of(selectedSenior));
+        given(familyMemberRepository.existsByUserAndFamily(currentUser, selectedFamily))
+                .willReturn(true);
+        given(familyMemberRepository.findByUserAndFamily(currentUser, selectedFamily))
+                .willReturn(Optional.of(createMember(
+                        2L, currentUser, selectedFamily, ManagerType.SUB
+                )));
+
+        assertThatThrownBy(() -> familyService.getSeniorCode(currentUser, 20L))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.FORBIDDEN);
+
+        verify(familyMemberRepository, never()).countByFamily(any());
+    }
+
+    @Test
+    void getSeniorCodeRejectsUserOutsideSelectedFamily() {
+        Family selectedFamily = Family.builder().familyId(2L).build();
+        User currentUser = createUser(1L, "다른 가족 사용자");
+        Senior selectedSenior = Senior.builder()
+                .seniorId(20L)
+                .family(selectedFamily)
+                .build();
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
+        given(seniorRepository.findById(20L)).willReturn(Optional.of(selectedSenior));
+        given(familyMemberRepository.existsByUserAndFamily(currentUser, selectedFamily))
+                .willReturn(false);
+
+        assertThatThrownBy(() -> familyService.getSeniorCode(currentUser, 20L))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED);
+
+        verify(familyMemberRepository, never()).countByFamily(any());
     }
 
     @Test
