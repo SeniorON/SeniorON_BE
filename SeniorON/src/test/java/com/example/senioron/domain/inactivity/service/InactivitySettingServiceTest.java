@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.example.senioron.domain.inactivity.dto.request.InactivitySettingRequest;
@@ -20,6 +21,7 @@ import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class InactivitySettingServiceTest {
 
@@ -35,6 +37,18 @@ class InactivitySettingServiceTest {
     private final InactivitySettingService service =
             new InactivitySettingService(inactivitySettingRepository, userRepository,
                     seniorRepository, familyMemberRepository);
+
+    @Test
+    void signupCreatesSettingWithFourHourDefault() {
+        User parent = User.builder().usersId(PARENT_ID).role(Role.PARENT).build();
+
+        service.createDefaultSetting(parent);
+
+        ArgumentCaptor<InactivitySetting> settingCaptor = ArgumentCaptor.forClass(InactivitySetting.class);
+        verify(inactivitySettingRepository).save(settingCaptor.capture());
+        assertThat(settingCaptor.getValue().getThresholdHours()).isEqualTo(4);
+        assertThat(settingCaptor.getValue().getIsEnabled()).isTrue();
+    }
 
     // 부모(시니어) 기기가 자신의 임계 시간을 폴링으로 조회할 수 있어야 한다.
     @Test

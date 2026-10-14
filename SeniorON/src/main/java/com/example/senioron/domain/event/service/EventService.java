@@ -6,7 +6,6 @@ import com.example.senioron.domain.event.dto.request.RiskLinkRequest;
 import com.example.senioron.domain.event.dto.SosEventCreation;
 import com.example.senioron.domain.event.dto.SosAddressLookupRequested;
 import com.example.senioron.domain.event.dto.request.SosEventRequest;
-import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.event.dto.response.EventDetailResponse;
 import com.example.senioron.domain.event.dto.response.InactivityResponse;
 import com.example.senioron.domain.event.dto.response.OutingReturnResponse;
@@ -53,7 +52,6 @@ public class EventService {
     private final UserRepository userRepository;
     private final SeniorRepository seniorRepository;
     private final FamilyMemberRepository familyMemberRepository;
-    private final DeviceRepository deviceRepository;
     private final MeterRegistry meterRegistry;
 
     /**
@@ -205,11 +203,7 @@ public class EventService {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
         validateAccess(user, event);
-        Integer currentBatteryLevel = deviceRepository
-                .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(event.getTriggeredUser())
-                .map(device -> device.getBatteryLevel())
-                .orElse(null);
-        return EventDetailResponse.of(event, currentBatteryLevel);
+        return EventDetailResponse.of(event);
     }
 
     private void validateAccess(User principal, Event event) {
