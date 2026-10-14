@@ -581,11 +581,6 @@ public class NotificationService {
                 && !hasRegisteredHomeLocation(senior)) {
             throw new BusinessException(ErrorCode.SENIOR_HOME_LOCATION_NOT_FOUND);
         }
-        // 선택한 시니어의 부모님 기기가 전부 오프라인이면 변경을 차단한다 (fail-safe).
-        if (!isAnyDeviceOnline(findParentDeviceStatuses(List.of(parent)))) {
-            throw new BusinessException(ErrorCode.PARENT_DEVICE_OFFLINE);
-        }
-
         NotificationSetting setting = notificationSettingRepository.findById(parent.getUsersId())
                 .orElseGet(() -> createDefaultSettingInternal(parent));
 
