@@ -228,7 +228,10 @@ public class FamilyPhotoService {
                     thumbnailKey,
                     idempotencyKey,
                     request.getDescription(),
-                    photoGroups
+                    family.getFamilyId(),
+                    photoGroups.stream()
+                            .map(PhotoGroup::getId)
+                            .toList()
             );
         } catch (DataIntegrityViolationException exception) {
             deleteUploadedObjectSafely(thumbnailKey);
@@ -425,7 +428,10 @@ public class FamilyPhotoService {
                     thumbnailKey,
                     idempotencyKey,
                     request.getDescription(),
-                    photoGroups
+                    family.getFamilyId(),
+                    photoGroups.stream()
+                            .map(PhotoGroup::getId)
+                            .toList()
             );
 
         } catch (DataIntegrityViolationException exception) {

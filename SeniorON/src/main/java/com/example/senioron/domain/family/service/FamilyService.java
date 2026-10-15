@@ -681,6 +681,16 @@ public class FamilyService {
             );
         }
 
+        // 사진 저장과 같은 그룹을 잠가 연결 해제와 저장을 순서대로 처리한다.
+        List<PhotoGroup> lockedGroups = photoGroupRepository
+                .findAllByIdsForUpdate(List.of(photoGroupId));
+
+        if (lockedGroups.size() != 1 || !lockedGroups.get(0).isActive()) {
+            throw new BusinessException(
+                    ErrorCode.PHOTO_GROUP_CONNECTION_NOT_FOUND
+            );
+        }
+
         List<PhotoGroupFamily> groupLinks =
                 photoGroupFamilyRepository.findAllSharedLinks(
                         currentFamily,
@@ -693,7 +703,7 @@ public class FamilyService {
             );
         }
 
-        PhotoGroup photoGroup = groupLinks.get(0).getPhotoGroup();
+        PhotoGroup photoGroup = lockedGroups.get(0);
         photoGroup.disconnect();
     }
 
