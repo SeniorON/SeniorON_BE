@@ -697,6 +697,10 @@ class FamilyServiceTest {
         given(seniorRepository.findById(10L)).willReturn(Optional.of(currentSenior));
         given(familyMemberRepository.existsByUserAndFamily(currentUser, currentFamily))
                 .willReturn(true);
+        given(familyMemberRepository.findByUserAndFamily(currentUser, currentFamily))
+                .willReturn(Optional.of(createMember(
+                        1L, currentUser, currentFamily, ManagerType.PRIMARY
+                )));
         given(photoGroupFamilyRepository.findConnectedFamilyLinks(currentFamily))
                 .willReturn(List.of(connectedLink));
 
@@ -708,6 +712,8 @@ class FamilyServiceTest {
         assertThat(result.get(0).name()).isEqualTo("연결 시니어");
         assertThat(result.get(0).relation()).isEqualTo(SeniorRelation.FATHER);
         assertThat(result.get(0).connectedAt()).isEqualTo(connectedAt);
+        verify(photoGroupFamilyRepository, never())
+                .findManagedConnectedFamilyLinks(currentFamily, currentUser);
     }
 
     @Test
@@ -736,6 +742,8 @@ class FamilyServiceTest {
 
         verify(photoGroupFamilyRepository, never())
                 .findConnectedFamilyLinks(selectedFamily);
+        verify(photoGroupFamilyRepository, never())
+                .findManagedConnectedFamilyLinks(selectedFamily, currentUser);
     }
 
     @Test

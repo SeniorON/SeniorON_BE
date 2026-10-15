@@ -47,6 +47,7 @@ import com.example.senioron.domain.family.entity.PhotoGroupFamily;
 import com.example.senioron.domain.family.repository.FamilyPhotoViewRepository;
 import com.example.senioron.domain.family.event.FamilyPhotoDeletedEvent;
 import org.springframework.context.ApplicationEventPublisher;
+import com.example.senioron.domain.user.entity.ManagerType;
 
 @Slf4j
 @Service
@@ -156,6 +157,7 @@ public class FamilyPhotoService {
 
         List<PhotoGroup> photoGroups =
                 resolveAccessiblePhotoGroups(
+                        user,
                         family,
                         request.getPhotoGroupIds()
                 );
@@ -366,6 +368,7 @@ public class FamilyPhotoService {
 
         List<PhotoGroup> photoGroups =
                 resolveAccessiblePhotoGroups(
+                        user,
                         family,
                         request.getPhotoGroupIds()
                 );
@@ -932,21 +935,44 @@ public class FamilyPhotoService {
     }
 
     private List<PhotoGroup> resolveAccessiblePhotoGroups(
+            User user,
             Family family,
             List<Long> requestedPhotoGroupIds
     ) {
-        List<Long> distinctPhotoGroupIds =
-                requestedPhotoGroupIds.stream()
-                        .distinct()
-                        .toList();
+        var member = familyMemberRepository
+                .findByUserAndFamily(user, family)
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED
+                        )
+                );
 
-        List<PhotoGroupFamily> groupLinks =
-                photoGroupFamilyRepository
-                        .findAllByFamilyAndPhotoGroupIds(
-                                family,
-                                distinctPhotoGroupIds
-                        );
+        List<Long> distinctPhotoGroupIds = requestedPhotoGroupIds.stream()
+                .distinct()
+                .toList();
 
+        List<PhotoGroupFamily> groupLinks;
+
+        if (member.getManagerType() == ManagerType.PRIMARY) {
+            groupLinks = photoGroupFamilyRepository
+                    .findAllByFamilyAndPhotoGroupIds(
+                            family,
+                            distinctPhotoGroupIds
+                    );
+        } else if (member.getManagerType() == ManagerType.SUB) {
+            groupLinks = photoGroupFamilyRepository
+                    .findManagedUploadGroupLinks(
+                            family,
+                            user,
+                            distinctPhotoGroupIds
+                    );
+        } else {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN
+            );
+        }
+
+        // 요청에 권한 없는 그룹이 하나라도 있으면 전체 거부
         if (groupLinks.size() != distinctPhotoGroupIds.size()) {
             throw new BusinessException(
                     ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN
