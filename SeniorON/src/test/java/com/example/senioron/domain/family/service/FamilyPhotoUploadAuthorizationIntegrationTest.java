@@ -1,0 +1,359 @@
+package com.example.senioron.domain.family.service;
+
+import com.example.senioron.domain.device.service.DeviceService;
+import com.example.senioron.domain.family.dto.request.FamilyPhotoCreateRequest;
+import com.example.senioron.domain.family.dto.request.FamilyPhotoUploadCompleteRequest;
+import com.example.senioron.domain.family.dto.request.FamilyPrimaryManagerUpdateRequest;
+import com.example.senioron.domain.family.dto.response.FamilyPhotoItemResponse;
+import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyMember;
+import com.example.senioron.domain.family.entity.FamilyPhotoGroup;
+import com.example.senioron.domain.family.entity.PhotoGroup;
+import com.example.senioron.domain.family.entity.PhotoGroupFamily;
+import com.example.senioron.domain.family.repository.FamilyPhotoGroupRepository;
+import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
+import com.example.senioron.domain.family.repository.PhotoGroupRepository;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
+import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.senior.entity.SeniorRelation;
+import com.example.senioron.domain.user.entity.ManagerType;
+import com.example.senioron.domain.user.entity.Role;
+import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.global.apiPayload.code.ErrorCode;
+import com.example.senioron.global.apiPayload.exception.BusinessException;
+import com.example.senioron.global.storage.S3Service;
+import com.example.senioron.global.storage.StoredObjectInfo;
+import com.example.senioron.global.storage.ThumbnailService;
+import jakarta.persistence.EntityManager;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.fail;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+
+@DataJpaTest(showSql = false)
+@Import({FamilyService.class, FamilyPhotoService.class, FamilyPhotoPersistenceService.class,
+        FamilyPhotoPermissionService.class})
+@Transactional(propagation = Propagation.NOT_SUPPORTED)
+@Timeout(30)
+class FamilyPhotoUploadAuthorizationIntegrationTest {
+
+    @Autowired private FamilyService familyService;
+    @Autowired private FamilyPhotoService photoService;
+    @Autowired private FamilyPhotoPersistenceService persistenceService;
+    @Autowired private FamilyPhotoRepository photos;
+    @Autowired private PhotoGroupRepository groups;
+    @Autowired private FamilyMemberRepository members;
+    @Autowired private EntityManager entityManager;
+    @Autowired private PlatformTransactionManager transactionManager;
+    @MockitoSpyBean private FamilyPhotoGroupRepository mappings;
+    @MockitoBean private S3Service storage;
+    @MockitoBean private ThumbnailService thumbnails;
+    @MockitoBean private DeviceService devices;
+    @MockitoBean private FamilyPhotoPushTargetService pushTargets;
+
+    private Fixture fixture;
+    private String imageKey;
+    private String thumbnailKey;
+
+    @BeforeEach
+    void setUp() {
+        fixture = transaction().execute(status -> {
+            User primaryA = saveUser(), primaryB = saveUser(), uploader = saveUser();
+            Family familyA = saveFamily(), familyB = saveFamily();
+            saveMember(primaryA, familyA, ManagerType.PRIMARY);
+            saveMember(primaryB, familyB, ManagerType.PRIMARY);
+            saveMember(uploader, familyA, ManagerType.SUB);
+            saveMember(uploader, familyB, ManagerType.SUB);
+            Senior seniorA = saveSenior(familyA, primaryA), seniorB = saveSenior(familyB, primaryB);
+            PhotoGroup defaultA = saveGroup(familyA);
+            PhotoGroup defaultB = saveGroup(familyB);
+            PhotoGroup shared = PhotoGroup.builder().name("Shared").build();
+            entityManager.persist(shared);
+            saveLink(familyA, shared);
+            saveLink(familyB, shared);
+            entityManager.flush();
+            return new Fixture(primaryA, primaryB, uploader, familyA, familyB,
+                    seniorA, seniorB, defaultA, defaultB, shared);
+        });
+        imageKey = "family-photos/" + fixture.familyA().getFamilyId() + "/"
+                + fixture.uploader().getUsersId() + "/" + UUID.randomUUID() + ".jpg";
+        thumbnailKey = "family-photos/thumbnails/" + UUID.randomUUID() + ".jpg";
+        given(storage.upload(any(), anyString())).willReturn(imageKey);
+        given(storage.findObjectInfo(anyString()))
+                .willReturn(Optional.of(new StoredObjectInfo(100L, "image/jpeg")));
+        given(storage.download(anyString())).willReturn(new byte[]{1});
+        given(thumbnails.create(any())).willReturn(new byte[]{2});
+        given(storage.uploadThumbnail(any())).willReturn(thumbnailKey);
+    }
+
+    @AfterEach
+    void cleanCommittedFixture() {
+        if (fixture == null) {
+            return;
+        }
+        transaction().executeWithoutResult(status -> {
+            List<Long> userIds = List.of(fixture.primaryA().getUsersId(), fixture.primaryB().getUsersId(),
+                    fixture.uploader().getUsersId());
+            List<Long> familyIds = List.of(fixture.familyA().getFamilyId(), fixture.familyB().getFamilyId());
+            List<Long> groupIds = List.of(fixture.defaultA().getId(), fixture.defaultB().getId(), fixture.shared().getId());
+            entityManager.createQuery("DELETE FROM FamilyPhotoView v WHERE v.familyPhoto.user.usersId IN :ids")
+                    .setParameter("ids", userIds).executeUpdate();
+            entityManager.createQuery("DELETE FROM FamilyPhotoGroup m WHERE m.familyPhoto.user.usersId IN :ids")
+                    .setParameter("ids", userIds).executeUpdate();
+            entityManager.createQuery("DELETE FROM FamilyPhoto p WHERE p.user.usersId IN :ids")
+                    .setParameter("ids", userIds).executeUpdate();
+            entityManager.createQuery("DELETE FROM Senior s WHERE s.family.familyId IN :ids")
+                    .setParameter("ids", familyIds).executeUpdate();
+            entityManager.createQuery("DELETE FROM FamilyMember m WHERE m.family.familyId IN :ids")
+                    .setParameter("ids", familyIds).executeUpdate();
+            entityManager.createQuery("DELETE FROM PhotoGroupFamily l WHERE l.photoGroup.id IN :ids")
+                    .setParameter("ids", groupIds).executeUpdate();
+            entityManager.createQuery("DELETE FROM PhotoGroup g WHERE g.id IN :ids")
+                    .setParameter("ids", groupIds).executeUpdate();
+            entityManager.createQuery("DELETE FROM Family f WHERE f.familyId IN :ids")
+                    .setParameter("ids", familyIds).executeUpdate();
+            entityManager.createQuery("DELETE FROM User u WHERE u.usersId IN :ids")
+                    .setParameter("ids", userIds).executeUpdate();
+        });
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void savesBothUploadPathsAndAllRequestedMappingsWhenAccessRemains(boolean multipart) {
+        var response = upload(fixture.uploader(), multipart);
+        assertThat(photos.countAccessibleByFamily(fixture.familyA())).isEqualTo(1);
+        assertThat(photos.countAccessibleByFamily(fixture.familyB())).isEqualTo(1);
+        List<Long> savedGroupIds = transaction().execute(status -> mappings.findAll().stream()
+                .filter(mapping -> mapping.getFamilyPhoto().getFamilyPhotoId().equals(response.getFamilyPhotoId()))
+                .map(mapping -> mapping.getPhotoGroup().getId()).toList());
+        assertThat(savedGroupIds)
+                .containsExactlyInAnyOrder(fixture.defaultA().getId(), fixture.shared().getId());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"DISCONNECT,true", "DISCONNECT,false", "REMOVE_TARGET,true", "REMOVE_TARGET,false",
+            "REMOVE_SELECTED,true", "REMOVE_SELECTED,false", "DEMOTE,true", "DEMOTE,false"})
+    void rejectsEntireUploadWhenAccessIsRevokedDuringThumbnailWork(Revocation revocation, boolean multipart) {
+        User uploader = revocation == Revocation.DEMOTE ? fixture.primaryA() : fixture.uploader();
+        // The presigned key must belong to whichever uploader this scenario uses.
+        imageKey = "family-photos/" + fixture.familyA().getFamilyId() + "/" + uploader.getUsersId()
+                + "/" + UUID.randomUUID() + ".jpg";
+        given(storage.upload(any(), anyString())).willReturn(imageKey);
+        given(storage.download(imageKey)).willAnswer(invocation -> {
+            revoke(revocation);
+            return new byte[]{1};
+        });
+
+        ErrorCode expected = revocation == Revocation.REMOVE_SELECTED
+                ? ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED : ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN;
+        assertThatThrownBy(() -> upload(uploader, multipart))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getCode()).isEqualTo(expected));
+        assertRevoked(revocation);
+        assertThat(photos.countAccessibleByFamily(fixture.familyA())).isZero();
+        assertThat(photos.countAccessibleByFamily(fixture.familyB())).isZero();
+        verify(storage).delete(thumbnailKey);
+        if (multipart) {
+            verify(storage).delete(imageKey);
+        } else {
+            verify(storage, never()).delete(imageKey);
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({"DISCONNECT,true", "DISCONNECT,false", "REMOVE_TARGET,true", "REMOVE_TARGET,false"})
+    void serializesSavingAndRevocationInBothOrders(Revocation revocation, boolean revocationFirst) throws Exception {
+        CountDownLatch holderReady = new CountDownLatch(1);
+        CountDownLatch releaseHolder = new CountDownLatch(1);
+        CountDownLatch contenderStarted = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        if (!revocationFirst) {
+            // Pause inside the real save transaction after all mappings have reached the DB.
+            doAnswer(invocation -> {
+                Iterable<FamilyPhotoGroup> requestedMappings = invocation.getArgument(0);
+                List<FamilyPhotoGroup> result = mappings.saveAll(requestedMappings);
+                mappings.flush();
+                holderReady.countDown();
+                await(releaseHolder);
+                return result;
+            }).when(mappings).saveAllAndFlush(any());
+        }
+        try {
+            Future<?> holder = executor.submit(() -> {
+                if (revocationFirst) {
+                    transaction().executeWithoutResult(status -> {
+                        revoke(revocation);
+                        holderReady.countDown();
+                        await(releaseHolder);
+                    });
+                } else {
+                    savePhoto();
+                }
+            });
+            if (!holderReady.await(5, TimeUnit.SECONDS)) {
+                holder.get(1, TimeUnit.SECONDS);
+                fail("The first operation did not reach the transaction pause point");
+            }
+            Future<?> contender = executor.submit(() -> {
+                contenderStarted.countDown();
+                if (revocationFirst) {
+                    savePhoto();
+                } else {
+                    revoke(revocation);
+                }
+            });
+            assertThat(contenderStarted.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThatThrownBy(() -> contender.get(250, TimeUnit.MILLISECONDS))
+                    .isInstanceOf(TimeoutException.class);
+            releaseHolder.countDown();
+            holder.get(5, TimeUnit.SECONDS);
+            if (revocationFirst) {
+                assertThatThrownBy(() -> contender.get(5, TimeUnit.SECONDS))
+                        .isInstanceOf(ExecutionException.class)
+                        .cause().isInstanceOfSatisfying(BusinessException.class, exception ->
+                                assertThat(exception.getCode()).isEqualTo(ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN));
+            } else {
+                contender.get(5, TimeUnit.SECONDS);
+            }
+            assertRevoked(revocation);
+            // Previously committed shares survive revocation; a later save is rejected.
+            assertThat(photos.countAccessibleByFamily(fixture.familyB())).isEqualTo(revocationFirst ? 0 : 1);
+        } finally {
+            releaseHolder.countDown();
+            executor.shutdownNow();
+            assertThat(executor.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+        }
+    }
+
+    private void savePhoto() {
+        persistenceService.create(fixture.uploader().getUsersId(), imageKey, thumbnailKey,
+                UUID.randomUUID().toString(), null, fixture.familyA().getFamilyId(), List.of(fixture.shared().getId()));
+    }
+
+    private FamilyPhotoItemResponse upload(User uploader, boolean multipart) {
+        List<Long> groupIds = List.of(fixture.defaultA().getId(), fixture.shared().getId());
+        if (multipart) {
+            FamilyPhotoCreateRequest request = new FamilyPhotoCreateRequest();
+            request.setSeniorId(fixture.seniorA().getSeniorId());
+            request.setPhotoGroupIds(groupIds);
+            request.setImage(new MockMultipartFile("image", "photo.jpg", "image/jpeg", new byte[]{1}));
+            return photoService.createPhoto(uploader, UUID.randomUUID().toString(), request);
+        }
+        FamilyPhotoUploadCompleteRequest request = new FamilyPhotoUploadCompleteRequest();
+        request.setSeniorId(fixture.seniorA().getSeniorId());
+        request.setPhotoGroupIds(groupIds);
+        request.setImageKey(imageKey);
+        return photoService.completePhotoUpload(uploader, UUID.randomUUID().toString(), request);
+    }
+
+    private void revoke(Revocation revocation) {
+        switch (revocation) {
+            case DISCONNECT -> familyService.disconnectPhotoGroup(fixture.primaryA(), fixture.seniorA().getSeniorId(),
+                    fixture.shared().getId());
+            case REMOVE_TARGET -> familyService.removeFamilyMember(fixture.primaryB(), fixture.seniorB().getSeniorId(),
+                    fixture.uploader().getUsersId());
+            case REMOVE_SELECTED -> familyService.removeFamilyMember(fixture.primaryA(), fixture.seniorA().getSeniorId(),
+                    fixture.uploader().getUsersId());
+            case DEMOTE -> {
+                FamilyPrimaryManagerUpdateRequest request = new FamilyPrimaryManagerUpdateRequest();
+                ReflectionTestUtils.setField(request, "targetUserId", fixture.uploader().getUsersId());
+                familyService.updatePrimaryManager(fixture.primaryA(), fixture.seniorA().getSeniorId(), request);
+            }
+        }
+    }
+
+    private void assertRevoked(Revocation revocation) {
+        switch (revocation) {
+            case DISCONNECT -> assertThat(groups.findById(fixture.shared().getId()).orElseThrow().isActive()).isFalse();
+            case REMOVE_TARGET -> assertThat(members.existsByUserAndFamily(fixture.uploader(), fixture.familyB())).isFalse();
+            case REMOVE_SELECTED -> assertThat(members.existsByUserAndFamily(fixture.uploader(), fixture.familyA())).isFalse();
+            case DEMOTE -> assertThat(members.findByUserAndFamily(fixture.primaryA(), fixture.familyA()).orElseThrow()
+                    .getManagerType()).isEqualTo(ManagerType.SUB);
+        }
+    }
+
+    private User saveUser() {
+        String id = UUID.randomUUID().toString();
+        User user = User.builder().loginId(id).email(id + "@example.com").name("업로드 권한 테스트").role(Role.CHILD).build();
+        entityManager.persist(user);
+        return user;
+    }
+
+    private Family saveFamily() {
+        Family family = Family.builder().seniorCode(UUID.randomUUID().toString().substring(0, 9)).build();
+        entityManager.persist(family);
+        return family;
+    }
+
+    private void saveMember(User user, Family family, ManagerType type) {
+        entityManager.persist(FamilyMember.builder().user(user).family(family).managerType(type).build());
+    }
+
+    private Senior saveSenior(Family family, User primary) {
+        Senior senior = Senior.builder().family(family).registeredBy(primary).name("권한 테스트")
+                .relation(SeniorRelation.OTHER).birth(LocalDate.of(1950, 1, 1)).phoneNumber("01012345678").build();
+        entityManager.persist(senior);
+        return senior;
+    }
+
+    private PhotoGroup saveGroup(Family family) {
+        PhotoGroup group = PhotoGroup.builder().name("Default").build();
+        entityManager.persist(group);
+        saveLink(family, group);
+        return group;
+    }
+
+    private void saveLink(Family family, PhotoGroup group) {
+        entityManager.persist(PhotoGroupFamily.builder().family(family).photoGroup(group).build());
+    }
+
+    private TransactionTemplate transaction() { return new TransactionTemplate(transactionManager); }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(exception);
+        }
+    }
+
+    private enum Revocation { DISCONNECT, REMOVE_TARGET, REMOVE_SELECTED, DEMOTE }
+
+    private record Fixture(User primaryA, User primaryB, User uploader, Family familyA, Family familyB,
+                           Senior seniorA, Senior seniorB, PhotoGroup defaultA, PhotoGroup defaultB, PhotoGroup shared) {}
+}

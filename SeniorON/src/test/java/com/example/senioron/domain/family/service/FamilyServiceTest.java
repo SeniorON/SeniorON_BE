@@ -572,10 +572,16 @@ class FamilyServiceTest {
         given(photoGroupFamilyRepository.findAllSharedLinks(currentFamily, 100L))
                 .willReturn(groupLinks);
 
+        given(photoGroupRepository.findAllByIdsForUpdate(List.of(100L)))
+                .willReturn(List.of(photoGroup));
+
         familyService.disconnectPhotoGroup(currentUser, 10L, 100L);
 
         assertThat(photoGroup.isActive()).isFalse();
         assertThat(photoGroup.getDisconnectedAt()).isNotNull();
+        var ordered = org.mockito.Mockito.inOrder(photoGroupRepository, photoGroupFamilyRepository);
+        ordered.verify(photoGroupRepository).findAllByIdsForUpdate(List.of(100L));
+        ordered.verify(photoGroupFamilyRepository).findAllSharedLinks(currentFamily, 100L);
         verify(photoGroupFamilyRepository, never()).deleteAllInBatch(any());
     }
 
@@ -641,6 +647,8 @@ class FamilyServiceTest {
                 .willReturn(Optional.of(primaryMember));
         given(photoGroupFamilyRepository.findAllSharedLinks(currentFamily, 100L))
                 .willReturn(List.of());
+        given(photoGroupRepository.findAllByIdsForUpdate(List.of(100L)))
+                .willReturn(List.of(PhotoGroup.builder().id(100L).name("공유 그룹").build()));
 
         assertThatThrownBy(() ->
                 familyService.disconnectPhotoGroup(currentUser, 10L, 100L)

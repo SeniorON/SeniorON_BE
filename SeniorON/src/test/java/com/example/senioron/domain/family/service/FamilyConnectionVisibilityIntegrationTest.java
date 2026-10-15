@@ -87,7 +87,7 @@ class FamilyConnectionVisibilityIntegrationTest {
         given(s3Service.download(anyString())).willReturn(new byte[]{1});
         given(thumbnailService.create(any())).willReturn(new byte[]{2});
         given(s3Service.uploadThumbnail(any())).willReturn("thumbnail.jpg");
-        given(photoPersistenceService.create(anyLong(), anyString(), anyString(), anyString(), any(), anyList()))
+        given(photoPersistenceService.create(anyLong(), anyString(), anyString(), anyString(), any(), anyLong(), anyList()))
                 .willAnswer(invocation -> FamilyPhoto.builder()
                         .familyPhotoId(42L)
                         .user(userRepository.findById(invocation.getArgument(0, Long.class)).orElseThrow())
@@ -158,12 +158,12 @@ class FamilyConnectionVisibilityIntegrationTest {
         assertThat(photoGroupFamilyRepository.count()).isEqualTo(originalLinkCount);
 
         @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<PhotoGroup>> groups = ArgumentCaptor.forClass(List.class);
+        ArgumentCaptor<List<Long>> groups = ArgumentCaptor.forClass(List.class);
         verify(photoPersistenceService, times(2)).create(
-                anyLong(), anyString(), anyString(), anyString(), any(), groups.capture()
+                anyLong(), anyString(), anyString(), anyString(), any(), anyLong(), groups.capture()
         );
         assertThat(groups.getAllValues()).allSatisfy(value ->
-                assertThat(value).extracting(PhotoGroup::getId).containsExactlyElementsOf(groupIds));
+                assertThat(value).containsExactlyElementsOf(groupIds));
     }
 
     @ParameterizedTest
@@ -227,7 +227,7 @@ class FamilyConnectionVisibilityIntegrationTest {
                 scenario.assistant(), scenario.mother().getSeniorId())).isEmpty();
         assertUploadForbidden(scenario.assistant(), scenario.mother(), List.of(groupId), multipart);
         verify(photoPersistenceService).create(
-                anyLong(), anyString(), anyString(), anyString(), any(), anyList());
+                anyLong(), anyString(), anyString(), anyString(), any(), anyLong(), anyList());
     }
 
     @ParameterizedTest
@@ -266,7 +266,7 @@ class FamilyConnectionVisibilityIntegrationTest {
         flushAndClear();
         assertUploadForbidden(scenario.assistant(), scenario.mother(), groupIds, multipart);
         verify(photoPersistenceService).create(
-                anyLong(), anyString(), anyString(), anyString(), any(), anyList()
+                anyLong(), anyString(), anyString(), anyString(), any(), anyLong(), anyList()
         );
     }
 

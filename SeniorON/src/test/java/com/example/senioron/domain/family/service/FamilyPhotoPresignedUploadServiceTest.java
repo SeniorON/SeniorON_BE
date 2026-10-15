@@ -464,7 +464,8 @@ class FamilyPhotoPresignedUploadServiceTest {
                 expectedThumbnailKey,
                 idempotencyKey,
                 request.getDescription(),
-                List.of(firstGroup, secondGroup)
+                FAMILY_ID,
+                List.of(firstGroup.getId(), secondGroup.getId())
         )).willReturn(savedPhoto);
 
         FamilyPhotoItemResponse response = familyPhotoService.createPhoto(
@@ -489,7 +490,8 @@ class FamilyPhotoPresignedUploadServiceTest {
                 expectedThumbnailKey,
                 idempotencyKey,
                 "여러 가족 공유 사진",
-                List.of(firstGroup, secondGroup)
+                FAMILY_ID,
+                List.of(firstGroup.getId(), secondGroup.getId())
         );
     }
 
@@ -523,7 +525,7 @@ class FamilyPhotoPresignedUploadServiceTest {
         given(s3Service.uploadThumbnail(thumbnailBytes)).willReturn(THUMBNAIL_KEY);
         given(persistenceService.create(
                 USER_ID, IMAGE_KEY, THUMBNAIL_KEY, idempotencyKey,
-                request.getDescription(), List.of(photoGroup)
+                request.getDescription(), FAMILY_ID, List.of(photoGroup.getId())
         )).willThrow(failure);
 
         assertThatThrownBy(() -> familyPhotoService.createPhoto(
@@ -583,7 +585,8 @@ class FamilyPhotoPresignedUploadServiceTest {
                 expectedThumbnailKey,
                 idempotencyKey,
                 request.getDescription(),
-                List.of(photoGroup)
+                FAMILY_ID,
+                List.of(photoGroup.getId())
         )).willReturn(savedPhoto);
         given(s3Service.getFileUrl(IMAGE_KEY))
                 .willReturn("https://example.com/" + IMAGE_KEY);
@@ -620,7 +623,8 @@ class FamilyPhotoPresignedUploadServiceTest {
                 expectedThumbnailKey,
                 idempotencyKey,
                 "오늘 찍은 사진",
-                List.of(photoGroup)
+                FAMILY_ID,
+                List.of(photoGroup.getId())
         );
     }
 
@@ -652,7 +656,7 @@ class FamilyPhotoPresignedUploadServiceTest {
         stubUploadedObjectAndThumbnail();
         given(persistenceService.create(
                 USER_ID, IMAGE_KEY, THUMBNAIL_KEY, idempotencyKey,
-                request.getDescription(), List.of(photoGroup)
+                request.getDescription(), FAMILY_ID, List.of(photoGroup.getId())
         )).willThrow(failure);
 
         if (failureCase.equals("idempotency")) {
@@ -701,7 +705,7 @@ class FamilyPhotoPresignedUploadServiceTest {
         stubUploadedObjectAndThumbnail();
         given(persistenceService.create(
                 USER_ID, IMAGE_KEY, THUMBNAIL_KEY, idempotencyKey,
-                request.getDescription(), List.of(photoGroup)
+                request.getDescription(), FAMILY_ID, List.of(photoGroup.getId())
         )).willReturn(savedPhoto);
         given(s3Service.getFileUrl(IMAGE_KEY)).willThrow(failure);
 
@@ -748,7 +752,8 @@ class FamilyPhotoPresignedUploadServiceTest {
                 null,
                 idempotencyKey,
                 request.getDescription(),
-                List.of(photoGroup)
+                FAMILY_ID,
+                List.of(photoGroup.getId())
         );
     }
 
@@ -794,7 +799,8 @@ class FamilyPhotoPresignedUploadServiceTest {
                 null,
                 idempotencyKey,
                 request.getDescription(),
-                List.of(photoGroup)
+                FAMILY_ID,
+                List.of(photoGroup.getId())
         );
     }
 
@@ -841,7 +847,8 @@ class FamilyPhotoPresignedUploadServiceTest {
                 null,
                 idempotencyKey,
                 request.getDescription(),
-                List.of(photoGroup)
+                FAMILY_ID,
+                List.of(photoGroup.getId())
         );
     }
 
