@@ -6,6 +6,7 @@ import com.example.senioron.domain.family.dto.request.FamilyPhotoUploadUrlReques
 import com.example.senioron.domain.family.dto.response.FamilyPhotoItemResponse;
 import com.example.senioron.domain.family.dto.response.FamilyPhotoUploadUrlResponse;
 import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.entity.PhotoGroup;
 import com.example.senioron.domain.family.entity.PhotoGroupFamily;
@@ -16,6 +17,7 @@ import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.entity.Role;
+import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
@@ -309,6 +311,7 @@ class FamilyPhotoPresignedUploadServiceTest {
                 family,
                 request.getPhotoGroupIds()
         )).willReturn(List.of());
+        stubPrimaryMember(child, family);
 
         assertThatThrownBy(() ->
                 familyPhotoService.completePhotoUpload(
@@ -437,6 +440,7 @@ class FamilyPhotoPresignedUploadServiceTest {
                         .photoGroup(secondGroup)
                         .build()
         ));
+        stubPrimaryMember(child, family);
         given(persistenceService.findExisting(USER_ID, idempotencyKey))
                 .willReturn(Optional.empty());
         given(s3Service.upload(
@@ -906,9 +910,19 @@ class FamilyPhotoPresignedUploadServiceTest {
                 .willReturn(Optional.of(senior));
         given(familyMemberRepository.existsByUserAndFamily(child, family))
                 .willReturn(true);
+        stubPrimaryMember(child, family);
         given(photoGroupFamilyRepository.findAllByFamilyAndPhotoGroupIds(
                 family,
                 List.of(photoGroup.getId())
         )).willReturn(List.of(groupFamily));
+    }
+
+    private void stubPrimaryMember(User child, Family family) {
+        given(familyMemberRepository.findByUserAndFamily(child, family))
+                .willReturn(Optional.of(FamilyMember.builder()
+                        .user(child)
+                        .family(family)
+                        .managerType(ManagerType.PRIMARY)
+                        .build()));
     }
 }

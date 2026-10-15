@@ -712,9 +712,28 @@ public class FamilyService {
                 seniorId
         );
 
-        return photoGroupFamilyRepository
-                .findConnectedFamilyLinks(currentFamily)
-                .stream()
+        FamilyMember currentMember = familyMemberRepository
+                .findByUserAndFamily(currentUser, currentFamily)
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED
+                        )
+                );
+
+        List<PhotoGroupFamily> connectedLinks;
+
+        if (currentMember.getManagerType() == ManagerType.SUB) {
+            connectedLinks = photoGroupFamilyRepository
+                    .findManagedConnectedFamilyLinks(
+                            currentFamily,
+                            currentUser
+                    );
+        } else {
+            connectedLinks = photoGroupFamilyRepository
+                    .findConnectedFamilyLinks(currentFamily);
+        }
+
+        return connectedLinks.stream()
                 .map(this::toConnectedSeniorResponse)
                 .toList();
     }
