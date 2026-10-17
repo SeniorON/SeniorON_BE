@@ -178,7 +178,8 @@ class FamilyPhotoPersistenceServiceTest {
                 expected = ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED;
             }
             case "unmanagedTarget" -> given(photoGroupFamilyRepository
-                    .findManagedUploadGroupLinks(family, user, List.of(3L))).willReturn(List.of());
+                    .findManagedDefaultPhotoGroupLinks(user, List.of(ManagerType.PRIMARY, ManagerType.SUB)))
+                    .willReturn(List.of());
             case "parent" -> { user.updateRole(Role.PARENT); expected = ErrorCode.FORBIDDEN; }
             case "withdrawn" -> {
                 ReflectionTestUtils.setField(user, "status", UserStatus.WITHDRAWN);
@@ -202,10 +203,7 @@ class FamilyPhotoPersistenceServiceTest {
                 FamilyMember.builder().user(user).family(family).managerType(managerType).build()));
         List<PhotoGroupFamily> links = groups.stream().map(group -> PhotoGroupFamily.builder()
                 .family(family).photoGroup(group).build()).toList();
-        if (managerType == ManagerType.PRIMARY) {
-            given(photoGroupFamilyRepository.findAllByFamilyAndPhotoGroupIds(family, ids)).willReturn(links);
-        } else if (managerType == ManagerType.SUB) {
-            given(photoGroupFamilyRepository.findManagedUploadGroupLinks(family, user, ids)).willReturn(links);
-        }
+        given(photoGroupFamilyRepository.findManagedDefaultPhotoGroupLinks(
+                user, List.of(ManagerType.PRIMARY, ManagerType.SUB))).willReturn(links);
     }
 }

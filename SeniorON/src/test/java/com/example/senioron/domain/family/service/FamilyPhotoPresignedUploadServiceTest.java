@@ -307,9 +307,9 @@ class FamilyPhotoPresignedUploadServiceTest {
                 .willReturn(Optional.of(senior));
         given(familyMemberRepository.existsByUserAndFamily(child, family))
                 .willReturn(true);
-        given(photoGroupFamilyRepository.findAllByFamilyAndPhotoGroupIds(
-                family,
-                request.getPhotoGroupIds()
+        given(photoGroupFamilyRepository.findManagedDefaultPhotoGroupLinks(
+                child,
+                List.of(ManagerType.PRIMARY, ManagerType.SUB)
         )).willReturn(List.of());
         stubPrimaryMember(child, family);
 
@@ -427,9 +427,9 @@ class FamilyPhotoPresignedUploadServiceTest {
                 .willReturn(Optional.of(senior));
         given(familyMemberRepository.existsByUserAndFamily(child, family))
                 .willReturn(true);
-        given(photoGroupFamilyRepository.findAllByFamilyAndPhotoGroupIds(
-                family,
-                List.of(30L, 31L)
+        given(photoGroupFamilyRepository.findManagedDefaultPhotoGroupLinks(
+                child,
+                List.of(ManagerType.PRIMARY, ManagerType.SUB)
         )).willReturn(List.of(
                 PhotoGroupFamily.builder()
                         .family(family)
@@ -918,9 +918,9 @@ class FamilyPhotoPresignedUploadServiceTest {
         given(familyMemberRepository.existsByUserAndFamily(child, family))
                 .willReturn(true);
         stubPrimaryMember(child, family);
-        given(photoGroupFamilyRepository.findAllByFamilyAndPhotoGroupIds(
-                family,
-                List.of(photoGroup.getId())
+        given(photoGroupFamilyRepository.findManagedDefaultPhotoGroupLinks(
+                child,
+                List.of(ManagerType.PRIMARY, ManagerType.SUB)
         )).willReturn(List.of(groupFamily));
     }
 

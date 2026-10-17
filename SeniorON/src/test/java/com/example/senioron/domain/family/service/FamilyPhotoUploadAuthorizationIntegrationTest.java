@@ -39,6 +39,7 @@ import java.util.concurrent.TimeoutException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -161,14 +162,14 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
                 .filter(mapping -> mapping.getFamilyPhoto().getFamilyPhotoId().equals(response.getFamilyPhotoId()))
                 .map(mapping -> mapping.getPhotoGroup().getId()).toList());
         assertThat(savedGroupIds)
-                .containsExactlyInAnyOrder(fixture.defaultA().getId(), fixture.shared().getId());
+                .containsExactlyInAnyOrder(fixture.defaultA().getId(), fixture.defaultB().getId());
     }
 
     @ParameterizedTest
-    @CsvSource({"DISCONNECT,true", "DISCONNECT,false", "REMOVE_TARGET,true", "REMOVE_TARGET,false",
-            "REMOVE_SELECTED,true", "REMOVE_SELECTED,false", "DEMOTE,true", "DEMOTE,false"})
+    @CsvSource({"DEACTIVATE_TARGET,true", "DEACTIVATE_TARGET,false", "REMOVE_TARGET,true", "REMOVE_TARGET,false",
+            "REMOVE_SELECTED,true", "REMOVE_SELECTED,false"})
     void rejectsEntireUploadWhenAccessIsRevokedDuringThumbnailWork(Revocation revocation, boolean multipart) {
-        User uploader = revocation == Revocation.DEMOTE ? fixture.primaryA() : fixture.uploader();
+        User uploader = fixture.uploader();
         // The presigned key must belong to whichever uploader this scenario uses.
         imageKey = "family-photos/" + fixture.familyA().getFamilyId() + "/" + uploader.getUsersId()
                 + "/" + UUID.randomUUID() + ".jpg";
@@ -195,7 +196,7 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"DISCONNECT,true", "DISCONNECT,false", "REMOVE_TARGET,true", "REMOVE_TARGET,false"})
+    @CsvSource({"DEACTIVATE_TARGET,true", "DEACTIVATE_TARGET,false", "REMOVE_TARGET,true", "REMOVE_TARGET,false"})
     void serializesSavingAndRevocationInBothOrders(Revocation revocation, boolean revocationFirst) throws Exception {
         CountDownLatch holderReady = new CountDownLatch(1);
         CountDownLatch releaseHolder = new CountDownLatch(1);
@@ -259,13 +260,105 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
         }
     }
 
+    @Test
+    void photoShareTargetsIncludeOnlyJoinedDefaultGroups() {
+        var targets = familyService.getPhotoShareTargets(fixture.uploader());
+        assertThat(targets).extracting(target -> target.getSeniorId())
+                .containsExactly(fixture.seniorA().getSeniorId(), fixture.seniorB().getSeniorId());
+        assertThat(targets).extracting(target -> target.getPhotoGroupId())
+                .containsExactly(fixture.defaultA().getId(), fixture.defaultB().getId());
+
+        // 주담당자도 본인이 가입하지 않은 상대 가족은 대상 목록에 나오지 않는다.
+        assertThat(familyService.getPhotoShareTargets(fixture.primaryA()))
+                .extracting(target -> target.getSeniorId())
+                .containsExactly(fixture.seniorA().getSeniorId());
+
+        revoke(Revocation.REMOVE_TARGET);
+        assertThat(familyService.getPhotoShareTargets(fixture.uploader()))
+                .extracting(target -> target.getSeniorId())
+                .containsExactly(fixture.seniorA().getSeniorId());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void changingPrimaryToSubDuringUploadKeepsJoinedFamilyAccess(boolean multipart) {
+        FamilyPrimaryManagerUpdateRequest promote = new FamilyPrimaryManagerUpdateRequest();
+        ReflectionTestUtils.setField(promote, "targetUserId", fixture.uploader().getUsersId());
+        familyService.updatePrimaryManager(fixture.primaryA(), fixture.seniorA().getSeniorId(), promote);
+        given(storage.download(imageKey)).willAnswer(invocation -> {
+            FamilyPrimaryManagerUpdateRequest demote = new FamilyPrimaryManagerUpdateRequest();
+            ReflectionTestUtils.setField(demote, "targetUserId", fixture.primaryA().getUsersId());
+            familyService.updatePrimaryManager(fixture.uploader(), fixture.seniorA().getSeniorId(), demote);
+            return new byte[]{1};
+        });
+
+        upload(fixture.uploader(), multipart);
+        assertThat(members.findByUserAndFamily(fixture.uploader(), fixture.familyA()).orElseThrow()
+                .getManagerType()).isEqualTo(ManagerType.SUB);
+        assertThat(photos.countAccessibleByFamily(fixture.familyA())).isEqualTo(1);
+        assertThat(photos.countAccessibleByFamily(fixture.familyB())).isEqualTo(1);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void defaultGroupsSaveToBothFamiliesWithoutSharingConnection(boolean multipart) {
+        revoke(Revocation.DISCONNECT);
+        List<Long> groupIds = List.of(fixture.defaultA().getId(), fixture.defaultB().getId());
+        assertThat(familyService.getConnectedSeniors(fixture.uploader(), fixture.seniorA().getSeniorId()))
+                .isEmpty();
+        assertThat(familyService.getPhotoShareTargets(fixture.uploader()))
+                .extracting(target -> target.getPhotoGroupId()).containsExactlyElementsOf(groupIds);
+
+        var response = upload(fixture.uploader(), multipart, groupIds);
+        assertThat(photos.countAccessibleByFamily(fixture.familyA())).isEqualTo(1);
+        assertThat(photos.countAccessibleByFamily(fixture.familyB())).isEqualTo(1);
+        List<Long> savedGroupIds = transaction().execute(status -> mappings.findAll().stream()
+                .filter(mapping -> mapping.getFamilyPhoto().getFamilyPhotoId().equals(response.getFamilyPhotoId()))
+                .map(mapping -> mapping.getPhotoGroup().getId()).toList());
+        assertThat(savedGroupIds).containsExactlyInAnyOrderElementsOf(groupIds);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void defaultGroupsRejectEntireUploadToUnjoinedFamily(boolean multipart) {
+        revoke(Revocation.REMOVE_TARGET);
+        assertThatThrownBy(() -> upload(fixture.uploader(), multipart,
+                List.of(fixture.defaultA().getId(), fixture.defaultB().getId())))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getCode()).isEqualTo(ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN));
+        assertThat(photos.countAccessibleByFamily(fixture.familyA())).isZero();
+        assertThat(photos.countAccessibleByFamily(fixture.familyB())).isZero();
+        verify(storage, never()).upload(any(), anyString());
+        verify(storage, never()).findObjectInfo(anyString());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void defaultGroupsRecheckMembershipImmediatelyBeforeSaving(boolean multipart) {
+        given(storage.download(imageKey)).willAnswer(invocation -> {
+            revoke(Revocation.REMOVE_TARGET);
+            return new byte[]{1};
+        });
+        assertThatThrownBy(() -> upload(fixture.uploader(), multipart,
+                List.of(fixture.defaultA().getId(), fixture.defaultB().getId())))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getCode()).isEqualTo(ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN));
+        assertThat(photos.countAccessibleByFamily(fixture.familyA())).isZero();
+        assertThat(photos.countAccessibleByFamily(fixture.familyB())).isZero();
+        verify(storage).delete(thumbnailKey);
+    }
+
     private void savePhoto() {
         persistenceService.create(fixture.uploader().getUsersId(), imageKey, thumbnailKey,
-                UUID.randomUUID().toString(), null, fixture.familyA().getFamilyId(), List.of(fixture.shared().getId()));
+                UUID.randomUUID().toString(), null, fixture.familyA().getFamilyId(), List.of(fixture.defaultB().getId()));
     }
 
     private FamilyPhotoItemResponse upload(User uploader, boolean multipart) {
-        List<Long> groupIds = List.of(fixture.defaultA().getId(), fixture.shared().getId());
+        List<Long> groupIds = List.of(fixture.defaultA().getId(), fixture.defaultB().getId());
+        return upload(uploader, multipart, groupIds);
+    }
+
+    private FamilyPhotoItemResponse upload(User uploader, boolean multipart, List<Long> groupIds) {
         if (multipart) {
             FamilyPhotoCreateRequest request = new FamilyPhotoCreateRequest();
             request.setSeniorId(fixture.seniorA().getSeniorId());
@@ -288,11 +381,8 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
                     fixture.uploader().getUsersId());
             case REMOVE_SELECTED -> familyService.removeFamilyMember(fixture.primaryA(), fixture.seniorA().getSeniorId(),
                     fixture.uploader().getUsersId());
-            case DEMOTE -> {
-                FamilyPrimaryManagerUpdateRequest request = new FamilyPrimaryManagerUpdateRequest();
-                ReflectionTestUtils.setField(request, "targetUserId", fixture.uploader().getUsersId());
-                familyService.updatePrimaryManager(fixture.primaryA(), fixture.seniorA().getSeniorId(), request);
-            }
+            case DEACTIVATE_TARGET -> transaction().executeWithoutResult(status ->
+                    groups.findAllByIdsForUpdate(List.of(fixture.defaultB().getId())).get(0).disconnect());
         }
     }
 
@@ -301,8 +391,7 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
             case DISCONNECT -> assertThat(groups.findById(fixture.shared().getId()).orElseThrow().isActive()).isFalse();
             case REMOVE_TARGET -> assertThat(members.existsByUserAndFamily(fixture.uploader(), fixture.familyB())).isFalse();
             case REMOVE_SELECTED -> assertThat(members.existsByUserAndFamily(fixture.uploader(), fixture.familyA())).isFalse();
-            case DEMOTE -> assertThat(members.findByUserAndFamily(fixture.primaryA(), fixture.familyA()).orElseThrow()
-                    .getManagerType()).isEqualTo(ManagerType.SUB);
+            case DEACTIVATE_TARGET -> assertThat(groups.findById(fixture.defaultB().getId()).orElseThrow().isActive()).isFalse();
         }
     }
 
@@ -352,7 +441,7 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
         }
     }
 
-    private enum Revocation { DISCONNECT, REMOVE_TARGET, REMOVE_SELECTED, DEMOTE }
+    private enum Revocation { DISCONNECT, REMOVE_TARGET, REMOVE_SELECTED, DEACTIVATE_TARGET }
 
     private record Fixture(User primaryA, User primaryB, User uploader, Family familyA, Family familyB,
                            Senior seniorA, Senior seniorB, PhotoGroup defaultA, PhotoGroup defaultB, PhotoGroup shared) {}

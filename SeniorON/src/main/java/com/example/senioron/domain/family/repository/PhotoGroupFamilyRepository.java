@@ -3,6 +3,7 @@ package com.example.senioron.domain.family.repository;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.PhotoGroup;
 import com.example.senioron.domain.family.entity.PhotoGroupFamily;
+import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.User;
 
 import java.util.List;
@@ -143,5 +144,34 @@ public interface PhotoGroupFamilyRepository
             @Param("family") Family family,
             @Param("user") User user,
             @Param("photoGroupIds") List<Long> photoGroupIds
+    );
+
+    @EntityGraph(attributePaths = {
+            "photoGroup",
+            "family",
+            "family.senior"
+    })
+    @Query("""
+    SELECT link
+    FROM PhotoGroupFamily link
+    WHERE link.photoGroup.active = true
+      AND link.family.senior IS NOT NULL
+      AND link.id = (
+          SELECT MIN(firstLink.id)
+          FROM PhotoGroupFamily firstLink
+          WHERE firstLink.family = link.family
+      )
+      AND EXISTS (
+          SELECT member.id
+          FROM FamilyMember member
+          WHERE member.family = link.family
+            AND member.user = :user
+            AND member.managerType IN :managerTypes
+      )
+    ORDER BY link.family.familyId ASC
+    """)
+    List<PhotoGroupFamily> findManagedDefaultPhotoGroupLinks(
+            @Param("user") User user,
+            @Param("managerTypes") List<ManagerType> managerTypes
     );
 }
