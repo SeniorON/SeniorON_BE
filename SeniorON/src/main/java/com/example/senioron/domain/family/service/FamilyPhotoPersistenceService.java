@@ -93,17 +93,21 @@ public class FamilyPhotoPersistenceService {
                         new BusinessException(ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED)
                 );
 
-        List<PhotoGroupFamily> accessibleLinks;
-
-        if (member.getManagerType() == ManagerType.PRIMARY) {
-            accessibleLinks = photoGroupFamilyRepository
-                    .findAllByFamilyAndPhotoGroupIds(family, distinctIds);
-        } else if (member.getManagerType() == ManagerType.SUB) {
-            accessibleLinks = photoGroupFamilyRepository
-                    .findManagedUploadGroupLinks(family, user, distinctIds);
-        } else {
+        if (member.getManagerType() != ManagerType.PRIMARY
+                && member.getManagerType() != ManagerType.SUB) {
             throw new BusinessException(ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN);
         }
+
+        List<PhotoGroupFamily> accessibleLinks = photoGroupFamilyRepository
+                .findManagedDefaultPhotoGroupLinks(
+                        user,
+                        List.of(ManagerType.PRIMARY, ManagerType.SUB)
+                )
+                .stream()
+                .filter(link ->
+                        distinctIds.contains(link.getPhotoGroup().getId())
+                )
+                .toList();
 
         if (accessibleLinks.size() != distinctIds.size()) {
             throw new BusinessException(ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN);

@@ -158,7 +158,6 @@ public class FamilyPhotoService {
         List<PhotoGroup> photoGroups =
                 resolveAccessiblePhotoGroups(
                         user,
-                        family,
                         request.getPhotoGroupIds()
                 );
 
@@ -372,7 +371,6 @@ public class FamilyPhotoService {
         List<PhotoGroup> photoGroups =
                 resolveAccessiblePhotoGroups(
                         user,
-                        family,
                         request.getPhotoGroupIds()
                 );
 
@@ -942,52 +940,35 @@ public class FamilyPhotoService {
 
     private List<PhotoGroup> resolveAccessiblePhotoGroups(
             User user,
-            Family family,
             List<Long> requestedPhotoGroupIds
     ) {
-        var member = familyMemberRepository
-                .findByUserAndFamily(user, family)
-                .orElseThrow(() ->
-                        new BusinessException(
-                                ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED
-                        )
-                );
-
-        List<Long> distinctPhotoGroupIds = requestedPhotoGroupIds.stream()
+        List<Long> distinctIds = requestedPhotoGroupIds.stream()
                 .distinct()
                 .toList();
 
-        List<PhotoGroupFamily> groupLinks;
-
-        if (member.getManagerType() == ManagerType.PRIMARY) {
-            groupLinks = photoGroupFamilyRepository
-                    .findAllByFamilyAndPhotoGroupIds(
-                            family,
-                            distinctPhotoGroupIds
-                    );
-        } else if (member.getManagerType() == ManagerType.SUB) {
-            groupLinks = photoGroupFamilyRepository
-                    .findManagedUploadGroupLinks(
-                            family,
-                            user,
-                            distinctPhotoGroupIds
-                    );
-        } else {
+        if (distinctIds.isEmpty()) {
             throw new BusinessException(
                     ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN
             );
         }
 
-        // 요청에 권한 없는 그룹이 하나라도 있으면 전체 거부
-        if (groupLinks.size() != distinctPhotoGroupIds.size()) {
-            throw new BusinessException(
-                    ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN
-            );
-        }
-
-        return groupLinks.stream()
+        List<PhotoGroup> photoGroups = photoGroupFamilyRepository
+                .findManagedDefaultPhotoGroupLinks(
+                        user,
+                        List.of(ManagerType.PRIMARY, ManagerType.SUB)
+                )
+                .stream()
                 .map(PhotoGroupFamily::getPhotoGroup)
+                .filter(group -> distinctIds.contains(group.getId()))
                 .toList();
+
+        if (photoGroups.size() != distinctIds.size()) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN
+            );
+        }
+
+        return photoGroups;
     }
 
     private String createThumbnailOrNull(String imageKey) {

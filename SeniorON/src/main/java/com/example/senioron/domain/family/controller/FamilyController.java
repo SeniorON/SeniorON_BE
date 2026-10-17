@@ -15,6 +15,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import com.example.senioron.domain.family.dto.response.PhotoShareTargetResponse;
 
 
 @Tag(name = "가족", description = "시니어 코드 등 가족 관련 API")
@@ -117,6 +118,16 @@ public class FamilyController {
     ) {
         return Response.ok(
                 familyService.getConnectedSeniors(user, seniorId)
+        );
+    }
+
+    @Operation(summary = "사진 공유 대상 목록 조회", description = "로그인한 자녀가 직접 추가한 시니어 목록을 조회합니다.")
+    @GetMapping("/photos/targets")
+    public Response<List<PhotoShareTargetResponse>> getPhotoShareTargets(
+            @AuthenticationPrincipal User user
+    ) {
+        return Response.ok(
+                familyService.getPhotoShareTargets(user)
         );
     }
 

@@ -762,4 +762,37 @@ public class FamilyService {
                 connectedSenior
         );
     }
+
+    @Transactional(readOnly = true)
+    public List<PhotoShareTargetResponse> getPhotoShareTargets(
+            User principal
+    ) {
+        User user = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.USER_NOT_FOUND)
+                );
+
+        if (user.getRole() != Role.CHILD) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+
+        return photoGroupFamilyRepository
+                .findManagedDefaultPhotoGroupLinks(
+                        user,
+                        List.of(ManagerType.PRIMARY, ManagerType.SUB)
+                )
+                .stream()
+                .map(link -> {
+                    Senior senior = link.getFamily().getSenior();
+
+                    return PhotoShareTargetResponse.builder()
+                            .photoGroupId(link.getPhotoGroup().getId())
+                            .seniorId(senior.getSeniorId())
+                            .name(senior.getName())
+                            .relation(senior.getRelation())
+                            .customRelation(senior.getCustomRelation())
+                            .build();
+                })
+                .toList();
+    }
 }

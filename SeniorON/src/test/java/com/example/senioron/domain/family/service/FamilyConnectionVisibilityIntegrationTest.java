@@ -100,7 +100,7 @@ class FamilyConnectionVisibilityIntegrationTest {
     void rejectsEntireUploadWhenOneRecipientIsNotManaged(boolean multipart) {
         FamilyScenario scenario = saveScenario(true, false);
         List<Long> groupIds = List.of(
-                connectedGroupId(scenario, scenario.father()), connectedGroupId(scenario, scenario.grandmother())
+                defaultGroupId(scenario.father()), defaultGroupId(scenario.grandmother())
         );
 
         assertUploadForbidden(scenario.assistant(), scenario.mother(), groupIds, multipart);
@@ -110,10 +110,10 @@ class FamilyConnectionVisibilityIntegrationTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    void sharedConnectionAndMembershipBothControlRecipientsAndUploads(boolean multipart) {
+    void membershipControlsUploadsWhileSharedConnectionsRemainSeparatelyManaged(boolean multipart) {
         FamilyScenario scenario = saveScenario(false, false);
         Long sharedGroupId = connectedGroupId(scenario, scenario.father());
-        List<Long> groupIds = List.of(defaultGroupId(scenario.mother()), sharedGroupId);
+        List<Long> groupIds = List.of(defaultGroupId(scenario.mother()), defaultGroupId(scenario.father()));
         long originalGroupCount = photoGroupRepository.count();
         long originalLinkCount = photoGroupFamilyRepository.count();
 
@@ -153,13 +153,14 @@ class FamilyConnectionVisibilityIntegrationTest {
         assertThat(familyService.getConnectedSeniors(
                 scenario.assistant(), scenario.mother().getSeniorId()
         )).isEmpty();
-        assertUploadForbidden(scenario.assistant(), scenario.mother(), groupIds, multipart);
+        assertThat(upload(scenario.assistant(), scenario.mother(), groupIds, multipart).getFamilyPhotoId())
+                .isEqualTo(42L);
         assertThat(photoGroupRepository.count()).isEqualTo(originalGroupCount);
         assertThat(photoGroupFamilyRepository.count()).isEqualTo(originalLinkCount);
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<Long>> groups = ArgumentCaptor.forClass(List.class);
-        verify(photoPersistenceService, times(2)).create(
+        verify(photoPersistenceService, times(3)).create(
                 anyLong(), anyString(), anyString(), anyString(), any(), anyLong(), groups.capture()
         );
         assertThat(groups.getAllValues()).allSatisfy(value ->
@@ -183,7 +184,7 @@ class FamilyConnectionVisibilityIntegrationTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    void joiningTwoSeniorsDoesNotCreateSharingConnectionsOrAllowOtherDefaultAlbums(boolean multipart) {
+    void joiningTwoSeniorsAllowsOtherDefaultAlbumsWithoutCreatingSharingConnections(boolean multipart) {
         FamilyScenario scenario = saveScenario(true, false, false);
         assertThat(seniorService.getManagedSeniors(scenario.assistant()))
                 .extracting(ManagedSeniorResponse::seniorId)
@@ -191,16 +192,15 @@ class FamilyConnectionVisibilityIntegrationTest {
         assertThat(familyService.getConnectedSeniors(
                 scenario.assistant(), scenario.mother().getSeniorId()
         )).isEmpty();
-        assertUploadForbidden(scenario.assistant(), scenario.mother(),
-                List.of(defaultGroupId(scenario.father())), multipart);
+        assertThat(upload(scenario.assistant(), scenario.mother(),
+                List.of(defaultGroupId(scenario.father())), multipart).getFamilyPhotoId()).isEqualTo(42L);
         assertThat(photoGroupRepository.count()).isEqualTo(3);
         assertThat(photoGroupFamilyRepository.count()).isEqualTo(3);
-        verifyNoInteractions(photoPersistenceService, s3Service);
     }
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    void primaryCanConnectShareAndDisconnectWithoutJoiningTheTargetFamily(boolean multipart) {
+    void primaryCanManageConnectionsButCannotUploadWithoutJoiningTheTargetFamily(boolean multipart) {
         FamilyScenario scenario = saveScenario(false, false, false);
         familyService.updatePrimaryManager(scenario.primary(), scenario.mother().getSeniorId(),
                 primaryManagerRequest(scenario.assistant().getUsersId()));
@@ -218,16 +218,16 @@ class FamilyConnectionVisibilityIntegrationTest {
         assertThat(connections).extracting(ConnectedSeniorResponse::seniorId)
                 .containsExactly(scenario.grandmother().getSeniorId());
         Long groupId = connections.get(0).photoGroupId();
-        assertThat(upload(scenario.assistant(), scenario.mother(), List.of(groupId), multipart)
-                .getFamilyPhotoId()).isEqualTo(42L);
+        assertUploadForbidden(scenario.assistant(), scenario.mother(), List.of(groupId), multipart);
+        assertUploadForbidden(scenario.assistant(), scenario.mother(),
+                List.of(defaultGroupId(scenario.grandmother())), multipart);
 
         familyService.disconnectPhotoGroup(scenario.assistant(), scenario.mother().getSeniorId(), groupId);
         flushAndClear();
         assertThat(familyService.getConnectedSeniors(
                 scenario.assistant(), scenario.mother().getSeniorId())).isEmpty();
         assertUploadForbidden(scenario.assistant(), scenario.mother(), List.of(groupId), multipart);
-        verify(photoPersistenceService).create(
-                anyLong(), anyString(), anyString(), anyString(), any(), anyLong(), anyList());
+        verifyNoInteractions(photoPersistenceService, s3Service);
     }
 
     @ParameterizedTest
@@ -244,9 +244,9 @@ class FamilyConnectionVisibilityIntegrationTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    void selectedFamilyRoleControlsUploadEvenWhenPrimaryElsewhere(boolean multipart) {
+    void changingSelectedFamilyRoleDoesNotGrantAccessToUnjoinedTarget(boolean multipart) {
         FamilyScenario scenario = saveScenario(true, true);
-        List<Long> groupIds = List.of(connectedGroupId(scenario, scenario.grandmother()));
+        List<Long> groupIds = List.of(defaultGroupId(scenario.grandmother()));
 
         assertUploadForbidden(scenario.assistant(), scenario.mother(), groupIds, multipart);
         verifyNoInteractions(photoPersistenceService, s3Service);
@@ -256,8 +256,7 @@ class FamilyConnectionVisibilityIntegrationTest {
                 primaryManagerRequest(scenario.assistant().getUsersId())
         );
         flushAndClear();
-        assertThat(upload(scenario.assistant(), scenario.mother(), groupIds, multipart).getFamilyPhotoId())
-                .isEqualTo(42L);
+        assertUploadForbidden(scenario.assistant(), scenario.mother(), groupIds, multipart);
 
         familyService.updatePrimaryManager(
                 scenario.assistant(), scenario.mother().getSeniorId(),
@@ -265,9 +264,7 @@ class FamilyConnectionVisibilityIntegrationTest {
         );
         flushAndClear();
         assertUploadForbidden(scenario.assistant(), scenario.mother(), groupIds, multipart);
-        verify(photoPersistenceService).create(
-                anyLong(), anyString(), anyString(), anyString(), any(), anyLong(), anyList()
-        );
+        verifyNoInteractions(photoPersistenceService, s3Service);
     }
 
     private Long connectedGroupId(FamilyScenario scenario, Senior target) {
