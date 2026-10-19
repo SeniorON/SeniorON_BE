@@ -42,6 +42,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doCallRealMethod;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -96,6 +98,7 @@ class FamilyPhotoPresignedUploadServiceTest {
 
     @BeforeEach
     void setUp() {
+        doCallRealMethod().when(thumbnailService).validateOriginal(any());
         familyPhotoService = new FamilyPhotoService(
                 familyPhotoRepository,
                 familyPhotoViewRepository,
@@ -408,7 +411,7 @@ class FamilyPhotoPresignedUploadServiceTest {
                 "image",
                 "family-photo.jpg",
                 "image/jpeg",
-                new byte[]{1}
+                FamilyPhotoImageFixtures.image("jpg")
         ));
         String idempotencyKey =
                 "45c20ce1-c7d2-48ac-aa80-5031eedc09ad";
@@ -447,7 +450,7 @@ class FamilyPhotoPresignedUploadServiceTest {
                 request.getImage(),
                 "family-photos/" + FAMILY_ID
         )).willReturn(IMAGE_KEY);
-        byte[] originalBytes = {1};
+        byte[] originalBytes = FamilyPhotoImageFixtures.image("jpg");
         byte[] thumbnailBytes = {2};
         String expectedThumbnailKey = thumbnailGenerated ? THUMBNAIL_KEY : null;
         given(s3Service.download(IMAGE_KEY)).willReturn(originalBytes);
@@ -506,10 +509,10 @@ class FamilyPhotoPresignedUploadServiceTest {
         request.setPhotoGroupIds(List.of(30L));
         request.setDescription("저장 실패 사진");
         request.setImage(new MockMultipartFile(
-                "image", "family-photo.jpg", "image/jpeg", new byte[]{1}
+                "image", "family-photo.jpg", "image/jpeg", FamilyPhotoImageFixtures.image("jpg")
         ));
         String idempotencyKey = "failed-multipart-upload";
-        byte[] originalBytes = {1};
+        byte[] originalBytes = FamilyPhotoImageFixtures.image("jpg");
         byte[] thumbnailBytes = {2};
         RuntimeException failure = integrityViolation
                 ? new DataIntegrityViolationException("saving failed")
@@ -569,7 +572,7 @@ class FamilyPhotoPresignedUploadServiceTest {
                                 "image/jpeg"
                         )
                 ));
-        byte[] originalBytes = {1};
+        byte[] originalBytes = FamilyPhotoImageFixtures.image("jpg");
         byte[] thumbnailBytes = {2};
         given(s3Service.download(IMAGE_KEY)).willReturn(originalBytes);
         if (thumbnailGenerated) {
@@ -888,7 +891,7 @@ class FamilyPhotoPresignedUploadServiceTest {
     }
 
     private void stubUploadedObjectAndThumbnail() {
-        byte[] originalBytes = {1};
+        byte[] originalBytes = FamilyPhotoImageFixtures.image("jpg");
         byte[] thumbnailBytes = {2};
         given(s3Service.findObjectInfo(IMAGE_KEY))
                 .willReturn(Optional.of(new StoredObjectInfo(1024L, "image/jpeg")));

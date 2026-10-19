@@ -10,6 +10,12 @@ import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import com.example.senioron.global.apiPayload.code.ErrorCode;
+import com.example.senioron.global.apiPayload.exception.BusinessException;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -30,6 +36,7 @@ class ThumbnailServiceTest {
         byte[] original = imageBytes(width, height, format);
         byte[] unchangedOriginal = original.clone();
 
+        service.validateOriginal(original);
         byte[] thumbnail = service.create(original);
         BufferedImage decoded = ImageIO.read(new ByteArrayInputStream(thumbnail));
 
@@ -85,6 +92,7 @@ class ThumbnailServiceTest {
                 "UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA"
         );
 
+        service.validateOriginal(webp);
         byte[] thumbnail = service.create(webp);
         BufferedImage decoded = ImageIO.read(new ByteArrayInputStream(thumbnail));
 
@@ -100,6 +108,34 @@ class ThumbnailServiceTest {
         assertThatThrownBy(() -> service.create(new byte[]{1, 2, 3}))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("썸네일 생성에 실패했습니다.");
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {"not an image"})
+    void rejectsNonImageOriginal(String content) {
+        byte[] original = content == null ? null : content.getBytes(StandardCharsets.UTF_8);
+
+        assertInvalidOriginal(original);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"jpg", "png"})
+    void rejectsTruncatedOriginal(String format) throws Exception {
+        assertInvalidOriginal(Arrays.copyOf(imageBytes(8, 8, format), 30));
+    }
+
+    @Test
+    void rejectsActualGifEvenWhenItIsDecodable() throws Exception {
+        assertInvalidOriginal(imageBytes(8, 8, "gif"));
+    }
+
+    private void assertInvalidOriginal(byte[] original) {
+        assertThatThrownBy(() -> service.validateOriginal(original))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getCode()).isEqualTo(ErrorCode.FAMILY_PHOTO_INVALID_IMAGE);
+                    assertThat(exception.getStatus().value()).isEqualTo(400);
+                });
     }
 
     private byte[] imageBytes(int width, int height, String format) throws Exception {

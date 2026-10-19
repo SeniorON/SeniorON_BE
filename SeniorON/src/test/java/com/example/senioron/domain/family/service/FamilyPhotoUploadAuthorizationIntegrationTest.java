@@ -24,7 +24,10 @@ import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.storage.S3Service;
 import com.example.senioron.global.storage.StoredObjectInfo;
 import com.example.senioron.global.storage.ThumbnailService;
+import com.example.senioron.domain.family.event.FamilyPhotoSharedEvent;
 import jakarta.persistence.EntityManager;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -50,6 +53,8 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -62,12 +67,17 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doCallRealMethod;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+@RecordApplicationEvents
 @DataJpaTest(showSql = false)
 @Import({FamilyService.class, FamilyPhotoService.class, FamilyPhotoPersistenceService.class,
-        FamilyPhotoPermissionService.class})
+        FamilyPhotoPermissionService.class, ThumbnailService.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @Timeout(30)
 class FamilyPhotoUploadAuthorizationIntegrationTest {
@@ -82,10 +92,14 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
     @Autowired private PlatformTransactionManager transactionManager;
     @MockitoSpyBean private FamilyPhotoGroupRepository mappings;
     @MockitoBean private S3Service storage;
-    @MockitoBean private ThumbnailService thumbnails;
+    @MockitoSpyBean private ThumbnailService thumbnails;
     @MockitoBean private DeviceService devices;
     @MockitoBean private FamilyPhotoPushTargetService pushTargets;
 
+    @Autowired private ApplicationEvents events;
+
+    private byte[] uploadBytes;
+    private String uploadContentType;
     private Fixture fixture;
     private String imageKey;
     private String thumbnailKey;
@@ -113,11 +127,13 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
         imageKey = "family-photos/" + fixture.familyA().getFamilyId() + "/"
                 + fixture.uploader().getUsersId() + "/" + UUID.randomUUID() + ".jpg";
         thumbnailKey = "family-photos/thumbnails/" + UUID.randomUUID() + ".jpg";
+        uploadBytes = FamilyPhotoImageFixtures.image("jpg");
+        uploadContentType = "image/jpeg";
         given(storage.upload(any(), anyString())).willReturn(imageKey);
         given(storage.findObjectInfo(anyString()))
                 .willReturn(Optional.of(new StoredObjectInfo(100L, "image/jpeg")));
-        given(storage.download(anyString())).willReturn(new byte[]{1});
-        given(thumbnails.create(any())).willReturn(new byte[]{2});
+        given(storage.download(anyString())).willReturn(uploadBytes);
+        doReturn(new byte[]{2}).when(thumbnails).create(any());
         given(storage.uploadThumbnail(any())).willReturn(thumbnailKey);
     }
 
@@ -176,7 +192,7 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
         given(storage.upload(any(), anyString())).willReturn(imageKey);
         given(storage.download(imageKey)).willAnswer(invocation -> {
             revoke(revocation);
-            return new byte[]{1};
+            return FamilyPhotoImageFixtures.image("jpg");
         });
 
         ErrorCode expected = revocation == Revocation.REMOVE_SELECTED
@@ -289,7 +305,7 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
             FamilyPrimaryManagerUpdateRequest demote = new FamilyPrimaryManagerUpdateRequest();
             ReflectionTestUtils.setField(demote, "targetUserId", fixture.primaryA().getUsersId());
             familyService.updatePrimaryManager(fixture.uploader(), fixture.seniorA().getSeniorId(), demote);
-            return new byte[]{1};
+            return FamilyPhotoImageFixtures.image("jpg");
         });
 
         upload(fixture.uploader(), multipart);
@@ -337,7 +353,7 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
     void defaultGroupsRecheckMembershipImmediatelyBeforeSaving(boolean multipart) {
         given(storage.download(imageKey)).willAnswer(invocation -> {
             revoke(Revocation.REMOVE_TARGET);
-            return new byte[]{1};
+            return FamilyPhotoImageFixtures.image("jpg");
         });
         assertThatThrownBy(() -> upload(fixture.uploader(), multipart,
                 List.of(fixture.defaultA().getId(), fixture.defaultB().getId())))
@@ -346,6 +362,128 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
         assertThat(photos.countAccessibleByFamily(fixture.familyA())).isZero();
         assertThat(photos.countAccessibleByFamily(fixture.familyB())).isZero();
         verify(storage).delete(thumbnailKey);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"true,text", "false,text", "true,jpg", "false,jpg", "true,png", "false,png"})
+    void rejectsInvalidOriginalWithoutPhotoMappingOrSharedEvent(boolean multipart, String kind) {
+        uploadBytes = kind.equals("text") ? "not an image".getBytes(StandardCharsets.UTF_8)
+                : Arrays.copyOf(FamilyPhotoImageFixtures.image(kind), 30);
+        given(storage.download(imageKey)).willReturn(uploadBytes);
+
+        assertThatThrownBy(() -> upload(fixture.uploader(), multipart))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getCode()).isEqualTo(ErrorCode.FAMILY_PHOTO_INVALID_IMAGE);
+                    assertThat(exception.getStatus().value()).isEqualTo(400);
+                });
+
+        assertNoPhotoSideEffects();
+        verify(thumbnails, never()).create(any());
+        verify(storage, never()).uploadThumbnail(any());
+        if (multipart) {
+            verify(storage).delete(imageKey);
+        } else {
+            verify(storage, never()).delete(imageKey);
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({"true,jpg", "false,jpg", "true,png", "false,png", "true,webp", "false,webp"})
+    void registersDecodableFormatsWithMultipleGroups(boolean multipart, String format) {
+        uploadBytes = FamilyPhotoImageFixtures.image(format);
+        uploadContentType = format.equals("jpg") ? "image/jpeg" : "image/" + format;
+        imageKey = imageKey.substring(0, imageKey.lastIndexOf('.') + 1) + format;
+        given(storage.upload(any(), anyString())).willReturn(imageKey);
+        given(storage.download(imageKey)).willReturn(uploadBytes);
+        given(storage.findObjectInfo(imageKey)).willReturn(Optional.of(new StoredObjectInfo(
+                uploadBytes.length, uploadContentType)));
+        doCallRealMethod().when(thumbnails).create(any());
+
+        var response = upload(fixture.uploader(), multipart);
+
+        assertThat(photos.findById(response.getFamilyPhotoId()).orElseThrow().getThumbnailKey())
+                .isEqualTo(thumbnailKey);
+        assertSavedInBothGroups(response.getFamilyPhotoId());
+        assertThat(sharedEventCount()).isEqualTo(1);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"true,generation", "false,generation", "true,storage", "false,storage"})
+    void keepsValidOriginalWhenOnlyThumbnailFails(boolean multipart, String failure) {
+        if (failure.equals("generation")) {
+            doThrow(new IllegalStateException("resize failed")).when(thumbnails).create(any());
+        } else {
+            given(storage.uploadThumbnail(any())).willThrow(new IllegalStateException("S3 put failed"));
+        }
+
+        var response = upload(fixture.uploader(), multipart);
+
+        assertThat(photos.findById(response.getFamilyPhotoId()).orElseThrow().getThumbnailKey()).isNull();
+        assertSavedInBothGroups(response.getFamilyPhotoId());
+        assertThat(sharedEventCount()).isEqualTo(1);
+        verify(storage, never()).delete(imageKey);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void downloadFailureDoesNotRegisterUnverifiedOriginal(boolean multipart) {
+        RuntimeException failure = new IllegalStateException("S3 get failed");
+        given(storage.download(imageKey)).willThrow(failure);
+
+        assertThatThrownBy(() -> upload(fixture.uploader(), multipart)).isSameAs(failure);
+
+        assertNoPhotoSideEffects();
+        if (multipart) {
+            verify(storage).delete(imageKey);
+        } else {
+            verify(storage, never()).delete(imageKey);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void repeatedRequestReturnsSavedPhotoWithoutRevalidationOrDuplicateEvent(boolean multipart) {
+        String idempotencyKey = UUID.randomUUID().toString();
+        List<Long> groupIds = List.of(fixture.defaultA().getId(), fixture.defaultB().getId());
+        var first = upload(fixture.uploader(), multipart, groupIds, idempotencyKey);
+        given(storage.download(imageKey)).willThrow(new IllegalStateException("temporary S3 failure"));
+
+        var repeated = upload(fixture.uploader(), multipart, groupIds, idempotencyKey);
+
+        assertThat(repeated.getFamilyPhotoId()).isEqualTo(first.getFamilyPhotoId());
+        verify(storage, times(1)).download(imageKey);
+        verify(storage, never()).delete(imageKey);
+        assertThat(sharedEventCount()).isEqualTo(1);
+        assertSavedInBothGroups(first.getFamilyPhotoId());
+
+        revoke(Revocation.REMOVE_TARGET);
+        assertThatThrownBy(() -> upload(fixture.uploader(), multipart, groupIds, idempotencyKey))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getCode()).isEqualTo(ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN));
+        verify(storage, never()).delete(imageKey);
+    }
+
+    private void assertNoPhotoSideEffects() {
+        assertThat(photos.countAccessibleByFamily(fixture.familyA())).isZero();
+        assertThat(photos.countAccessibleByFamily(fixture.familyB())).isZero();
+        Long mappingCount = transaction().execute(status -> mappings.findAll().stream()
+                .filter(mapping -> mapping.getFamilyPhoto().getUser().getUsersId()
+                        .equals(fixture.uploader().getUsersId())).count());
+        assertThat(mappingCount).isZero();
+        assertThat(sharedEventCount()).isZero();
+    }
+
+    private void assertSavedInBothGroups(Long photoId) {
+        assertThat(photos.countAccessibleByFamily(fixture.familyA())).isEqualTo(1);
+        assertThat(photos.countAccessibleByFamily(fixture.familyB())).isEqualTo(1);
+        List<Long> savedGroupIds = transaction().execute(status -> mappings.findAll().stream()
+                .filter(mapping -> mapping.getFamilyPhoto().getFamilyPhotoId().equals(photoId))
+                .map(mapping -> mapping.getPhotoGroup().getId()).toList());
+        assertThat(savedGroupIds).containsExactlyInAnyOrder(fixture.defaultA().getId(), fixture.defaultB().getId());
+    }
+
+    private long sharedEventCount() {
+        return events.stream(FamilyPhotoSharedEvent.class).count();
     }
 
     private void savePhoto() {
@@ -359,18 +497,24 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
     }
 
     private FamilyPhotoItemResponse upload(User uploader, boolean multipart, List<Long> groupIds) {
+        return upload(uploader, multipart, groupIds, UUID.randomUUID().toString());
+    }
+
+    private FamilyPhotoItemResponse upload(User uploader, boolean multipart, List<Long> groupIds,
+                                          String idempotencyKey) {
         if (multipart) {
             FamilyPhotoCreateRequest request = new FamilyPhotoCreateRequest();
             request.setSeniorId(fixture.seniorA().getSeniorId());
             request.setPhotoGroupIds(groupIds);
-            request.setImage(new MockMultipartFile("image", "photo.jpg", "image/jpeg", new byte[]{1}));
-            return photoService.createPhoto(uploader, UUID.randomUUID().toString(), request);
+            request.setImage(new MockMultipartFile("image", "photo" + imageKey.substring(imageKey.lastIndexOf('.')),
+                    uploadContentType, uploadBytes));
+            return photoService.createPhoto(uploader, idempotencyKey, request);
         }
         FamilyPhotoUploadCompleteRequest request = new FamilyPhotoUploadCompleteRequest();
         request.setSeniorId(fixture.seniorA().getSeniorId());
         request.setPhotoGroupIds(groupIds);
         request.setImageKey(imageKey);
-        return photoService.completePhotoUpload(uploader, UUID.randomUUID().toString(), request);
+        return photoService.completePhotoUpload(uploader, idempotencyKey, request);
     }
 
     private void revoke(Revocation revocation) {
