@@ -4,6 +4,7 @@ import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.event.dto.request.*;
 import com.example.senioron.domain.event.entity.Event;
 import com.example.senioron.domain.event.entity.OutingPhase;
+import com.example.senioron.domain.event.entity.OutingDetectionType;
 import com.example.senioron.domain.event.entity.RiskCheckResult;
 import com.example.senioron.domain.event.repository.EventRepository;
 import com.example.senioron.domain.event.util.*;
@@ -95,6 +96,45 @@ class EventNotificationPolicyTest {
         assertThat(outing.getNotificationStatus().name()).isEqualTo("NOT_DISPATCHED");
         verify(events, times(2)).save(any(Event.class));
         verifyNoInteractions(notifications);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(OutingDetectionType.class)
+    void outingDetectionTypeIsSaved(OutingDetectionType detectionType) {
+        service.saveOutingReturnEvent("주소", parent,
+                new OutingReturnRequest(OutingPhase.OUTING, BigDecimal.ONE, BigDecimal.ONE, 80, detectionType));
+
+        ArgumentCaptor<Event> saved = ArgumentCaptor.forClass(Event.class);
+        verify(events).save(saved.capture());
+        assertThat(saved.getValue().getDetectionType()).isEqualTo(detectionType);
+        assertThat(saved.getValue().getPhase()).isEqualTo(OutingPhase.OUTING);
+    }
+
+    @Test
+    void legacyOutingRequestIsSavedAsTransition() {
+        service.saveOutingReturnEvent("주소", parent,
+                new OutingReturnRequest(OutingPhase.RETURN, BigDecimal.ONE, BigDecimal.ONE, 80));
+
+        ArgumentCaptor<Event> saved = ArgumentCaptor.forClass(Event.class);
+        verify(events).save(saved.capture());
+        assertThat(saved.getValue().getDetectionType()).isEqualTo(OutingDetectionType.TRANSITION);
+        assertThat(saved.getValue().getPhase()).isEqualTo(OutingPhase.RETURN);
+    }
+
+    @Test
+    void outingMetadataIsSavedWithKoreaLocalTimestamp() {
+        var request = OutingReturnRequest.builder().phase(OutingPhase.RETURN)
+                .detectionType(OutingDetectionType.RECONNECTION).clientEventId("event-123")
+                .detectedAt(java.time.OffsetDateTime.parse("2026-10-19T05:00:00Z"))
+                .latitude(BigDecimal.ONE).longitude(BigDecimal.ONE).deviceBattery(80).build();
+        var response = service.saveOutingReturnEvent("주소", parent, request);
+        ArgumentCaptor<Event> saved = ArgumentCaptor.forClass(Event.class);
+        verify(events).save(saved.capture());
+        assertThat(saved.getValue().getClientEventId()).isEqualTo("event-123");
+        assertThat(saved.getValue().getDetectedAt()).isEqualTo(LocalDateTime.parse("2026-10-19T14:00:00"));
+        assertThat(response.getOccurredAt()).isEqualTo(saved.getValue().getDetectedAt());
+        assertThat(response.getDetectedAt().getOffset()).isEqualTo(java.time.ZoneOffset.ofHours(9));
+        assertThat(response.getClientEventId()).isEqualTo("event-123");
     }
 
     @Test
