@@ -28,6 +28,7 @@ import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
 import com.example.senioron.domain.family.repository.PhotoGroupRepository;
+import com.example.senioron.domain.family.support.FamilyPhotoResponseMapper;
 import com.example.senioron.domain.senior.dto.response.ManagedSeniorResponse;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
@@ -59,7 +60,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
 
 @DataJpaTest
-@Import({FamilyService.class, SeniorService.class, FamilyPhotoService.class})
+@Import({FamilyService.class, SeniorService.class, FamilyPhotoService.class,
+        FamilyPhotoResponseMapper.class})
 class FamilyConnectionVisibilityIntegrationTest {
 
     @Autowired private FamilyService familyService;
