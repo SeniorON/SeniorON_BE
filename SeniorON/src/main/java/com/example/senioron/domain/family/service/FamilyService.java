@@ -307,7 +307,8 @@ public class FamilyService {
             FamilyPhoto photo,
             User currentUser,
             LocalDateTime newPhotoCutoff,
-            boolean viewedByCurrentParent
+            boolean viewedByCurrentParent,
+            boolean canDelete
     ) {
         boolean newPhoto =
                 currentUser.getRole() == Role.PARENT
@@ -328,12 +329,7 @@ public class FamilyService {
                 )
                 .uploaderName(photo.getUser().getName())
                 .description(photo.getDescription())
-                .canDelete(
-                        familyPhotoPermissionService.canDelete(
-                                photo,
-                                currentUser
-                        )
-                )
+                .canDelete(canDelete)
                 .createdAt(photo.getCreatedAt())
                 .newPhoto(newPhoto)
                 .build();
@@ -421,6 +417,12 @@ public class FamilyService {
                 LocalDateTime.now()
                         .minusHours(NEW_PHOTO_WINDOW_HOURS);
 
+        Set<Long> deletablePhotoIds =
+                familyPhotoPermissionService.findDeletablePhotoIds(
+                        recentPhotoEntities,
+                        currentUser
+                );
+
         List<FamilyPhotoItemResponse> recentPhotos =
                 recentPhotoEntities.stream()
                         .map(photo ->
@@ -429,6 +431,9 @@ public class FamilyService {
                                         currentUser,
                                         newPhotoCutoff,
                                         viewedPhotoIds.contains(
+                                                photo.getFamilyPhotoId()
+                                        ),
+                                        deletablePhotoIds.contains(
                                                 photo.getFamilyPhotoId()
                                         )
                                 )

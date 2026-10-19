@@ -10,7 +10,9 @@ import com.example.senioron.domain.user.entity.User;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 public interface FamilyPhotoGroupRepository
         extends JpaRepository<FamilyPhotoGroup, Long> {
@@ -79,5 +81,50 @@ public interface FamilyPhotoGroupRepository
             @Param("familyPhotoId") Long familyPhotoId,
             @Param("role") Role role,
             @Param("status") UserStatus status
+    );
+
+    @Query("""
+    SELECT DISTINCT fp.familyPhotoId
+    FROM FamilyPhotoGroup fpg
+    JOIN fpg.familyPhoto fp
+    WHERE fp.familyPhotoId IN :familyPhotoIds
+      AND EXISTS (
+          SELECT pgf.id
+          FROM PhotoGroupFamily pgf
+          WHERE pgf.photoGroup = fpg.photoGroup
+            AND EXISTS (
+                SELECT fm.id
+                FROM FamilyMember fm
+                WHERE fm.family = pgf.family
+                  AND fm.user = fp.user
+            )
+      )
+    """)
+    Set<Long> findPhotoIdsAccessibleByUploader(
+            @Param("familyPhotoIds") Collection<Long> familyPhotoIds
+    );
+
+    @Query("""
+    SELECT DISTINCT fp.familyPhotoId
+    FROM FamilyPhotoGroup fpg
+    JOIN fpg.familyPhoto fp
+    WHERE fp.familyPhotoId IN :familyPhotoIds
+      AND EXISTS (
+          SELECT pgf.id
+          FROM PhotoGroupFamily pgf
+          WHERE pgf.photoGroup = fpg.photoGroup
+            AND EXISTS (
+                SELECT fm.id
+                FROM FamilyMember fm
+                WHERE fm.family = pgf.family
+                  AND fm.user = :user
+                  AND fm.managerType = :managerType
+            )
+      )
+    """)
+    Set<Long> findPhotoIdsAccessibleByUserAndManagerType(
+            @Param("familyPhotoIds") Collection<Long> familyPhotoIds,
+            @Param("user") User user,
+            @Param("managerType") ManagerType managerType
     );
 }

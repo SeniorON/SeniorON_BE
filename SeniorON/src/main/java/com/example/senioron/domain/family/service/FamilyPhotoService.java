@@ -482,6 +482,25 @@ public class FamilyPhotoService {
             LocalDateTime newPhotoCutoff,
             boolean viewedByCurrentParent
     ) {
+        return toItemResponse(
+                photo,
+                currentUser,
+                newPhotoCutoff,
+                viewedByCurrentParent,
+                familyPhotoPermissionService.canDelete(
+                        photo,
+                        currentUser
+                )
+        );
+    }
+
+    private FamilyPhotoItemResponse toItemResponse(
+            FamilyPhoto photo,
+            User currentUser,
+            LocalDateTime newPhotoCutoff,
+            boolean viewedByCurrentParent,
+            boolean canDelete
+    ) {
         boolean newPhoto =
                 currentUser.getRole() == Role.PARENT
                         && photo.getUser().getRole() == Role.CHILD
@@ -505,12 +524,7 @@ public class FamilyPhotoService {
                 )
                 .uploaderName(photo.getUser().getName())
                 .description(photo.getDescription())
-                .canDelete(
-                        familyPhotoPermissionService.canDelete(
-                                photo,
-                                currentUser
-                        )
-                )
+                .canDelete(canDelete)
                 .createdAt(photo.getCreatedAt())
                 .newPhoto(newPhoto)
                 .build();
@@ -655,6 +669,12 @@ public class FamilyPhotoService {
                         pagePhotos
                 );
 
+        Set<Long> deletablePhotoIds =
+                familyPhotoPermissionService.findDeletablePhotoIds(
+                        pagePhotos,
+                        currentUser
+                );
+
         List<FamilyPhotoItemResponse> photoResponses =
                 pagePhotos.stream()
                         .map(photo ->
@@ -663,6 +683,9 @@ public class FamilyPhotoService {
                                         currentUser,
                                         newPhotoCutoff,
                                         viewedPhotoIds.contains(
+                                                photo.getFamilyPhotoId()
+                                        ),
+                                        deletablePhotoIds.contains(
                                                 photo.getFamilyPhotoId()
                                         )
                                 )
