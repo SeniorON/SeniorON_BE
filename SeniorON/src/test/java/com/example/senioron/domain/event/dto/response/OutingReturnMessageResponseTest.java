@@ -22,7 +22,7 @@ class OutingReturnMessageResponseTest {
     void detailAndNotificationUseSameMessage(OutingPhase phase, OutingDetectionType type, String message) {
         var event = Event.builder().eventType(EventType.OUTING_RETURN).phase(phase).detectionType(type)
                 .triggeredUser(User.builder().name("부모님").build()).build();
-        assertThat(EventDetailResponse.of(event, 80).getMessage()).isEqualTo(message);
+        assertThat(EventDetailResponse.of(event).getMessage()).isEqualTo(message);
         var service = mock(NotificationService.class, org.mockito.Mockito.CALLS_REAL_METHODS);
         String body = ReflectionTestUtils.invokeMethod(service, "resolveBody", event);
         assertThat(body).isEqualTo(message);
@@ -34,8 +34,8 @@ class OutingReturnMessageResponseTest {
                 .triggeredUser(User.builder().name("부모님").build()).build();
         var createdAt = LocalDateTime.parse("2026-10-19T14:00:00");
         ReflectionTestUtils.setField(event, "createdAt", createdAt);
-        assertThat(EventDetailResponse.of(event, 80).getMessage()).isEqualTo("외출하셨어요");
-        assertThat(EventDetailResponse.of(event, 80).getOccurredAt().toLocalDateTime()).isEqualTo(createdAt);
+        assertThat(EventDetailResponse.of(event).getMessage()).isEqualTo("외출하셨어요");
+        assertThat(EventDetailResponse.of(event).getOccurredAt().toLocalDateTime()).isEqualTo(createdAt);
         assertThat(OutingReturnResponse.of(event).getOccurredAt()).isEqualTo(createdAt);
     }
 
@@ -47,12 +47,12 @@ class OutingReturnMessageResponseTest {
                 .detectionType(OutingDetectionType.RECONNECTION).detectedAt(detectedAt).clientEventId("id-1")
                 .triggeredUser(User.builder().name("부모님").build()).build();
         ReflectionTestUtils.setField(event, "createdAt", createdAt);
-        var detail = EventDetailResponse.of(event, 80);
+        var detail = EventDetailResponse.of(event);
         assertThat(detail.getOccurredAt().toLocalDateTime()).isEqualTo(detectedAt);
         assertThat(detail.getDetectedAt().getOffset()).isEqualTo(java.time.ZoneOffset.ofHours(9));
         assertThat(detail.getClientEventId()).isEqualTo("id-1");
         assertThat(detail.getDetectionType()).isEqualTo(OutingDetectionType.RECONNECTION);
         ReflectionTestUtils.setField(event, "eventType", EventType.SOS);
-        assertThat(EventDetailResponse.of(event, 80).getOccurredAt().toLocalDateTime()).isEqualTo(createdAt);
+        assertThat(EventDetailResponse.of(event).getOccurredAt().toLocalDateTime()).isEqualTo(createdAt);
     }
 }
