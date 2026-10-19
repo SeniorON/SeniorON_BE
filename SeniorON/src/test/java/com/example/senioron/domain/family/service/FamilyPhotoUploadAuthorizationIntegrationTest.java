@@ -14,6 +14,7 @@ import com.example.senioron.domain.family.repository.FamilyPhotoGroupRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.family.repository.PhotoGroupRepository;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
+import com.example.senioron.domain.family.support.FamilyPhotoResponseMapper;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
 import com.example.senioron.domain.user.entity.ManagerType;
@@ -77,7 +78,8 @@ import static org.mockito.Mockito.verify;
 @RecordApplicationEvents
 @DataJpaTest(showSql = false)
 @Import({FamilyService.class, FamilyPhotoService.class, FamilyPhotoPersistenceService.class,
-        FamilyPhotoPermissionService.class, ThumbnailService.class})
+        FamilyPhotoPermissionService.class, ThumbnailService.class,
+        FamilyPhotoResponseMapper.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @Timeout(30)
 class FamilyPhotoUploadAuthorizationIntegrationTest {

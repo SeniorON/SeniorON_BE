@@ -13,6 +13,7 @@ import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
 import com.example.senioron.domain.family.repository.PhotoGroupRepository;
+import com.example.senioron.domain.family.support.FamilyPhotoResponseMapper;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.entity.ManagerType;
@@ -50,6 +51,7 @@ public class FamilyService {
     private final PhotoGroupFamilyRepository photoGroupFamilyRepository;
     private final DeviceService deviceService;
     private final SeniorRepository seniorRepository;
+    private final FamilyPhotoResponseMapper familyPhotoResponseMapper;
 
     private static final int RECENT_UPLOADER_COUNT = 3;
     private static final int RECENT_PHOTO_COUNT = 4;
@@ -303,38 +305,6 @@ public class FamilyService {
                 .build();
     }
 
-    private FamilyPhotoItemResponse toFamilyPhotoItemResponse(
-            FamilyPhoto photo,
-            User currentUser,
-            LocalDateTime newPhotoCutoff,
-            boolean viewedByCurrentParent,
-            boolean canDelete
-    ) {
-        boolean newPhoto =
-                currentUser.getRole() == Role.PARENT
-                        && photo.getUser().getRole() == Role.CHILD
-                        && !viewedByCurrentParent
-                        && !photo.getCreatedAt()
-                        .isBefore(newPhotoCutoff);
-
-        return FamilyPhotoItemResponse.builder()
-                .familyPhotoId(photo.getFamilyPhotoId())
-                .imageUrl(
-                        s3Service.getFileUrl(
-                                photo.getImageKey()
-                        )
-                )
-                .uploaderUserId(
-                        photo.getUser().getUsersId()
-                )
-                .uploaderName(photo.getUser().getName())
-                .description(photo.getDescription())
-                .canDelete(canDelete)
-                .createdAt(photo.getCreatedAt())
-                .newPhoto(newPhoto)
-                .build();
-    }
-
     @Transactional(readOnly = true)
     public FamilyHomeResponse getFamilyHome(User user, Long seniorId) {
 
@@ -426,7 +396,7 @@ public class FamilyService {
         List<FamilyPhotoItemResponse> recentPhotos =
                 recentPhotoEntities.stream()
                         .map(photo ->
-                                toFamilyPhotoItemResponse(
+                                familyPhotoResponseMapper.toItemResponse(
                                         photo,
                                         currentUser,
                                         newPhotoCutoff,

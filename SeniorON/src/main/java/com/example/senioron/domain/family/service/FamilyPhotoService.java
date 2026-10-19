@@ -13,6 +13,7 @@ import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.family.repository.projection.FamilyPhotoAlbumCountProjection;
+import com.example.senioron.domain.family.support.FamilyPhotoResponseMapper;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
@@ -66,6 +67,7 @@ public class FamilyPhotoService {
     private final PhotoGroupFamilyRepository photoGroupFamilyRepository;
     private final FamilyPhotoPushTargetService familyPhotoPushTargetService;
     private final ApplicationEventPublisher eventPublisher;
+    private final FamilyPhotoResponseMapper familyPhotoResponseMapper;
 
     private static final int NEW_PHOTO_WINDOW_HOURS = 24;
     private static final long MAX_FAMILY_PHOTO_SIZE = 10L * 1024 * 1024;
@@ -501,33 +503,13 @@ public class FamilyPhotoService {
             boolean viewedByCurrentParent,
             boolean canDelete
     ) {
-        boolean newPhoto =
-                currentUser.getRole() == Role.PARENT
-                        && photo.getUser().getRole() == Role.CHILD
-                        && !viewedByCurrentParent
-                        && !photo.getCreatedAt()
-                        .isBefore(newPhotoCutoff);
-
-        String imageUrl = s3Service.getFileUrl(photo.getImageKey());
-        String thumbnailKey = photo.getThumbnailKey();
-
-        String thumbnailUrl = thumbnailKey == null || thumbnailKey.isBlank()
-                ? imageUrl
-                : s3Service.getFileUrl(thumbnailKey);
-
-        return FamilyPhotoItemResponse.builder()
-                .familyPhotoId(photo.getFamilyPhotoId())
-                .imageUrl(imageUrl)
-                .thumbnailUrl(thumbnailUrl)
-                .uploaderUserId(
-                        photo.getUser().getUsersId()
-                )
-                .uploaderName(photo.getUser().getName())
-                .description(photo.getDescription())
-                .canDelete(canDelete)
-                .createdAt(photo.getCreatedAt())
-                .newPhoto(newPhoto)
-                .build();
+        return familyPhotoResponseMapper.toItemResponse(
+                photo,
+                currentUser,
+                newPhotoCutoff,
+                viewedByCurrentParent,
+                canDelete
+        );
     }
 
     private Set<Long> findViewedPhotoIds(
