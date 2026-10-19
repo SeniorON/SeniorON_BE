@@ -4,11 +4,13 @@ import com.example.senioron.domain.event.entity.Event;
 import com.example.senioron.domain.notification.dto.NotificationPreparationResult;
 import io.swagger.v3.oas.annotations.media.Schema;
 import com.example.senioron.domain.event.entity.OutingPhase;
+import com.example.senioron.domain.event.entity.OutingDetectionType;
 import lombok.Builder;
 import lombok.Getter;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
 @Getter
 @Builder
@@ -22,6 +24,9 @@ public class OutingReturnResponse {
 
     private Long id;
     private OutingPhase phase;
+    private OutingDetectionType detectionType;
+    private String clientEventId;
+    private OffsetDateTime detectedAt;
     private LocalDateTime occurredAt;
     private BigDecimal latitude;
     private BigDecimal longitude;
@@ -41,11 +46,17 @@ public class OutingReturnResponse {
                 .seniorId(event.getSenior() == null ? null : event.getSenior().getSeniorId())
                 .id(event.getEventId())
                 .phase(event.getPhase())
-                .occurredAt(event.getCreatedAt())
+                .detectionType(event.getDetectionType())
+                .clientEventId(event.getClientEventId())
+                .detectedAt(event.getDetectedAtWithOffset())
+                .occurredAt(event.getOutingOccurredAt())
                 .latitude(event.getLatitude())
                 .longitude(event.getLongitude())
                 .address(event.getAddress())
                 .deviceBattery(event.getDeviceBattery())
+                .notificationStatus(event.getPreparationStatus())
+                .reason(event.getPreparationReason())
+                .receiverCount(event.getPreparationReceiverCount() == null ? 0 : event.getPreparationReceiverCount())
                 .build();
     }
 }
