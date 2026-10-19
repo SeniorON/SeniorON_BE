@@ -2,6 +2,7 @@ package com.example.senioron.domain.family.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
@@ -12,6 +13,7 @@ import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.family.dto.request.FamilyJoinRequest;
 import com.example.senioron.domain.family.dto.request.FamilyPrimaryManagerUpdateRequest;
 import com.example.senioron.domain.family.dto.request.PhotoGroupConnectRequest;
+import com.example.senioron.domain.family.dto.response.FamilyPhotoItemResponse;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
@@ -23,6 +25,7 @@ import com.example.senioron.domain.family.repository.FamilyPhotoViewRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
 import com.example.senioron.domain.family.repository.PhotoGroupRepository;
+import com.example.senioron.domain.family.support.FamilyPhotoResponseMapper;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
@@ -37,6 +40,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.StreamSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -84,7 +88,8 @@ class FamilyServiceTest {
                 photoGroupRepository,
                 photoGroupFamilyRepository,
                 deviceService,
-                seniorRepository
+                seniorRepository,
+                new FamilyPhotoResponseMapper(s3Service)
         );
     }
 
@@ -163,6 +168,116 @@ class FamilyServiceTest {
                 .satisfies(item ->
                         assertThat(item.isNewPhoto()).isFalse()
                 );
+    }
+
+    @Test
+    void getFamilyHomeReturnsThumbnailUrlWithOriginalFallback() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .build();
+        User parent = User.builder()
+                .usersId(1L)
+                .name("부모")
+                .role(Role.PARENT)
+                .build();
+        User uploader = User.builder()
+                .usersId(2L)
+                .name("자녀")
+                .role(Role.CHILD)
+                .build();
+        Senior senior = Senior.builder()
+                .seniorId(10L)
+                .family(family)
+                .build();
+        PhotoGroup defaultPhotoGroup = PhotoGroup.builder()
+                .id(100L)
+                .name("Family 1")
+                .build();
+        PhotoGroupFamily defaultGroupLink = PhotoGroupFamily.builder()
+                .family(family)
+                .photoGroup(defaultPhotoGroup)
+                .build();
+        FamilyPhoto withThumbnail = FamilyPhoto.builder()
+                .familyPhotoId(31L)
+                .photoGroup(defaultPhotoGroup)
+                .user(uploader)
+                .imageKey("photo-31.jpg")
+                .thumbnailKey("thumb-31.jpg")
+                .build();
+        FamilyPhoto withoutThumbnail = FamilyPhoto.builder()
+                .familyPhotoId(32L)
+                .photoGroup(defaultPhotoGroup)
+                .user(uploader)
+                .imageKey("photo-32.jpg")
+                .build();
+        FamilyPhoto blankThumbnail = FamilyPhoto.builder()
+                .familyPhotoId(33L)
+                .photoGroup(defaultPhotoGroup)
+                .user(uploader)
+                .imageKey("photo-33.jpg")
+                .thumbnailKey(" ")
+                .build();
+        List<FamilyPhoto> photos =
+                List.of(withThumbnail, withoutThumbnail, blankThumbnail);
+        photos.forEach(photo -> ReflectionTestUtils.setField(
+                photo,
+                "createdAt",
+                LocalDateTime.now()
+        ));
+
+        given(userRepository.findById(1L))
+                .willReturn(Optional.of(parent));
+        given(seniorRepository.findById(10L))
+                .willReturn(Optional.of(senior));
+        given(familyMemberRepository.existsByUserAndFamily(parent, family))
+                .willReturn(true);
+        given(photoGroupFamilyRepository.findFirstByFamilyOrderByIdAsc(family))
+                .willReturn(Optional.of(defaultGroupLink));
+        given(familyMemberRepository.findAllByFamilyOrderByIdAsc(family))
+                .willReturn(List.of());
+        given(familyPhotoRepository.findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
+                family,
+                PageRequest.of(0, 4)
+        )).willReturn(photos);
+        given(familyPhotoRepository.findRecentUploaders(
+                family,
+                PageRequest.of(0, 3)
+        )).willReturn(List.of(uploader));
+        given(familyPhotoViewRepository.findViewedFamilyPhotoIds(
+                1L,
+                List.of(31L, 32L, 33L)
+        )).willReturn(List.of(32L));
+        given(familyPhotoPermissionService.findDeletablePhotoIds(photos, parent))
+                .willReturn(Set.of(31L));
+        given(s3Service.getFileUrl("photo-31.jpg"))
+                .willReturn("https://cdn/photo-31.jpg");
+        given(s3Service.getFileUrl("thumb-31.jpg"))
+                .willReturn("https://cdn/thumb-31.jpg");
+        given(s3Service.getFileUrl("photo-32.jpg"))
+                .willReturn("https://cdn/photo-32.jpg");
+        given(s3Service.getFileUrl("photo-33.jpg"))
+                .willReturn("https://cdn/photo-33.jpg");
+
+        var response = familyService.getFamilyHome(parent, 10L);
+
+        assertThat(response.getRecentPhotos())
+                .extracting(
+                        FamilyPhotoItemResponse::getFamilyPhotoId,
+                        FamilyPhotoItemResponse::getImageUrl,
+                        FamilyPhotoItemResponse::getThumbnailUrl,
+                        FamilyPhotoItemResponse::isCanDelete,
+                        FamilyPhotoItemResponse::isNewPhoto
+                )
+                .containsExactly(
+                        tuple(31L, "https://cdn/photo-31.jpg",
+                                "https://cdn/thumb-31.jpg", true, true),
+                        tuple(32L, "https://cdn/photo-32.jpg",
+                                "https://cdn/photo-32.jpg", false, false),
+                        tuple(33L, "https://cdn/photo-33.jpg",
+                                "https://cdn/photo-33.jpg", false, true)
+                );
+        verify(familyPhotoPermissionService, never())
+                .canDelete(any(), any());
     }
 
     @Test
