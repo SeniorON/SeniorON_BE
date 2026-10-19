@@ -92,19 +92,7 @@ public class FamilyPhotoService {
             User principal,
             FamilyPhotoUploadUrlRequest request
     ) {
-        User user = userRepository
-                .findById(principal.getUsersId())
-                .orElseThrow(() ->
-                        new BusinessException(
-                                ErrorCode.USER_NOT_FOUND
-                        )
-                );
-
-        if (user.getRole() != Role.CHILD) {
-            throw new BusinessException(
-                    ErrorCode.FORBIDDEN
-            );
-        }
+        User user = findChildUser(principal);
 
         Family family = resolveAccessibleFamily(
                 user,
@@ -136,19 +124,7 @@ public class FamilyPhotoService {
             String idempotencyKey,
             FamilyPhotoUploadCompleteRequest request
     ) {
-        User user = userRepository
-                .findById(principal.getUsersId())
-                .orElseThrow(() ->
-                        new BusinessException(
-                                ErrorCode.USER_NOT_FOUND
-                        )
-                );
-
-        if (user.getRole() != Role.CHILD) {
-            throw new BusinessException(
-                    ErrorCode.FORBIDDEN
-            );
-        }
+        User user = findChildUser(principal);
 
         Family family = resolveAccessibleFamily(
                 user,
@@ -270,7 +246,7 @@ public class FamilyPhotoService {
         );
     }
 
-    private StoredObjectInfo validateUploadedObject(
+    private void validateUploadedObject(
             User user,
             Family family,
             String imageKey
@@ -312,8 +288,19 @@ public class FamilyPhotoService {
                     ErrorCode.UNSUPPORTED_IMAGE_TYPE
             );
         }
+    }
 
-        return objectInfo;
+    private User findChildUser(User principal) {
+        User user = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.USER_NOT_FOUND)
+                );
+
+        if (user.getRole() != Role.CHILD) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+
+        return user;
     }
 
     private void validateImageKeyOwnership(
@@ -354,14 +341,7 @@ public class FamilyPhotoService {
             String idempotencyKey,
             FamilyPhotoCreateRequest request
     ) {
-        User user = userRepository.findById(principal.getUsersId())
-                .orElseThrow(() ->
-                        new BusinessException(ErrorCode.USER_NOT_FOUND)
-                );
-
-        if (user.getRole() != Role.CHILD) {
-            throw new BusinessException(ErrorCode.FORBIDDEN);
-        }
+        User user = findChildUser(principal);
 
         Family family = resolveAccessibleFamily(
                 user,
@@ -415,11 +395,12 @@ public class FamilyPhotoService {
                 directory
         );
 
-        String thumbnailKey = createThumbnailOrNull(imageKey);
+        String thumbnailKey = null;
 
         FamilyPhoto savedPhoto;
 
         try {
+            thumbnailKey = createThumbnailOrNull(imageKey);
             savedPhoto = photoPersistenceService.create(
                     user.getUsersId(),
                     imageKey,
@@ -972,14 +953,15 @@ public class FamilyPhotoService {
     }
 
     private String createThumbnailOrNull(String imageKey) {
-        try {
-            byte[] originalBytes = s3Service.download(imageKey);
-            byte[] thumbnailBytes = thumbnailService.create(originalBytes);
+        byte[] originalBytes = s3Service.download(imageKey);
+        thumbnailService.validateOriginal(originalBytes);
 
+        try {
+            byte[] thumbnailBytes = thumbnailService.create(originalBytes);
             return s3Service.uploadThumbnail(thumbnailBytes);
         } catch (RuntimeException exception) {
             log.warn(
-                    "가족사진 썸네일 생성 실패, imageKey={}",
+                    "가족사진 썸네일 생성·저장 실패, imageKey={}",
                     imageKey,
                     exception
             );
