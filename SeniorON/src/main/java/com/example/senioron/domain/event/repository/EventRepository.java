@@ -1,6 +1,8 @@
 package com.example.senioron.domain.event.repository;
 
 import com.example.senioron.domain.event.entity.Event;
+import com.example.senioron.domain.event.entity.EventType;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -10,6 +12,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Repository
 public interface EventRepository extends JpaRepository<Event, Long> {
+    Optional<Event> findByTriggeredUser_UsersIdAndClientEventIdAndEventType(
+            Long userId, String clientEventId, EventType eventType);
+
     @Modifying
     @Transactional
     @Query("UPDATE Event e SET e.address = :address WHERE e.eventId = :eventId")

@@ -33,6 +33,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.dao.DataIntegrityViolationException;
+import java.util.Optional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -130,9 +133,32 @@ public class EventService {
 
     public OutingReturnResponse createOutingReturnEvent(User user, OutingReturnRequest req) {
         validateParent(user);
-        String address = geocodingClient.reverseGeocode(req.getLatitude(), req.getLongitude());
         EventService self = applicationContext.getBean(EventService.class);
-        return self.saveOutingReturnEvent(address, user, req);
+        if (req.getClientEventId() != null) {
+            Optional<OutingReturnResponse> existing = self.findOutingReturnReplay(user, req.getClientEventId());
+            if (existing.isPresent()) {
+                return existing.get();
+            }
+        }
+        String address = geocodingClient.reverseGeocode(req.getLatitude(), req.getLongitude());
+        try {
+            return self.saveOutingReturnEvent(address, user, req);
+        } catch (DataIntegrityViolationException failure) {
+            // 유일 제약 경쟁의 패자는 롤백된 저장 트랜잭션 밖에서 승자의 결과를 다시 읽는다.
+            if (req.getClientEventId() != null) {
+                Optional<OutingReturnResponse> existing = self.findOutingReturnReplay(user, req.getClientEventId());
+                if (existing.isPresent()) {
+                    return existing.get();
+                }
+            }
+            throw failure;
+        }
+    }
+
+    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
+    public Optional<OutingReturnResponse> findOutingReturnReplay(User user, String clientEventId) {
+        return eventRepository.findByTriggeredUser_UsersIdAndClientEventIdAndEventType(
+                user.getUsersId(), clientEventId, EventType.OUTING_RETURN).map(OutingReturnResponse::of);
     }
 
     @Transactional
@@ -143,6 +169,10 @@ public class EventService {
                 .senior(resolveSenior(user))
                 .eventType(EventType.OUTING_RETURN)
                 .phase(req.getPhase())
+                .detectionType(req.getDetectionType())
+                .clientEventId(req.getClientEventId())
+                .detectedAt(req.getDetectedAt() == null ? null
+                        : req.getDetectedAt().atZoneSameInstant(java.time.ZoneId.of("Asia/Seoul")).toLocalDateTime())
                 .latitude(req.getLatitude())
                 .longitude(req.getLongitude())
                 .deviceBattery(req.getDeviceBattery())
@@ -150,7 +180,12 @@ public class EventService {
                 .build();
 
         Event savedEvent = eventRepository.save(event);
+        if (req.getClientEventId() != null) {
+            // 알림 생성 이전에 유일 제약을 확인하여 경쟁에서 진 요청의 부수 효과를 차단한다.
+            eventRepository.flush();
+        }
         NotificationPreparationResult result = notificationService.createFormEvent(savedEvent);
+        savedEvent.recordPreparationResult(result);
 
         return OutingReturnResponse.of(savedEvent, result);
     }
