@@ -46,7 +46,7 @@ public class SosEventResponse {
                 .build();
     }
 
-    public static SosEventResponse replay(Event event) {
+    public static SosEventResponse replay(Event event, String responseAddress) {
         return SosEventResponse.builder()
                 .seniorId(event.getSenior() == null ? null : event.getSenior().getSeniorId())
                 .notificationStatus(event.getPreparationStatus())
@@ -55,7 +55,7 @@ public class SosEventResponse {
                 .id(event.getEventId())
                 .latitude(event.getLatitude())
                 .longitude(event.getLongitude())
-                .address(event.getAddress())
+                .address(responseAddress)
                 .deviceBattery(event.getDeviceBattery())
                 .build();
     }

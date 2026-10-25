@@ -83,7 +83,8 @@ public class EventService {
     @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
     public Optional<SosEventResponse> findSosReplay(User user, String clientEventId) {
         return eventRepository.findByTriggeredUser_UsersIdAndClientEventIdAndEventType(
-                user.getUsersId(), clientEventId, EventType.SOS).map(SosEventResponse::replay);
+                user.getUsersId(), clientEventId, EventType.SOS)
+                .map(event -> SosEventResponse.replay(event, SosAddressLookupService.PENDING_ADDRESS));
     }
 
     @Transactional
