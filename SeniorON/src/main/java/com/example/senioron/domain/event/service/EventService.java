@@ -62,11 +62,29 @@ public class EventService {
      * 푸시 실패는 API 실패로 바꾸지 않고 로그와 메트릭으로 관찰한다.
      */
     public SosEventResponse createSosEvent(User user, SosEventRequest req){
+        validateParent(user);
         EventService self = applicationContext.getBean(EventService.class);
+        if (req.getClientEventId() != null) {
+            Optional<SosEventResponse> replay = self.findSosReplay(user, req.getClientEventId());
+            if (replay.isPresent()) return replay.get();
+        }
+        try {
+            SosEventCreation creation = self.saveSosEvent(user, req);
+            return SosEventResponse.of(creation.event(), creation.notificationResult());
+        } catch (DataIntegrityViolationException failure) {
+            if (req.getClientEventId() != null) {
+                Optional<SosEventResponse> replay = self.findSosReplay(user, req.getClientEventId());
+                if (replay.isPresent()) return replay.get();
+            }
+            throw failure;
+        }
+    }
 
-        SosEventCreation creation = self.saveSosEvent(user, req);
-
-        return SosEventResponse.of(creation.event(), creation.notificationResult());
+    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
+    public Optional<SosEventResponse> findSosReplay(User user, String clientEventId) {
+        return eventRepository.findByTriggeredUser_UsersIdAndClientEventIdAndEventType(
+                user.getUsersId(), clientEventId, EventType.SOS)
+                .map(event -> SosEventResponse.replay(event, SosAddressLookupService.PENDING_ADDRESS));
     }
 
     @Transactional
@@ -80,11 +98,14 @@ public class EventService {
                 .latitude(req.getLatitude())
                 .longitude(req.getLongitude())
                 .address(SosAddressLookupService.PENDING_ADDRESS)
+                .clientEventId(req.getClientEventId())
                 .build();
 
         Event savedEvent = eventRepository.save(event);
+        if (req.getClientEventId() != null) eventRepository.flush();
         NotificationPreparationResult notificationResult =
                 notificationService.prepareSosNotificationResult(savedEvent);
+        savedEvent.recordPreparationResult(notificationResult);
 
         // REQUIRED 전파로 외부 트랜잭션에 참여한 경우에도 실제 커밋 이후에만 발송한다.
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
@@ -104,11 +125,29 @@ public class EventService {
 
     public InactivityResponse createInactivityEvent(User user, InactivityRequest req){
         validateParent(user);
+        EventService self = applicationContext.getBean(EventService.class);
+        if (req.getClientEventId() != null) {
+            Optional<InactivityResponse> replay = self.findInactivityReplay(user, req.getClientEventId());
+            if (replay.isPresent()) return replay.get();
+        }
         String address = req.getLatitude() != null && req.getLongitude() != null
                 ? geocodingClient.reverseGeocode(req.getLatitude(), req.getLongitude())
                 : null;
-        EventService self = applicationContext.getBean(EventService.class);
-        return self.saveInactivityEvent(address, user, req);
+        try {
+            return self.saveInactivityEvent(address, user, req);
+        } catch (DataIntegrityViolationException failure) {
+            if (req.getClientEventId() != null) {
+                Optional<InactivityResponse> replay = self.findInactivityReplay(user, req.getClientEventId());
+                if (replay.isPresent()) return replay.get();
+            }
+            throw failure;
+        }
+    }
+
+    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
+    public Optional<InactivityResponse> findInactivityReplay(User user, String clientEventId) {
+        return eventRepository.findByTriggeredUser_UsersIdAndClientEventIdAndEventType(
+                user.getUsersId(), clientEventId, EventType.INACTIVITY).map(InactivityResponse::replay);
     }
 
     @Transactional
@@ -123,10 +162,13 @@ public class EventService {
                 .longitude(req.getLongitude())
                 .address(address)
                 .lastSeenAt(req.getLastSeenAt())
+                .clientEventId(req.getClientEventId())
                 .build();
 
         Event savedEvent = eventRepository.save(event);
+        if (req.getClientEventId() != null) eventRepository.flush();
         NotificationPreparationResult result = notificationService.createFormEvent(savedEvent);
+        savedEvent.recordPreparationResult(result);
 
         return InactivityResponse.of(savedEvent, result);
     }
