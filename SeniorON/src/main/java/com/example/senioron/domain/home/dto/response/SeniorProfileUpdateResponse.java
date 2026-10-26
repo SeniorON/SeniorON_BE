@@ -2,6 +2,7 @@ package com.example.senioron.domain.home.dto.response;
 
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
+import com.example.senioron.domain.family.entity.FamilyMember;
 
 import java.time.LocalDate;
 
@@ -19,13 +20,14 @@ public record SeniorProfileUpdateResponse(
 ) {
 
     public static SeniorProfileUpdateResponse from(
-            Senior senior
+            Senior senior,
+            FamilyMember familyMember
     ) {
         return new SeniorProfileUpdateResponse(
                 senior.getSeniorId(),
                 senior.getName(),
-                senior.getRelation(),
-                senior.getCustomRelation(),
+                familyMember.getRelation(),
+                familyMember.getCustomRelation(),
                 senior.getBirth(),
                 senior.getPhoneNumber(),
                 senior.getAddress(),
