@@ -70,7 +70,7 @@ public class HomeService {
     private final FamilyRepository familyRepository;
     private final FamilyMemberRepository familyMemberRepository;
     private final RefreshTokenRepository refreshTokenRepository;
-    private static final long DEVICE_OFFLINE_THRESHOLD_MINUTES = 11;
+    private static final long DEVICE_OFFLINE_THRESHOLD_MINUTES = 18;
     private final HomeWebSocketService homeWebSocketService;
 
     private Home createHomeButton(
@@ -273,28 +273,6 @@ public class HomeService {
         );
     }
 
-    private boolean isDeviceDisconnected(
-            Optional<User> seniorUser
-    ) {
-        if (seniorUser.isEmpty()) {
-            return true;
-        }
-
-        return deviceRepository
-                .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
-                        seniorUser.get()
-                )
-                .map(this::isDeviceDisconnected)
-                .orElse(true);
-    }
-
-    private boolean isDeviceDisconnected(
-            Device device
-    ) {
-        return device.getConnectionStatus() == DeviceStatus.DISCONNECTED
-                || !isDeviceConnected(device.getLastConnectedAt());
-    }
-
 
     public HomeService(
             HomeRepository homeRepository,
@@ -358,7 +336,9 @@ public class HomeService {
 
         boolean deviceDisconnected =
                 latestDevice
-                        .map(this::isDeviceDisconnected)
+                        .map(device ->
+                                device.getConnectionStatus() == DeviceStatus.DISCONNECTED
+                        )
                         .orElse(true);
 
         log.debug(
@@ -668,7 +648,9 @@ public class HomeService {
                         .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
                                 parent
                         )
-                        .map(this::isDeviceDisconnected)
+                        .map(device ->
+                                device.getConnectionStatus() == DeviceStatus.DISCONNECTED
+                        )
                         .orElse(true);
 
         List<Home> homes =
@@ -1317,15 +1299,17 @@ public class HomeService {
             User seniorUser
     ) {
 
-        boolean disconnected =
-                deviceRepository
-                        .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
-                                seniorUser
+        Device device = deviceRepository
+                .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
+                        seniorUser
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.DEVICE_NOT_CONNECTED
                         )
-                        .map(this::isDeviceDisconnected)
-                        .orElse(true);
+                );
 
-        if (disconnected) {
+        if (device.getConnectionStatus() == DeviceStatus.DISCONNECTED) {
             throw new BusinessException(
                     ErrorCode.DEVICE_NOT_CONNECTED
             );
