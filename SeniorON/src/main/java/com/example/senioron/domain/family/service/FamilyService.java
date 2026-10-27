@@ -741,12 +741,13 @@ public class FamilyService {
         }
 
         return connectedLinks.stream()
-                .map(this::toConnectedSeniorResponse)
+                .map(link -> toConnectedSeniorResponse(link, currentUser))
                 .toList();
     }
 
     private ConnectedSeniorResponse toConnectedSeniorResponse(
-            PhotoGroupFamily connectedLink
+            PhotoGroupFamily connectedLink,
+            User currentUser
     ) {
         Senior connectedSenior = Optional
                 .ofNullable(connectedLink.getFamily().getSenior())
@@ -754,9 +755,14 @@ public class FamilyService {
                         new BusinessException(ErrorCode.SENIOR_NOT_FOUND)
                 );
 
+        FamilyMember connectedMember = familyMemberRepository
+                .findByUserAndFamily(currentUser, connectedLink.getFamily())
+                .orElse(null);
+
         return ConnectedSeniorResponse.from(
                 connectedLink.getPhotoGroup(),
-                connectedSenior
+                connectedSenior,
+                connectedMember
         );
     }
 
