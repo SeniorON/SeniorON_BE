@@ -240,6 +240,14 @@ class SeniorServiceTest {
 
         given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
         given(familyMemberRepository.existsByUserAndFamily(user, family)).willReturn(true);
+        given(familyMemberRepository.findByUserAndFamily(user, family))
+                .willReturn(Optional.of(
+                        FamilyMember.builder()
+                                .user(user)
+                                .family(family)
+                                .managerType(ManagerType.PRIMARY)
+                                .build()
+                ));
         given(seniorRepository.saveAndFlush(any(Senior.class))).willReturn(savedSenior);
 
         var response = seniorService.createSenior(
@@ -260,6 +268,14 @@ class SeniorServiceTest {
 
         given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
         given(familyMemberRepository.existsByUserAndFamily(child, family)).willReturn(true);
+        given(familyMemberRepository.findByUserAndFamily(child, family))
+                .willReturn(Optional.of(
+                        FamilyMember.builder()
+                                .user(child)
+                                .family(family)
+                                .managerType(ManagerType.PRIMARY)
+                                .build()
+                ));
         given(familyMemberRepository.findByFamilyAndUserIdNotAndUserRole(
                 family,
                 1L,
@@ -309,6 +325,14 @@ class SeniorServiceTest {
 
         given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
         given(familyMemberRepository.existsByUserAndFamily(user, family)).willReturn(true);
+        given(familyMemberRepository.findByUserAndFamily(user, family))
+                .willReturn(Optional.of(
+                        FamilyMember.builder()
+                                .user(user)
+                                .family(family)
+                                .managerType(ManagerType.PRIMARY)
+                                .build()
+                ));
         given(seniorRepository.saveAndFlush(any(Senior.class)))
                 .willThrow(new DataIntegrityViolationException("duplicate family senior"));
 

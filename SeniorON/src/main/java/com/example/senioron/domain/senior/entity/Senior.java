@@ -93,4 +93,22 @@ public class Senior {
         this.customRelation = customRelation;
     }
 
+    // 시니어 공통 프로필 정보만 수정
+    public void updateCommonProfile(
+            String name,
+            LocalDate birth,
+            String phoneNumber,
+            String address,
+            String detailAddress,
+            Double latitude,
+            Double longitude
+    ) {
+        this.name = name;
+        this.birth = birth;
+        this.phoneNumber = phoneNumber;
+        this.address = address;
+        this.detailAddress = detailAddress;
+        this.latitude = latitude;
+        this.longitude = longitude;
+    }
 }

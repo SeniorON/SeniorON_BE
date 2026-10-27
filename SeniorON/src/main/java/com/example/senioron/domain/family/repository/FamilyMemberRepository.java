@@ -91,8 +91,8 @@ public interface FamilyMemberRepository extends JpaRepository<FamilyMember, Long
                 f.familyId,
                 s.seniorId,
                 s.name,
-                s.relation,
-                s.customRelation,
+                fm.relation,
+                fm.customRelation,
                 CASE WHEN s IS NULL THEN false ELSE true END
             )
             FROM FamilyMember fm
