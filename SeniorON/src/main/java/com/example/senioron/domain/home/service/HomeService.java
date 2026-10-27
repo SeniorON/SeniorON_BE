@@ -389,12 +389,16 @@ public class HomeService {
                         )
                         .toList();
 
+        // 현재 로그인한 담당자의 관계 정보 조회
+        FamilyMember currentMember =
+                getFamilyMember(currentUser, seniorProfile);
+
         HomeResponse.SeniorProfileResponse seniorProfileResponse =
                 createSeniorProfileResponse(
                         seniorProfile,
-                        seniorProfile.getRelation() == null
+                        currentMember.getRelation() == null
                                 ? null
-                                : seniorProfile.getRelation().name()
+                                : currentMember.getRelation().name()
                 );
 
         FontSize fontSize =
@@ -459,10 +463,13 @@ public class HomeService {
                         seniorId
                 );
 
-        senior.updateProfile(
+        // 로그인한 담당자의 가족 구성원 정보 조회
+        FamilyMember currentMember =
+                getFamilyMember(currentUser, senior);
+
+        // 시니어 공통 프로필 정보 수정
+        senior.updateCommonProfile(
                 request.name(),
-                request.relation(),
-                resolvedCustomRelation,
                 request.birth(),
                 normalizedPhoneNumber,
                 request.address(),
@@ -471,7 +478,14 @@ public class HomeService {
                 request.longitude()
         );
 
-        return SeniorProfileUpdateResponse.from(senior);
+        // 로그인한 담당자의 관계 정보만 수정
+        currentMember.updateRelation(
+                request.relation(),
+                resolvedCustomRelation
+        );
+
+        // 담당자별 관계가 반영된 응답 반환
+        return SeniorProfileUpdateResponse.from(senior, currentMember);
     }
 
     /**

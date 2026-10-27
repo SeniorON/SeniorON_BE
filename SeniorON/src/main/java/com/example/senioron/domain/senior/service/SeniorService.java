@@ -101,6 +101,10 @@ public class SeniorService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND));
         validateFamilyMember(user, lockedFamily);
 
+        FamilyMember registeringMember = familyMemberRepository
+                .findByUserAndFamily(user, lockedFamily)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FORBIDDEN));
+
         Senior senior = Senior.builder()
                 .name(request.name())
                 .relation(request.relation())
@@ -118,6 +122,12 @@ public class SeniorService {
         linkExistingParentUser(senior, lockedFamily, user);
 
         Senior savedSenior = saveSeniorOrThrowAlreadyExists(senior);
+
+        registeringMember.updateRelation(
+                request.relation(),
+                resolveCustomRelation(request)
+        );
+
         return SeniorCreateResponse.from(savedSenior);
     }
 
