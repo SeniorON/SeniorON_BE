@@ -792,7 +792,6 @@ class FamilyServiceTest {
         Senior targetSenior = Senior.builder()
                 .seniorId(20L)
                 .name("연결 시니어")
-                .relation(SeniorRelation.FATHER)
                 .family(targetFamily)
                 .build();
         ReflectionTestUtils.setField(targetFamily, "senior", targetSenior);
@@ -833,7 +832,8 @@ class FamilyServiceTest {
         assertThat(result.get(0).photoGroupId()).isEqualTo(100L);
         assertThat(result.get(0).seniorId()).isEqualTo(20L);
         assertThat(result.get(0).name()).isEqualTo("연결 시니어");
-        assertThat(result.get(0).relation()).isEqualTo(SeniorRelation.FATHER);
+        assertThat(result.get(0).relation()).isNull();
+        assertThat(result.get(0).customRelation()).isNull();
         assertThat(result.get(0).connectedAt()).isEqualTo(connectedAt);
         verify(photoGroupFamilyRepository, never())
                 .findManagedConnectedFamilyLinks(currentFamily, currentUser);

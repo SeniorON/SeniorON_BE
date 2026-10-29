@@ -40,7 +40,7 @@ class FamilyMemberRepositoryTest {
     void findsFamilyAndSeniorWhenUserBelongsToFamilyWithSenior() {
         User user = saveUser("managed-one-senior");
         Family family = saveFamily("MANAGED1");
-        saveFamilyMember(user, family);
+        saveFamilyMemberWithRelation(user, family);
         Senior senior = saveSenior(family, user);
 
         var result = familyMemberRepository.findManagedSeniorResponsesByUserId(
@@ -100,7 +100,7 @@ class FamilyMemberRepositoryTest {
         User user = saveUser("managed-mixed");
         Family firstFamily = saveFamily("MANAGED3");
         Family secondFamily = saveFamily("MANAGED4");
-        saveFamilyMember(user, firstFamily);
+        saveFamilyMemberWithRelation(user, firstFamily);
         saveFamilyMember(user, secondFamily);
         Senior senior = saveSenior(firstFamily, user);
 
@@ -135,8 +135,8 @@ class FamilyMemberRepositoryTest {
         User user = saveUser("managed-all-seniors");
         Family firstFamily = saveFamily("MANAGED5");
         Family secondFamily = saveFamily("MANAGED6");
-        saveFamilyMember(user, firstFamily);
-        saveFamilyMember(user, secondFamily);
+        saveFamilyMemberWithRelation(user, firstFamily);
+        saveFamilyMemberWithRelation(user, secondFamily);
         Senior firstSenior = saveSenior(firstFamily, user);
         Senior secondSenior = saveSenior(secondFamily, user);
 
@@ -249,6 +249,17 @@ class FamilyMemberRepositoryTest {
 
     private void saveFamilyMember(User user, Family family) {
         saveFamilyMember(user, family, ManagerType.NONE);
+    }
+
+    private void saveFamilyMemberWithRelation(User user, Family family) {
+        familyMemberRepository.saveAndFlush(
+                FamilyMember.builder()
+                        .user(user)
+                        .family(family)
+                        .managerType(ManagerType.NONE)
+                        .relation(SeniorRelation.MOTHER)
+                        .build()
+        );
     }
 
     private void saveFamilyMember(User user, Family family, ManagerType managerType) {
