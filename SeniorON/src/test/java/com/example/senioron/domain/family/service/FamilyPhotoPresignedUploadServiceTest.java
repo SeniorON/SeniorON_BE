@@ -11,6 +11,7 @@ import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.entity.PhotoGroup;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
+import com.example.senioron.domain.family.repository.FamilyPhotoSeniorRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoViewRepository;
 import com.example.senioron.domain.family.support.FamilyPhotoResponseMapper;
 import com.example.senioron.domain.senior.entity.Senior;
@@ -89,6 +90,9 @@ class FamilyPhotoPresignedUploadServiceTest {
     private final SeniorRepository seniorRepository =
             mock(SeniorRepository.class);
 
+    private final FamilyPhotoSeniorRepository familyPhotoSeniorRepository =
+            mock(FamilyPhotoSeniorRepository.class);
+
     private FamilyPhotoService familyPhotoService;
     private final FamilyPhotoPushTargetService familyPhotoPushTargetService =
             mock(FamilyPhotoPushTargetService.class);
@@ -110,7 +114,8 @@ class FamilyPhotoPresignedUploadServiceTest {
                 seniorRepository,
                 familyPhotoPushTargetService,
                 eventPublisher,
-                new FamilyPhotoResponseMapper(s3Service)
+                new FamilyPhotoResponseMapper(s3Service),
+                familyPhotoSeniorRepository
         );
     }
 

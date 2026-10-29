@@ -5,10 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
-import com.example.senioron.domain.family.entity.FamilyPhotoGroup;
 import com.example.senioron.domain.family.entity.FamilyPhotoSenior;
 import com.example.senioron.domain.family.entity.PhotoGroup;
-import com.example.senioron.domain.family.entity.PhotoGroupFamily;
 import com.example.senioron.domain.family.service.FamilyPhotoPermissionService;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
@@ -31,9 +29,6 @@ class FamilyPhotoRepositoryTest {
     private FamilyPhotoRepository familyPhotoRepository;
 
     @Autowired
-    private FamilyPhotoGroupRepository familyPhotoGroupRepository;
-
-    @Autowired
     private FamilyPhotoViewRepository familyPhotoViewRepository;
 
     @Autowired
@@ -44,9 +39,6 @@ class FamilyPhotoRepositoryTest {
 
     @Autowired
     private PhotoGroupRepository photoGroupRepository;
-
-    @Autowired
-    private PhotoGroupFamilyRepository photoGroupFamilyRepository;
 
     @Autowired
     private FamilyPhotoSeniorRepository familyPhotoSeniorRepository;
@@ -195,45 +187,29 @@ class FamilyPhotoRepositoryTest {
     }
 
     @Test
-    void allowsPrimaryManagerToDeleteOnlyAfterUploaderLosesGroupAccess() {
-        Family currentFamily = saveFamily("CURRENT-004");
-        Family uploaderFamily = saveFamily("UPLOADER-001");
-        User primaryManager = saveUser("primary-manager");
-        User uploader = saveUser("orphan-photo-uploader");
-        saveFamilyMember(
-                primaryManager,
-                currentFamily,
-                ManagerType.PRIMARY
-        );
-        saveFamilyMember(uploader, uploaderFamily);
+    void allowsUploaderAndPrimaryManagerOfSharedSeniorToDelete() {
+        User uploader = saveUser("photo-uploader");
+        User motherPrimary = saveUser("mother-primary");
+        User motherSub = saveUser("mother-sub");
+        User auntPrimary = saveUser("aunt-primary");
+        Senior mother = saveSenior("MOTHER-006", uploader);
+        Senior aunt = saveSenior("AUNT-006", uploader);
+        saveFamilyMember(motherPrimary, mother.getFamily(), ManagerType.PRIMARY);
+        saveFamilyMember(motherSub, mother.getFamily(), ManagerType.SUB);
+        saveFamilyMember(auntPrimary, aunt.getFamily(), ManagerType.PRIMARY);
 
-        PhotoGroup sharedGroup = savePhotoGroup("delete-shared-group");
-        savePhotoGroupFamily(currentFamily, sharedGroup);
-        savePhotoGroupFamily(uploaderFamily, sharedGroup);
-        FamilyPhoto photo = saveGroupPhoto(
-                sharedGroup,
-                uploader,
-                "delete-shared-photo.jpg"
-        );
-        saveFamilyPhotoGroup(photo, sharedGroup);
+        FamilyPhoto photo = savePhoto(uploader, "delete-shared-photo.jpg", mother);
 
         FamilyPhotoPermissionService permissionService =
                 new FamilyPhotoPermissionService(
-                        familyPhotoGroupRepository
+                        familyPhotoSeniorRepository
                 );
 
         assertThat(permissionService.canDelete(photo, uploader)).isTrue();
-        assertThat(permissionService.canDelete(photo, primaryManager))
-                .isFalse();
-
-        familyMemberRepository.deleteByUserAndFamily(
-                uploader,
-                uploaderFamily
-        );
-        familyMemberRepository.flush();
-
-        assertThat(permissionService.canDelete(photo, primaryManager))
-                .isTrue();
+        assertThat(permissionService.canDelete(photo, motherPrimary)).isTrue();
+        assertThat(permissionService.canDelete(photo, motherSub)).isFalse();
+        // 공유 대상이 아닌 시니어의 주 담당자는 삭제할 수 없다.
+        assertThat(permissionService.canDelete(photo, auntPrimary)).isFalse();
     }
 
     @Test
@@ -345,18 +321,6 @@ class FamilyPhotoRepositoryTest {
         );
     }
 
-    private void savePhotoGroupFamily(
-            Family family,
-            PhotoGroup photoGroup
-    ) {
-        photoGroupFamilyRepository.saveAndFlush(
-                PhotoGroupFamily.builder()
-                        .family(family)
-                        .photoGroup(photoGroup)
-                        .build()
-        );
-    }
-
     private Senior saveSenior(String seniorCode, User registeredBy) {
         Family family = saveFamily(seniorCode);
         return seniorRepository.saveAndFlush(
@@ -395,18 +359,6 @@ class FamilyPhotoRepositoryTest {
                         .photoGroup(photoGroup)
                         .user(uploader)
                         .imageKey(imageKey)
-                        .build()
-        );
-    }
-
-    private void saveFamilyPhotoGroup(
-            FamilyPhoto familyPhoto,
-            PhotoGroup photoGroup
-    ) {
-        familyPhotoGroupRepository.saveAndFlush(
-                FamilyPhotoGroup.builder()
-                        .familyPhoto(familyPhoto)
-                        .photoGroup(photoGroup)
                         .build()
         );
     }

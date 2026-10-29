@@ -1,7 +1,7 @@
 package com.example.senioron.domain.family.service;
 
 import com.example.senioron.domain.family.entity.FamilyPhoto;
-import com.example.senioron.domain.family.repository.FamilyPhotoGroupRepository;
+import com.example.senioron.domain.family.repository.FamilyPhotoSeniorRepository;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.User;
 import lombok.RequiredArgsConstructor;
@@ -17,38 +17,15 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class FamilyPhotoPermissionService {
 
-    private final FamilyPhotoGroupRepository familyPhotoGroupRepository;
+    private final FamilyPhotoSeniorRepository familyPhotoSeniorRepository;
 
+    // 올린 사람 또는 공유 대상 시니어의 주 담당자만 삭제할 수 있다.
     public boolean canDelete(
             FamilyPhoto photo,
             User currentUser
     ) {
-        boolean isUploader = Objects.equals(
-                photo.getUser().getUsersId(),
-                currentUser.getUsersId()
-        );
-
-        if (isUploader) {
-            return true;
-        }
-
-        boolean uploaderStillHasAccess =
-                familyPhotoGroupRepository
-                        .existsAccessibleByFamilyPhotoAndUser(
-                                photo,
-                                photo.getUser()
-                        );
-
-        if (uploaderStillHasAccess) {
-            return false;
-        }
-
-        return familyPhotoGroupRepository
-                .existsAccessibleByFamilyPhotoAndUserAndManagerType(
-                        photo,
-                        currentUser,
-                        ManagerType.PRIMARY
-                );
+        return findDeletablePhotoIds(List.of(photo), currentUser)
+                .contains(photo.getFamilyPhotoId());
     }
 
     public Set<Long> findDeletablePhotoIds(
@@ -75,27 +52,10 @@ public class FamilyPhotoPermissionService {
             return deletablePhotoIds;
         }
 
-        Set<Long> uploaderAccessiblePhotoIds =
-                familyPhotoGroupRepository
-                        .findPhotoIdsAccessibleByUploader(
-                                otherUploaderPhotoIds
-                        );
-
-        List<Long> uploaderLostAccessPhotoIds =
-                otherUploaderPhotoIds.stream()
-                        .filter(photoId ->
-                                !uploaderAccessiblePhotoIds.contains(photoId)
-                        )
-                        .toList();
-
-        if (uploaderLostAccessPhotoIds.isEmpty()) {
-            return deletablePhotoIds;
-        }
-
         deletablePhotoIds.addAll(
-                familyPhotoGroupRepository
-                        .findPhotoIdsAccessibleByUserAndManagerType(
-                                uploaderLostAccessPhotoIds,
+                familyPhotoSeniorRepository
+                        .findPhotoIdsSharedToSeniorsManagedBy(
+                                otherUploaderPhotoIds,
                                 currentUser,
                                 ManagerType.PRIMARY
                         )
