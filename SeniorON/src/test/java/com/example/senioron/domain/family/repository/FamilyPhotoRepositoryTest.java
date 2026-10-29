@@ -6,16 +6,19 @@ import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.entity.FamilyPhotoGroup;
+import com.example.senioron.domain.family.entity.FamilyPhotoSenior;
 import com.example.senioron.domain.family.entity.PhotoGroup;
 import com.example.senioron.domain.family.entity.PhotoGroupFamily;
 import com.example.senioron.domain.family.service.FamilyPhotoPermissionService;
+import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.senior.entity.SeniorRelation;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -46,225 +49,127 @@ class FamilyPhotoRepositoryTest {
     private PhotoGroupFamilyRepository photoGroupFamilyRepository;
 
     @Autowired
+    private FamilyPhotoSeniorRepository familyPhotoSeniorRepository;
+
+    @Autowired
+    private SeniorRepository seniorRepository;
+
+    @Autowired
     private UserRepository userRepository;
 
     @Test
-    void findsPhotoThroughNonRepresentativeMappedGroup() {
-        Family currentFamily = saveFamily("FIRST-001");
-        Family connectedFamily = saveFamily("CONNECTED-001");
+    void findsPhotoSharedToSeniorOfUserFamily() {
         User currentUser = saveUser("current-user");
         User uploader = saveUser("uploader");
+        Senior mother = saveSenior("MOTHER-001", uploader);
+        Senior father = saveSenior("FATHER-001", uploader);
+        saveFamilyMember(currentUser, mother.getFamily());
 
-        saveFamilyMember(currentUser, currentFamily);
-        saveFamilyMember(uploader, connectedFamily);
-
-        PhotoGroup representativeGroup =
-                savePhotoGroup("representative-group");
-        PhotoGroup sharedGroup = savePhotoGroup("shared-group");
-        savePhotoGroupFamily(connectedFamily, representativeGroup);
-        savePhotoGroupFamily(currentFamily, sharedGroup);
-        savePhotoGroupFamily(connectedFamily, sharedGroup);
-
-        FamilyPhoto photo = savePhoto(
-                representativeGroup,
-                uploader,
-                "connected-photo.jpg"
-        );
-        saveFamilyPhotoGroup(photo, representativeGroup);
-        saveFamilyPhotoGroup(photo, sharedGroup);
-
-        Optional<FamilyPhoto> result =
-                familyPhotoRepository.findAccessibleByFamilyPhotoIdAndUser(
-                        photo.getFamilyPhotoId(),
-                        currentUser
-                );
-
-        assertThat(result).contains(photo);
-    }
-
-    @Test
-    void keepsPreviouslySharedPhotoAccessibleAfterGroupIsDisconnected() {
-        Family currentFamily = saveFamily("CURRENT-OLD");
-        Family connectedFamily = saveFamily("CONNECTED-OLD");
-        User currentUser = saveUser("current-old-user");
-        User uploader = saveUser("old-photo-uploader");
-        saveFamilyMember(currentUser, currentFamily);
-        saveFamilyMember(uploader, connectedFamily);
-
-        PhotoGroup sharedGroup = savePhotoGroup("disconnected-shared-group");
-        savePhotoGroupFamily(currentFamily, sharedGroup);
-        savePhotoGroupFamily(connectedFamily, sharedGroup);
-        FamilyPhoto photo = savePhoto(
-                sharedGroup,
-                uploader,
-                "previously-shared-photo.jpg"
-        );
-        saveFamilyPhotoGroup(photo, sharedGroup);
-
-        sharedGroup.disconnect();
-        photoGroupRepository.saveAndFlush(sharedGroup);
+        FamilyPhoto photo = savePhoto(uploader, "shared-photo.jpg", mother, father);
 
         assertThat(familyPhotoRepository.findAccessibleByFamilyPhotoIdAndUser(
                 photo.getFamilyPhotoId(),
                 currentUser
         )).contains(photo);
-        assertThat(familyPhotoRepository.findAllAccessibleByFamily(
-                currentFamily,
-                PageRequest.of(0, 10)
-        )).containsExactly(photo);
+        assertThat(familyPhotoRepository.findAccessibleByFamilyPhotoIdAndFamily(
+                photo.getFamilyPhotoId(),
+                mother.getFamily()
+        )).contains(photo);
     }
 
     @Test
-    void doesNotFindPhotoWhenNoUserFamilyIsConnectedToPhotoGroup() {
-        Family userFamily = saveFamily("USER-001");
-        Family otherFamily = saveFamily("OTHER-001");
+    void doesNotFindPhotoSharedOnlyToAnotherSenior() {
         User currentUser = saveUser("current-user");
         User uploader = saveUser("uploader");
+        Senior mother = saveSenior("MOTHER-002", uploader);
+        Senior father = saveSenior("FATHER-002", uploader);
+        saveFamilyMember(currentUser, mother.getFamily());
+        saveFamilyMember(uploader, mother.getFamily());
 
-        saveFamilyMember(currentUser, userFamily);
-        saveFamilyMember(uploader, otherFamily);
+        // 같은 담당자가 올렸어도 공유하지 않은 시니어에게는 보이지 않는다.
+        FamilyPhoto photo = savePhoto(uploader, "father-only-photo.jpg", father);
 
-        PhotoGroup photoGroup = savePhotoGroup("other-group");
-        savePhotoGroupFamily(otherFamily, photoGroup);
-        FamilyPhoto photo = savePhoto(photoGroup, uploader, "other-photo.jpg");
-        saveFamilyPhotoGroup(photo, photoGroup);
-
-        Optional<FamilyPhoto> result =
-                familyPhotoRepository.findAccessibleByFamilyPhotoIdAndUser(
-                        photo.getFamilyPhotoId(),
-                        currentUser
-                );
-
-        assertThat(result).isEmpty();
+        assertThat(familyPhotoRepository.findAccessibleByFamilyPhotoIdAndUser(
+                photo.getFamilyPhotoId(),
+                currentUser
+        )).isEmpty();
+        assertThat(familyPhotoRepository.findAccessibleByFamilyPhotoIdAndFamily(
+                photo.getFamilyPhotoId(),
+                mother.getFamily()
+        )).isEmpty();
+        assertThat(familyPhotoRepository.findAllAccessibleByFamily(
+                mother.getFamily(),
+                PageRequest.of(0, 10)
+        )).isEmpty();
+        assertThat(familyPhotoRepository.countAccessibleByFamily(mother.getFamily()))
+                .isZero();
     }
 
     @Test
-    void findsSharedPhotosWithoutDuplicatesAcrossPhotoGroups() {
-        Family currentFamily = saveFamily("CURRENT-001");
-        Family connectedFamily = saveFamily("CONNECTED-002");
-        User uploader = saveUser("connected-uploader");
-        saveFamilyMember(uploader, connectedFamily);
+    void findsPhotosSharedToSelectedSeniorWithoutDuplicates() {
+        User firstUploader = saveUser("first-uploader");
+        User secondUploader = saveUser("second-uploader");
+        Senior mother = saveSenior("MOTHER-003", firstUploader);
+        Senior father = saveSenior("FATHER-003", firstUploader);
 
-        PhotoGroup firstSharedGroup = savePhotoGroup("first-shared-group");
-        PhotoGroup secondSharedGroup = savePhotoGroup("second-shared-group");
-        PhotoGroup inaccessibleGroup = savePhotoGroup("inaccessible-group");
+        FamilyPhoto older = savePhoto(firstUploader, "older-photo.jpg", mother, father);
+        FamilyPhoto newer = savePhoto(secondUploader, "newer-photo.jpg", mother);
+        savePhoto(secondUploader, "father-only-photo.jpg", father);
 
-        savePhotoGroupFamily(currentFamily, firstSharedGroup);
-        savePhotoGroupFamily(connectedFamily, firstSharedGroup);
-        savePhotoGroupFamily(currentFamily, secondSharedGroup);
-        savePhotoGroupFamily(connectedFamily, secondSharedGroup);
-        savePhotoGroupFamily(connectedFamily, inaccessibleGroup);
-
-        FamilyPhoto sharedPhoto = savePhoto(
-                firstSharedGroup,
-                uploader,
-                "shared-photo.jpg"
-        );
-        saveFamilyPhotoGroup(sharedPhoto, firstSharedGroup);
-        saveFamilyPhotoGroup(sharedPhoto, secondSharedGroup);
-
-        FamilyPhoto inaccessiblePhoto = savePhoto(
-                inaccessibleGroup,
-                uploader,
-                "inaccessible-photo.jpg"
-        );
-        saveFamilyPhotoGroup(inaccessiblePhoto, inaccessibleGroup);
-
-        List<FamilyPhoto> result =
-                familyPhotoRepository.findAllAccessibleByFamily(
-                        currentFamily,
-                        PageRequest.of(0, 10)
-                );
-
-        assertThat(result).containsExactly(sharedPhoto);
-        assertThat(familyPhotoRepository.countAccessibleByFamily(currentFamily))
-                .isEqualTo(1L);
+        assertThat(familyPhotoRepository.findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
+                mother.getFamily(),
+                PageRequest.of(0, 4)
+        )).containsExactly(newer, older);
+        assertThat(familyPhotoRepository.findAllAccessibleByFamily(
+                mother.getFamily(),
+                PageRequest.of(0, 1)
+        )).containsExactly(newer);
+        assertThat(familyPhotoRepository.findNextAccessiblePageByFamily(
+                mother.getFamily(),
+                LocalDateTime.now().plusMinutes(1),
+                Long.MAX_VALUE,
+                PageRequest.of(0, 10)
+        )).containsExactly(newer, older);
+        assertThat(familyPhotoRepository.countAccessibleByFamily(mother.getFamily()))
+                .isEqualTo(2L);
     }
 
     @Test
     void filtersSharedPhotosByUploader() {
-        Family currentFamily = saveFamily("CURRENT-002");
-        Family connectedFamily = saveFamily("CONNECTED-003");
         User firstUploader = saveUser("first-uploader");
         User secondUploader = saveUser("second-uploader");
-        saveFamilyMember(firstUploader, connectedFamily);
-        saveFamilyMember(secondUploader, connectedFamily);
+        Senior mother = saveSenior("MOTHER-004", firstUploader);
 
-        PhotoGroup sharedGroup = savePhotoGroup("uploader-filter-group");
-        savePhotoGroupFamily(currentFamily, sharedGroup);
-        savePhotoGroupFamily(connectedFamily, sharedGroup);
+        FamilyPhoto firstPhoto = savePhoto(firstUploader, "first-uploader-photo.jpg", mother);
+        savePhoto(secondUploader, "second-uploader-photo.jpg", mother);
 
-        FamilyPhoto firstPhoto = savePhoto(
-                sharedGroup,
+        assertThat(familyPhotoRepository.findAllAccessibleByFamilyAndUploader(
+                mother.getFamily(),
                 firstUploader,
-                "first-uploader-photo.jpg"
-        );
-        FamilyPhoto secondPhoto = savePhoto(
-                sharedGroup,
-                secondUploader,
-                "second-uploader-photo.jpg"
-        );
-        saveFamilyPhotoGroup(firstPhoto, sharedGroup);
-        saveFamilyPhotoGroup(secondPhoto, sharedGroup);
-
-        List<FamilyPhoto> result =
-                familyPhotoRepository.findAllAccessibleByFamilyAndUploader(
-                        currentFamily,
-                        firstUploader,
-                        PageRequest.of(0, 10)
-                );
-
-        assertThat(result).containsExactly(firstPhoto);
+                PageRequest.of(0, 10)
+        )).containsExactly(firstPhoto);
         assertThat(familyPhotoRepository.countAccessibleByFamilyAndUploader(
-                currentFamily,
+                mother.getFamily(),
                 firstUploader
         )).isEqualTo(1L);
     }
 
     @Test
-    void usesMappedGroupsForAlbumsAndFamilyHomeWithoutDuplicates() {
-        Family currentFamily = saveFamily("CURRENT-003");
-        Family connectedFamily = saveFamily("CONNECTED-004");
+    void countsAlbumsByUploaderForPhotosSharedToSenior() {
         User parent = saveUser("album-parent", Role.PARENT);
-        User uploader = saveUser("shared-album-uploader");
-        saveFamilyMember(uploader, connectedFamily);
+        User uploader = saveUser("album-uploader");
+        Senior mother = saveSenior("MOTHER-005", uploader);
+        Senior father = saveSenior("FATHER-005", uploader);
 
-        PhotoGroup representativeGroup =
-                savePhotoGroup("album-representative-group");
-        PhotoGroup firstSharedGroup =
-                savePhotoGroup("album-first-shared-group");
-        PhotoGroup secondSharedGroup =
-                savePhotoGroup("album-second-shared-group");
-        savePhotoGroupFamily(connectedFamily, representativeGroup);
-        savePhotoGroupFamily(currentFamily, firstSharedGroup);
-        savePhotoGroupFamily(connectedFamily, firstSharedGroup);
-        savePhotoGroupFamily(currentFamily, secondSharedGroup);
-        savePhotoGroupFamily(connectedFamily, secondSharedGroup);
+        FamilyPhoto photo = savePhoto(uploader, "album-photo.jpg", mother, father);
+        savePhoto(uploader, "father-only-album-photo.jpg", father);
 
-        FamilyPhoto photo = savePhoto(
-                representativeGroup,
-                uploader,
-                "shared-album-photo.jpg"
-        );
-        saveFamilyPhotoGroup(photo, representativeGroup);
-        saveFamilyPhotoGroup(photo, firstSharedGroup);
-        saveFamilyPhotoGroup(photo, secondSharedGroup);
-
-        assertThat(familyPhotoRepository
-                .findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
-                        currentFamily,
-                        PageRequest.of(0, 4)
-                )).containsExactly(photo);
-        assertThat(familyPhotoRepository.findRecentUploaders(
-                currentFamily,
-                PageRequest.of(0, 3)
-        )).containsExactly(uploader);
         assertThat(familyPhotoRepository.findLatestPhotosByUploader(
-                currentFamily,
+                mother.getFamily(),
                 Role.CHILD
         )).containsExactly(photo);
         assertThat(familyPhotoRepository.countAlbumPhotosByUploader(
-                currentFamily,
+                mother.getFamily(),
                 Role.CHILD,
                 LocalDateTime.now().minusDays(1),
                 parent
@@ -279,7 +184,7 @@ class FamilyPhotoRepositoryTest {
         familyPhotoViewRepository.flush();
 
         assertThat(familyPhotoRepository.countAlbumPhotosByUploader(
-                currentFamily,
+                mother.getFamily(),
                 Role.CHILD,
                 LocalDateTime.now().minusDays(1),
                 parent
@@ -305,7 +210,7 @@ class FamilyPhotoRepositoryTest {
         PhotoGroup sharedGroup = savePhotoGroup("delete-shared-group");
         savePhotoGroupFamily(currentFamily, sharedGroup);
         savePhotoGroupFamily(uploaderFamily, sharedGroup);
-        FamilyPhoto photo = savePhoto(
+        FamilyPhoto photo = saveGroupPhoto(
                 sharedGroup,
                 uploader,
                 "delete-shared-photo.jpg"
@@ -332,121 +237,18 @@ class FamilyPhotoRepositoryTest {
     }
 
     @Test
-    void findsPhotoForFamilyThroughNonRepresentativeMappedGroup() {
-        Family requestedFamily = saveFamily("VIEW-FAMILY-001");
-        Family uploaderFamily = saveFamily("VIEW-UPLOADER-001");
-        User uploader = saveUser("view-photo-uploader");
-
-        saveFamilyMember(uploader, uploaderFamily);
-
-        PhotoGroup representativeGroup =
-                savePhotoGroup("view-representative-group");
-        PhotoGroup sharedGroup =
-                savePhotoGroup("view-shared-group");
-
-        /*
-         * 사진의 대표 그룹은 uploaderFamily에만 연결되어 있으므로
-         * requestedFamily는 대표 그룹을 통해 사진에 접근할 수 없다.
-         */
-        savePhotoGroupFamily(
-                uploaderFamily,
-                representativeGroup
-        );
-
-        /*
-         * 추가 공유 그룹은 두 Family에 연결한다.
-         * requestedFamily는 이 매핑을 통해 사진에 접근할 수 있다.
-         */
-        savePhotoGroupFamily(
-                uploaderFamily,
-                sharedGroup
-        );
-        savePhotoGroupFamily(
-                requestedFamily,
-                sharedGroup
-        );
-
-        FamilyPhoto photo = savePhoto(
-                representativeGroup,
-                uploader,
-                "view-shared-photo.jpg"
-        );
-
-        saveFamilyPhotoGroup(
-                photo,
-                representativeGroup
-        );
-        saveFamilyPhotoGroup(
-                photo,
-                sharedGroup
-        );
-
-        Optional<FamilyPhoto> result =
-                familyPhotoRepository
-                        .findAccessibleByFamilyPhotoIdAndFamily(
-                                photo.getFamilyPhotoId(),
-                                requestedFamily
-                        );
-
-        assertThat(result).contains(photo);
-    }
-
-    @Test
-    void doesNotFindPhotoForFamilyWithoutMappedPhotoGroupAccess() {
-        Family requestedFamily = saveFamily("VIEW-FAMILY-002");
-        Family uploaderFamily = saveFamily("VIEW-UPLOADER-002");
-        User uploader = saveUser("inaccessible-view-uploader");
-
-        saveFamilyMember(uploader, uploaderFamily);
-
-        PhotoGroup uploaderGroup =
-                savePhotoGroup("inaccessible-view-group");
-        PhotoGroup unrelatedGroup =
-                savePhotoGroup("unrelated-family-group");
-
-        savePhotoGroupFamily(
-                uploaderFamily,
-                uploaderGroup
-        );
-        savePhotoGroupFamily(
-                requestedFamily,
-                unrelatedGroup
-        );
-
-        FamilyPhoto photo = savePhoto(
-                uploaderGroup,
-                uploader,
-                "inaccessible-view-photo.jpg"
-        );
-
-        saveFamilyPhotoGroup(
-                photo,
-                uploaderGroup
-        );
-
-        Optional<FamilyPhoto> result =
-                familyPhotoRepository
-                        .findAccessibleByFamilyPhotoIdAndFamily(
-                                photo.getFamilyPhotoId(),
-                                requestedFamily
-                        );
-
-        assertThat(result).isEmpty();
-    }
-
-    @Test
     void findsMissingThumbnailsInBoundedIdOrderWithoutRepeatingEarlierPhotos() {
         User uploader = saveUser("thumbnail-backfill-uploader");
         PhotoGroup group = savePhotoGroup("thumbnail-backfill-group");
-        FamilyPhoto first = savePhoto(group, uploader, "missing-first.jpg");
+        FamilyPhoto first = saveGroupPhoto(group, uploader, "missing-first.jpg");
         familyPhotoRepository.saveAndFlush(FamilyPhoto.builder()
                 .photoGroup(group)
                 .user(uploader)
                 .imageKey("already-generated.jpg")
                 .thumbnailKey("thumbnails/already-generated.jpg")
                 .build());
-        FamilyPhoto second = savePhoto(group, uploader, "missing-second.jpg");
-        FamilyPhoto third = savePhoto(group, uploader, "missing-third.jpg");
+        FamilyPhoto second = saveGroupPhoto(group, uploader, "missing-second.jpg");
+        FamilyPhoto third = saveGroupPhoto(group, uploader, "missing-third.jpg");
 
         assertThat(familyPhotoRepository.findPhotosWithoutThumbnail(
                 0L, PageRequest.of(0, 2)
@@ -468,7 +270,7 @@ class FamilyPhotoRepositoryTest {
     void attachesThumbnailOnlyToExistingPhotoWithoutThumbnail() {
         User uploader = saveUser("thumbnail-attachment-uploader");
         PhotoGroup group = savePhotoGroup("thumbnail-attachment-group");
-        FamilyPhoto photo = savePhoto(group, uploader, "original-for-backfill.jpg");
+        FamilyPhoto photo = saveGroupPhoto(group, uploader, "original-for-backfill.jpg");
         Long photoId = photo.getFamilyPhotoId();
 
         assertThat(familyPhotoRepository.updateThumbnailIfAbsent(
@@ -555,7 +357,35 @@ class FamilyPhotoRepositoryTest {
         );
     }
 
-    private FamilyPhoto savePhoto(
+    private Senior saveSenior(String seniorCode, User registeredBy) {
+        Family family = saveFamily(seniorCode);
+        return seniorRepository.saveAndFlush(
+                Senior.builder()
+                        .name(seniorCode)
+                        .relation(SeniorRelation.OTHER)
+                        .family(family)
+                        .registeredBy(registeredBy)
+                        .birth(LocalDate.of(1950, 1, 1))
+                        .phoneNumber("01012345678")
+                        .build()
+        );
+    }
+
+    private FamilyPhoto savePhoto(User uploader, String imageKey, Senior... seniors) {
+        PhotoGroup group = savePhotoGroup("group-" + imageKey);
+        FamilyPhoto photo = saveGroupPhoto(group, uploader, imageKey);
+        for (Senior senior : seniors) {
+            familyPhotoSeniorRepository.saveAndFlush(
+                    FamilyPhotoSenior.builder()
+                            .familyPhoto(photo)
+                            .senior(senior)
+                            .build()
+            );
+        }
+        return photo;
+    }
+
+    private FamilyPhoto saveGroupPhoto(
             PhotoGroup photoGroup,
             User uploader,
             String imageKey

@@ -17,7 +17,6 @@ import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.entity.PhotoGroup;
-import com.example.senioron.domain.family.entity.PhotoGroupFamily;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoViewRepository;
@@ -115,10 +114,6 @@ class FamilyServiceTest {
                 .id(100L)
                 .name("Family 1")
                 .build();
-        PhotoGroupFamily defaultGroupLink = PhotoGroupFamily.builder()
-                .family(family)
-                .photoGroup(defaultPhotoGroup)
-                .build();
         FamilyPhoto photo = FamilyPhoto.builder()
                 .familyPhotoId(30L)
                 .photoGroup(defaultPhotoGroup)
@@ -137,18 +132,12 @@ class FamilyServiceTest {
                 .willReturn(Optional.of(senior));
         given(familyMemberRepository.existsByUserAndFamily(parent, family))
                 .willReturn(true);
-        given(photoGroupFamilyRepository.findFirstByFamilyOrderByIdAsc(family))
-                .willReturn(Optional.of(defaultGroupLink));
         given(familyMemberRepository.findAllByFamilyOrderByIdAsc(family))
                 .willReturn(List.of());
         given(familyPhotoRepository.findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
                 family,
                 PageRequest.of(0, 4)
         )).willReturn(List.of(photo));
-        given(familyPhotoRepository.findRecentUploaders(
-                family,
-                PageRequest.of(0, 3)
-        )).willReturn(List.of(uploader));
         given(familyPhotoViewRepository.findViewedFamilyPhotoIds(
                 1L,
                 List.of(30L)
@@ -192,10 +181,6 @@ class FamilyServiceTest {
                 .id(100L)
                 .name("Family 1")
                 .build();
-        PhotoGroupFamily defaultGroupLink = PhotoGroupFamily.builder()
-                .family(family)
-                .photoGroup(defaultPhotoGroup)
-                .build();
         FamilyPhoto withThumbnail = FamilyPhoto.builder()
                 .familyPhotoId(31L)
                 .photoGroup(defaultPhotoGroup)
@@ -230,18 +215,12 @@ class FamilyServiceTest {
                 .willReturn(Optional.of(senior));
         given(familyMemberRepository.existsByUserAndFamily(parent, family))
                 .willReturn(true);
-        given(photoGroupFamilyRepository.findFirstByFamilyOrderByIdAsc(family))
-                .willReturn(Optional.of(defaultGroupLink));
         given(familyMemberRepository.findAllByFamilyOrderByIdAsc(family))
                 .willReturn(List.of());
         given(familyPhotoRepository.findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
                 family,
                 PageRequest.of(0, 4)
         )).willReturn(photos);
-        given(familyPhotoRepository.findRecentUploaders(
-                family,
-                PageRequest.of(0, 3)
-        )).willReturn(List.of(uploader));
         given(familyPhotoViewRepository.findViewedFamilyPhotoIds(
                 1L,
                 List.of(31L, 32L, 33L)
@@ -277,87 +256,6 @@ class FamilyServiceTest {
                 );
         verify(familyPhotoPermissionService, never())
                 .canDelete(any(), any());
-    }
-
-    @Test
-    void getFamilyHomeReturnsDefaultPhotoGroupId() {
-        Family family = Family.builder()
-                .familyId(1L)
-                .build();
-        User currentUser = User.builder()
-                .usersId(1L)
-                .name("자녀")
-                .role(Role.CHILD)
-                .build();
-        Senior senior = Senior.builder()
-                .seniorId(10L)
-                .family(family)
-                .build();
-        PhotoGroup defaultPhotoGroup = PhotoGroup.builder()
-                .id(100L)
-                .name("Family 1")
-                .build();
-        PhotoGroupFamily defaultGroupLink = PhotoGroupFamily.builder()
-                .family(family)
-                .photoGroup(defaultPhotoGroup)
-                .build();
-
-        given(userRepository.findById(1L))
-                .willReturn(Optional.of(currentUser));
-        given(seniorRepository.findById(10L))
-                .willReturn(Optional.of(senior));
-        given(familyMemberRepository.existsByUserAndFamily(currentUser, family))
-                .willReturn(true);
-        given(photoGroupFamilyRepository.findFirstByFamilyOrderByIdAsc(family))
-                .willReturn(Optional.of(defaultGroupLink));
-        given(familyMemberRepository.findAllByFamilyOrderByIdAsc(family))
-                .willReturn(List.of());
-        given(familyPhotoRepository.findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
-                family,
-                PageRequest.of(0, 4)
-        )).willReturn(List.of());
-        given(familyPhotoRepository.findRecentUploaders(
-                family,
-                PageRequest.of(0, 3)
-        )).willReturn(List.of());
-
-        var response = familyService.getFamilyHome(currentUser, 10L);
-
-        assertThat(response.getPhotoGroupId()).isEqualTo(100L);
-    }
-
-    @Test
-    void getFamilyHomeRejectsFamilyWithoutDefaultPhotoGroup() {
-        Family family = Family.builder()
-                .familyId(1L)
-                .build();
-        User currentUser = User.builder()
-                .usersId(1L)
-                .name("자녀")
-                .role(Role.CHILD)
-                .build();
-        Senior senior = Senior.builder()
-                .seniorId(10L)
-                .family(family)
-                .build();
-
-        given(userRepository.findById(1L))
-                .willReturn(Optional.of(currentUser));
-        given(seniorRepository.findById(10L))
-                .willReturn(Optional.of(senior));
-        given(familyMemberRepository.existsByUserAndFamily(currentUser, family))
-                .willReturn(true);
-        given(photoGroupFamilyRepository.findFirstByFamilyOrderByIdAsc(family))
-                .willReturn(Optional.empty());
-
-        assertThatThrownBy(() -> familyService.getFamilyHome(currentUser, 10L))
-                .isInstanceOf(BusinessException.class)
-                .asInstanceOf(type(BusinessException.class))
-                .extracting(BusinessException::getCode)
-                .isEqualTo(ErrorCode.PHOTO_GROUP_NOT_FOUND);
-
-        verify(familyMemberRepository, never())
-                .findAllByFamilyOrderByIdAsc(family);
     }
 
     @Test

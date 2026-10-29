@@ -52,7 +52,6 @@ public class FamilyService {
     private final SeniorRepository seniorRepository;
     private final FamilyPhotoResponseMapper familyPhotoResponseMapper;
 
-    private static final int RECENT_UPLOADER_COUNT = 3;
     private static final int RECENT_PHOTO_COUNT = 4;
     private static final int NEW_PHOTO_WINDOW_HOURS = 24;
 
@@ -332,31 +331,15 @@ public class FamilyService {
                 seniorId
         );
 
-        PhotoGroup defaultPhotoGroup = photoGroupFamilyRepository
-                .findFirstByFamilyOrderByIdAsc(family)
-                .map(PhotoGroupFamily::getPhotoGroup)
-                .orElseThrow(() ->
-                        new BusinessException(
-                                ErrorCode.PHOTO_GROUP_NOT_FOUND
-                        )
-                );
-
         // 가족 구성원 조회
         List<FamilyMember> familyMembers = familyMemberRepository
                 .findAllByFamilyOrderByIdAsc(family);
 
-        // 최신 가족 사진 4개 조회
+        // 선택한 시니어에게 공유된 최신 사진 4개 조회
         List<FamilyPhoto> recentPhotoEntities =
                 familyPhotoRepository.findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
                         family,
                         PageRequest.of(0, RECENT_PHOTO_COUNT)
-                );
-
-        // 전체 가족사진을 기준으로 최근 업로더 3명 조회
-        List<User> recentUploaders =
-                familyPhotoRepository.findRecentUploaders(
-                        family,
-                        PageRequest.of(0, RECENT_UPLOADER_COUNT)
                 );
 
         // 가족 구성원 응답 생성
@@ -367,15 +350,6 @@ public class FamilyService {
                 ))
                 .map(member -> toFamilyMemberResponse(member, currentUser))
                 .toList();
-
-        // 최근 업로더 프로필 최대 3개 생성
-        List<String> recentUploaderProfileImageUrls =
-                recentUploaders.stream()
-                        .map(User::getProfileImageKey)
-                        .map(profileImageKey -> profileImageKey == null
-                                ? null
-                                : s3Service.getFileUrl(profileImageKey))
-                        .toList();
 
         Set<Long> viewedPhotoIds;
 
@@ -425,11 +399,7 @@ public class FamilyService {
                         .toList();
 
         return FamilyHomeResponse.builder()
-                .photoGroupId(defaultPhotoGroup.getId())
                 .members(members)
-                .recentUploaderProfileImageUrls(
-                        recentUploaderProfileImageUrls
-                )
                 .recentPhotos(recentPhotos)
                 .build();
     }
