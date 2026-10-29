@@ -87,7 +87,7 @@ public class FamilyController {
         );
     }
 
-    @Operation(summary = "사진 공유 대상 목록 조회", description = "로그인한 자녀가 직접 추가한 시니어 목록을 조회합니다.")
+    @Operation(summary = "사진 공유 대상 목록 조회", description = "로그인한 자녀가 주·보조 담당자로 관리하며 시니어 기기가 연결된 시니어 목록을 조회합니다.")
     @GetMapping("/photos/targets")
     public Response<List<PhotoShareTargetResponse>> getPhotoShareTargets(
             @AuthenticationPrincipal User user

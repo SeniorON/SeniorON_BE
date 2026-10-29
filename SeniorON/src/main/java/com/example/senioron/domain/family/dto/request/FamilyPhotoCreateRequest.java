@@ -20,9 +20,9 @@ public class FamilyPhotoCreateRequest {
     @Schema(description = "사진을 업로드하는 현재 가족의 시니어 ID", example = "1")
     private Long seniorId;
 
-    @NotEmpty(message = "사진을 공유할 포토 그룹을 하나 이상 선택해주세요.")
-    @Schema(description = "사진을 공유할 포토 그룹 ID 목록", example = "[1, 2]")
-    private List<@NotNull(message = "포토 그룹 ID는 null일 수 없습니다.") Long> photoGroupIds;
+    @NotEmpty(message = "사진을 공유할 시니어를 한 명 이상 선택해주세요.")
+    @Schema(description = "사진을 공유할 시니어 ID 목록", example = "[1, 2]")
+    private List<@NotNull(message = "공유할 시니어 ID는 null일 수 없습니다.") Long> seniorIds;
 
     @NotNull(message = "사진은 필수입니다.")
     @Schema(description = "등록할 가족 사진", type = "string", format = "binary")
