@@ -288,7 +288,7 @@ public class UserService {
                 .parentUserId(senior == null || senior.getParentUser() == null
                         ? null
                         : senior.getParentUser().getUsersId())
-                .relation(senior == null ? null : senior.getRelation())
+                .relation(familyMember.getRelation())
                 .seniorId(senior == null ? null : senior.getSeniorId())
                 .seniorName(senior == null ? null : senior.getName())
                 .seniorProfileCompleted(senior != null)
@@ -302,8 +302,7 @@ public class UserService {
         if (user.getRole() == Role.PARENT) {
             return Objects.equals(family.getParentUserId(), user.getUsersId())
                     && family.getSeniorId() != null
-                    && family.isSeniorProfileCompleted()
-                    && family.getRelation() != null;
+                    && family.isSeniorProfileCompleted();
         }
 
         return family.getManagerType() != null
