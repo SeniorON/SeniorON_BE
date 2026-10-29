@@ -445,14 +445,6 @@ public class FamilyService {
 
         Family family = resolveAccessibleFamily(user, seniorId);
 
-        FamilyMember member = familyMemberRepository
-                .findByUserAndFamily(user, family)
-                .orElseThrow(() -> new BusinessException(ErrorCode.FORBIDDEN));
-
-        if (member.getManagerType() != ManagerType.PRIMARY) {
-            throw new BusinessException(ErrorCode.FORBIDDEN);
-        }
-
         long familyMemberCount = familyMemberRepository.countByFamily(family);
 
         return SeniorCodeResponse.builder()
