@@ -1,6 +1,8 @@
 package com.example.senioron.domain.admin.entity;
 
 import com.example.senioron.common.entity.BaseEntity;
+import com.example.senioron.global.apiPayload.code.ErrorCode;
+import com.example.senioron.global.apiPayload.exception.BusinessException;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import lombok.*;
@@ -45,6 +47,14 @@ public class Admin extends BaseEntity {
     public void activate(String encodedPassword) {
         this.password = encodedPassword;
         this.status = AdminStatus.ACTIVE;
+    }
+
+    public void updateInvitedProfile(String name, AdminRole adminRole) {
+        if (status != AdminStatus.INVITED) {
+            throw new BusinessException(ErrorCode.ADMIN_STATUS_CONFLICT);
+        }
+        this.name = name;
+        this.adminRole = adminRole;
     }
 
     public void changePassword(String encodedPassword) {

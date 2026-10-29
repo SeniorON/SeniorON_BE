@@ -3,6 +3,7 @@ package com.example.senioron.domain.admin.controller;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppContextSetup;
 
@@ -127,28 +128,80 @@ class AdminSecurityIntegrationTest {
     }
 
     @Test
-    void moderatorCannotInviteOrResendAdmin() throws Exception {
+    void moderatorCannotInviteAdmin() throws Exception {
         Admin moderator = saveAdmin("moderator@example.com", AdminStatus.ACTIVE, AdminRole.MODERATOR);
-        Admin target = saveAdmin("target@example.com", AdminStatus.INVITED, AdminRole.MODERATOR);
         String bearer = "Bearer " + jwtUtil.createAdminAccessToken(moderator);
         mockMvc.perform(post("/api/admin/admins/invitations").header(HttpHeaders.AUTHORIZATION, bearer)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"new\",\"email\":\"new@example.com\",\"adminRole\":\"MODERATOR\"}"))
                 .andExpect(status().isForbidden());
-        mockMvc.perform(post("/api/admin/admins/" + target.getAdminId() + "/invitations/resend")
-                        .header(HttpHeaders.AUTHORIZATION, bearer))
-                .andExpect(status().isForbidden());
     }
 
     @Test
-    void superAdminCanInviteAndReceivesAdminId() throws Exception {
+    void superAdminCanInviteAndReceivesCreatedResponseWithResentFalse() throws Exception {
         Admin superAdmin = saveAdmin("super@example.com", AdminStatus.ACTIVE, AdminRole.SUPER);
         mockMvc.perform(post("/api/admin/admins/invitations")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwtUtil.createAdminAccessToken(superAdmin))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"new\",\"email\":\"new-super@example.com\",\"adminRole\":\"MODERATOR\"}"))
-                .andExpect(status().isOk())
-                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.data.adminId").isNumber());
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.code").value("COMMON_201"))
+                .andExpect(jsonPath("$.data.adminId").isNumber())
+                .andExpect(jsonPath("$.data.resent").value(false));
+    }
+
+    @Test
+    void activeAndSuspendedEmailCannotBeInvitedAgain() throws Exception {
+        Admin superAdmin = saveAdmin("duplicate-super@example.com", AdminStatus.ACTIVE, AdminRole.SUPER);
+        String bearer = "Bearer " + jwtUtil.createAdminAccessToken(superAdmin);
+        for (AdminStatus status : new AdminStatus[]{AdminStatus.ACTIVE, AdminStatus.SUSPENDED}) {
+            String email = status.name().toLowerCase() + "-duplicate@example.com";
+            saveAdmin(email, status, AdminRole.MODERATOR);
+            mockMvc.perform(post("/api/admin/admins/invitations")
+                            .header(HttpHeaders.AUTHORIZATION, bearer)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"name\":\"new\",\"email\":\"" + email
+                                    + "\",\"adminRole\":\"MODERATOR\"}"))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.code").value("ADMIN409"))
+                    .andExpect(jsonPath("$.message").value("이미 등록된 운영자 이메일입니다."));
+        }
+    }
+
+    @Test
+    void removedResendPathIsNotAvailable() throws Exception {
+        Admin superAdmin = saveAdmin("removed-path-super@example.com", AdminStatus.ACTIVE, AdminRole.SUPER);
+        Admin target = saveAdmin("removed-path-target@example.com", AdminStatus.INVITED, AdminRole.MODERATOR);
+        mockMvc.perform(post("/api/admin/admins/" + target.getAdminId() + "/invitations/resend")
+                        .header(HttpHeaders.AUTHORIZATION,
+                                "Bearer " + jwtUtil.createAdminAccessToken(superAdmin)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void adminErrorsUseSpecificationMessages() throws Exception {
+        mockMvc.perform(post("/api/admin/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"missing@example.com\",\"password\":\"password1\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("이메일 또는 비밀번호를 다시 확인해 주세요."));
+
+        mockMvc.perform(post("/api/admin/auth/invitations/verify")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"invalid\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("사용할 수 없는 링크예요."));
+
+        Admin invited = saveAdmin("password-message@example.com", AdminStatus.INVITED, AdminRole.MODERATOR);
+        String raw = "password-message-token";
+        invitations.saveAndFlush(AdminInvitation.builder().admin(invited).type(AdminInvitationType.INVITE)
+                .tokenHash(TokenHashUtil.hashHex(raw)).expiresAt(LocalDateTime.now().plusHours(1)).build());
+        mockMvc.perform(post("/api/admin/auth/invitations/accept")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"" + raw + "\",\"password\":\"short1\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message")
+                        .value("비밀번호는 영문·숫자 포함 8자 이상이어야 합니다."));
     }
 
     @Test

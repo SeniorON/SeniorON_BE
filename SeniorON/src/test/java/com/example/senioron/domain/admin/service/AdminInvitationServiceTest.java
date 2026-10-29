@@ -9,8 +9,8 @@ import com.example.senioron.domain.admin.entity.*;
 import com.example.senioron.domain.admin.repository.*;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
-import java.lang.reflect.Field;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -75,40 +75,44 @@ class AdminInvitationServiceTest {
     }
 
     @Test
-    void duplicateEmailIgnoringCaseReturnsConflict() {
-        given(admins.findByEmail("admin@example.com")).willReturn(Optional.of(admin(AdminStatus.ACTIVE)));
-        assertThatThrownBy(() -> service.invite(admin(AdminStatus.ACTIVE),
-                new AdminInviteRequest("new", "ADMIN@EXAMPLE.COM", AdminRole.MODERATOR), "127.0.0.1"))
-                .isInstanceOfSatisfying(BusinessException.class,
-                        e -> assertThat(e.getCode()).isEqualTo(ErrorCode.DUPLICATE_ADMIN_EMAIL));
-    }
-
-    @Test
-    void resendInvalidatesOldInvitationAndIssuesNewInvitation() {
+    void invitedEmailIgnoringCaseUpdatesProfileInvalidatesOldLinkAndReturnsResentTrue() {
         Admin target = admin(AdminStatus.INVITED);
         Admin actor = admin(AdminStatus.ACTIVE);
         AdminInvitation old = invitation(target, LocalDateTime.now().plusHours(1), null, null);
+        given(admins.findByEmail("admin@example.com")).willReturn(Optional.of(target));
         given(admins.findByIdForUpdate(1L)).willReturn(Optional.of(target));
-        given(invitations.findAllByAdminAndType(target, AdminInvitationType.INVITE)).willReturn(java.util.List.of(old));
-        service.resend(actor, 1L, "127.0.0.1");
+        given(invitations.findAllByAdminAndType(target, AdminInvitationType.INVITE))
+                .willReturn(List.of(old));
+
+        var response = service.invite(actor,
+                new AdminInviteRequest("변경된 이름", "ADMIN@EXAMPLE.COM", AdminRole.SUPER),
+                "127.0.0.1");
+
+        assertThat(response.adminId()).isEqualTo(1L);
+        assertThat(response.resent()).isTrue();
         assertThat(old.getInvalidatedAt()).isNotNull();
+        assertThat(target.getName()).isEqualTo("변경된 이름");
+        assertThat(target.getAdminRole()).isEqualTo(AdminRole.SUPER);
         verify(issuer).issue(target, actor);
+        verify(logs).record(actor, AdminActivityType.ADMIN_INVITATION_RESENT,
+                AdminActivityTargetType.ADMIN, 1L, "변경된 이름",
+                "관리자 초대 링크를 재발송했습니다.", "127.0.0.1");
     }
 
     @Test
-    void resendActiveAdminReturnsStatusConflict() {
-        given(admins.findByIdForUpdate(1L)).willReturn(Optional.of(admin(AdminStatus.ACTIVE)));
-        assertThatThrownBy(() -> service.resend(admin(AdminStatus.ACTIVE), 1L, "127.0.0.1"))
-                .isInstanceOfSatisfying(BusinessException.class,
-                        e -> assertThat(e.getCode()).isEqualTo(ErrorCode.ADMIN_STATUS_CONFLICT));
-    }
+    void activeAndSuspendedEmailReturnDuplicateEmailConflict() {
+        for (AdminStatus status : List.of(AdminStatus.ACTIVE, AdminStatus.SUSPENDED)) {
+            reset(admins);
+            Admin existing = admin(status);
+            given(admins.findByEmail("admin@example.com")).willReturn(Optional.of(existing));
+            given(admins.findByIdForUpdate(1L)).willReturn(Optional.of(existing));
 
-    @Test
-    void resendMissingAdminReturnsNotFound() {
-        given(admins.findByIdForUpdate(999L)).willReturn(Optional.empty());
-        assertThatThrownBy(() -> service.resend(admin(AdminStatus.ACTIVE), 999L, "127.0.0.1"))
-                .isInstanceOfSatisfying(BusinessException.class,
-                        e -> assertThat(e.getCode()).isEqualTo(ErrorCode.ADMIN_NOT_FOUND));
+            assertThatThrownBy(() -> service.invite(admin(AdminStatus.ACTIVE),
+                    new AdminInviteRequest("new", "ADMIN@EXAMPLE.COM", AdminRole.MODERATOR),
+                    "127.0.0.1"))
+                    .isInstanceOfSatisfying(BusinessException.class,
+                            e -> assertThat(e.getCode()).isEqualTo(ErrorCode.DUPLICATE_ADMIN_EMAIL));
+        }
     }
 
     @Test

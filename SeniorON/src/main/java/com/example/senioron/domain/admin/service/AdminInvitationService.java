@@ -29,8 +29,9 @@ public class AdminInvitationService {
     @Transactional
     public AdminInviteResponse invite(Admin actor, AdminInviteRequest request, String ipAddress) {
         String email = normalize(request.email());
-        if (adminRepository.findByEmail(email).isPresent()) {
-            throw new BusinessException(ErrorCode.DUPLICATE_ADMIN_EMAIL);
+        Admin existing = adminRepository.findByEmail(email).orElse(null);
+        if (existing != null) {
+            return reinvite(actor, existing.getAdminId(), request, ipAddress);
         }
 
         Admin invited = Admin.builder()
@@ -49,24 +50,30 @@ public class AdminInvitationService {
         activityLogService.record(actor, AdminActivityType.ADMIN_INVITED,
                 AdminActivityTargetType.ADMIN, invited.getAdminId(), invited.getName(),
                 "관리자 계정을 초대했습니다.", ipAddress);
-        return new AdminInviteResponse(invited.getAdminId());
+        return new AdminInviteResponse(invited.getAdminId(), false);
     }
 
-    @Transactional
-    public void resend(Admin actor, Long adminId, String ipAddress) {
+    private AdminInviteResponse reinvite(
+            Admin actor,
+            Long adminId,
+            AdminInviteRequest request,
+            String ipAddress
+    ) {
         Admin invited = adminRepository.findByIdForUpdate(adminId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.ADMIN_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(ErrorCode.DUPLICATE_ADMIN_EMAIL));
         if (invited.getStatus() != AdminStatus.INVITED) {
-            throw new BusinessException(ErrorCode.ADMIN_STATUS_CONFLICT);
+            throw new BusinessException(ErrorCode.DUPLICATE_ADMIN_EMAIL);
         }
         LocalDateTime now = LocalDateTime.now();
         invitationRepository.findAllByAdminAndType(invited, AdminInvitationType.INVITE)
                 .stream().filter(invitation -> invitation.isUsable(now))
                 .forEach(invitation -> invitation.invalidate(now));
+        invited.updateInvitedProfile(request.name(), request.adminRole());
         invitationIssuer.issue(invited, actor);
         activityLogService.record(actor, AdminActivityType.ADMIN_INVITATION_RESENT,
                 AdminActivityTargetType.ADMIN, invited.getAdminId(), invited.getName(),
                 "관리자 초대 링크를 재발송했습니다.", ipAddress);
+        return new AdminInviteResponse(invited.getAdminId(), true);
     }
 
     @Transactional(readOnly = true)

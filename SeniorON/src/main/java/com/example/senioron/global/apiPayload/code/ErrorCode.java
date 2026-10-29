@@ -57,13 +57,13 @@ public enum ErrorCode implements BaseCode {
 
     // Admin Error
     ADMIN_NOT_FOUND(HttpStatus.NOT_FOUND, "ADMIN404", "관리자를 찾을 수 없습니다."),
-    INVALID_ADMIN_CREDENTIAL(HttpStatus.UNAUTHORIZED, "ADMIN401", "이메일 또는 비밀번호가 올바르지 않습니다."),
+    INVALID_ADMIN_CREDENTIAL(HttpStatus.UNAUTHORIZED, "ADMIN401", "이메일 또는 비밀번호를 다시 확인해 주세요."),
     INVALID_ADMIN_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "ADMIN401_1", "관리자 Refresh Token이 유효하지 않습니다."),
     ADMIN_NOT_ACTIVE(HttpStatus.FORBIDDEN, "ADMIN403", "활성화된 관리자 계정이 아닙니다."),
-    DUPLICATE_ADMIN_EMAIL(HttpStatus.CONFLICT, "ADMIN409", "이미 등록된 관리자 이메일입니다."),
+    DUPLICATE_ADMIN_EMAIL(HttpStatus.CONFLICT, "ADMIN409", "이미 등록된 운영자 이메일입니다."),
     ADMIN_STATUS_CONFLICT(HttpStatus.CONFLICT, "ADMIN409_1", "현재 관리자 상태에서는 처리할 수 없습니다."),
-    INVALID_INVITATION_TOKEN(HttpStatus.BAD_REQUEST, "ADMIN400", "초대 링크가 유효하지 않습니다."),
-    INVALID_ADMIN_PASSWORD(HttpStatus.BAD_REQUEST, "ADMIN400_1", "관리자 비밀번호 형식이 올바르지 않습니다."),
+    INVALID_INVITATION_TOKEN(HttpStatus.BAD_REQUEST, "ADMIN400", "사용할 수 없는 링크예요."),
+    INVALID_ADMIN_PASSWORD(HttpStatus.BAD_REQUEST, "ADMIN400_1", "비밀번호는 영문·숫자 포함 8자 이상이어야 합니다."),
 
     // Email Error
     EMAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "EMAIL500", "이메일 발송에 실패했습니다."),
