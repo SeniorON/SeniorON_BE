@@ -64,6 +64,7 @@ public class MedicationLogService {
     private final ApplicationEventPublisher eventPublisher;
     private final MedicationFamilyAuthorization medicationFamilyAuthorization;
     private final HomeWebSocketService homeWebSocketService;
+    private final MedicationWebSocketService medicationWebSocketService;
     private final EntityManager entityManager;
 
     public List<MedicationScheduleResponse> getOwnDailyMedicationSchedules(
@@ -626,6 +627,24 @@ public class MedicationLogService {
                     .notifyMedicationUpdated(
                             userId
                     );
+
+            Long seniorId =
+                    findSeniorIdByParentUserId(
+                            userId
+                    );
+
+            if (seniorId != null) {
+                medicationWebSocketService
+                        .notifyMedicationUpdated(
+                                seniorId
+                        );
+            } else {
+                log.warn(
+                        "복용 완료 WebSocket 대상 Senior를 찾을 수 없습니다. parentUserId: {}, medicationLogId: {}",
+                        userId,
+                        medicationLogId
+                );
+            }
         }
 
         MedicationLog updatedMedicationLog =
@@ -1097,7 +1116,6 @@ public class MedicationLogService {
                     medication.getMedicationGroupId();
 
         } else {
-
             medicationIdentifier =
                     String.valueOf(
                             medication.getMedication_id()
@@ -1109,6 +1127,27 @@ public class MedicationLogService {
                 + plannedDate
                 + "|"
                 + medication.getMedicineTime();
+    }
+
+    private Long findSeniorIdByParentUserId(
+            Long parentUserId
+    ) {
+        return entityManager.createQuery(
+                        """
+                        SELECT senior.seniorId
+                        FROM Senior senior
+                        WHERE senior.parentUser IS NOT NULL
+                          AND senior.parentUser.usersId = :parentUserId
+                        """,
+                        Long.class
+                )
+                .setParameter(
+                        "parentUserId",
+                        parentUserId
+                )
+                .getResultStream()
+                .findFirst()
+                .orElse(null);
     }
 
     private MedicationScheduleStatus determineMedicationStatus(

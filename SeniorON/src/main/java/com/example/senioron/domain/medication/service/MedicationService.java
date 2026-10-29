@@ -50,6 +50,7 @@ public class MedicationService {
     private final MedicationLogService medicationLogService;
     private final MedicationFamilyAuthorization medicationFamilyAuthorization;
     private final HomeWebSocketService homeWebSocketService;
+    private final MedicationWebSocketService medicationWebSocketService;
 
     @Transactional
     public MedicationCreateResponse createMedication(
@@ -179,6 +180,11 @@ public class MedicationService {
         homeWebSocketService
                 .notifyMedicationUpdated(
                         parentUser.getUsersId()
+                );
+
+        medicationWebSocketService
+                .notifyMedicationUpdated(
+                        seniorId
                 );
 
         List<Long> medicationIds =
@@ -413,6 +419,11 @@ public class MedicationService {
                         parentUser.getUsersId()
                 );
 
+        medicationWebSocketService
+                .notifyMedicationUpdated(
+                        seniorId
+                );
+
         log.info(
                 "약 수정 완료. requesterUserId: {}, seniorId: {}, parentUserId: {}, groupId: {}",
                 requesterUserId,
@@ -469,6 +480,11 @@ public class MedicationService {
         homeWebSocketService
                 .notifyMedicationUpdated(
                         parentUser.getUsersId()
+                );
+
+        medicationWebSocketService
+                .notifyMedicationUpdated(
+                        seniorId
                 );
 
         log.info(

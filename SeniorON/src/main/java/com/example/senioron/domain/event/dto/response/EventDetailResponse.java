@@ -3,6 +3,8 @@ package com.example.senioron.domain.event.dto.response;
 import com.example.senioron.domain.event.entity.Event;
 import com.example.senioron.domain.event.entity.EventType;
 import com.example.senioron.domain.event.entity.OutingPhase;
+import com.example.senioron.domain.event.entity.OutingDetectionType;
+import com.example.senioron.domain.event.entity.OutingReturnMessage;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -29,22 +31,29 @@ public class EventDetailResponse {
     private Integer deviceBattery;
 
     private OutingPhase phase;           // OUTING_RETURN 전용
+    private OutingDetectionType detectionType;
+    private String clientEventId;
+    private OffsetDateTime detectedAt;
     private LocalDateTime lastSeenAt;    // INACTIVITY 전용
     private String linkUrl;              // RISK_LINK 전용
     private Boolean isDangerous;         // RISK_LINK 전용
 
-    public static EventDetailResponse of(Event event, Integer currentBatteryLevel) {
+    public static EventDetailResponse of(Event event) {
         return EventDetailResponse.builder()
                 .eventId(event.getEventId())
                 .eventType(event.getEventType())
-                .message(resolveMessage(event.getEventType(), event.getPhase(), event.getIsDangerous()))
+                .message(resolveMessage(event))
                 .senderName(event.getTriggeredUser().getName())
-                .occurredAt(toOffsetDateTime(event.getCreatedAt()))
+                .occurredAt(toOffsetDateTime(event.getEventType() == EventType.OUTING_RETURN
+                        ? event.getOutingOccurredAt() : event.getCreatedAt()))
                 .address(event.getAddress())
                 .latitude(event.getLatitude())
                 .longitude(event.getLongitude())
-                .deviceBattery(currentBatteryLevel)
+                .deviceBattery(event.getDeviceBattery())
                 .phase(event.getPhase())
+                .detectionType(event.getDetectionType())
+                .clientEventId(event.getClientEventId())
+                .detectedAt(event.getDetectedAtWithOffset())
                 .lastSeenAt(event.getLastSeenAt())
                 .linkUrl(event.getLinkUrl())
                 .isDangerous(event.getIsDangerous())
@@ -57,12 +66,12 @@ public class EventDetailResponse {
                 : occurredAt.atZone(KOREA_ZONE_ID).toOffsetDateTime();
     }
 
-    private static String resolveMessage(EventType eventType, OutingPhase phase, Boolean isDangerous) {
-        return switch (eventType) {
+    private static String resolveMessage(Event event) {
+        return switch (event.getEventType()) {
             case SOS -> "도움이 필요해요";
             case INACTIVITY -> "무활동 감지됨";
-            case RISK_LINK -> resolveRiskLinkMessage(isDangerous);
-            case OUTING_RETURN -> phase == OutingPhase.OUTING ? "외출하셨어요" : "귀가하셨어요";
+            case RISK_LINK -> resolveRiskLinkMessage(event.getIsDangerous());
+            case OUTING_RETURN -> OutingReturnMessage.resolve(event.getPhase(), event.getDetectionType());
         };
     }
 

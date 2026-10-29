@@ -9,6 +9,7 @@ import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.device.dto.request.DeviceLocationUpdateRequest;
 import com.example.senioron.domain.device.dto.response.DeviceLocationResponse;
 import com.example.senioron.domain.device.dto.response.HomeLocationResponse;
+import com.example.senioron.domain.device.dto.response.DeviceReconnectionStatusResponse;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
@@ -179,20 +180,10 @@ public class DeviceService {
             );
         }
 
-        Device device = deviceRepository
-                .findByDeviceIdentifier(
-                        request.deviceIdentifier()
-                )
-                .orElseGet(() ->
-                        Device.builder()
-                                .user(user)
-                                .deviceIdentifier(
-                                        request.deviceIdentifier()
-                                )
-                                .build()
-                );
-
-        device.reassignOwner(user);
+        Device device = findOrCreateDevice(
+                user,
+                request.deviceIdentifier()
+        );
 
         device.updateDeviceInfo(
                 request.deviceName(),
@@ -217,73 +208,37 @@ public class DeviceService {
             User currentUser,
             Long seniorId
     ) {
-
         if (currentUser.getRole() != Role.CHILD) {
             throw new BusinessException(
                     ErrorCode.DEVICE_DISCONNECT_ACCESS_DENIED
             );
         }
 
-        Senior senior =
-                seniorRepository
-                        .findById(seniorId)
-                        .orElseThrow(() ->
-                                new BusinessException(
-                                        ErrorCode.SENIOR_NOT_FOUND
-                                )
-                        );
-
-        FamilyMember familyMember =
-                familyMemberRepository
-                        .findByUserAndFamily(
-                                currentUser,
-                                senior.getFamily()
+        Senior senior = seniorRepository
+                .findById(seniorId)
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.SENIOR_NOT_FOUND
                         )
-                        .orElseThrow(() ->
-                                new BusinessException(
-                                        ErrorCode.DEVICE_DISCONNECT_ACCESS_DENIED
-                                )
-                        );
+                );
+
+        FamilyMember familyMember = familyMemberRepository
+                .findByUserAndFamilyForUpdate(
+                        currentUser,
+                        senior.getFamily()
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.DEVICE_DISCONNECT_ACCESS_DENIED
+                        )
+                );
 
         validateDeviceDisconnectAuthority(
                 currentUser,
                 familyMember
         );
 
-        User seniorUser =
-                senior.getParentUser();
-
-        if (seniorUser == null) {
-            throw new BusinessException(
-                    ErrorCode.DEVICE_NOT_CONNECTED
-            );
-        }
-
-        List<Device> devices =
-                deviceRepository.findAllByUser(
-                        seniorUser
-                );
-
-        if (devices.isEmpty()) {
-            throw new BusinessException(
-                    ErrorCode.DEVICE_NOT_CONNECTED
-            );
-        }
-
-        boolean alreadyDisconnected =
-                devices.stream()
-                        .allMatch(device ->
-                                device.getConnectionStatus()
-                                        == DeviceStatus.DISCONNECTED
-                        );
-
-        if (alreadyDisconnected) {
-            throw new BusinessException(
-                    ErrorCode.DEVICE_NOT_CONNECTED
-            );
-        }
-
-        devices.forEach(Device::disconnect);
+        familyMemberRepository.delete(familyMember);
     }
 
     @Transactional
@@ -321,6 +276,38 @@ public class DeviceService {
         }
 
         devices.forEach(Device::disconnect);
+    }
+
+    @Transactional(readOnly = true)
+    public DeviceReconnectionStatusResponse getReconnectionStatus(
+            User currentUser
+    ) {
+        if (currentUser.getRole() != Role.PARENT) {
+            throw new BusinessException(
+                    ErrorCode.SENIOR_DEVICE_ACCESS_DENIED
+            );
+        }
+
+        boolean familyConnected =
+                !familyMemberRepository
+                        .findAllByUser(currentUser)
+                        .isEmpty();
+
+        boolean deviceDisconnected =
+                deviceRepository
+                        .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(
+                                currentUser
+                        )
+                        .map(device ->
+                                device.getConnectionStatus()
+                                        == DeviceStatus.DISCONNECTED
+                        )
+                        .orElse(false);
+
+        return new DeviceReconnectionStatusResponse(
+                familyConnected,
+                deviceDisconnected
+        );
     }
 
     @Transactional
@@ -365,18 +352,13 @@ public class DeviceService {
             User currentUser,
             FamilyMember familyMember
     ) {
-
         if (currentUser.getRole() != Role.CHILD) {
             throw new BusinessException(
                     ErrorCode.DEVICE_DISCONNECT_ACCESS_DENIED
             );
         }
 
-        ManagerType managerType =
-                familyMember.getManagerType();
-
-        if (managerType != ManagerType.PRIMARY
-                && managerType != ManagerType.SUB) {
+        if (familyMember.getManagerType() != ManagerType.SUB) {
             throw new BusinessException(
                     ErrorCode.DEVICE_DISCONNECT_ACCESS_DENIED
             );

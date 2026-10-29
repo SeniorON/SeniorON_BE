@@ -17,6 +17,7 @@ import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.repository.RefreshTokenRepository;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.domain.device.dto.request.DeviceStatusUpdateRequest;
+import com.example.senioron.domain.device.dto.response.DeviceReconnectionStatusResponse;
 import com.example.senioron.domain.user.entity.ManagerType;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -357,6 +358,224 @@ class DeviceServiceTest {
         deviceService().reconnectDevice(parent);
 
         assertThat(deviceRepository.count()).isZero();
+    }
+
+    @Test
+    void reconnectionStatusReturnsTrueWhenFamilyConnectedAndDeviceDisconnected() {
+        Family family = familyRepository.saveAndFlush(
+                Family.builder()
+                        .seniorCode("family-" + UUID.randomUUID())
+                        .build()
+        );
+        User parent = saveUser("parent", Role.PARENT, family);
+
+        deviceService().updateFcmToken(
+                parent,
+                "fcm-token",
+                DEVICE_IDENTIFIER
+        );
+        deviceService().disconnectOwnDevice(parent);
+
+        DeviceReconnectionStatusResponse response =
+                deviceService().getReconnectionStatus(parent);
+
+        assertThat(response.familyConnected()).isTrue();
+        assertThat(response.deviceDisconnected()).isTrue();
+    }
+
+    @Test
+    void reconnectionStatusReturnsFalseWhenDeviceIsOnline() {
+        Family family = familyRepository.saveAndFlush(
+                Family.builder()
+                        .seniorCode("family-" + UUID.randomUUID())
+                        .build()
+        );
+        User parent = saveUser("parent", Role.PARENT, family);
+
+        deviceService().updateFcmToken(
+                parent,
+                "fcm-token",
+                DEVICE_IDENTIFIER
+        );
+
+        DeviceReconnectionStatusResponse response =
+                deviceService().getReconnectionStatus(parent);
+
+        assertThat(response.familyConnected()).isTrue();
+        assertThat(response.deviceDisconnected()).isFalse();
+    }
+
+    @Test
+    void reconnectionStatusReturnsFamilyDisconnectedWhenNoFamilyExists() {
+        User parent = saveUser("parent", Role.PARENT);
+
+        DeviceReconnectionStatusResponse response =
+                deviceService().getReconnectionStatus(parent);
+
+        assertThat(response.familyConnected()).isFalse();
+        assertThat(response.deviceDisconnected()).isFalse();
+    }
+
+    @Test
+    void subManagerCanDisconnectOnlyOwnRelationshipFromSenior() {
+        Family family = familyRepository.saveAndFlush(
+                Family.builder()
+                        .seniorCode("family-" + UUID.randomUUID())
+                        .build()
+        );
+
+        User primary = saveUser("primary", Role.CHILD, family);
+        User sub = saveUser("sub", Role.CHILD);
+
+        familyMemberRepository.saveAndFlush(
+                FamilyMember.builder()
+                        .user(sub)
+                        .family(family)
+                        .managerType(ManagerType.SUB)
+                        .build()
+        );
+
+        Senior senior = seniorRepository.saveAndFlush(
+                senior(
+                        "senior",
+                        family,
+                        primary,
+                        null,
+                        37.1,
+                        127.1
+                )
+        );
+
+        deviceService().disconnectDevice(
+                sub,
+                senior.getSeniorId()
+        );
+
+        assertThat(
+                familyMemberRepository.existsByUserAndFamily(
+                        sub,
+                        family
+                )
+        ).isFalse();
+
+        assertThat(
+                familyMemberRepository.existsByUserAndFamily(
+                        primary,
+                        family
+                )
+        ).isTrue();
+
+        assertThat(
+                seniorRepository.findById(senior.getSeniorId())
+        ).isPresent();
+    }
+
+    @Test
+    void primaryManagerCannotDisconnectFromSenior() {
+        Family family = familyRepository.saveAndFlush(
+                Family.builder()
+                        .seniorCode("family-" + UUID.randomUUID())
+                        .build()
+        );
+
+        User primary = saveUser(
+                "primary",
+                Role.CHILD,
+                family
+        );
+
+        Senior senior = seniorRepository.saveAndFlush(
+                senior(
+                        "senior",
+                        family,
+                        primary,
+                        null,
+                        37.1,
+                        127.1
+                )
+        );
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                deviceService().disconnectDevice(
+                        primary,
+                        senior.getSeniorId()
+                )
+        ).isInstanceOf(
+                com.example.senioron.global.apiPayload.exception.BusinessException.class
+        );
+
+        assertThat(
+                familyMemberRepository.existsByUserAndFamily(
+                        primary,
+                        family
+                )
+        ).isTrue();
+    }
+
+    @Test
+    void disconnectingSubManagerKeepsOtherSubManagerRelationship() {
+        Family family = familyRepository.saveAndFlush(
+                Family.builder()
+                        .seniorCode("family-" + UUID.randomUUID())
+                        .build()
+        );
+
+        User primary = saveUser("primary", Role.CHILD, family);
+        User subA = saveUser("sub-a", Role.CHILD);
+        User subB = saveUser("sub-b", Role.CHILD);
+
+        familyMemberRepository.saveAndFlush(
+                FamilyMember.builder()
+                        .user(subA)
+                        .family(family)
+                        .managerType(ManagerType.SUB)
+                        .build()
+        );
+
+        familyMemberRepository.saveAndFlush(
+                FamilyMember.builder()
+                        .user(subB)
+                        .family(family)
+                        .managerType(ManagerType.SUB)
+                        .build()
+        );
+
+        Senior senior = seniorRepository.saveAndFlush(
+                senior(
+                        "senior",
+                        family,
+                        primary,
+                        null,
+                        37.1,
+                        127.1
+                )
+        );
+
+        deviceService().disconnectDevice(
+                subA,
+                senior.getSeniorId()
+        );
+
+        assertThat(
+                familyMemberRepository.existsByUserAndFamily(
+                        subA,
+                        family
+                )
+        ).isFalse();
+
+        assertThat(
+                familyMemberRepository.existsByUserAndFamily(
+                        subB,
+                        family
+                )
+        ).isTrue();
+
+        assertThat(
+                familyMemberRepository.existsByUserAndFamily(
+                        primary,
+                        family
+                )
+        ).isTrue();
     }
 
     @Test

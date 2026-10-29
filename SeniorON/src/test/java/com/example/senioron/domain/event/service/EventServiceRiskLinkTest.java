@@ -48,7 +48,6 @@ class EventServiceRiskLinkTest {
     private final UserRepository userRepository = org.mockito.Mockito.mock(UserRepository.class);
     private final SeniorRepository seniorRepository = org.mockito.Mockito.mock(SeniorRepository.class);
     private final FamilyMemberRepository familyMemberRepository = org.mockito.Mockito.mock(FamilyMemberRepository.class);
-    private final DeviceRepository deviceRepository = org.mockito.Mockito.mock(DeviceRepository.class);
     private final MeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     private EventService eventService;
@@ -59,7 +58,7 @@ class EventServiceRiskLinkTest {
         eventService = new EventService(
                 eventRepository, notificationService, geocodingClient, safeBrowsingClient,
                 applicationContext, userRepository, seniorRepository, familyMemberRepository,
-                deviceRepository, meterRegistry);
+                meterRegistry);
 
         senior = User.builder().usersId(1L).name("시니어").role(Role.PARENT).build();
 

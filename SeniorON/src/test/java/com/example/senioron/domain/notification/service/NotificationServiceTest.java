@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.example.senioron.domain.device.entity.Device;
 import com.example.senioron.domain.device.entity.DeviceStatus;
@@ -238,13 +239,7 @@ class NotificationServiceTest {
     }
 
     @Test
-    void updateSettingUsesSeniorParentSetting() {
-        given(deviceRepository.findAllByUserIn(List.of(parent))).willReturn(List.of(
-                Device.builder()
-                        .connectionStatus(DeviceStatus.ONLINE)
-                        .build()
-        ));
-
+    void updateSettingDoesNotRequireParentDeviceOnline() {
         var response = notificationService.updateSetting(
                 CHILD_ID,
                 SENIOR_ID,
@@ -255,6 +250,7 @@ class NotificationServiceTest {
         assertThat(response.getType()).isEqualTo(NotificationSettingType.INACTIVITY);
         assertThat(response.getEnabled()).isTrue();
         verify(notificationSettingRepository).findById(PARENT_ID);
+        verifyNoInteractions(deviceRepository);
     }
 
     @Test
@@ -291,9 +287,6 @@ class NotificationServiceTest {
         senior = Senior.builder().seniorId(SENIOR_ID).family(family).registeredBy(child)
                 .parentUser(parent).latitude(37.5665).longitude(126.9780).build();
         given(seniorRepository.findById(SENIOR_ID)).willReturn(Optional.of(senior));
-        given(deviceRepository.findAllByUserIn(List.of(parent))).willReturn(List.of(
-                Device.builder().connectionStatus(DeviceStatus.ONLINE).build()));
-
         var response = notificationService.updateSetting(
                 CHILD_ID, SENIOR_ID, NotificationSettingType.OUTING_RETURN, true);
         assertThat(response.getEnabled()).isTrue();
@@ -302,9 +295,6 @@ class NotificationServiceTest {
 
     @Test
     void outingReturnCanBeTurnedOffWithoutHomeLocation() {
-        given(deviceRepository.findAllByUserIn(List.of(parent))).willReturn(List.of(
-                Device.builder().connectionStatus(DeviceStatus.ONLINE).build()));
-
         var response = notificationService.updateSetting(
                 CHILD_ID, SENIOR_ID, NotificationSettingType.OUTING_RETURN, false);
 

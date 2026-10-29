@@ -434,6 +434,66 @@ class FamilyPhotoRepositoryTest {
         assertThat(result).isEmpty();
     }
 
+    @Test
+    void findsMissingThumbnailsInBoundedIdOrderWithoutRepeatingEarlierPhotos() {
+        User uploader = saveUser("thumbnail-backfill-uploader");
+        PhotoGroup group = savePhotoGroup("thumbnail-backfill-group");
+        FamilyPhoto first = savePhoto(group, uploader, "missing-first.jpg");
+        familyPhotoRepository.saveAndFlush(FamilyPhoto.builder()
+                .photoGroup(group)
+                .user(uploader)
+                .imageKey("already-generated.jpg")
+                .thumbnailKey("thumbnails/already-generated.jpg")
+                .build());
+        FamilyPhoto second = savePhoto(group, uploader, "missing-second.jpg");
+        FamilyPhoto third = savePhoto(group, uploader, "missing-third.jpg");
+
+        assertThat(familyPhotoRepository.findPhotosWithoutThumbnail(
+                0L, PageRequest.of(0, 2)
+        )).extracting(FamilyPhoto::getFamilyPhotoId)
+                .containsExactly(first.getFamilyPhotoId(), second.getFamilyPhotoId());
+
+        // 앞선 사진 생성이 실패해 NULL로 남아 있어도 커서 이후로 진행한다.
+        assertThat(familyPhotoRepository.findPhotosWithoutThumbnail(
+                first.getFamilyPhotoId(), PageRequest.of(0, 2)
+        )).extracting(FamilyPhoto::getFamilyPhotoId)
+                .containsExactly(second.getFamilyPhotoId(), third.getFamilyPhotoId());
+
+        assertThat(familyPhotoRepository.findPhotosWithoutThumbnail(
+                third.getFamilyPhotoId(), PageRequest.of(0, 2)
+        )).isEmpty();
+    }
+
+    @Test
+    void attachesThumbnailOnlyToExistingPhotoWithoutThumbnail() {
+        User uploader = saveUser("thumbnail-attachment-uploader");
+        PhotoGroup group = savePhotoGroup("thumbnail-attachment-group");
+        FamilyPhoto photo = savePhoto(group, uploader, "original-for-backfill.jpg");
+        Long photoId = photo.getFamilyPhotoId();
+
+        assertThat(familyPhotoRepository.updateThumbnailIfAbsent(
+                photoId, "thumbnails/first.jpg"
+        )).isEqualTo(1);
+        assertThat(familyPhotoRepository.findById(photoId)).hasValueSatisfying(saved -> {
+            assertThat(saved.getThumbnailKey()).isEqualTo("thumbnails/first.jpg");
+            assertThat(saved.getImageKey()).isEqualTo("original-for-backfill.jpg");
+        });
+
+        assertThat(familyPhotoRepository.updateThumbnailIfAbsent(
+                photoId, "thumbnails/second.jpg"
+        )).isZero();
+        assertThat(familyPhotoRepository.findById(photoId)).hasValueSatisfying(saved ->
+                assertThat(saved.getThumbnailKey()).isEqualTo("thumbnails/first.jpg")
+        );
+
+        familyPhotoRepository.deleteById(photoId);
+        familyPhotoRepository.flush();
+        assertThat(familyPhotoRepository.updateThumbnailIfAbsent(
+                photoId, "thumbnails/deleted-photo.jpg"
+        )).isZero();
+        assertThat(familyPhotoRepository.findById(photoId)).isEmpty();
+    }
+
     private Family saveFamily(String seniorCode) {
         return familyRepository.saveAndFlush(
                 Family.builder()

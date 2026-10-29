@@ -2,13 +2,16 @@ package com.example.senioron.global.validation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.example.senioron.domain.event.dto.request.SosEventRequest;
 import com.example.senioron.domain.home.dto.request.SeniorProfileUpdateRequest;
 import com.example.senioron.domain.senior.dto.request.SeniorCreateRequest;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class ValidCoordinatePairTest {
 
@@ -57,6 +60,20 @@ class ValidCoordinatePairTest {
         SeniorProfileUpdateRequest request = createSeniorProfileUpdateRequest(37.5665, 126.9780);
 
         assertThat(validator.validate(request)).isEmpty();
+    }
+
+    @Test
+    void sosRequestAllowsBothCoordinatesMissing() {
+        assertThat(validator.validate(new SosEventRequest())).isEmpty();
+    }
+
+    @Test
+    void sosRequestRejectsPartialCoordinates() {
+        SosEventRequest request = new SosEventRequest();
+        ReflectionTestUtils.setField(request, "latitude", new BigDecimal("37.5665"));
+
+        assertThat(validator.validate(request))
+                .anyMatch(violation -> violation.getMessage().equals("위도와 경도는 함께 입력해야 합니다."));
     }
 
     private SeniorCreateRequest createSeniorCreateRequest(Double latitude, Double longitude) {

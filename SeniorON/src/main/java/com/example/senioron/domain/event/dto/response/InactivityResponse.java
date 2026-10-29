@@ -42,4 +42,18 @@ public class InactivityResponse {
                 .LastSeenAt(event.getLastSeenAt())
                 .build();
     }
+
+    public static InactivityResponse replay(Event event) {
+        return InactivityResponse.builder()
+                .seniorId(event.getSenior() == null ? null : event.getSenior().getSeniorId())
+                .notificationStatus(event.getPreparationStatus())
+                .reason(event.getPreparationReason())
+                .receiverCount(event.getPreparationReceiverCount() == null ? 0 : event.getPreparationReceiverCount())
+                .id(event.getEventId())
+                .address(event.getAddress())
+                .latitude(event.getLatitude())
+                .longitude(event.getLongitude())
+                .LastSeenAt(event.getLastSeenAt())
+                .build();
+    }
 }

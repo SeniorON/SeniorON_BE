@@ -122,6 +122,7 @@ public enum ErrorCode implements BaseCode {
     FAMILY_PHOTO_UPLOAD_NOT_FOUND(HttpStatus.NOT_FOUND, "FAMILY_PHOTO404_1", "업로드된 사진 파일을 찾을 수 없습니다."),
     FAMILY_PHOTO_UPLOAD_FORBIDDEN(HttpStatus.FORBIDDEN, "FAMILY_PHOTO403_1", "해당 사진 업로드를 완료할 권한이 없습니다."),
     FAMILY_PHOTO_SIZE_EXCEEDED(HttpStatus.BAD_REQUEST, "FAMILY_PHOTO400_1", "사진 크기는 10MB 이하여야 합니다."),
+    FAMILY_PHOTO_INVALID_IMAGE(HttpStatus.BAD_REQUEST, "FAMILY_PHOTO400_2", "해독 가능한 JPG, PNG, WEBP 사진을 업로드해 주세요."),
     FAMILY_PHOTO_ALREADY_REGISTERED(HttpStatus.CONFLICT, "FAMILY_PHOTO409", "이미 등록 완료된 사진입니다."),
     PRIMARY_MANAGER_MUST_BE_CHILD(HttpStatus.BAD_REQUEST, "FAMILY400_3", "주 담당자는 자녀 계정만 지정할 수 있습니다."),
     PHOTO_GROUP_CONNECTION_FORBIDDEN(HttpStatus.FORBIDDEN, "PHOTO_GROUP403", "사진 공유 연결 권한이 없습니다."),
@@ -153,7 +154,7 @@ public enum ErrorCode implements BaseCode {
     PARENT_DEVICE_OFFLINE(HttpStatus.BAD_REQUEST, "DEVICE400", "부모님 기기가 오프라인 상태라 설정을 변경할 수 없습니다."),
     DEVICE_IDENTIFIER_REQUIRED(HttpStatus.BAD_REQUEST, "DEVICE400_1", "기기 식별자(deviceIdentifier)가 필요합니다."),
     DEVICE_NOT_CONNECTED(HttpStatus.NOT_FOUND, "DEVICE405", "연결된 기기가 없습니다."),
-    DEVICE_DISCONNECT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "DEVICE403", "기기 연결을 해제할 권한이 없습니다."),
+    DEVICE_DISCONNECT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "DEVICE403", "시니어 연결을 해제할 권한이 없습니다."),
     
     // Receipt Error
     RECEIPT_NOT_FOUND(HttpStatus.NOT_FOUND, "RECEIPT404", "영수증을 찾을 수 없습니다."),

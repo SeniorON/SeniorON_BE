@@ -13,6 +13,7 @@ import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.family.repository.projection.FamilyPhotoAlbumCountProjection;
+import com.example.senioron.domain.family.support.FamilyPhotoResponseMapper;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
@@ -21,6 +22,7 @@ import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.storage.PresignedUploadInfo;
 import com.example.senioron.global.storage.S3Service;
 import com.example.senioron.global.storage.StoredObjectInfo;
+import com.example.senioron.global.storage.ThumbnailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -44,6 +46,9 @@ import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
 import com.example.senioron.domain.family.entity.PhotoGroup;
 import com.example.senioron.domain.family.entity.PhotoGroupFamily;
 import com.example.senioron.domain.family.repository.FamilyPhotoViewRepository;
+import com.example.senioron.domain.family.event.FamilyPhotoDeletedEvent;
+import org.springframework.context.ApplicationEventPublisher;
+import com.example.senioron.domain.user.entity.ManagerType;
 
 @Slf4j
 @Service
@@ -54,11 +59,15 @@ public class FamilyPhotoService {
     private final FamilyPhotoViewRepository familyPhotoViewRepository;
     private final UserRepository userRepository;
     private final S3Service s3Service;
+    private final ThumbnailService thumbnailService;
     private final FamilyPhotoPermissionService familyPhotoPermissionService;
     private final FamilyPhotoPersistenceService photoPersistenceService;
     private final FamilyMemberRepository familyMemberRepository;
     private final SeniorRepository seniorRepository;
     private final PhotoGroupFamilyRepository photoGroupFamilyRepository;
+    private final FamilyPhotoPushTargetService familyPhotoPushTargetService;
+    private final ApplicationEventPublisher eventPublisher;
+    private final FamilyPhotoResponseMapper familyPhotoResponseMapper;
 
     private static final int NEW_PHOTO_WINDOW_HOURS = 24;
     private static final long MAX_FAMILY_PHOTO_SIZE = 10L * 1024 * 1024;
@@ -85,19 +94,7 @@ public class FamilyPhotoService {
             User principal,
             FamilyPhotoUploadUrlRequest request
     ) {
-        User user = userRepository
-                .findById(principal.getUsersId())
-                .orElseThrow(() ->
-                        new BusinessException(
-                                ErrorCode.USER_NOT_FOUND
-                        )
-                );
-
-        if (user.getRole() != Role.CHILD) {
-            throw new BusinessException(
-                    ErrorCode.FORBIDDEN
-            );
-        }
+        User user = findChildUser(principal);
 
         Family family = resolveAccessibleFamily(
                 user,
@@ -129,19 +126,7 @@ public class FamilyPhotoService {
             String idempotencyKey,
             FamilyPhotoUploadCompleteRequest request
     ) {
-        User user = userRepository
-                .findById(principal.getUsersId())
-                .orElseThrow(() ->
-                        new BusinessException(
-                                ErrorCode.USER_NOT_FOUND
-                        )
-                );
-
-        if (user.getRole() != Role.CHILD) {
-            throw new BusinessException(
-                    ErrorCode.FORBIDDEN
-            );
-        }
+        User user = findChildUser(principal);
 
         Family family = resolveAccessibleFamily(
                 user,
@@ -150,7 +135,7 @@ public class FamilyPhotoService {
 
         List<PhotoGroup> photoGroups =
                 resolveAccessiblePhotoGroups(
-                        family,
+                        user,
                         request.getPhotoGroupIds()
                 );
 
@@ -210,35 +195,29 @@ public class FamilyPhotoService {
                 imageKey
         );
 
-        try {
-            FamilyPhoto savedPhoto =
-                    photoPersistenceService.create(
-                            user.getUsersId(),
-                            imageKey,
-                            idempotencyKey,
-                            request.getDescription(),
-                            photoGroups
-                    );
+        String thumbnailKey = createThumbnailOrNull(imageKey);
+        FamilyPhoto savedPhoto;
 
-            return toItemResponse(
-                    savedPhoto,
-                    user,
-                    newPhotoCutoff,
-                    false
+        try {
+            savedPhoto = photoPersistenceService.create(
+                    user.getUsersId(),
+                    imageKey,
+                    thumbnailKey,
+                    idempotencyKey,
+                    request.getDescription(),
+                    family.getFamilyId(),
+                    photoGroups.stream()
+                            .map(PhotoGroup::getId)
+                            .toList()
             );
         } catch (DataIntegrityViolationException exception) {
-            /*
-             * 동일 멱등키 요청이 동시에 실행된 경우,
-             * 먼저 저장된 결과를 반환한다.
-             */
-            FamilyPhoto existingPhoto =
-                    photoPersistenceService
-                            .findExisting(
-                                    user.getUsersId(),
-                                    idempotencyKey
-                            )
-                            .orElse(null);
+            deleteUploadedObjectSafely(thumbnailKey);
 
+            FamilyPhoto existingPhoto = photoPersistenceService
+                    .findExisting(user.getUsersId(), idempotencyKey)
+                    .orElse(null);
+
+            // 동일 멱등키로 먼저 저장된 결과가 있으면 반환
             if (existingPhoto != null) {
                 return toItemResponse(
                         existingPhoto,
@@ -248,22 +227,28 @@ public class FamilyPhotoService {
                 );
             }
 
-            /*
-             * 서로 다른 멱등키로 동일 imageKey를
-             * 동시에 완료한 경우 409를 반환한다.
-             */
-            if (familyPhotoRepository
-                    .existsByImageKey(imageKey)) {
+            // 다른 멱등키로 같은 원본이 먼저 등록됐다면 충돌 처리
+            if (familyPhotoRepository.existsByImageKey(imageKey)) {
                 throw new BusinessException(
                         ErrorCode.FAMILY_PHOTO_ALREADY_REGISTERED
                 );
             }
 
             throw exception;
+        } catch (RuntimeException exception) {
+            deleteUploadedObjectSafely(thumbnailKey);
+            throw exception;
         }
+
+        return toItemResponse(
+                savedPhoto,
+                user,
+                newPhotoCutoff,
+                false
+        );
     }
 
-    private StoredObjectInfo validateUploadedObject(
+    private void validateUploadedObject(
             User user,
             Family family,
             String imageKey
@@ -305,8 +290,19 @@ public class FamilyPhotoService {
                     ErrorCode.UNSUPPORTED_IMAGE_TYPE
             );
         }
+    }
 
-        return objectInfo;
+    private User findChildUser(User principal) {
+        User user = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.USER_NOT_FOUND)
+                );
+
+        if (user.getRole() != Role.CHILD) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+
+        return user;
     }
 
     private void validateImageKeyOwnership(
@@ -347,14 +343,7 @@ public class FamilyPhotoService {
             String idempotencyKey,
             FamilyPhotoCreateRequest request
     ) {
-        User user = userRepository.findById(principal.getUsersId())
-                .orElseThrow(() ->
-                        new BusinessException(ErrorCode.USER_NOT_FOUND)
-                );
-
-        if (user.getRole() != Role.CHILD) {
-            throw new BusinessException(ErrorCode.FORBIDDEN);
-        }
+        User user = findChildUser(principal);
 
         Family family = resolveAccessibleFamily(
                 user,
@@ -363,7 +352,7 @@ public class FamilyPhotoService {
 
         List<PhotoGroup> photoGroups =
                 resolveAccessiblePhotoGroups(
-                        family,
+                        user,
                         request.getPhotoGroupIds()
                 );
 
@@ -408,19 +397,27 @@ public class FamilyPhotoService {
                 directory
         );
 
+        String thumbnailKey = null;
+
         FamilyPhoto savedPhoto;
 
         try {
+            thumbnailKey = createThumbnailOrNull(imageKey);
             savedPhoto = photoPersistenceService.create(
                     user.getUsersId(),
                     imageKey,
+                    thumbnailKey,
                     idempotencyKey,
                     request.getDescription(),
-                    photoGroups
+                    family.getFamilyId(),
+                    photoGroups.stream()
+                            .map(PhotoGroup::getId)
+                            .toList()
             );
 
         } catch (DataIntegrityViolationException exception) {
             deleteUploadedObjectSafely(imageKey);
+            deleteUploadedObjectSafely(thumbnailKey);
 
             FamilyPhoto existingPhoto =
                     photoPersistenceService
@@ -439,6 +436,7 @@ public class FamilyPhotoService {
 
         } catch (RuntimeException exception) {
             deleteUploadedObjectSafely(imageKey);
+            deleteUploadedObjectSafely(thumbnailKey);
             throw exception;
         }
 
@@ -451,6 +449,11 @@ public class FamilyPhotoService {
     }
 
     private void deleteUploadedObjectSafely(String imageKey) {
+
+        if (imageKey == null || imageKey.isBlank()) {
+            return;
+        }
+
         try {
             s3Service.delete(imageKey);
         } catch (RuntimeException exception) {
@@ -481,34 +484,32 @@ public class FamilyPhotoService {
             LocalDateTime newPhotoCutoff,
             boolean viewedByCurrentParent
     ) {
-        boolean newPhoto =
-                currentUser.getRole() == Role.PARENT
-                        && photo.getUser().getRole() == Role.CHILD
-                        && !viewedByCurrentParent
-                        && !photo.getCreatedAt()
-                        .isBefore(newPhotoCutoff);
+        return toItemResponse(
+                photo,
+                currentUser,
+                newPhotoCutoff,
+                viewedByCurrentParent,
+                familyPhotoPermissionService.canDelete(
+                        photo,
+                        currentUser
+                )
+        );
+    }
 
-        return FamilyPhotoItemResponse.builder()
-                .familyPhotoId(photo.getFamilyPhotoId())
-                .imageUrl(
-                        s3Service.getFileUrl(
-                                photo.getImageKey()
-                        )
-                )
-                .uploaderUserId(
-                        photo.getUser().getUsersId()
-                )
-                .uploaderName(photo.getUser().getName())
-                .description(photo.getDescription())
-                .canDelete(
-                        familyPhotoPermissionService.canDelete(
-                                photo,
-                                currentUser
-                        )
-                )
-                .createdAt(photo.getCreatedAt())
-                .newPhoto(newPhoto)
-                .build();
+    private FamilyPhotoItemResponse toItemResponse(
+            FamilyPhoto photo,
+            User currentUser,
+            LocalDateTime newPhotoCutoff,
+            boolean viewedByCurrentParent,
+            boolean canDelete
+    ) {
+        return familyPhotoResponseMapper.toItemResponse(
+                photo,
+                currentUser,
+                newPhotoCutoff,
+                viewedByCurrentParent,
+                canDelete
+        );
     }
 
     private Set<Long> findViewedPhotoIds(
@@ -650,6 +651,12 @@ public class FamilyPhotoService {
                         pagePhotos
                 );
 
+        Set<Long> deletablePhotoIds =
+                familyPhotoPermissionService.findDeletablePhotoIds(
+                        pagePhotos,
+                        currentUser
+                );
+
         List<FamilyPhotoItemResponse> photoResponses =
                 pagePhotos.stream()
                         .map(photo ->
@@ -658,6 +665,9 @@ public class FamilyPhotoService {
                                         currentUser,
                                         newPhotoCutoff,
                                         viewedPhotoIds.contains(
+                                                photo.getFamilyPhotoId()
+                                        ),
+                                        deletablePhotoIds.contains(
                                                 photo.getFamilyPhotoId()
                                         )
                                 )
@@ -685,7 +695,7 @@ public class FamilyPhotoService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         FamilyPhoto photo = familyPhotoRepository
-                .findAccessibleByFamilyPhotoIdAndUser(
+                .findAccessibleForDeletionByFamilyPhotoIdAndUser(
                         familyPhotoId,
                         currentUser
                 )
@@ -700,12 +710,28 @@ public class FamilyPhotoService {
         }
 
         String imageKey = photo.getImageKey();
+        String thumbnailKey = photo.getThumbnailKey();
+
+        List<String> tokens =
+                familyPhotoPushTargetService.loadDeletionTokens(familyPhotoId);
 
         familyPhotoRepository.delete(photo);
         registerS3DeleteAfterCommit(imageKey);
+        registerS3DeleteAfterCommit(thumbnailKey);
+
+        if (!tokens.isEmpty()) {
+            eventPublisher.publishEvent(
+                    new FamilyPhotoDeletedEvent(familyPhotoId, tokens)
+            );
+        }
     }
 
     private void registerS3DeleteAfterCommit(String imageKey){
+
+        if (imageKey == null || imageKey.isBlank()) {
+            return;
+        }
+
         TransactionSynchronizationManager.registerSynchronization(
                 new TransactionSynchronization(){
                     @Override
@@ -899,29 +925,52 @@ public class FamilyPhotoService {
     }
 
     private List<PhotoGroup> resolveAccessiblePhotoGroups(
-            Family family,
+            User user,
             List<Long> requestedPhotoGroupIds
     ) {
-        List<Long> distinctPhotoGroupIds =
-                requestedPhotoGroupIds.stream()
-                        .distinct()
-                        .toList();
+        List<Long> distinctIds = requestedPhotoGroupIds.stream()
+                .distinct()
+                .toList();
 
-        List<PhotoGroupFamily> groupLinks =
-                photoGroupFamilyRepository
-                        .findAllByFamilyAndPhotoGroupIds(
-                                family,
-                                distinctPhotoGroupIds
-                        );
-
-        if (groupLinks.size() != distinctPhotoGroupIds.size()) {
+        if (distinctIds.isEmpty()) {
             throw new BusinessException(
                     ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN
             );
         }
 
-        return groupLinks.stream()
+        List<PhotoGroup> photoGroups = photoGroupFamilyRepository
+                .findManagedDefaultPhotoGroupLinks(
+                        user,
+                        List.of(ManagerType.PRIMARY, ManagerType.SUB)
+                )
+                .stream()
                 .map(PhotoGroupFamily::getPhotoGroup)
+                .filter(group -> distinctIds.contains(group.getId()))
                 .toList();
+
+        if (photoGroups.size() != distinctIds.size()) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN
+            );
+        }
+
+        return photoGroups;
+    }
+
+    private String createThumbnailOrNull(String imageKey) {
+        byte[] originalBytes = s3Service.download(imageKey);
+        thumbnailService.validateOriginal(originalBytes);
+
+        try {
+            byte[] thumbnailBytes = thumbnailService.create(originalBytes);
+            return s3Service.uploadThumbnail(thumbnailBytes);
+        } catch (RuntimeException exception) {
+            log.warn(
+                    "가족사진 썸네일 생성·저장 실패, imageKey={}",
+                    imageKey,
+                    exception
+            );
+            return null;
+        }
     }
 }

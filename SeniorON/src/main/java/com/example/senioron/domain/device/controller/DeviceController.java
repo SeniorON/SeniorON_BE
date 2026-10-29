@@ -6,6 +6,7 @@ import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.device.dto.request.DeviceLocationUpdateRequest;
 import com.example.senioron.domain.device.dto.response.DeviceLocationResponse;
 import com.example.senioron.domain.device.dto.response.HomeLocationResponse;
+import com.example.senioron.domain.device.dto.response.DeviceReconnectionStatusResponse;
 import com.example.senioron.domain.user.entity.User;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -122,10 +123,10 @@ public class DeviceController {
     }
 
     @Operation(
-            summary = "시니어 기기 연결 해제",
-            description = "주담당자 또는 보조담당자가 seniorId로 선택한 시니어 기기 연결을 해제"
+            summary = "보조담당자 시니어 연결 해제",
+            description = "보조담당자가 seniorId로 선택한 시니어와의 연결 관계를 해제합니다. " +
+                    "주담당자는 연결 해제할 수 없으며, 시니어 및 다른 담당자의 연결 관계는 유지됩니다."
     )
-
     @DeleteMapping("/connection")
     public ResponseEntity<Void> disconnectDevice(
             @RequestParam Long seniorId,
@@ -156,6 +157,38 @@ public class DeviceController {
         deviceService.disconnectOwnDevice(
                 currentUser
         );
+
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(
+            summary = "시니어 기기 재연결 상태 조회",
+            description = "로그인한 시니어의 가족 연결 여부와 기기 연결 해제 여부를 조회"
+    )
+    @GetMapping("/reconnection")
+    public ResponseEntity<DeviceReconnectionStatusResponse> getReconnectionStatus(
+            Authentication authentication
+    ) {
+        User currentUser =
+                (User) authentication.getPrincipal();
+
+        return ResponseEntity.ok(
+                deviceService.getReconnectionStatus(currentUser)
+        );
+    }
+
+    @Operation(
+            summary = "시니어 기기 재연결",
+            description = "연결 해제된 시니어의 기존 기기를 다시 연결"
+    )
+    @PatchMapping("/reconnection")
+    public ResponseEntity<Void> reconnectDevice(
+            Authentication authentication
+    ) {
+        User currentUser =
+                (User) authentication.getPrincipal();
+
+        deviceService.reconnectDevice(currentUser);
 
         return ResponseEntity.noContent().build();
     }

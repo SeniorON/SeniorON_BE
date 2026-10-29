@@ -6,7 +6,6 @@ import com.example.senioron.domain.event.dto.request.RiskLinkRequest;
 import com.example.senioron.domain.event.dto.SosEventCreation;
 import com.example.senioron.domain.event.dto.SosAddressLookupRequested;
 import com.example.senioron.domain.event.dto.request.SosEventRequest;
-import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.event.dto.response.EventDetailResponse;
 import com.example.senioron.domain.event.dto.response.InactivityResponse;
 import com.example.senioron.domain.event.dto.response.OutingReturnResponse;
@@ -34,6 +33,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.dao.DataIntegrityViolationException;
+import java.util.Optional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -53,7 +55,6 @@ public class EventService {
     private final UserRepository userRepository;
     private final SeniorRepository seniorRepository;
     private final FamilyMemberRepository familyMemberRepository;
-    private final DeviceRepository deviceRepository;
     private final MeterRegistry meterRegistry;
 
     /**
@@ -61,11 +62,29 @@ public class EventService {
      * 푸시 실패는 API 실패로 바꾸지 않고 로그와 메트릭으로 관찰한다.
      */
     public SosEventResponse createSosEvent(User user, SosEventRequest req){
+        validateParent(user);
         EventService self = applicationContext.getBean(EventService.class);
+        if (req.getClientEventId() != null) {
+            Optional<SosEventResponse> replay = self.findSosReplay(user, req.getClientEventId());
+            if (replay.isPresent()) return replay.get();
+        }
+        try {
+            SosEventCreation creation = self.saveSosEvent(user, req);
+            return SosEventResponse.of(creation.event(), creation.notificationResult());
+        } catch (DataIntegrityViolationException failure) {
+            if (req.getClientEventId() != null) {
+                Optional<SosEventResponse> replay = self.findSosReplay(user, req.getClientEventId());
+                if (replay.isPresent()) return replay.get();
+            }
+            throw failure;
+        }
+    }
 
-        SosEventCreation creation = self.saveSosEvent(user, req);
-
-        return SosEventResponse.of(creation.event(), creation.notificationResult());
+    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
+    public Optional<SosEventResponse> findSosReplay(User user, String clientEventId) {
+        return eventRepository.findByTriggeredUser_UsersIdAndClientEventIdAndEventType(
+                user.getUsersId(), clientEventId, EventType.SOS)
+                .map(event -> SosEventResponse.replay(event, SosAddressLookupService.PENDING_ADDRESS));
     }
 
     @Transactional
@@ -79,11 +98,14 @@ public class EventService {
                 .latitude(req.getLatitude())
                 .longitude(req.getLongitude())
                 .address(SosAddressLookupService.PENDING_ADDRESS)
+                .clientEventId(req.getClientEventId())
                 .build();
 
         Event savedEvent = eventRepository.save(event);
+        if (req.getClientEventId() != null) eventRepository.flush();
         NotificationPreparationResult notificationResult =
                 notificationService.prepareSosNotificationResult(savedEvent);
+        savedEvent.recordPreparationResult(notificationResult);
 
         // REQUIRED 전파로 외부 트랜잭션에 참여한 경우에도 실제 커밋 이후에만 발송한다.
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
@@ -103,9 +125,29 @@ public class EventService {
 
     public InactivityResponse createInactivityEvent(User user, InactivityRequest req){
         validateParent(user);
-        String address = geocodingClient.reverseGeocode(req.getLatitude(), req.getLongitude());
         EventService self = applicationContext.getBean(EventService.class);
-        return self.saveInactivityEvent(address, user, req);
+        if (req.getClientEventId() != null) {
+            Optional<InactivityResponse> replay = self.findInactivityReplay(user, req.getClientEventId());
+            if (replay.isPresent()) return replay.get();
+        }
+        String address = req.getLatitude() != null && req.getLongitude() != null
+                ? geocodingClient.reverseGeocode(req.getLatitude(), req.getLongitude())
+                : null;
+        try {
+            return self.saveInactivityEvent(address, user, req);
+        } catch (DataIntegrityViolationException failure) {
+            if (req.getClientEventId() != null) {
+                Optional<InactivityResponse> replay = self.findInactivityReplay(user, req.getClientEventId());
+                if (replay.isPresent()) return replay.get();
+            }
+            throw failure;
+        }
+    }
+
+    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
+    public Optional<InactivityResponse> findInactivityReplay(User user, String clientEventId) {
+        return eventRepository.findByTriggeredUser_UsersIdAndClientEventIdAndEventType(
+                user.getUsersId(), clientEventId, EventType.INACTIVITY).map(InactivityResponse::replay);
     }
 
     @Transactional
@@ -120,19 +162,45 @@ public class EventService {
                 .longitude(req.getLongitude())
                 .address(address)
                 .lastSeenAt(req.getLastSeenAt())
+                .clientEventId(req.getClientEventId())
                 .build();
 
         Event savedEvent = eventRepository.save(event);
+        if (req.getClientEventId() != null) eventRepository.flush();
         NotificationPreparationResult result = notificationService.createFormEvent(savedEvent);
+        savedEvent.recordPreparationResult(result);
 
         return InactivityResponse.of(savedEvent, result);
     }
 
     public OutingReturnResponse createOutingReturnEvent(User user, OutingReturnRequest req) {
         validateParent(user);
-        String address = geocodingClient.reverseGeocode(req.getLatitude(), req.getLongitude());
         EventService self = applicationContext.getBean(EventService.class);
-        return self.saveOutingReturnEvent(address, user, req);
+        if (req.getClientEventId() != null) {
+            Optional<OutingReturnResponse> existing = self.findOutingReturnReplay(user, req.getClientEventId());
+            if (existing.isPresent()) {
+                return existing.get();
+            }
+        }
+        String address = geocodingClient.reverseGeocode(req.getLatitude(), req.getLongitude());
+        try {
+            return self.saveOutingReturnEvent(address, user, req);
+        } catch (DataIntegrityViolationException failure) {
+            // 유일 제약 경쟁의 패자는 롤백된 저장 트랜잭션 밖에서 승자의 결과를 다시 읽는다.
+            if (req.getClientEventId() != null) {
+                Optional<OutingReturnResponse> existing = self.findOutingReturnReplay(user, req.getClientEventId());
+                if (existing.isPresent()) {
+                    return existing.get();
+                }
+            }
+            throw failure;
+        }
+    }
+
+    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
+    public Optional<OutingReturnResponse> findOutingReturnReplay(User user, String clientEventId) {
+        return eventRepository.findByTriggeredUser_UsersIdAndClientEventIdAndEventType(
+                user.getUsersId(), clientEventId, EventType.OUTING_RETURN).map(OutingReturnResponse::of);
     }
 
     @Transactional
@@ -143,6 +211,10 @@ public class EventService {
                 .senior(resolveSenior(user))
                 .eventType(EventType.OUTING_RETURN)
                 .phase(req.getPhase())
+                .detectionType(req.getDetectionType())
+                .clientEventId(req.getClientEventId())
+                .detectedAt(req.getDetectedAt() == null ? null
+                        : req.getDetectedAt().atZoneSameInstant(java.time.ZoneId.of("Asia/Seoul")).toLocalDateTime())
                 .latitude(req.getLatitude())
                 .longitude(req.getLongitude())
                 .deviceBattery(req.getDeviceBattery())
@@ -150,7 +222,12 @@ public class EventService {
                 .build();
 
         Event savedEvent = eventRepository.save(event);
+        if (req.getClientEventId() != null) {
+            // 알림 생성 이전에 유일 제약을 확인하여 경쟁에서 진 요청의 부수 효과를 차단한다.
+            eventRepository.flush();
+        }
         NotificationPreparationResult result = notificationService.createFormEvent(savedEvent);
+        savedEvent.recordPreparationResult(result);
 
         return OutingReturnResponse.of(savedEvent, result);
     }
@@ -203,11 +280,7 @@ public class EventService {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
         validateAccess(user, event);
-        Integer currentBatteryLevel = deviceRepository
-                .findFirstByUserOrderByLastConnectedAtDescDeviceIdDesc(event.getTriggeredUser())
-                .map(device -> device.getBatteryLevel())
-                .orElse(null);
-        return EventDetailResponse.of(event, currentBatteryLevel);
+        return EventDetailResponse.of(event);
     }
 
     private void validateAccess(User principal, Event event) {

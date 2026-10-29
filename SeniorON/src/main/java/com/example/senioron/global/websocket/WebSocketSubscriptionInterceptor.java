@@ -1,5 +1,6 @@
 package com.example.senioron.global.websocket;
 
+import com.example.senioron.domain.medication.service.MedicationWebSocketAuthorizationService;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.UserStatus;
@@ -9,6 +10,7 @@ import com.example.senioron.global.jwt.JwtUtil;
 import io.jsonwebtoken.JwtException;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.stomp.StompCommand;
@@ -28,8 +30,23 @@ public class WebSocketSubscriptionInterceptor implements ChannelInterceptor {
 
     private static final Pattern SENIOR_HOME_TOPIC_PATTERN =
             Pattern.compile("^/topic/senior/(\\d+)/home$");
+
+    private static final Pattern SENIOR_MEDICATION_TOPIC_PATTERN =
+            Pattern.compile("^/topic/senior/(\\d+)/medication$");
+
     private final JwtUtil jwtUtil;
     private final UserRepository users;
+
+    private MedicationWebSocketAuthorizationService
+            medicationWebSocketAuthorizationService;
+
+    @Autowired
+    public void setMedicationWebSocketAuthorizationService(
+            MedicationWebSocketAuthorizationService medicationWebSocketAuthorizationService
+    ) {
+        this.medicationWebSocketAuthorizationService =
+                medicationWebSocketAuthorizationService;
+    }
 
     @Override
     public Message<?> preSend(
@@ -41,7 +58,7 @@ public class WebSocketSubscriptionInterceptor implements ChannelInterceptor {
         if (accessor == null) return message;
         if (StompCommand.CONNECT.equals(accessor.getCommand())) {
             User user = authenticate(accessor);
-            // 기본 User.toString()이 아닌 안정적인 usersId로 사용자별 세션을 라우팅한다.
+            // 기본 User.toString()이 아닌 안정적인 usersId로 사용 자별 세션을 라우팅한다.
             accessor.setUser(new UsernamePasswordAuthenticationToken(user, null, List.of()) {
                 @Override
                 public String getName() {
@@ -55,6 +72,35 @@ public class WebSocketSubscriptionInterceptor implements ChannelInterceptor {
                 if (user.getRole() != Role.CHILD) throw denied();
                 return message;
             }
+
+            var medicationMatcher =
+                    SENIOR_MEDICATION_TOPIC_PATTERN.matcher(
+                            destination == null ? "" : destination
+                    );
+
+            if (medicationMatcher.matches()) {
+                Long seniorId;
+
+                try {
+                    seniorId =
+                            Long.valueOf(
+                                    medicationMatcher.group(1)
+                            );
+                } catch (NumberFormatException exception) {
+                    throw denied();
+                }
+
+                if (medicationWebSocketAuthorizationService == null
+                        || !medicationWebSocketAuthorizationService.canSubscribe(
+                        user,
+                        seniorId
+                )) {
+                    throw denied();
+                }
+
+                return message;
+            }
+
             var matcher = SENIOR_HOME_TOPIC_PATTERN.matcher(destination == null ? "" : destination);
             // 기존 부모 홈 채널은 usersId 계약을 유지한다.
             if (!matcher.matches() || !user.getUsersId().toString().equals(matcher.group(1))) {
@@ -81,7 +127,7 @@ public class WebSocketSubscriptionInterceptor implements ChannelInterceptor {
                 throw denied();
             }
         } else {
-            // HTTP handshake에 JWT를 싣는 기존 네이티브 앱도 지원한다.
+            // HTTP handshake에 JWT를 싣는 기존 네이티브 앱도 지원 한다.
             userId = authenticatedUser(accessor).getUsersId();
         }
         return users.findById(userId).filter(user -> user.getStatus() == UserStatus.ACTIVE)

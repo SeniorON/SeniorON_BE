@@ -13,6 +13,7 @@ import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
 import com.example.senioron.domain.family.repository.PhotoGroupRepository;
+import com.example.senioron.domain.family.support.FamilyPhotoResponseMapper;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.entity.ManagerType;
@@ -50,6 +51,7 @@ public class FamilyService {
     private final PhotoGroupFamilyRepository photoGroupFamilyRepository;
     private final DeviceService deviceService;
     private final SeniorRepository seniorRepository;
+    private final FamilyPhotoResponseMapper familyPhotoResponseMapper;
 
     private static final int RECENT_UPLOADER_COUNT = 3;
     private static final int RECENT_PHOTO_COUNT = 4;
@@ -74,7 +76,7 @@ public class FamilyService {
 
         Family savedFamily = familyRepository.save(family);
 
-        createFamilyMember(user, savedFamily, ManagerType.PRIMARY);
+        createFamilyMember(user, savedFamily, ManagerType.PRIMARY, null);
         createDefaultPhotoGroup(savedFamily);
 
         return SeniorCodeCreateResponse.builder()
@@ -131,7 +133,22 @@ public class FamilyService {
             managerType = ManagerType.NONE;
         }
 
-        createFamilyMember(user, family, managerType);
+        // 보조담당자 최초 참여 시 주담당자의 관계를 초기값으로 사용
+        FamilyMember primaryMember = null;
+
+        if (managerType == ManagerType.SUB) {
+            primaryMember = familyMemberRepository
+                    .findAllByFamilyOrderByIdAsc(family)
+                    .stream()
+                    .filter(member ->
+                            member.getManagerType() == ManagerType.PRIMARY
+                    )
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        createFamilyMember(user, family, managerType, primaryMember);
+
         if (user.getRole() == Role.PARENT) {
             linkParentUserToFamilySenior(user, family);
         }
@@ -303,42 +320,6 @@ public class FamilyService {
                 .build();
     }
 
-    private FamilyPhotoItemResponse toFamilyPhotoItemResponse(
-            FamilyPhoto photo,
-            User currentUser,
-            LocalDateTime newPhotoCutoff,
-            boolean viewedByCurrentParent
-    ) {
-        boolean newPhoto =
-                currentUser.getRole() == Role.PARENT
-                        && photo.getUser().getRole() == Role.CHILD
-                        && !viewedByCurrentParent
-                        && !photo.getCreatedAt()
-                        .isBefore(newPhotoCutoff);
-
-        return FamilyPhotoItemResponse.builder()
-                .familyPhotoId(photo.getFamilyPhotoId())
-                .imageUrl(
-                        s3Service.getFileUrl(
-                                photo.getImageKey()
-                        )
-                )
-                .uploaderUserId(
-                        photo.getUser().getUsersId()
-                )
-                .uploaderName(photo.getUser().getName())
-                .description(photo.getDescription())
-                .canDelete(
-                        familyPhotoPermissionService.canDelete(
-                                photo,
-                                currentUser
-                        )
-                )
-                .createdAt(photo.getCreatedAt())
-                .newPhoto(newPhoto)
-                .build();
-    }
-
     @Transactional(readOnly = true)
     public FamilyHomeResponse getFamilyHome(User user, Long seniorId) {
 
@@ -421,14 +402,23 @@ public class FamilyService {
                 LocalDateTime.now()
                         .minusHours(NEW_PHOTO_WINDOW_HOURS);
 
+        Set<Long> deletablePhotoIds =
+                familyPhotoPermissionService.findDeletablePhotoIds(
+                        recentPhotoEntities,
+                        currentUser
+                );
+
         List<FamilyPhotoItemResponse> recentPhotos =
                 recentPhotoEntities.stream()
                         .map(photo ->
-                                toFamilyPhotoItemResponse(
+                                familyPhotoResponseMapper.toItemResponse(
                                         photo,
                                         currentUser,
                                         newPhotoCutoff,
                                         viewedPhotoIds.contains(
+                                                photo.getFamilyPhotoId()
+                                        ),
+                                        deletablePhotoIds.contains(
                                                 photo.getFamilyPhotoId()
                                         )
                                 )
@@ -455,6 +445,14 @@ public class FamilyService {
 
         Family family = resolveAccessibleFamily(user, seniorId);
 
+        FamilyMember member = familyMemberRepository
+                .findByUserAndFamily(user, family)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FORBIDDEN));
+
+        if (member.getManagerType() != ManagerType.PRIMARY) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+
         long familyMemberCount = familyMemberRepository.countByFamily(family);
 
         return SeniorCodeResponse.builder()
@@ -466,19 +464,26 @@ public class FamilyService {
     private void createFamilyMember(
             User user,
             Family family,
-            ManagerType managerType
+            ManagerType managerType,
+            FamilyMember primaryMember
     ) {
+        // 기존 가족 구성원이면 관계를 다시 복사하지 않음
         if (familyMemberRepository.existsByUserAndFamily(user, family)) {
             return;
         }
 
-        familyMemberRepository.save(
-                FamilyMember.builder()
-                        .user(user)
-                        .family(family)
-                        .managerType(managerType)
-                        .build()
-        );
+        FamilyMember.FamilyMemberBuilder builder = FamilyMember.builder()
+                .user(user)
+                .family(family)
+                .managerType(managerType);
+
+        // 보조담당자에게만 주담당자 관계 최초 복사
+        if (managerType == ManagerType.SUB && primaryMember != null) {
+            builder.relation(primaryMember.getRelation())
+                    .customRelation(primaryMember.getCustomRelation());
+        }
+
+        familyMemberRepository.save(builder.build());
     }
 
     private void createDefaultPhotoGroup(Family family) {
@@ -673,6 +678,16 @@ public class FamilyService {
             );
         }
 
+        // 사진 저장과 같은 그룹을 잠가 연결 해제와 저장을 순서대로 처리한다.
+        List<PhotoGroup> lockedGroups = photoGroupRepository
+                .findAllByIdsForUpdate(List.of(photoGroupId));
+
+        if (lockedGroups.size() != 1 || !lockedGroups.get(0).isActive()) {
+            throw new BusinessException(
+                    ErrorCode.PHOTO_GROUP_CONNECTION_NOT_FOUND
+            );
+        }
+
         List<PhotoGroupFamily> groupLinks =
                 photoGroupFamilyRepository.findAllSharedLinks(
                         currentFamily,
@@ -685,7 +700,7 @@ public class FamilyService {
             );
         }
 
-        PhotoGroup photoGroup = groupLinks.get(0).getPhotoGroup();
+        PhotoGroup photoGroup = lockedGroups.get(0);
         photoGroup.disconnect();
     }
 
@@ -704,15 +719,35 @@ public class FamilyService {
                 seniorId
         );
 
-        return photoGroupFamilyRepository
-                .findConnectedFamilyLinks(currentFamily)
-                .stream()
-                .map(this::toConnectedSeniorResponse)
+        FamilyMember currentMember = familyMemberRepository
+                .findByUserAndFamily(currentUser, currentFamily)
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED
+                        )
+                );
+
+        List<PhotoGroupFamily> connectedLinks;
+
+        if (currentMember.getManagerType() == ManagerType.SUB) {
+            connectedLinks = photoGroupFamilyRepository
+                    .findManagedConnectedFamilyLinks(
+                            currentFamily,
+                            currentUser
+                    );
+        } else {
+            connectedLinks = photoGroupFamilyRepository
+                    .findConnectedFamilyLinks(currentFamily);
+        }
+
+        return connectedLinks.stream()
+                .map(link -> toConnectedSeniorResponse(link, currentUser))
                 .toList();
     }
 
     private ConnectedSeniorResponse toConnectedSeniorResponse(
-            PhotoGroupFamily connectedLink
+            PhotoGroupFamily connectedLink,
+            User currentUser
     ) {
         Senior connectedSenior = Optional
                 .ofNullable(connectedLink.getFamily().getSenior())
@@ -720,9 +755,55 @@ public class FamilyService {
                         new BusinessException(ErrorCode.SENIOR_NOT_FOUND)
                 );
 
+        FamilyMember connectedMember = familyMemberRepository
+                .findByUserAndFamily(currentUser, connectedLink.getFamily())
+                .orElse(null);
+
         return ConnectedSeniorResponse.from(
                 connectedLink.getPhotoGroup(),
-                connectedSenior
+                connectedSenior,
+                connectedMember
         );
+    }
+
+    @Transactional(readOnly = true)
+    public List<PhotoShareTargetResponse> getPhotoShareTargets(
+            User principal
+    ) {
+        User user = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.USER_NOT_FOUND)
+                );
+
+        if (user.getRole() != Role.CHILD) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+
+        return photoGroupFamilyRepository
+                .findManagedDefaultPhotoGroupLinks(
+                        user,
+                        List.of(ManagerType.PRIMARY, ManagerType.SUB)
+                )
+                .stream()
+                .map(link -> {
+                    Senior senior = link.getFamily().getSenior();
+
+                    FamilyMember currentMember = familyMemberRepository
+                            .findByUserAndFamily(user, link.getFamily())
+                            .orElseThrow(() ->
+                                    new BusinessException(
+                                            ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED
+                                    )
+                            );
+
+                    return PhotoShareTargetResponse.builder()
+                            .photoGroupId(link.getPhotoGroup().getId())
+                            .seniorId(senior.getSeniorId())
+                            .name(senior.getName())
+                            .relation(currentMember.getRelation())
+                            .customRelation(currentMember.getCustomRelation())
+                            .build();
+                })
+                .toList();
     }
 }

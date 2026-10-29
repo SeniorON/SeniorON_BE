@@ -5,7 +5,7 @@ import com.example.senioron.domain.device.entity.DeviceStatus;
 import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.event.entity.Event;
 import com.example.senioron.domain.event.entity.EventType;
-import com.example.senioron.domain.event.entity.OutingPhase;
+import com.example.senioron.domain.event.entity.OutingReturnMessage;
 import com.example.senioron.domain.event.util.FcmSender;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
@@ -489,7 +489,8 @@ public class NotificationService {
             case SOS -> "도움이 필요해요";
             case INACTIVITY -> resolveInactivityMessage(event.getLastSeenAt(), event.getCreatedAt());
             case RISK_LINK -> "위험링크 감지됨";
-            case OUTING_RETURN -> resolveOutingReturnMessage(event.getPhase());
+            case OUTING_RETURN -> OutingReturnMessage.resolve(
+                    event.getPhase(), event.getDetectionType());
         };
     }
 
@@ -500,14 +501,6 @@ public class NotificationService {
         }
         long hours = Duration.between(lastSeenAt, detectedAt).toHours();
         return hours + "시간 미사용 감지됨";
-    }
-
-    private String resolveOutingReturnMessage(OutingPhase phase) {
-        if(phase == null) return "외출,귀가가 감지됨";
-        return switch(phase){
-            case OUTING -> "외출하셨어요";
-            case RETURN -> "귀가하셨어요";
-        };
     }
 
     // 백필 대응 메소드 (기존 세팅 없을 경우 즉시 생성)
@@ -581,11 +574,6 @@ public class NotificationService {
                 && !hasRegisteredHomeLocation(senior)) {
             throw new BusinessException(ErrorCode.SENIOR_HOME_LOCATION_NOT_FOUND);
         }
-        // 선택한 시니어의 부모님 기기가 전부 오프라인이면 변경을 차단한다 (fail-safe).
-        if (!isAnyDeviceOnline(findParentDeviceStatuses(List.of(parent)))) {
-            throw new BusinessException(ErrorCode.PARENT_DEVICE_OFFLINE);
-        }
-
         NotificationSetting setting = notificationSettingRepository.findById(parent.getUsersId())
                 .orElseGet(() -> createDefaultSettingInternal(parent));
 

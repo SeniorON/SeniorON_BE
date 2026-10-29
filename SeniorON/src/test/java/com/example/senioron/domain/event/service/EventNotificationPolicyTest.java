@@ -4,6 +4,7 @@ import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.event.dto.request.*;
 import com.example.senioron.domain.event.entity.Event;
 import com.example.senioron.domain.event.entity.OutingPhase;
+import com.example.senioron.domain.event.entity.OutingDetectionType;
 import com.example.senioron.domain.event.entity.RiskCheckResult;
 import com.example.senioron.domain.event.repository.EventRepository;
 import com.example.senioron.domain.event.util.*;
@@ -19,6 +20,7 @@ import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import org.junit.jupiter.api.*;
 import org.mockito.ArgumentCaptor;
@@ -46,7 +48,7 @@ class EventNotificationPolicyTest {
             mock(com.example.senioron.domain.notification.service.NotificationHomeWebSocketService.class));
     private final EventService service = new EventService(events, notificationService,
             geocoding, safeBrowsing, context, mock(UserRepository.class), seniors, members,
-            mock(DeviceRepository.class), metrics);
+            metrics);
     private final User parent = User.builder().usersId(10L).role(Role.PARENT).build();
 
     @BeforeEach
@@ -94,6 +96,83 @@ class EventNotificationPolicyTest {
         assertThat(outing.getNotificationStatus().name()).isEqualTo("NOT_DISPATCHED");
         verify(events, times(2)).save(any(Event.class));
         verifyNoInteractions(notifications);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(OutingDetectionType.class)
+    void outingDetectionTypeIsSaved(OutingDetectionType detectionType) {
+        service.saveOutingReturnEvent("주소", parent,
+                new OutingReturnRequest(OutingPhase.OUTING, BigDecimal.ONE, BigDecimal.ONE, 80, detectionType));
+
+        ArgumentCaptor<Event> saved = ArgumentCaptor.forClass(Event.class);
+        verify(events).save(saved.capture());
+        assertThat(saved.getValue().getDetectionType()).isEqualTo(detectionType);
+        assertThat(saved.getValue().getPhase()).isEqualTo(OutingPhase.OUTING);
+    }
+
+    @Test
+    void legacyOutingRequestIsSavedAsTransition() {
+        service.saveOutingReturnEvent("주소", parent,
+                new OutingReturnRequest(OutingPhase.RETURN, BigDecimal.ONE, BigDecimal.ONE, 80));
+
+        ArgumentCaptor<Event> saved = ArgumentCaptor.forClass(Event.class);
+        verify(events).save(saved.capture());
+        assertThat(saved.getValue().getDetectionType()).isEqualTo(OutingDetectionType.TRANSITION);
+        assertThat(saved.getValue().getPhase()).isEqualTo(OutingPhase.RETURN);
+    }
+
+    @Test
+    void outingMetadataIsSavedWithKoreaLocalTimestamp() {
+        var request = OutingReturnRequest.builder().phase(OutingPhase.RETURN)
+                .detectionType(OutingDetectionType.RECONNECTION).clientEventId("event-123")
+                .detectedAt(java.time.OffsetDateTime.parse("2026-10-19T05:00:00Z"))
+                .latitude(BigDecimal.ONE).longitude(BigDecimal.ONE).deviceBattery(80).build();
+        var response = service.saveOutingReturnEvent("주소", parent, request);
+        ArgumentCaptor<Event> saved = ArgumentCaptor.forClass(Event.class);
+        verify(events).save(saved.capture());
+        assertThat(saved.getValue().getClientEventId()).isEqualTo("event-123");
+        assertThat(saved.getValue().getDetectedAt()).isEqualTo(LocalDateTime.parse("2026-10-19T14:00:00"));
+        assertThat(response.getOccurredAt()).isEqualTo(saved.getValue().getDetectedAt());
+        assertThat(response.getDetectedAt().getOffset()).isEqualTo(java.time.ZoneOffset.ofHours(9));
+        assertThat(response.getClientEventId()).isEqualTo("event-123");
+    }
+
+    @Test
+    void inactivityWithoutLocationSkipsGeocodingAndIsSaved() {
+        InactivityRequest request = new InactivityRequest();
+        ReflectionTestUtils.setField(request, "deviceBattery", 80);
+        ReflectionTestUtils.setField(request, "lastSeenAt", LocalDateTime.now().minusMinutes(10));
+
+        var response = service.createInactivityEvent(parent, request);
+
+        assertThat(response.getId()).isEqualTo(123L);
+        ArgumentCaptor<Event> saved = ArgumentCaptor.forClass(Event.class);
+        verify(events).save(saved.capture());
+        assertThat(saved.getValue().getLatitude()).isNull();
+        assertThat(saved.getValue().getLongitude()).isNull();
+        assertThat(saved.getValue().getAddress()).isNull();
+        verifyNoInteractions(geocoding);
+    }
+
+    @Test
+    void inactivityWithLocationUsesGeocodedAddress() {
+        InactivityRequest request = new InactivityRequest();
+        BigDecimal latitude = new BigDecimal("37.5665");
+        BigDecimal longitude = new BigDecimal("126.9780");
+        ReflectionTestUtils.setField(request, "latitude", latitude);
+        ReflectionTestUtils.setField(request, "longitude", longitude);
+        ReflectionTestUtils.setField(request, "deviceBattery", 80);
+        ReflectionTestUtils.setField(request, "lastSeenAt", LocalDateTime.now().minusMinutes(10));
+        given(geocoding.reverseGeocode(latitude, longitude)).willReturn("서울특별시 중구");
+
+        service.createInactivityEvent(parent, request);
+
+        ArgumentCaptor<Event> saved = ArgumentCaptor.forClass(Event.class);
+        verify(events).save(saved.capture());
+        assertThat(saved.getValue().getLatitude()).isEqualByComparingTo(latitude);
+        assertThat(saved.getValue().getLongitude()).isEqualByComparingTo(longitude);
+        assertThat(saved.getValue().getAddress()).isEqualTo("서울특별시 중구");
+        verify(geocoding).reverseGeocode(latitude, longitude);
     }
 
     @Test

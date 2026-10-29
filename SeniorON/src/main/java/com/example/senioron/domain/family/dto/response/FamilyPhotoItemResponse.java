@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 public class FamilyPhotoItemResponse {
     private Long familyPhotoId;
     private String imageUrl;
+    private String thumbnailUrl;
     private Long uploaderUserId;
     private String uploaderName;
     private String description;

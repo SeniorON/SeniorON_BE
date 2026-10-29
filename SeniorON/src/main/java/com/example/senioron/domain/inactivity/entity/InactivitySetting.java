@@ -14,6 +14,8 @@ import com.example.senioron.common.entity.BaseEntity;
 @Builder
 public class InactivitySetting extends BaseEntity {
 
+    public static final int DEFAULT_THRESHOLD_HOURS = 4;
+
     @Id
     private Long userId;
 
@@ -24,7 +26,7 @@ public class InactivitySetting extends BaseEntity {
 
     @Builder.Default
     @Column(nullable = false)
-    private Integer thresholdHours = 24;
+    private Integer thresholdHours = DEFAULT_THRESHOLD_HOURS;
 
     @Builder.Default
     @Column(nullable = false)

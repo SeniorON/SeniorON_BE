@@ -2,6 +2,7 @@ package com.example.senioron.domain.family.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
@@ -12,6 +13,7 @@ import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.family.dto.request.FamilyJoinRequest;
 import com.example.senioron.domain.family.dto.request.FamilyPrimaryManagerUpdateRequest;
 import com.example.senioron.domain.family.dto.request.PhotoGroupConnectRequest;
+import com.example.senioron.domain.family.dto.response.FamilyPhotoItemResponse;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
@@ -23,6 +25,7 @@ import com.example.senioron.domain.family.repository.FamilyPhotoViewRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
 import com.example.senioron.domain.family.repository.PhotoGroupRepository;
+import com.example.senioron.domain.family.support.FamilyPhotoResponseMapper;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
@@ -37,6 +40,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.StreamSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -84,7 +88,8 @@ class FamilyServiceTest {
                 photoGroupRepository,
                 photoGroupFamilyRepository,
                 deviceService,
-                seniorRepository
+                seniorRepository,
+                new FamilyPhotoResponseMapper(s3Service)
         );
     }
 
@@ -163,6 +168,116 @@ class FamilyServiceTest {
                 .satisfies(item ->
                         assertThat(item.isNewPhoto()).isFalse()
                 );
+    }
+
+    @Test
+    void getFamilyHomeReturnsThumbnailUrlWithOriginalFallback() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .build();
+        User parent = User.builder()
+                .usersId(1L)
+                .name("부모")
+                .role(Role.PARENT)
+                .build();
+        User uploader = User.builder()
+                .usersId(2L)
+                .name("자녀")
+                .role(Role.CHILD)
+                .build();
+        Senior senior = Senior.builder()
+                .seniorId(10L)
+                .family(family)
+                .build();
+        PhotoGroup defaultPhotoGroup = PhotoGroup.builder()
+                .id(100L)
+                .name("Family 1")
+                .build();
+        PhotoGroupFamily defaultGroupLink = PhotoGroupFamily.builder()
+                .family(family)
+                .photoGroup(defaultPhotoGroup)
+                .build();
+        FamilyPhoto withThumbnail = FamilyPhoto.builder()
+                .familyPhotoId(31L)
+                .photoGroup(defaultPhotoGroup)
+                .user(uploader)
+                .imageKey("photo-31.jpg")
+                .thumbnailKey("thumb-31.jpg")
+                .build();
+        FamilyPhoto withoutThumbnail = FamilyPhoto.builder()
+                .familyPhotoId(32L)
+                .photoGroup(defaultPhotoGroup)
+                .user(uploader)
+                .imageKey("photo-32.jpg")
+                .build();
+        FamilyPhoto blankThumbnail = FamilyPhoto.builder()
+                .familyPhotoId(33L)
+                .photoGroup(defaultPhotoGroup)
+                .user(uploader)
+                .imageKey("photo-33.jpg")
+                .thumbnailKey(" ")
+                .build();
+        List<FamilyPhoto> photos =
+                List.of(withThumbnail, withoutThumbnail, blankThumbnail);
+        photos.forEach(photo -> ReflectionTestUtils.setField(
+                photo,
+                "createdAt",
+                LocalDateTime.now()
+        ));
+
+        given(userRepository.findById(1L))
+                .willReturn(Optional.of(parent));
+        given(seniorRepository.findById(10L))
+                .willReturn(Optional.of(senior));
+        given(familyMemberRepository.existsByUserAndFamily(parent, family))
+                .willReturn(true);
+        given(photoGroupFamilyRepository.findFirstByFamilyOrderByIdAsc(family))
+                .willReturn(Optional.of(defaultGroupLink));
+        given(familyMemberRepository.findAllByFamilyOrderByIdAsc(family))
+                .willReturn(List.of());
+        given(familyPhotoRepository.findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
+                family,
+                PageRequest.of(0, 4)
+        )).willReturn(photos);
+        given(familyPhotoRepository.findRecentUploaders(
+                family,
+                PageRequest.of(0, 3)
+        )).willReturn(List.of(uploader));
+        given(familyPhotoViewRepository.findViewedFamilyPhotoIds(
+                1L,
+                List.of(31L, 32L, 33L)
+        )).willReturn(List.of(32L));
+        given(familyPhotoPermissionService.findDeletablePhotoIds(photos, parent))
+                .willReturn(Set.of(31L));
+        given(s3Service.getFileUrl("photo-31.jpg"))
+                .willReturn("https://cdn/photo-31.jpg");
+        given(s3Service.getFileUrl("thumb-31.jpg"))
+                .willReturn("https://cdn/thumb-31.jpg");
+        given(s3Service.getFileUrl("photo-32.jpg"))
+                .willReturn("https://cdn/photo-32.jpg");
+        given(s3Service.getFileUrl("photo-33.jpg"))
+                .willReturn("https://cdn/photo-33.jpg");
+
+        var response = familyService.getFamilyHome(parent, 10L);
+
+        assertThat(response.getRecentPhotos())
+                .extracting(
+                        FamilyPhotoItemResponse::getFamilyPhotoId,
+                        FamilyPhotoItemResponse::getImageUrl,
+                        FamilyPhotoItemResponse::getThumbnailUrl,
+                        FamilyPhotoItemResponse::isCanDelete,
+                        FamilyPhotoItemResponse::isNewPhoto
+                )
+                .containsExactly(
+                        tuple(31L, "https://cdn/photo-31.jpg",
+                                "https://cdn/thumb-31.jpg", true, true),
+                        tuple(32L, "https://cdn/photo-32.jpg",
+                                "https://cdn/photo-32.jpg", false, false),
+                        tuple(33L, "https://cdn/photo-33.jpg",
+                                "https://cdn/photo-33.jpg", false, true)
+                );
+        verify(familyPhotoPermissionService, never())
+                .canDelete(any(), any());
     }
 
     @Test
@@ -572,10 +687,16 @@ class FamilyServiceTest {
         given(photoGroupFamilyRepository.findAllSharedLinks(currentFamily, 100L))
                 .willReturn(groupLinks);
 
+        given(photoGroupRepository.findAllByIdsForUpdate(List.of(100L)))
+                .willReturn(List.of(photoGroup));
+
         familyService.disconnectPhotoGroup(currentUser, 10L, 100L);
 
         assertThat(photoGroup.isActive()).isFalse();
         assertThat(photoGroup.getDisconnectedAt()).isNotNull();
+        var ordered = org.mockito.Mockito.inOrder(photoGroupRepository, photoGroupFamilyRepository);
+        ordered.verify(photoGroupRepository).findAllByIdsForUpdate(List.of(100L));
+        ordered.verify(photoGroupFamilyRepository).findAllSharedLinks(currentFamily, 100L);
         verify(photoGroupFamilyRepository, never()).deleteAllInBatch(any());
     }
 
@@ -641,6 +762,8 @@ class FamilyServiceTest {
                 .willReturn(Optional.of(primaryMember));
         given(photoGroupFamilyRepository.findAllSharedLinks(currentFamily, 100L))
                 .willReturn(List.of());
+        given(photoGroupRepository.findAllByIdsForUpdate(List.of(100L)))
+                .willReturn(List.of(PhotoGroup.builder().id(100L).name("공유 그룹").build()));
 
         assertThatThrownBy(() ->
                 familyService.disconnectPhotoGroup(currentUser, 10L, 100L)
@@ -669,7 +792,6 @@ class FamilyServiceTest {
         Senior targetSenior = Senior.builder()
                 .seniorId(20L)
                 .name("연결 시니어")
-                .relation(SeniorRelation.FATHER)
                 .family(targetFamily)
                 .build();
         ReflectionTestUtils.setField(targetFamily, "senior", targetSenior);
@@ -697,6 +819,10 @@ class FamilyServiceTest {
         given(seniorRepository.findById(10L)).willReturn(Optional.of(currentSenior));
         given(familyMemberRepository.existsByUserAndFamily(currentUser, currentFamily))
                 .willReturn(true);
+        given(familyMemberRepository.findByUserAndFamily(currentUser, currentFamily))
+                .willReturn(Optional.of(createMember(
+                        1L, currentUser, currentFamily, ManagerType.PRIMARY
+                )));
         given(photoGroupFamilyRepository.findConnectedFamilyLinks(currentFamily))
                 .willReturn(List.of(connectedLink));
 
@@ -706,8 +832,11 @@ class FamilyServiceTest {
         assertThat(result.get(0).photoGroupId()).isEqualTo(100L);
         assertThat(result.get(0).seniorId()).isEqualTo(20L);
         assertThat(result.get(0).name()).isEqualTo("연결 시니어");
-        assertThat(result.get(0).relation()).isEqualTo(SeniorRelation.FATHER);
+        assertThat(result.get(0).relation()).isNull();
+        assertThat(result.get(0).customRelation()).isNull();
         assertThat(result.get(0).connectedAt()).isEqualTo(connectedAt);
+        verify(photoGroupFamilyRepository, never())
+                .findManagedConnectedFamilyLinks(currentFamily, currentUser);
     }
 
     @Test
@@ -736,6 +865,8 @@ class FamilyServiceTest {
 
         verify(photoGroupFamilyRepository, never())
                 .findConnectedFamilyLinks(selectedFamily);
+        verify(photoGroupFamilyRepository, never())
+                .findManagedConnectedFamilyLinks(selectedFamily, currentUser);
     }
 
     @Test
@@ -778,6 +909,7 @@ class FamilyServiceTest {
                 .build();
         User currentUser = createUser(1L, "현재 사용자");
         currentUser.updateFamily(firstFamily);
+        currentUser.updateManagerType(ManagerType.SUB);
         Senior selectedSenior = Senior.builder()
                 .seniorId(20L)
                 .family(selectedFamily)
@@ -789,6 +921,10 @@ class FamilyServiceTest {
                 .willReturn(Optional.of(selectedSenior));
         given(familyMemberRepository.existsByUserAndFamily(currentUser, selectedFamily))
                 .willReturn(true);
+        given(familyMemberRepository.findByUserAndFamily(currentUser, selectedFamily))
+                .willReturn(Optional.of(createMember(
+                        1L, currentUser, selectedFamily, ManagerType.PRIMARY
+                )));
         given(familyMemberRepository.countByFamily(selectedFamily))
                 .willReturn(3L);
 
@@ -798,6 +934,59 @@ class FamilyServiceTest {
         assertThat(response.getFamilyMemberCount()).isEqualTo(3L);
         verify(familyMemberRepository).countByFamily(selectedFamily);
         verify(familyMemberRepository, never()).countByFamily(firstFamily);
+    }
+
+    @Test
+    void getSeniorCodeRejectsSelectedFamilySubManagerEvenWhenPrimaryElsewhere() {
+        Family firstFamily = Family.builder().familyId(1L).build();
+        Family selectedFamily = Family.builder().familyId(2L).build();
+        User currentUser = createUser(1L, "다른 가족의 주 담당자");
+        currentUser.updateFamily(firstFamily);
+        currentUser.updateManagerType(ManagerType.PRIMARY);
+        Senior selectedSenior = Senior.builder()
+                .seniorId(20L)
+                .family(selectedFamily)
+                .build();
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
+        given(seniorRepository.findById(20L)).willReturn(Optional.of(selectedSenior));
+        given(familyMemberRepository.existsByUserAndFamily(currentUser, selectedFamily))
+                .willReturn(true);
+        given(familyMemberRepository.findByUserAndFamily(currentUser, selectedFamily))
+                .willReturn(Optional.of(createMember(
+                        2L, currentUser, selectedFamily, ManagerType.SUB
+                )));
+
+        assertThatThrownBy(() -> familyService.getSeniorCode(currentUser, 20L))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.FORBIDDEN);
+
+        verify(familyMemberRepository, never()).countByFamily(any());
+    }
+
+    @Test
+    void getSeniorCodeRejectsUserOutsideSelectedFamily() {
+        Family selectedFamily = Family.builder().familyId(2L).build();
+        User currentUser = createUser(1L, "다른 가족 사용자");
+        Senior selectedSenior = Senior.builder()
+                .seniorId(20L)
+                .family(selectedFamily)
+                .build();
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
+        given(seniorRepository.findById(20L)).willReturn(Optional.of(selectedSenior));
+        given(familyMemberRepository.existsByUserAndFamily(currentUser, selectedFamily))
+                .willReturn(false);
+
+        assertThatThrownBy(() -> familyService.getSeniorCode(currentUser, 20L))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED);
+
+        verify(familyMemberRepository, never()).countByFamily(any());
     }
 
     @Test

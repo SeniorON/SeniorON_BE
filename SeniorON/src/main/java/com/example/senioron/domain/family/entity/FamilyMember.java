@@ -3,6 +3,7 @@ package com.example.senioron.domain.family.entity;
 import com.example.senioron.common.entity.BaseEntity;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.senior.entity.SeniorRelation;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -52,7 +53,26 @@ public class FamilyMember extends BaseEntity {
     @Column(nullable = false)
     private ManagerType managerType;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "relation", nullable = true)
+    private SeniorRelation relation;
+
+    @Column(name = "custom_relation", nullable = true)
+    private String customRelation;
+
     public void updateManagerType(ManagerType managerType) {
         this.managerType = managerType;
     }
+
+    public void updateRelation(
+            SeniorRelation relation,
+            String customRelation
+    ) {
+        this.relation = relation;
+        this.customRelation = relation == SeniorRelation.OTHER
+                ? customRelation
+                : null;
+    }
 }
+
+

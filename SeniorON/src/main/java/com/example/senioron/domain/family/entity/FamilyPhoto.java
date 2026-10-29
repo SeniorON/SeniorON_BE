@@ -56,6 +56,9 @@ public class FamilyPhoto extends BaseEntity {
     @Column(name = "image_key", nullable = false)
     private String imageKey;
 
+    @Column(name = "thumbnail_key")
+    private String thumbnailKey;
+
     @Column(name = "description", length = 30)
     private String description;
 

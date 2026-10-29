@@ -7,10 +7,7 @@ import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.repository.EntityGraph;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Lock;
-import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
@@ -383,5 +380,56 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
     long countAccessibleByFamilyAndUploader(
             @Param("family") Family family,
             @Param("uploader") User uploader
+    );
+
+    @Query("""
+    SELECT fp
+    FROM FamilyPhoto fp
+    WHERE fp.thumbnailKey IS NULL
+      AND fp.familyPhotoId > :afterId
+    ORDER BY fp.familyPhotoId ASC
+    """)
+    List<FamilyPhoto> findPhotosWithoutThumbnail(
+            @Param("afterId") Long afterId,
+            Pageable pageable
+    );
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+    UPDATE FamilyPhoto fp
+    SET fp.thumbnailKey = :thumbnailKey
+    WHERE fp.familyPhotoId = :photoId
+      AND fp.thumbnailKey IS NULL
+    """)
+    int updateThumbnailIfAbsent(
+            @Param("photoId") Long photoId,
+            @Param("thumbnailKey") String thumbnailKey
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+    SELECT fp
+    FROM FamilyPhoto fp
+    WHERE fp.familyPhotoId = :familyPhotoId
+      AND EXISTS (
+          SELECT fpg.id
+          FROM FamilyPhotoGroup fpg
+          WHERE fpg.familyPhoto = fp
+            AND EXISTS (
+                SELECT pgf.id
+                FROM PhotoGroupFamily pgf
+                WHERE pgf.photoGroup = fpg.photoGroup
+                  AND EXISTS (
+                      SELECT fm.id
+                      FROM FamilyMember fm
+                      WHERE fm.family = pgf.family
+                        AND fm.user = :user
+                  )
+            )
+      )
+    """)
+    Optional<FamilyPhoto> findAccessibleForDeletionByFamilyPhotoIdAndUser(
+            @Param("familyPhotoId") Long familyPhotoId,
+            @Param("user") User user
     );
 }
