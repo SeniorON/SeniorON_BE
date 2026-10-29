@@ -308,19 +308,14 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
     FROM FamilyPhoto fp
     WHERE fp.familyPhotoId = :familyPhotoId
       AND EXISTS (
-          SELECT fpg.id
-          FROM FamilyPhotoGroup fpg
-          WHERE fpg.familyPhoto = fp
+          SELECT fps.id
+          FROM FamilyPhotoSenior fps
+          WHERE fps.familyPhoto = fp
             AND EXISTS (
-                SELECT pgf.id
-                FROM PhotoGroupFamily pgf
-                WHERE pgf.photoGroup = fpg.photoGroup
-                  AND EXISTS (
-                      SELECT fm.id
-                      FROM FamilyMember fm
-                      WHERE fm.family = pgf.family
-                        AND fm.user = :user
-                  )
+                SELECT fm.id
+                FROM FamilyMember fm
+                WHERE fm.family = fps.senior.family
+                  AND fm.user = :user
             )
       )
     """)
