@@ -17,7 +17,6 @@ import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoViewRepository;
-import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
 import com.example.senioron.domain.family.support.FamilyPhotoResponseMapper;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
@@ -63,8 +62,6 @@ class FamilyPhotoServiceTest {
             org.mockito.Mockito.mock(FamilyMemberRepository.class);
     private final SeniorRepository seniorRepository =
             org.mockito.Mockito.mock(SeniorRepository.class);
-    private final PhotoGroupFamilyRepository photoGroupFamilyRepository =
-            org.mockito.Mockito.mock(PhotoGroupFamilyRepository.class);
 
     private FamilyPhotoService familyPhotoService;
     private final FamilyPhotoPushTargetService familyPhotoPushTargetService =
@@ -84,7 +81,6 @@ class FamilyPhotoServiceTest {
                 photoPersistenceService,
                 familyMemberRepository,
                 seniorRepository,
-                photoGroupFamilyRepository,
                 familyPhotoPushTargetService,
                 eventPublisher,
                 new FamilyPhotoResponseMapper(s3Service)

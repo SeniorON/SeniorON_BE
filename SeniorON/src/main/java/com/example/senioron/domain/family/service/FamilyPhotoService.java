@@ -42,9 +42,6 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.senior.entity.Senior;
-import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
-import com.example.senioron.domain.family.entity.PhotoGroup;
-import com.example.senioron.domain.family.entity.PhotoGroupFamily;
 import com.example.senioron.domain.family.repository.FamilyPhotoViewRepository;
 import com.example.senioron.domain.family.event.FamilyPhotoDeletedEvent;
 import org.springframework.context.ApplicationEventPublisher;
@@ -64,7 +61,6 @@ public class FamilyPhotoService {
     private final FamilyPhotoPersistenceService photoPersistenceService;
     private final FamilyMemberRepository familyMemberRepository;
     private final SeniorRepository seniorRepository;
-    private final PhotoGroupFamilyRepository photoGroupFamilyRepository;
     private final FamilyPhotoPushTargetService familyPhotoPushTargetService;
     private final ApplicationEventPublisher eventPublisher;
     private final FamilyPhotoResponseMapper familyPhotoResponseMapper;
@@ -133,10 +129,10 @@ public class FamilyPhotoService {
                 request.getSeniorId()
         );
 
-        List<PhotoGroup> photoGroups =
-                resolveAccessiblePhotoGroups(
+        List<Long> seniorIds =
+                resolveShareTargetSeniorIds(
                         user,
-                        request.getPhotoGroupIds()
+                        request.getSeniorIds()
                 );
 
         LocalDateTime newPhotoCutoff =
@@ -206,9 +202,7 @@ public class FamilyPhotoService {
                     idempotencyKey,
                     request.getDescription(),
                     family.getFamilyId(),
-                    photoGroups.stream()
-                            .map(PhotoGroup::getId)
-                            .toList()
+                    seniorIds
             );
         } catch (DataIntegrityViolationException exception) {
             deleteUploadedObjectSafely(thumbnailKey);
@@ -350,10 +344,10 @@ public class FamilyPhotoService {
                 request.getSeniorId()
         );
 
-        List<PhotoGroup> photoGroups =
-                resolveAccessiblePhotoGroups(
+        List<Long> seniorIds =
+                resolveShareTargetSeniorIds(
                         user,
-                        request.getPhotoGroupIds()
+                        request.getSeniorIds()
                 );
 
         LocalDateTime newPhotoCutoff =
@@ -373,7 +367,7 @@ public class FamilyPhotoService {
                         uploadAndCreatePhoto(
                                 user,
                                 family,
-                                photoGroups,
+                                seniorIds,
                                 idempotencyKey,
                                 request,
                                 newPhotoCutoff
@@ -384,7 +378,7 @@ public class FamilyPhotoService {
     private FamilyPhotoItemResponse uploadAndCreatePhoto(
             User user,
             Family family,
-            List<PhotoGroup> photoGroups,
+            List<Long> seniorIds,
             String idempotencyKey,
             FamilyPhotoCreateRequest request,
             LocalDateTime newPhotoCutoff
@@ -410,9 +404,7 @@ public class FamilyPhotoService {
                     idempotencyKey,
                     request.getDescription(),
                     family.getFamilyId(),
-                    photoGroups.stream()
-                            .map(PhotoGroup::getId)
-                            .toList()
+                    seniorIds
             );
 
         } catch (DataIntegrityViolationException exception) {
@@ -924,12 +916,13 @@ public class FamilyPhotoService {
         return family;
     }
 
-    private List<PhotoGroup> resolveAccessiblePhotoGroups(
+    private List<Long> resolveShareTargetSeniorIds(
             User user,
-            List<Long> requestedPhotoGroupIds
+            List<Long> requestedSeniorIds
     ) {
-        List<Long> distinctIds = requestedPhotoGroupIds.stream()
+        List<Long> distinctIds = requestedSeniorIds.stream()
                 .distinct()
+                .sorted()
                 .toList();
 
         if (distinctIds.isEmpty()) {
@@ -938,23 +931,23 @@ public class FamilyPhotoService {
             );
         }
 
-        List<PhotoGroup> photoGroups = photoGroupFamilyRepository
-                .findManagedDefaultPhotoGroupLinks(
+        // 담당 중이며 시니어 기기가 연결된 시니어에게만 공유할 수 있다.
+        Set<Long> targetSeniorIds = familyMemberRepository
+                .findPhotoShareTargetMembers(
                         user,
                         List.of(ManagerType.PRIMARY, ManagerType.SUB)
                 )
                 .stream()
-                .map(PhotoGroupFamily::getPhotoGroup)
-                .filter(group -> distinctIds.contains(group.getId()))
-                .toList();
+                .map(member -> member.getFamily().getSenior().getSeniorId())
+                .collect(Collectors.toSet());
 
-        if (photoGroups.size() != distinctIds.size()) {
+        if (!targetSeniorIds.containsAll(distinctIds)) {
             throw new BusinessException(
                     ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN
             );
         }
 
-        return photoGroups;
+        return distinctIds;
     }
 
     private String createThumbnailOrNull(String imageKey) {
