@@ -52,6 +52,9 @@ class AdminInvitationServiceTest {
 
     @Test
     void passwordMustContainLettersAndNumbersAndHaveValidLength() {
+        given(invitations.findByTokenHashForUpdate(anyString())).willReturn(Optional.of(
+                invitation(admin(AdminStatus.INVITED), LocalDateTime.now().plusHours(1), null, null)
+        ));
         for (String password : new String[]{"short1", "onlyletters", "12345678", "a1" + "x".repeat(63)}) {
             assertThatThrownBy(() -> service.accept(new AdminInvitationAcceptRequest("token", password)))
                     .isInstanceOfSatisfying(BusinessException.class,
@@ -120,6 +123,9 @@ class AdminInvitationServiceTest {
 
     @Test
     void passwordBoundaryRejects7And65AndMissingCharacterClasses() {
+        given(invitations.findByTokenHashForUpdate(anyString())).willReturn(Optional.of(
+                invitation(admin(AdminStatus.INVITED), LocalDateTime.now().plusHours(1), null, null)
+        ));
         for (String password : new String[]{"abc1234", "a1" + "x".repeat(63), "abcdefgh", "12345678"}) {
             assertThatThrownBy(() -> service.accept(new AdminInvitationAcceptRequest("token", password)))
                     .isInstanceOf(BusinessException.class);
@@ -134,6 +140,15 @@ class AdminInvitationServiceTest {
             assertThatCode(() -> service.accept(new AdminInvitationAcceptRequest("token", password)))
                     .doesNotThrowAnyException();
         }
+    }
+
+    @Test
+    void invalidTokenTakesPrecedenceOverInvalidPassword() {
+        given(invitations.findByTokenHashForUpdate(anyString())).willReturn(Optional.empty());
+        assertThatThrownBy(() -> service.accept(
+                new AdminInvitationAcceptRequest("invalid-token", "short1")))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.getCode()).isEqualTo(ErrorCode.INVALID_INVITATION_TOKEN));
     }
 
     private Admin admin(AdminStatus status) {

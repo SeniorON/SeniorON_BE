@@ -41,6 +41,9 @@ public class JwtUtil {
             @Value("${jwt.admin-access-token-expiration}") long adminAccessTokenExpiration,
             @Value("${jwt.admin-refresh-token-expiration}") long adminRefreshTokenExpiration
     ) {
+        if (secret.equals(adminSecret)) {
+            throw new IllegalStateException("User and admin JWT secrets must be different.");
+        }
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.accessTokenExpiration = accessTokenExpiration;
         this.refreshTokenExpiration = refreshTokenExpiration;

@@ -80,11 +80,11 @@ public class AdminInvitationService {
 
     @Transactional
     public void accept(AdminInvitationAcceptRequest request) {
-        validatePassword(request.password());
         AdminInvitation invitation = invitationRepository.findByTokenHashForUpdate(
                         TokenHashUtil.hashHex(request.token()))
                 .filter(this::valid)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_INVITATION_TOKEN));
+        validatePassword(request.password());
         if (invitation.getType() == AdminInvitationType.INVITE) {
             invitation.getAdmin().activate(passwordEncoder.encode(request.password()));
         }

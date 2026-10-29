@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.doThrow;
 
 import com.example.senioron.global.mail.EmailService;
 import org.junit.jupiter.api.Test;
@@ -55,5 +56,21 @@ class AdminInvitationMailEventIntegrationTest {
                 "hidden@example.com", "https://example.com/invitation?token=raw-secret-token"));
         assertThat(output.getOut()).doesNotContain("raw-secret-token");
         assertThat(output.getOut()).doesNotContain("/invitation?token=");
+        assertThat(output.getOut()).doesNotContain("hidden@example.com");
+        assertThat(output.getOut()).contains("h***@example.com");
+    }
+
+    @Test
+    void mailFailureLogMasksRecipientEmail(CapturedOutput output) {
+        doThrow(new RuntimeException("mail failure"))
+                .when(emailService).sendAdminInvitation(anyString(), anyString());
+        AdminInvitationMailEventListener listener =
+                new AdminInvitationMailEventListener(emailService);
+        ReflectionTestUtils.setField(listener, "mailUsername", "sender@example.com");
+        ReflectionTestUtils.setField(listener, "logLink", false);
+        listener.handle(new AdminInvitationMailEvent(
+                "alice@example.com", "https://example.com/invitation?token=secret"));
+        assertThat(output.getOut()).doesNotContain("alice@example.com");
+        assertThat(output.getOut()).contains("a***@example.com");
     }
 }
