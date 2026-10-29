@@ -9,7 +9,7 @@ import com.example.senioron.domain.device.entity.Device;
 import com.example.senioron.domain.device.entity.DeviceStatus;
 import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
-import com.example.senioron.domain.family.repository.FamilyPhotoGroupRepository;
+import com.example.senioron.domain.family.repository.FamilyPhotoSeniorRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
@@ -21,10 +21,10 @@ import org.junit.jupiter.api.Test;
 class FamilyPhotoPushTargetServiceTest {
 
     private final FamilyPhotoRepository photos = mock(FamilyPhotoRepository.class);
-    private final FamilyPhotoGroupRepository groups = mock(FamilyPhotoGroupRepository.class);
+    private final FamilyPhotoSeniorRepository shares = mock(FamilyPhotoSeniorRepository.class);
     private final DeviceRepository devices = mock(DeviceRepository.class);
     private final FamilyPhotoPushTargetService service =
-            new FamilyPhotoPushTargetService(photos, groups, devices);
+            new FamilyPhotoPushTargetService(photos, shares, devices);
 
     @Test
     void deduplicatesTokensKeepsOfflineDevicesAndExcludesDisconnectedOrExpiredDevices() {
@@ -47,13 +47,13 @@ class FamilyPhotoPushTargetServiceTest {
     void skipsDeletedPhotoBeforeQueryingRecipients() {
         given(photos.findById(10L)).willReturn(Optional.empty());
         assertThat(service.load(10L)).isEmpty();
-        verifyNoInteractions(groups, devices);
+        verifyNoInteractions(shares, devices);
     }
 
     @Test
     void skipsWhenNoLinkedParentCanReceivePhoto() {
         stubRecipients("업로더");
-        given(groups.findPhotoRecipientParents(10L, Role.PARENT, UserStatus.ACTIVE))
+        given(shares.findRecipientParents(10L, List.of(20L, 21L), Role.PARENT, UserStatus.ACTIVE))
                 .willReturn(List.of());
         assertThat(service.load(10L)).isEmpty();
         verifyNoInteractions(devices);
@@ -82,7 +82,8 @@ class FamilyPhotoPushTargetServiceTest {
         given(photos.findById(10L)).willReturn(Optional.of(
                 FamilyPhoto.builder().familyPhotoId(10L).user(uploader).build()));
         var parents = List.of(User.builder().usersId(2L).name("부모").build());
-        given(groups.findPhotoRecipientParents(10L, Role.PARENT, UserStatus.ACTIVE))
+        given(shares.findSeniorIdsByFamilyPhotoId(10L)).willReturn(List.of(20L, 21L));
+        given(shares.findRecipientParents(10L, List.of(20L, 21L), Role.PARENT, UserStatus.ACTIVE))
                 .willReturn(parents);
         return parents;
     }
@@ -91,7 +92,7 @@ class FamilyPhotoPushTargetServiceTest {
     void deletionTokensIncludeBothParentsAndExcludeUnavailableOrDuplicateTokens() {
         var parents = List.of(User.builder().usersId(2L).build(),
                 User.builder().usersId(3L).build());
-        given(groups.findPhotoRecipientParents(10L, Role.PARENT, UserStatus.ACTIVE))
+        given(shares.findRecipientParents(10L, List.of(20L, 21L), Role.PARENT, UserStatus.ACTIVE))
                 .willReturn(parents);
         given(devices.findAllByUserIn(parents)).willReturn(List.of(
                 device("first-parent", DeviceStatus.ONLINE),
@@ -102,17 +103,23 @@ class FamilyPhotoPushTargetServiceTest {
                 device(null, DeviceStatus.ONLINE),
                 device("  ", DeviceStatus.ONLINE)));
 
-        assertThat(service.loadDeletionTokens(10L))
+        assertThat(service.loadDeletionTokens(10L, List.of(20L, 21L)))
                 .containsExactly("first-parent", "second-parent");
         verifyNoInteractions(photos);
     }
 
     @Test
     void deletionWithoutRecipientsSkipsDeviceLookup() {
-        given(groups.findPhotoRecipientParents(10L, Role.PARENT, UserStatus.ACTIVE))
+        given(shares.findRecipientParents(10L, List.of(20L), Role.PARENT, UserStatus.ACTIVE))
                 .willReturn(List.of());
-        assertThat(service.loadDeletionTokens(10L)).isEmpty();
+        assertThat(service.loadDeletionTokens(10L, List.of(20L))).isEmpty();
         verifyNoInteractions(photos, devices);
+    }
+
+    @Test
+    void deletionWithoutRemovedSeniorsSkipsRecipientLookup() {
+        assertThat(service.loadDeletionTokens(10L, List.of())).isEmpty();
+        verifyNoInteractions(photos, shares, devices);
     }
 
     private Device device(String token, DeviceStatus status) {
