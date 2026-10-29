@@ -571,29 +571,20 @@ public class FamilyService {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
 
-        return photoGroupFamilyRepository
-                .findManagedDefaultPhotoGroupLinks(
+        return familyMemberRepository
+                .findPhotoShareTargetMembers(
                         user,
                         List.of(ManagerType.PRIMARY, ManagerType.SUB)
                 )
                 .stream()
-                .map(link -> {
-                    Senior senior = link.getFamily().getSenior();
-
-                    FamilyMember currentMember = familyMemberRepository
-                            .findByUserAndFamily(user, link.getFamily())
-                            .orElseThrow(() ->
-                                    new BusinessException(
-                                            ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED
-                                    )
-                            );
+                .map(member -> {
+                    Senior senior = member.getFamily().getSenior();
 
                     return PhotoShareTargetResponse.builder()
-                            .photoGroupId(link.getPhotoGroup().getId())
                             .seniorId(senior.getSeniorId())
                             .name(senior.getName())
-                            .relation(currentMember.getRelation())
-                            .customRelation(currentMember.getCustomRelation())
+                            .relation(member.getRelation())
+                            .customRelation(member.getCustomRelation())
                             .build();
                 })
                 .toList();
