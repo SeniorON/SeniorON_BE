@@ -6,7 +6,6 @@ import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.entity.FamilyPhotoSenior;
-import com.example.senioron.domain.family.entity.PhotoGroup;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
@@ -31,8 +30,7 @@ class FamilyPhotoRecipientsRepositoryTest {
     @BeforeEach
     void setUp() {
         uploader = persist(User.builder().name("업로더").role(Role.CHILD).build());
-        PhotoGroup group = persist(PhotoGroup.builder().name("기본 그룹").build());
-        photo = persist(FamilyPhoto.builder().user(uploader).photoGroup(group)
+        photo = persist(FamilyPhoto.builder().user(uploader)
                 .imageKey("recipient-test.jpg").build());
     }
 

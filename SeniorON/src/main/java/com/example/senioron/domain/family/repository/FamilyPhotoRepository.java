@@ -17,7 +17,7 @@ import java.util.Optional;
 public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> {
 
     // 첫 페이지 조회 메서드
-    @EntityGraph(attributePaths = {"user", "photoGroup"})
+    @EntityGraph(attributePaths = "user")
     @Query("""
     SELECT fp
     FROM FamilyPhoto fp
@@ -34,7 +34,7 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
             Pageable pageable
     );
 
-    @EntityGraph(attributePaths = {"user", "photoGroup"})
+    @EntityGraph(attributePaths = "user")
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
         SELECT fp
@@ -52,7 +52,7 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
             @Param("family") Family family
     );
 
-    @EntityGraph(attributePaths = {"user", "photoGroup"})
+    @EntityGraph(attributePaths = "user")
     @Query("""
     SELECT fp
     FROM FamilyPhoto fp
@@ -128,7 +128,7 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
             User parent
     );
 
-    @EntityGraph(attributePaths = {"photoGroup", "user"})
+    @EntityGraph(attributePaths = "user")
     Optional<FamilyPhoto> findByUserUsersIdAndIdempotencyKey(
             Long usersId,
             String idempotencyKey
@@ -136,7 +136,7 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
 
     boolean existsByImageKey(String imageKey);
 
-    @EntityGraph(attributePaths = {"user", "photoGroup"})
+    @EntityGraph(attributePaths = "user")
     @Query("""
         SELECT fp
         FROM FamilyPhoto fp
@@ -158,7 +158,7 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
             @Param("user") User user
     );
 
-    @EntityGraph(attributePaths = {"user", "photoGroup"})
+    @EntityGraph(attributePaths = "user")
     @Query("""
         SELECT fp
         FROM FamilyPhoto fp
@@ -175,7 +175,7 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
             Pageable pageable
     );
 
-    @EntityGraph(attributePaths = {"user", "photoGroup"})
+    @EntityGraph(attributePaths = "user")
     @Query("""
         SELECT fp
         FROM FamilyPhoto fp
@@ -201,7 +201,7 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
             Pageable pageable
     );
 
-    @EntityGraph(attributePaths = {"user", "photoGroup"})
+    @EntityGraph(attributePaths = "user")
     @Query("""
         SELECT fp
         FROM FamilyPhoto fp
@@ -220,7 +220,7 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
             Pageable pageable
     );
 
-    @EntityGraph(attributePaths = {"user", "photoGroup"})
+    @EntityGraph(attributePaths = "user")
     @Query("""
         SELECT fp
         FROM FamilyPhoto fp
