@@ -110,6 +110,7 @@ public enum ErrorCode implements BaseCode {
 
     // Family Error
     FAMILY_NOT_FOUND(HttpStatus.NOT_FOUND, "FAMILY404", "가족 정보를 찾을 수 없습니다."),
+    SENIOR_CODE_NOT_FOUND(HttpStatus.NOT_FOUND, "FAMILY404_2", "시니어 코드를 찾을 수 없습니다."),
     INVALID_SENIOR_CODE(HttpStatus.BAD_REQUEST, "FAMILY400", "유효하지 않은 시니어 코드입니다."),
     FAMILY_MEMBER_REMOVE_FORBIDDEN(HttpStatus.FORBIDDEN, "FAMILY403", "가족 구성원을 제외할 권한이 없습니다."),
     SENIOR_CODE_CREATE_PARENT_FORBIDDEN(HttpStatus.FORBIDDEN, "FAMILY403_1", "부모 계정은 시니어 코드를 생성할 수 없습니다."),
