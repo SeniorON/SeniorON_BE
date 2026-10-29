@@ -1,5 +1,6 @@
 package com.example.senioron.domain.senior.dto.response;
 
+import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
 
@@ -19,13 +20,14 @@ public record SeniorCreateResponse(
 ) {
 
     public static SeniorCreateResponse from(
-            Senior senior
+            Senior senior,
+            FamilyMember familyMember
     ) {
         return new SeniorCreateResponse(
                 senior.getSeniorId(),
                 senior.getName(),
-                senior.getRelation(),
-                senior.getCustomRelation(),
+                familyMember.getRelation(),
+                familyMember.getCustomRelation(),
                 senior.getBirth(),
                 senior.getPhoneNumber(),
                 senior.getAddress(),
