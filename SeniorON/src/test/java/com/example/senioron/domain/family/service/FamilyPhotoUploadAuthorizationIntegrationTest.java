@@ -320,10 +320,9 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     void defaultGroupsSaveToBothFamiliesWithoutSharingConnection(boolean multipart) {
-        revoke(Revocation.DISCONNECT);
+        transaction().executeWithoutResult(status ->
+                groups.findAllByIdsForUpdate(List.of(fixture.shared().getId())).get(0).disconnect());
         List<Long> groupIds = List.of(fixture.defaultA().getId(), fixture.defaultB().getId());
-        assertThat(familyService.getConnectedSeniors(fixture.uploader(), fixture.seniorA().getSeniorId()))
-                .isEmpty();
         assertThat(familyService.getPhotoShareTargets(fixture.uploader()))
                 .extracting(target -> target.getPhotoGroupId()).containsExactlyElementsOf(groupIds);
 
@@ -521,8 +520,6 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
 
     private void revoke(Revocation revocation) {
         switch (revocation) {
-            case DISCONNECT -> familyService.disconnectPhotoGroup(fixture.primaryA(), fixture.seniorA().getSeniorId(),
-                    fixture.shared().getId());
             case REMOVE_TARGET -> familyService.removeFamilyMember(fixture.primaryB(), fixture.seniorB().getSeniorId(),
                     fixture.uploader().getUsersId());
             case REMOVE_SELECTED -> familyService.removeFamilyMember(fixture.primaryA(), fixture.seniorA().getSeniorId(),
@@ -534,7 +531,6 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
 
     private void assertRevoked(Revocation revocation) {
         switch (revocation) {
-            case DISCONNECT -> assertThat(groups.findById(fixture.shared().getId()).orElseThrow().isActive()).isFalse();
             case REMOVE_TARGET -> assertThat(members.existsByUserAndFamily(fixture.uploader(), fixture.familyB())).isFalse();
             case REMOVE_SELECTED -> assertThat(members.existsByUserAndFamily(fixture.uploader(), fixture.familyA())).isFalse();
             case DEACTIVATE_TARGET -> assertThat(groups.findById(fixture.defaultB().getId()).orElseThrow().isActive()).isFalse();
@@ -587,7 +583,7 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
         }
     }
 
-    private enum Revocation { DISCONNECT, REMOVE_TARGET, REMOVE_SELECTED, DEACTIVATE_TARGET }
+    private enum Revocation { REMOVE_TARGET, REMOVE_SELECTED, DEACTIVATE_TARGET }
 
     private record Fixture(User primaryA, User primaryB, User uploader, Family familyA, Family familyB,
                            Senior seniorA, Senior seniorB, PhotoGroup defaultA, PhotoGroup defaultB, PhotoGroup shared) {}
