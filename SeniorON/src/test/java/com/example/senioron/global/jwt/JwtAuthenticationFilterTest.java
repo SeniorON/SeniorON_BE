@@ -3,6 +3,7 @@ package com.example.senioron.global.jwt;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.domain.admin.repository.AdminRepository;
 import com.example.senioron.global.config.SecurityErrorResponseWriter;
 import jakarta.servlet.FilterChain;
 import java.util.Optional;
@@ -25,6 +26,7 @@ class JwtAuthenticationFilterTest {
     private static final String JWT_SECRET = "12345678901234567890123456789012";
 
     private final UserRepository userRepository = mock(UserRepository.class);
+    private final AdminRepository adminRepository = mock(AdminRepository.class);
     private final SecurityErrorResponseWriter securityErrorResponseWriter = new SecurityErrorResponseWriter();
 
     @AfterEach
@@ -34,10 +36,11 @@ class JwtAuthenticationFilterTest {
 
     @Test
     void authenticatesAccessTokenWithSingleClaimsParsing() throws Exception {
-        JwtUtil jwtUtil = spy(new JwtUtil(JWT_SECRET, 3600000L, 1209600000L));
+        JwtUtil jwtUtil = spy(jwtUtil());
         JwtAuthenticationFilter filter = new JwtAuthenticationFilter(
                 jwtUtil,
                 userRepository,
+                adminRepository,
                 securityErrorResponseWriter
         );
         User user = createUser();
@@ -65,10 +68,11 @@ class JwtAuthenticationFilterTest {
 
     @Test
     void authenticatesSeniorReloginRequestListGet() throws Exception {
-        JwtUtil jwtUtil = spy(new JwtUtil(JWT_SECRET, 3600000L, 1209600000L));
+        JwtUtil jwtUtil = spy(jwtUtil());
         JwtAuthenticationFilter filter = new JwtAuthenticationFilter(
                 jwtUtil,
                 userRepository,
+                adminRepository,
                 securityErrorResponseWriter
         );
         User user = createUser();
@@ -92,10 +96,11 @@ class JwtAuthenticationFilterTest {
 
     @Test
     void skipsOnlySeniorReloginRequestCreatePostWithoutToken() throws Exception {
-        JwtUtil jwtUtil = spy(new JwtUtil(JWT_SECRET, 3600000L, 1209600000L));
+        JwtUtil jwtUtil = spy(jwtUtil());
         JwtAuthenticationFilter filter = new JwtAuthenticationFilter(
                 jwtUtil,
                 userRepository,
+                adminRepository,
                 securityErrorResponseWriter
         );
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/seniors/relogin-requests");
@@ -111,10 +116,11 @@ class JwtAuthenticationFilterTest {
 
     @Test
     void skipsOnlySeniorReloginReactivatePostWithoutToken() throws Exception {
-        JwtUtil jwtUtil = spy(new JwtUtil(JWT_SECRET, 3600000L, 1209600000L));
+        JwtUtil jwtUtil = spy(jwtUtil());
         JwtAuthenticationFilter filter = new JwtAuthenticationFilter(
                 jwtUtil,
                 userRepository,
+                adminRepository,
                 securityErrorResponseWriter
         );
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/seniors/relogin-requests/1/reactivate");
@@ -137,5 +143,12 @@ class JwtAuthenticationFilterTest {
                 .name("test")
                 .role(Role.PARENT)
                 .build();
+    }
+
+    private JwtUtil jwtUtil() {
+        return new JwtUtil(
+                JWT_SECRET, 3600000L, 1209600000L,
+                "admin-test-secret-key-123456789012", 1800000L, 86400000L
+        );
     }
 }

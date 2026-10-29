@@ -27,7 +27,10 @@ class RefreshTokenRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        JwtUtil jwtUtil = new JwtUtil("12345678901234567890123456789012", 3600000L, 1209600000L);
+        JwtUtil jwtUtil = new JwtUtil(
+                "12345678901234567890123456789012", 3600000L, 1209600000L,
+                "admin-test-secret-key-123456789012", 1800000L, 86400000L
+        );
         refreshTokenService = new RefreshTokenService(refreshTokenRepository, jwtUtil);
     }
 

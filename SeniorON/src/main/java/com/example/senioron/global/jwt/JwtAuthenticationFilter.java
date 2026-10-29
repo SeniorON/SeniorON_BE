@@ -1,6 +1,9 @@
 package com.example.senioron.global.jwt;
 
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.admin.entity.Admin;
+import com.example.senioron.domain.admin.entity.AdminRole;
+import com.example.senioron.domain.admin.repository.AdminRepository;
 import com.example.senioron.domain.user.entity.UserStatus;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
@@ -11,16 +14,18 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Set;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 @Slf4j
 @Component
@@ -46,7 +51,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             "/api/social-accounts/login/kakao",
             "/api/social-accounts/login/google",
             "/api/social-accounts/signup",
-            "/api/social-accounts/login/kakao/callback"
+            "/api/social-accounts/login/kakao/callback",
+            "/api/admin/auth/login",
+            "/api/admin/auth/token/refresh",
+            "/api/admin/auth/invitations/verify",
+            "/api/admin/auth/invitations/accept"
     );
 
     private static final Set<String> PUBLIC_PATH_PREFIXES = Set.of(
@@ -60,6 +69,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
+    private final AdminRepository adminRepository;
     private final SecurityErrorResponseWriter securityErrorResponseWriter;
 
     @Override
@@ -94,31 +104,33 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             if (token != null) {
                 long jwtStart = System.nanoTime();
-                Claims claims = jwtUtil.parseClaims(token);
+                if (path.startsWith("/api/admin/")) {
+                    authenticateAdmin(token);
+                } else {
+                    Claims claims = jwtUtil.parseClaims(token);
+                    if (!jwtUtil.isAccessToken(claims)) {
+                        throw new JwtException("Only access token can authenticate requests.");
+                    }
+                    Long usersId = jwtUtil.getUsersId(claims);
+                    log.debug("[TIMING] JWT 파싱: {}ms | {}",
+                            elapsedMillis(jwtStart), path);
 
-                if (!jwtUtil.isAccessToken(claims)) {
-                    throw new JwtException("Only access token can authenticate requests.");
-                }
+                    long dbStart = System.nanoTime();
+                    User user = userRepository.findById(usersId)
+                            .orElse(null);
+                    log.debug("[TIMING] JWT Filter DB조회 (findById): {}ms | {}",
+                            elapsedMillis(dbStart), path);
 
-                Long usersId = jwtUtil.getUsersId(claims);
-                log.debug("[TIMING] JWT 파싱: {}ms | {}",
-                        elapsedMillis(jwtStart), path);
+                    if (user != null && user.getStatus() == UserStatus.ACTIVE) {
+                        UsernamePasswordAuthenticationToken authentication =
+                                new UsernamePasswordAuthenticationToken(
+                                        user,
+                                        null,
+                                        Collections.emptyList()
+                                );
 
-                long dbStart = System.nanoTime();
-                User user = userRepository.findById(usersId)
-                        .orElse(null);
-                log.debug("[TIMING] JWT Filter DB조회 (findById): {}ms | {}",
-                        elapsedMillis(dbStart), path);
-
-                if (user != null && user.getStatus() == UserStatus.ACTIVE) {
-                    UsernamePasswordAuthenticationToken authentication =
-                            new UsernamePasswordAuthenticationToken(
-                                    user,
-                                    null,
-                                    Collections.emptyList()
-                            );
-
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                        SecurityContextHolder.getContext().setAuthentication(authentication);
+                    }
                 }
             }
         } catch (JwtException | IllegalArgumentException e) {
@@ -146,6 +158,25 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             log.debug("[TIMING] JWT Authentication: {}ms | {}",
                     jwtAuthenticationMs, path);
         }
+    }
+
+    private void authenticateAdmin(String token) {
+        Claims claims = jwtUtil.parseAdminClaims(token);
+        if (!jwtUtil.isAdminAccessToken(claims)) {
+            throw new JwtException("Only admin access token can authenticate requests.");
+        }
+        Admin admin = adminRepository.findById(jwtUtil.getAdminId(claims)).orElse(null);
+        if (admin == null || !admin.isActive()) {
+            return;
+        }
+        var authorities = new ArrayList<SimpleGrantedAuthority>();
+        authorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
+        if (admin.getAdminRole() == AdminRole.SUPER) {
+            authorities.add(new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"));
+        }
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(admin, null, authorities)
+        );
     }
 
     private String resolveToken(HttpServletRequest request) {

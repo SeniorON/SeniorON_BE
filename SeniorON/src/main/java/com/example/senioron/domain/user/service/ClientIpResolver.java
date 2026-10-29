@@ -6,19 +6,13 @@ import org.springframework.stereotype.Component;
 @Component
 public class ClientIpResolver {
 
-    private static final String X_FORWARDED_FOR = "X-Forwarded-For";
+    private static final String X_REAL_IP = "X-Real-IP";
 
     public String resolve(HttpServletRequest request) {
-        String forwardedFor = request.getHeader(X_FORWARDED_FOR);
-        if (forwardedFor == null || forwardedFor.isBlank()) {
+        String realIp = request.getHeader(X_REAL_IP);
+        if (realIp == null || realIp.isBlank()) {
             return request.getRemoteAddr();
         }
-
-        String clientIp = forwardedFor.split(",")[0].trim();
-        if (clientIp.isBlank()) {
-            return request.getRemoteAddr();
-        }
-
-        return clientIp;
+        return realIp.trim();
     }
 }

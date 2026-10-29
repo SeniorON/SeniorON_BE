@@ -17,7 +17,10 @@ import static org.mockito.Mockito.*;
 
 class WebSocketSubscriptionInterceptorTest {
     private final UserRepository users = mock(UserRepository.class);
-    private final JwtUtil jwt = new JwtUtil("websocket-test-secret-key-at-least-32-characters", 60000, 120000);
+    private final JwtUtil jwt = new JwtUtil(
+            "websocket-test-secret-key-at-least-32-characters", 60000, 120000,
+            "websocket-admin-test-secret-key-at-least-32", 60000, 120000
+    );
     private final WebSocketSubscriptionInterceptor interceptor = new WebSocketSubscriptionInterceptor(jwt, users);
     private final User child = User.builder().usersId(10L).role(Role.CHILD).build();
 
@@ -44,7 +47,10 @@ class WebSocketSubscriptionInterceptorTest {
 
     @Test
     void missingInvalidExpiredAndRefreshTokensAreRejected() {
-        JwtUtil expired = new JwtUtil("websocket-test-secret-key-at-least-32-characters", -10000, 120000);
+        JwtUtil expired = new JwtUtil(
+                "websocket-test-secret-key-at-least-32-characters", -10000, 120000,
+                "websocket-admin-test-secret-key-at-least-32", 60000, 120000
+        );
         for (String token : new String[]{"Bearer invalid", "Bearer " + jwt.createRefreshToken(child),
                 "Bearer " + expired.createAccessToken(child), "Basic invalid"}) {
             var connect = frame(StompCommand.CONNECT, null);

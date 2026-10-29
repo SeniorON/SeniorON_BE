@@ -41,4 +41,17 @@ public class EmailService {
             throw new BusinessException(ErrorCode.EMAIL_SEND_FAILED);
         }
     }
+
+    public void sendAdminInvitation(String to, String link) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setTo(to);
+        message.setSubject("[SeniorON] 관리자 초대 안내");
+        message.setText("관리자 계정 비밀번호를 설정하려면 다음 링크를 이용해 주세요.\n" + link);
+
+        try {
+            javaMailSender.send(message);
+        } catch (MailException e) {
+            throw new BusinessException(ErrorCode.EMAIL_SEND_FAILED);
+        }
+    }
 }

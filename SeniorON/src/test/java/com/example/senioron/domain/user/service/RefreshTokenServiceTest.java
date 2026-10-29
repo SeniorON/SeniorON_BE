@@ -19,7 +19,10 @@ import org.springframework.dao.DataIntegrityViolationException;
 class RefreshTokenServiceTest {
 
     private final RefreshTokenRepository refreshTokenRepository = mock(RefreshTokenRepository.class);
-    private final JwtUtil jwtUtil = new JwtUtil("12345678901234567890123456789012", 3600000L, 1209600000L);
+    private final JwtUtil jwtUtil = new JwtUtil(
+            "12345678901234567890123456789012", 3600000L, 1209600000L,
+            "admin-test-secret-key-123456789012", 1800000L, 86400000L
+    );
     private final RefreshTokenService refreshTokenService = new RefreshTokenService(refreshTokenRepository, jwtUtil);
 
     @Test

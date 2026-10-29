@@ -19,6 +19,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageConversionException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.jpa.JpaSystemException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.ServletRequestBindingException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -61,6 +62,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity
                 .status(ex.getStatus())
                 .body(Response.fail(ex.getCode()));
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<Response<Void>> handleAccessDeniedException(
+            AccessDeniedException ex
+    ) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Response.fail(ErrorCode.FORBIDDEN));
     }
 
     // ===================== Validation / 변환 오류 ======================
