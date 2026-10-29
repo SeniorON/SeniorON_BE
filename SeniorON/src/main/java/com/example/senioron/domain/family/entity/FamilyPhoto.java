@@ -22,16 +22,6 @@ import java.time.*;
                         name = "uk_family_photo_image_key",
                         columnNames = "image_key"
                 )
-        },
-        indexes = {
-                @Index(
-                        name = "idx_family_photo_group_created",
-                        columnList = "photo_group_id, created_at, family_photo_id"
-                ),
-                @Index(
-                        name = "idx_family_photo_group_user",
-                        columnList = "photo_group_id, users_id"
-                )
         }
 )
 @Getter
@@ -44,10 +34,6 @@ public class FamilyPhoto extends BaseEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name="family_photo_id")
     private Long familyPhotoId;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "photo_group_id", nullable = false)
-    private PhotoGroup photoGroup;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "users_id")

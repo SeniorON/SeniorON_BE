@@ -3,7 +3,6 @@ package com.example.senioron.domain.family.repository;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.example.senioron.domain.family.entity.FamilyPhoto;
-import com.example.senioron.domain.family.entity.PhotoGroup;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
@@ -21,9 +20,6 @@ class FamilyPhotoViewRepositoryTest {
     private FamilyPhotoRepository familyPhotoRepository;
 
     @Autowired
-    private PhotoGroupRepository photoGroupRepository;
-
-    @Autowired
     private UserRepository userRepository;
 
     @Test
@@ -31,14 +27,8 @@ class FamilyPhotoViewRepositoryTest {
         User uploader = saveUser("view-uploader", Role.CHILD);
         User firstParent = saveUser("first-view-parent", Role.PARENT);
         User secondParent = saveUser("second-view-parent", Role.PARENT);
-        PhotoGroup photoGroup = photoGroupRepository.saveAndFlush(
-                PhotoGroup.builder()
-                        .name("view-test-group")
-                        .build()
-        );
         FamilyPhoto photo = familyPhotoRepository.saveAndFlush(
                 FamilyPhoto.builder()
-                        .photoGroup(photoGroup)
                         .user(uploader)
                         .imageKey("view-test-photo.jpg")
                         .build()
