@@ -16,9 +16,12 @@ import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.repository.RefreshTokenRepository;
 import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.domain.device.dto.request.DeviceStatusPatchRequest;
 import com.example.senioron.domain.device.dto.request.DeviceStatusUpdateRequest;
 import com.example.senioron.domain.device.dto.response.DeviceReconnectionStatusResponse;
 import com.example.senioron.domain.user.entity.ManagerType;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import com.example.senioron.global.apiPayload.exception.BusinessException;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import java.time.LocalDate;
@@ -302,6 +305,231 @@ class DeviceServiceTest {
         assertThat(device.getNotificationPermissionGranted()).isTrue();
         assertThat(device.getAppExecutionMaintained()).isTrue();
         assertThat(device.getLastConnectedAt()).isNotNull();
+    }
+
+
+    @Test
+    void patchDeviceStatusUpdatesOnlyProvidedFields() {
+        // given: 기존 기기 상태 저장
+        User parent = saveUser("parent", Role.PARENT);
+
+        Device device = deviceRepository.saveAndFlush(
+                Device.builder()
+                        .user(parent)
+                        .deviceIdentifier(DEVICE_IDENTIFIER)
+                        .deviceName("Galaxy S24")
+                        .connectionStatus(DeviceStatus.ONLINE)
+                        .batteryLevel(72)
+                        .charging(true)
+                        .networkConnected(true)
+                        .gpsEnabled(false)
+                        .lastConnectedAt(LocalDateTime.now().minusHours(1))
+                        .build()
+        );
+
+        LocalDateTime previousConnectedAt = device.getLastConnectedAt();
+
+        // when: 배터리 잔량만 변경
+        DeviceStatusPatchRequest request =
+                new DeviceStatusPatchRequest(
+                        DEVICE_IDENTIFIER,
+                        null,   // deviceName
+                        85,     // batteryLevel
+                        null,   // charging
+                        null,   // deviceStatusSharingEnabled
+                        null,   // networkConnected
+                        null,   // defaultHomeEnabled
+                        null,   // locationPermissionGranted
+                        null,   // gpsEnabled
+                        null,   // notificationPermissionGranted
+                        null    // appExecutionMaintained
+                );
+
+        deviceService().patchDeviceStatus(parent, request);
+
+        deviceRepository.flush();
+
+        // then: 변경된 필드만 갱신되고 나머지는 유지
+        Device updatedDevice = deviceRepository
+                .findByDeviceIdentifier(DEVICE_IDENTIFIER)
+                .orElseThrow();
+
+        assertThat(updatedDevice.getBatteryLevel()).isEqualTo(85);
+        assertThat(updatedDevice.getDeviceName()).isEqualTo("Galaxy S24");
+        assertThat(updatedDevice.getCharging()).isTrue();
+        assertThat(updatedDevice.getNetworkConnected()).isTrue();
+        assertThat(updatedDevice.getGpsEnabled()).isFalse();
+        assertThat(updatedDevice.getConnectionStatus())
+                .isEqualTo(DeviceStatus.ONLINE);
+        assertThat(updatedDevice.getLastConnectedAt())
+                .isAfter(previousConnectedAt);
+    }
+
+
+    @Test
+    void patchDeviceStatusUpdatesFalseAndZeroValues() {
+        // given
+        User parent = saveUser("parent", Role.PARENT);
+
+        deviceRepository.saveAndFlush(
+                Device.builder()
+                        .user(parent)
+                        .deviceIdentifier(DEVICE_IDENTIFIER)
+                        .connectionStatus(DeviceStatus.ONLINE)
+                        .batteryLevel(72)
+                        .charging(true)
+                        .networkConnected(true)
+                        .build()
+        );
+
+        DeviceStatusPatchRequest request =
+                new DeviceStatusPatchRequest(
+                        DEVICE_IDENTIFIER,
+                        null,
+                        0,       // batteryLevel
+                        false,   // charging
+                        null,
+                        false,   // networkConnected
+                        null,
+                        null,
+                        null,
+                        null,
+                        null
+                );
+
+        // when
+        deviceService().patchDeviceStatus(parent, request);
+
+        deviceRepository.flush();
+
+        // then
+        Device updatedDevice = deviceRepository
+                .findByDeviceIdentifier(DEVICE_IDENTIFIER)
+                .orElseThrow();
+
+        assertThat(updatedDevice.getBatteryLevel()).isZero();
+        assertThat(updatedDevice.getCharging()).isFalse();
+        assertThat(updatedDevice.getNetworkConnected()).isFalse();
+    }
+
+
+    @Test
+    void patchDeviceStatusRejectsOtherUsersDevice() {
+        // given: 서로 다른 시니어 계정
+        User owner = saveUser("owner", Role.PARENT);
+        User otherParent = saveUser("other-parent", Role.PARENT);
+
+        deviceRepository.saveAndFlush(
+                Device.builder()
+                        .user(owner)
+                        .deviceIdentifier(DEVICE_IDENTIFIER)
+                        .connectionStatus(DeviceStatus.ONLINE)
+                        .batteryLevel(72)
+                        .build()
+        );
+
+        DeviceStatusPatchRequest request =
+                new DeviceStatusPatchRequest(
+                        DEVICE_IDENTIFIER,
+                        null,
+                        85,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null
+                );
+
+        // when & then: 다른 사용자는 수정 불가
+        assertThatThrownBy(() ->
+                deviceService().patchDeviceStatus(otherParent, request)
+        ).isInstanceOf(BusinessException.class);
+
+        // 기존 값 유지
+        Device device = deviceRepository
+                .findByDeviceIdentifier(DEVICE_IDENTIFIER)
+                .orElseThrow();
+
+        assertThat(device.getBatteryLevel()).isEqualTo(72);
+    }
+
+
+    @Test
+    void patchDeviceStatusRejectsDisconnectedDevice() {
+        // given: 연결 해제된 기기
+        User parent = saveUser("parent", Role.PARENT);
+
+        deviceRepository.saveAndFlush(
+                Device.builder()
+                        .user(parent)
+                        .deviceIdentifier(DEVICE_IDENTIFIER)
+                        .connectionStatus(DeviceStatus.DISCONNECTED)
+                        .batteryLevel(72)
+                        .build()
+        );
+
+        DeviceStatusPatchRequest request =
+                new DeviceStatusPatchRequest(
+                        DEVICE_IDENTIFIER,
+                        null,
+                        85,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null
+                );
+
+        // when & then: 연결 해제된 기기는 수정 불가
+        assertThatThrownBy(() ->
+                deviceService().patchDeviceStatus(parent, request)
+        ).isInstanceOf(BusinessException.class);
+
+        Device device = deviceRepository
+                .findByDeviceIdentifier(DEVICE_IDENTIFIER)
+                .orElseThrow();
+
+        // 연결 해제 상태와 기존 배터리 값 유지
+        assertThat(device.getConnectionStatus())
+                .isEqualTo(DeviceStatus.DISCONNECTED);
+        assertThat(device.getBatteryLevel()).isEqualTo(72);
+    }
+
+
+    @Test
+    void patchDeviceStatusRejectsNonexistentDevice() {
+        // given: 등록되지 않은 기기
+        User parent = saveUser("parent", Role.PARENT);
+
+        DeviceStatusPatchRequest request =
+                new DeviceStatusPatchRequest(
+                        "unknown-device",
+                        null,
+                        85,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null
+                );
+
+        // when & then: 존재하지 않는 기기는 수정 불가
+        assertThatThrownBy(() ->
+                deviceService().patchDeviceStatus(parent, request)
+        ).isInstanceOf(BusinessException.class);
+
+        // PATCH 요청으로 새로운 기기가 생성되지 않았는지 확인
+        assertThat(deviceRepository.findByDeviceIdentifier("unknown-device"))
+                .isEmpty();
     }
 
 

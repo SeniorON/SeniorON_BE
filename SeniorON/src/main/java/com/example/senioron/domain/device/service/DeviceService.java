@@ -1,5 +1,6 @@
 package com.example.senioron.domain.device.service;
 
+import com.example.senioron.domain.device.dto.request.DeviceStatusPatchRequest;
 import com.example.senioron.domain.device.entity.Device;
 import com.example.senioron.domain.device.entity.DeviceStatus;
 import com.example.senioron.domain.device.repository.DeviceRepository;
@@ -202,6 +203,53 @@ public class DeviceService {
 
         deviceRepository.save(device);
     }
+
+
+    @Transactional
+    public void patchDeviceStatus(
+            User user,
+            DeviceStatusPatchRequest request
+    ) {
+        // 시니어 계정만 기기 상태 갱신 가능
+        if (user.getRole() != Role.PARENT) {
+            throw new BusinessException(
+                    ErrorCode.SENIOR_DEVICE_ACCESS_DENIED
+            );
+        }
+
+        // 현재 사용자의 기존 기기만 조회
+        Device device = deviceRepository
+                .findByDeviceIdentifierAndUser(
+                        request.deviceIdentifier(),
+                        user
+                )
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.DEVICE_NOT_FOUND
+                ));
+
+        // 연결 해제된 기기는 상태 갱신 불가
+        if (device.getConnectionStatus() == DeviceStatus.DISCONNECTED) {
+            throw new BusinessException(
+                    ErrorCode.DEVICE_NOT_CONNECTED
+            );
+        }
+
+        // 전달된 필드만 부분 갱신
+        device.patchDeviceInfo(
+                request.deviceName(),
+                request.batteryLevel(),
+                request.charging(),
+                request.deviceStatusSharingEnabled(),
+                request.networkConnected(),
+                request.defaultHomeEnabled(),
+                request.locationPermissionGranted(),
+                request.gpsEnabled(),
+                request.notificationPermissionGranted(),
+                request.appExecutionMaintained(),
+                LocalDateTime.now()
+        );
+    }
+
 
     @Transactional
     public void disconnectDevice(
