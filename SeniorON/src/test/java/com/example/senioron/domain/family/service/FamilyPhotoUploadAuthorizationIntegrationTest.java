@@ -7,12 +7,8 @@ import com.example.senioron.domain.family.dto.request.FamilyPrimaryManagerUpdate
 import com.example.senioron.domain.family.dto.response.FamilyPhotoItemResponse;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
-import com.example.senioron.domain.family.entity.FamilyPhotoGroup;
-import com.example.senioron.domain.family.entity.PhotoGroup;
-import com.example.senioron.domain.family.entity.PhotoGroupFamily;
-import com.example.senioron.domain.family.repository.FamilyPhotoGroupRepository;
+import com.example.senioron.domain.family.entity.FamilyPhotoSenior;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
-import com.example.senioron.domain.family.repository.PhotoGroupRepository;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoSeniorRepository;
 import com.example.senioron.domain.family.dto.response.PhotoShareTargetResponse;
@@ -90,12 +86,10 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
     @Autowired private FamilyPhotoService photoService;
     @Autowired private FamilyPhotoPersistenceService persistenceService;
     @Autowired private FamilyPhotoRepository photos;
-    @Autowired private PhotoGroupRepository groups;
     @Autowired private FamilyMemberRepository members;
-    @Autowired private FamilyPhotoSeniorRepository shareTargets;
     @Autowired private EntityManager entityManager;
     @Autowired private PlatformTransactionManager transactionManager;
-    @MockitoSpyBean private FamilyPhotoGroupRepository mappings;
+    @MockitoSpyBean private FamilyPhotoSeniorRepository shareTargets;
     @MockitoBean private S3Service storage;
     @MockitoSpyBean private ThumbnailService thumbnails;
     @MockitoBean private DeviceService devices;
@@ -120,15 +114,9 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
             saveMember(uploader, familyB, ManagerType.SUB);
             User parentA = saveUser(Role.PARENT), parentB = saveUser(Role.PARENT);
             Senior seniorA = saveSenior(familyA, primaryA, parentA), seniorB = saveSenior(familyB, primaryB, parentB);
-            PhotoGroup defaultA = saveGroup(familyA);
-            PhotoGroup defaultB = saveGroup(familyB);
-            PhotoGroup shared = PhotoGroup.builder().name("Shared").build();
-            entityManager.persist(shared);
-            saveLink(familyA, shared);
-            saveLink(familyB, shared);
             entityManager.flush();
             return new Fixture(primaryA, primaryB, uploader, parentA, parentB, familyA, familyB,
-                    seniorA, seniorB, defaultA, defaultB, shared);
+                    seniorA, seniorB);
         });
         imageKey = "family-photos/" + fixture.familyA().getFamilyId() + "/"
                 + fixture.uploader().getUsersId() + "/" + UUID.randomUUID() + ".jpg";
@@ -153,10 +141,7 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
                     fixture.uploader().getUsersId());
             List<Long> parentIds = List.of(fixture.parentA().getUsersId(), fixture.parentB().getUsersId());
             List<Long> familyIds = List.of(fixture.familyA().getFamilyId(), fixture.familyB().getFamilyId());
-            List<Long> groupIds = List.of(fixture.defaultA().getId(), fixture.defaultB().getId(), fixture.shared().getId());
             entityManager.createQuery("DELETE FROM FamilyPhotoView v WHERE v.familyPhoto.user.usersId IN :ids")
-                    .setParameter("ids", userIds).executeUpdate();
-            entityManager.createQuery("DELETE FROM FamilyPhotoGroup m WHERE m.familyPhoto.user.usersId IN :ids")
                     .setParameter("ids", userIds).executeUpdate();
             entityManager.createQuery("DELETE FROM FamilyPhotoSenior t WHERE t.familyPhoto.user.usersId IN :ids")
                     .setParameter("ids", userIds).executeUpdate();
@@ -166,10 +151,6 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
                     .setParameter("ids", familyIds).executeUpdate();
             entityManager.createQuery("DELETE FROM FamilyMember m WHERE m.family.familyId IN :ids")
                     .setParameter("ids", familyIds).executeUpdate();
-            entityManager.createQuery("DELETE FROM PhotoGroupFamily l WHERE l.photoGroup.id IN :ids")
-                    .setParameter("ids", groupIds).executeUpdate();
-            entityManager.createQuery("DELETE FROM PhotoGroup g WHERE g.id IN :ids")
-                    .setParameter("ids", groupIds).executeUpdate();
             entityManager.createQuery("DELETE FROM Family f WHERE f.familyId IN :ids")
                     .setParameter("ids", familyIds).executeUpdate();
             entityManager.createQuery("DELETE FROM User u WHERE u.usersId IN :ids")
@@ -181,15 +162,9 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    void savesBothUploadPathsAndAllRequestedMappingsWhenAccessRemains(boolean multipart) {
+    void savesBothUploadPathsAndAllRequestedSeniorsWhenAccessRemains(boolean multipart) {
         var response = upload(fixture.uploader(), multipart);
-        assertThat(photos.countAccessibleByFamily(fixture.familyA())).isEqualTo(1);
-        assertThat(photos.countAccessibleByFamily(fixture.familyB())).isEqualTo(1);
-        List<Long> savedGroupIds = transaction().execute(status -> mappings.findAll().stream()
-                .filter(mapping -> mapping.getFamilyPhoto().getFamilyPhotoId().equals(response.getFamilyPhotoId()))
-                .map(mapping -> mapping.getPhotoGroup().getId()).toList());
-        assertThat(savedGroupIds)
-                .containsExactlyInAnyOrder(fixture.defaultA().getId(), fixture.defaultB().getId());
+        assertSavedForBothSeniors(response.getFamilyPhotoId());
     }
 
     @ParameterizedTest
@@ -230,15 +205,15 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
         CountDownLatch contenderStarted = new CountDownLatch(1);
         ExecutorService executor = Executors.newFixedThreadPool(2);
         if (!revocationFirst) {
-            // Pause inside the real save transaction after all mappings have reached the DB.
+            // Pause inside the real save transaction after all share targets have reached the DB.
             doAnswer(invocation -> {
-                Iterable<FamilyPhotoGroup> requestedMappings = invocation.getArgument(0);
-                List<FamilyPhotoGroup> result = mappings.saveAll(requestedMappings);
-                mappings.flush();
+                Iterable<FamilyPhotoSenior> requestedTargets = invocation.getArgument(0);
+                List<FamilyPhotoSenior> result = shareTargets.saveAll(requestedTargets);
+                shareTargets.flush();
                 holderReady.countDown();
                 await(releaseHolder);
                 return result;
-            }).when(mappings).saveAllAndFlush(any());
+            }).when(shareTargets).saveAllAndFlush(any());
         }
         try {
             Future<?> holder = executor.submit(() -> {
@@ -327,8 +302,6 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     void savesToBothSeniorsWithoutSharingConnection(boolean multipart) {
-        transaction().executeWithoutResult(status ->
-                groups.findAllByIdsForUpdate(List.of(fixture.shared().getId())).get(0).disconnect());
         List<Long> seniorIds = List.of(fixture.seniorA().getSeniorId(), fixture.seniorB().getSeniorId());
         assertThat(familyService.getPhotoShareTargets(fixture.uploader()))
                 .extracting(PhotoShareTargetResponse::getSeniorId).containsExactlyElementsOf(seniorIds);
@@ -336,11 +309,6 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
         var response = upload(fixture.uploader(), multipart, seniorIds);
         assertThat(photos.countAccessibleByFamily(fixture.familyA())).isEqualTo(1);
         assertThat(photos.countAccessibleByFamily(fixture.familyB())).isEqualTo(1);
-        List<Long> savedGroupIds = transaction().execute(status -> mappings.findAll().stream()
-                .filter(mapping -> mapping.getFamilyPhoto().getFamilyPhotoId().equals(response.getFamilyPhotoId()))
-                .map(mapping -> mapping.getPhotoGroup().getId()).toList());
-        assertThat(savedGroupIds)
-                .containsExactlyInAnyOrder(fixture.defaultA().getId(), fixture.defaultB().getId());
         assertThat(savedSeniorIds(response.getFamilyPhotoId())).containsExactlyInAnyOrderElementsOf(seniorIds);
     }
 
@@ -413,7 +381,7 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
 
         assertThat(photos.findById(response.getFamilyPhotoId()).orElseThrow().getThumbnailKey())
                 .isEqualTo(thumbnailKey);
-        assertSavedInBothGroups(response.getFamilyPhotoId());
+        assertSavedForBothSeniors(response.getFamilyPhotoId());
         assertThat(sharedEventCount()).isEqualTo(1);
     }
 
@@ -429,7 +397,7 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
         var response = upload(fixture.uploader(), multipart);
 
         assertThat(photos.findById(response.getFamilyPhotoId()).orElseThrow().getThumbnailKey()).isNull();
-        assertSavedInBothGroups(response.getFamilyPhotoId());
+        assertSavedForBothSeniors(response.getFamilyPhotoId());
         assertThat(sharedEventCount()).isEqualTo(1);
         verify(storage, never()).delete(imageKey);
     }
@@ -464,7 +432,7 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
         verify(storage, times(1)).download(imageKey);
         verify(storage, never()).delete(imageKey);
         assertThat(sharedEventCount()).isEqualTo(1);
-        assertSavedInBothGroups(first.getFamilyPhotoId());
+        assertSavedForBothSeniors(first.getFamilyPhotoId());
 
         revoke(Revocation.REMOVE_TARGET);
         assertThatThrownBy(() -> upload(fixture.uploader(), multipart, seniorIds, idempotencyKey))
@@ -476,10 +444,6 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
     private void assertNoPhotoSideEffects() {
         assertThat(photos.countAccessibleByFamily(fixture.familyA())).isZero();
         assertThat(photos.countAccessibleByFamily(fixture.familyB())).isZero();
-        Long mappingCount = transaction().execute(status -> mappings.findAll().stream()
-                .filter(mapping -> mapping.getFamilyPhoto().getUser().getUsersId()
-                        .equals(fixture.uploader().getUsersId())).count());
-        assertThat(mappingCount).isZero();
         Long shareTargetCount = transaction().execute(status -> shareTargets.findAll().stream()
                 .filter(target -> target.getFamilyPhoto().getUser().getUsersId()
                         .equals(fixture.uploader().getUsersId())).count());
@@ -487,13 +451,9 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
         assertThat(sharedEventCount()).isZero();
     }
 
-    private void assertSavedInBothGroups(Long photoId) {
+    private void assertSavedForBothSeniors(Long photoId) {
         assertThat(photos.countAccessibleByFamily(fixture.familyA())).isEqualTo(1);
         assertThat(photos.countAccessibleByFamily(fixture.familyB())).isEqualTo(1);
-        List<Long> savedGroupIds = transaction().execute(status -> mappings.findAll().stream()
-                .filter(mapping -> mapping.getFamilyPhoto().getFamilyPhotoId().equals(photoId))
-                .map(mapping -> mapping.getPhotoGroup().getId()).toList());
-        assertThat(savedGroupIds).containsExactlyInAnyOrder(fixture.defaultA().getId(), fixture.defaultB().getId());
         assertThat(savedSeniorIds(photoId))
                 .containsExactlyInAnyOrder(fixture.seniorA().getSeniorId(), fixture.seniorB().getSeniorId());
     }
@@ -589,17 +549,6 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
         return senior;
     }
 
-    private PhotoGroup saveGroup(Family family) {
-        PhotoGroup group = PhotoGroup.builder().name("Default").build();
-        entityManager.persist(group);
-        saveLink(family, group);
-        return group;
-    }
-
-    private void saveLink(Family family, PhotoGroup group) {
-        entityManager.persist(PhotoGroupFamily.builder().family(family).photoGroup(group).build());
-    }
-
     private TransactionTemplate transaction() { return new TransactionTemplate(transactionManager); }
 
     private static void await(CountDownLatch latch) {
@@ -615,5 +564,5 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
 
     private record Fixture(User primaryA, User primaryB, User uploader, User parentA, User parentB,
                            Family familyA, Family familyB,
-                           Senior seniorA, Senior seniorB, PhotoGroup defaultA, PhotoGroup defaultB, PhotoGroup shared) {}
+                           Senior seniorA, Senior seniorB) {}
 }

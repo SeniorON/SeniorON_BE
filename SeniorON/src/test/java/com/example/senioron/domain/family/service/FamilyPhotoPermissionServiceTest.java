@@ -6,12 +6,10 @@ import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.entity.FamilyPhotoSenior;
-import com.example.senioron.domain.family.entity.PhotoGroup;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoSeniorRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
-import com.example.senioron.domain.family.repository.PhotoGroupRepository;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
@@ -43,7 +41,6 @@ class FamilyPhotoPermissionServiceTest {
     @Autowired private FamilyPhotoSeniorRepository familyPhotoSeniorRepository;
     @Autowired private FamilyRepository familyRepository;
     @Autowired private FamilyMemberRepository familyMemberRepository;
-    @Autowired private PhotoGroupRepository photoGroupRepository;
     @Autowired private SeniorRepository seniorRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private EntityManagerFactory entityManagerFactory;
@@ -178,14 +175,6 @@ class FamilyPhotoPermissionServiceTest {
         );
     }
 
-    private PhotoGroup savePhotoGroup(String name) {
-        return photoGroupRepository.saveAndFlush(
-                PhotoGroup.builder()
-                        .name(name)
-                        .build()
-        );
-    }
-
     private Senior saveSenior(String seniorCode, User registeredBy) {
         Family family = familyRepository.saveAndFlush(
                 Family.builder()
@@ -205,10 +194,8 @@ class FamilyPhotoPermissionServiceTest {
     }
 
     private FamilyPhoto savePhoto(User uploader, String imageKey, Senior... seniors) {
-        PhotoGroup group = savePhotoGroup("group-" + imageKey);
         FamilyPhoto photo = familyPhotoRepository.saveAndFlush(
                 FamilyPhoto.builder()
-                        .photoGroup(group)
                         .user(uploader)
                         .imageKey(imageKey)
                         .build()

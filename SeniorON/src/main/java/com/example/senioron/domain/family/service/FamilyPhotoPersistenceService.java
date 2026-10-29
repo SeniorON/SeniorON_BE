@@ -1,7 +1,6 @@
 package com.example.senioron.domain.family.service;
 
 import com.example.senioron.domain.family.entity.FamilyPhoto;
-import com.example.senioron.domain.family.entity.PhotoGroup;
 import com.example.senioron.domain.family.event.FamilyPhotoSharedEvent;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.user.entity.User;
@@ -18,18 +17,14 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import com.example.senioron.domain.family.entity.FamilyPhotoGroup;
 import com.example.senioron.domain.family.entity.FamilyPhotoSenior;
-import com.example.senioron.domain.family.repository.FamilyPhotoGroupRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoSeniorRepository;
 
 import java.util.List;
 
 import com.example.senioron.domain.family.entity.Family;
-import com.example.senioron.domain.family.entity.PhotoGroupFamily;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
-import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
@@ -41,11 +36,9 @@ public class FamilyPhotoPersistenceService {
 
     private final FamilyPhotoRepository familyPhotoRepository;
     private final UserRepository userRepository;
-    private final FamilyPhotoGroupRepository familyPhotoGroupRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final FamilyRepository familyRepository;
     private final FamilyMemberRepository familyMemberRepository;
-    private final PhotoGroupFamilyRepository photoGroupFamilyRepository;
     private final FamilyPhotoSeniorRepository familyPhotoSeniorRepository;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -111,21 +104,7 @@ public class FamilyPhotoPersistenceService {
                 .map(targetSeniors::get)
                 .toList();
 
-        // 조회가 시니어 기준으로 바뀌기 전까지 기존 그룹 매핑도 함께 저장한다.
-        List<PhotoGroup> photoGroups = seniors.stream()
-                .map(senior -> photoGroupFamilyRepository
-                        .findFirstByFamilyOrderByIdAsc(senior.getFamily())
-                        .map(PhotoGroupFamily::getPhotoGroup)
-                        .orElseThrow(() ->
-                                new BusinessException(ErrorCode.PHOTO_GROUP_NOT_FOUND)
-                        )
-                )
-                .toList();
-
-        PhotoGroup representativePhotoGroup = photoGroups.get(0);
-
         FamilyPhoto familyPhoto = FamilyPhoto.builder()
-                .photoGroup(representativePhotoGroup)
                 .user(user)
                 .imageKey(imageKey)
                 .thumbnailKey(thumbnailKey)
@@ -135,18 +114,6 @@ public class FamilyPhotoPersistenceService {
 
         FamilyPhoto savedPhoto =
                 familyPhotoRepository.saveAndFlush(familyPhoto);
-
-        List<FamilyPhotoGroup> mappings =
-                photoGroups.stream()
-                        .map(photoGroup ->
-                                FamilyPhotoGroup.builder()
-                                        .familyPhoto(savedPhoto)
-                                        .photoGroup(photoGroup)
-                                        .build()
-                        )
-                        .toList();
-
-        familyPhotoGroupRepository.saveAllAndFlush(mappings);
 
         List<FamilyPhotoSenior> shareTargets =
                 seniors.stream()

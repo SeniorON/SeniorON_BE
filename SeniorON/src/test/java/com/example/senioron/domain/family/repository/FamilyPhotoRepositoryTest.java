@@ -6,7 +6,6 @@ import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.entity.FamilyPhotoSenior;
-import com.example.senioron.domain.family.entity.PhotoGroup;
 import com.example.senioron.domain.family.service.FamilyPhotoPermissionService;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
@@ -36,9 +35,6 @@ class FamilyPhotoRepositoryTest {
 
     @Autowired
     private FamilyMemberRepository familyMemberRepository;
-
-    @Autowired
-    private PhotoGroupRepository photoGroupRepository;
 
     @Autowired
     private FamilyPhotoSeniorRepository familyPhotoSeniorRepository;
@@ -215,16 +211,14 @@ class FamilyPhotoRepositoryTest {
     @Test
     void findsMissingThumbnailsInBoundedIdOrderWithoutRepeatingEarlierPhotos() {
         User uploader = saveUser("thumbnail-backfill-uploader");
-        PhotoGroup group = savePhotoGroup("thumbnail-backfill-group");
-        FamilyPhoto first = saveGroupPhoto(group, uploader, "missing-first.jpg");
+        FamilyPhoto first = savePhoto(uploader, "missing-first.jpg");
         familyPhotoRepository.saveAndFlush(FamilyPhoto.builder()
-                .photoGroup(group)
                 .user(uploader)
                 .imageKey("already-generated.jpg")
                 .thumbnailKey("thumbnails/already-generated.jpg")
                 .build());
-        FamilyPhoto second = saveGroupPhoto(group, uploader, "missing-second.jpg");
-        FamilyPhoto third = saveGroupPhoto(group, uploader, "missing-third.jpg");
+        FamilyPhoto second = savePhoto(uploader, "missing-second.jpg");
+        FamilyPhoto third = savePhoto(uploader, "missing-third.jpg");
 
         assertThat(familyPhotoRepository.findPhotosWithoutThumbnail(
                 0L, PageRequest.of(0, 2)
@@ -245,8 +239,7 @@ class FamilyPhotoRepositoryTest {
     @Test
     void attachesThumbnailOnlyToExistingPhotoWithoutThumbnail() {
         User uploader = saveUser("thumbnail-attachment-uploader");
-        PhotoGroup group = savePhotoGroup("thumbnail-attachment-group");
-        FamilyPhoto photo = saveGroupPhoto(group, uploader, "original-for-backfill.jpg");
+        FamilyPhoto photo = savePhoto(uploader, "original-for-backfill.jpg");
         Long photoId = photo.getFamilyPhotoId();
 
         assertThat(familyPhotoRepository.updateThumbnailIfAbsent(
@@ -313,14 +306,6 @@ class FamilyPhotoRepositoryTest {
         );
     }
 
-    private PhotoGroup savePhotoGroup(String name) {
-        return photoGroupRepository.saveAndFlush(
-                PhotoGroup.builder()
-                        .name(name)
-                        .build()
-        );
-    }
-
     private Senior saveSenior(String seniorCode, User registeredBy) {
         Family family = saveFamily(seniorCode);
         return seniorRepository.saveAndFlush(
@@ -336,8 +321,12 @@ class FamilyPhotoRepositoryTest {
     }
 
     private FamilyPhoto savePhoto(User uploader, String imageKey, Senior... seniors) {
-        PhotoGroup group = savePhotoGroup("group-" + imageKey);
-        FamilyPhoto photo = saveGroupPhoto(group, uploader, imageKey);
+        FamilyPhoto photo = familyPhotoRepository.saveAndFlush(
+                FamilyPhoto.builder()
+                        .user(uploader)
+                        .imageKey(imageKey)
+                        .build()
+        );
         for (Senior senior : seniors) {
             familyPhotoSeniorRepository.saveAndFlush(
                     FamilyPhotoSenior.builder()
@@ -349,17 +338,4 @@ class FamilyPhotoRepositoryTest {
         return photo;
     }
 
-    private FamilyPhoto saveGroupPhoto(
-            PhotoGroup photoGroup,
-            User uploader,
-            String imageKey
-    ) {
-        return familyPhotoRepository.saveAndFlush(
-                FamilyPhoto.builder()
-                        .photoGroup(photoGroup)
-                        .user(uploader)
-                        .imageKey(imageKey)
-                        .build()
-        );
-    }
 }

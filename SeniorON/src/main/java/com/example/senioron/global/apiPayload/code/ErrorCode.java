@@ -125,7 +125,6 @@ public enum ErrorCode implements BaseCode {
     FAMILY_PHOTO_INVALID_IMAGE(HttpStatus.BAD_REQUEST, "FAMILY_PHOTO400_2", "해독 가능한 JPG, PNG, WEBP 사진을 업로드해 주세요."),
     FAMILY_PHOTO_ALREADY_REGISTERED(HttpStatus.CONFLICT, "FAMILY_PHOTO409", "이미 등록 완료된 사진입니다."),
     PRIMARY_MANAGER_MUST_BE_CHILD(HttpStatus.BAD_REQUEST, "FAMILY400_3", "주 담당자는 자녀 계정만 지정할 수 있습니다."),
-    PHOTO_GROUP_NOT_FOUND(HttpStatus.NOT_FOUND, "PHOTO_GROUP404_1", "사진 그룹을 찾을 수 없습니다."),
 
     // Photo Error
     UNSUPPORTED_IMAGE_TYPE(HttpStatus.BAD_REQUEST,"IMAGE400_1", "JPG, PNG, WEBP 형식의 이미지만 업로드할 수 있습니다."),

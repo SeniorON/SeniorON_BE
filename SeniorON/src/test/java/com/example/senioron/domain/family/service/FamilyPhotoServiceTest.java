@@ -212,7 +212,7 @@ class FamilyPhotoServiceTest {
     }
 
     @Test
-    void markPhotoAsViewedRejectsPhotoOutsideSelectedFamilyPhotoGroups() {
+    void markPhotoAsViewedRejectsPhotoNotSharedToSelectedSenior() {
         Family selectedFamily = Family.builder()
                 .familyId(2L)
                 .build();

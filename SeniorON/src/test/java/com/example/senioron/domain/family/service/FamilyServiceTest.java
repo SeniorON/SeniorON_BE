@@ -16,13 +16,10 @@ import com.example.senioron.domain.family.dto.response.FamilyPhotoItemResponse;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
-import com.example.senioron.domain.family.entity.PhotoGroup;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoViewRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
-import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
-import com.example.senioron.domain.family.repository.PhotoGroupRepository;
 import com.example.senioron.domain.family.support.FamilyPhotoResponseMapper;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
@@ -62,10 +59,6 @@ class FamilyServiceTest {
             org.mockito.Mockito.mock(FamilyPhotoPermissionService.class);
     private final FamilyMemberRepository familyMemberRepository =
             org.mockito.Mockito.mock(FamilyMemberRepository.class);
-    private final PhotoGroupRepository photoGroupRepository =
-            org.mockito.Mockito.mock(PhotoGroupRepository.class);
-    private final PhotoGroupFamilyRepository photoGroupFamilyRepository =
-            org.mockito.Mockito.mock(PhotoGroupFamilyRepository.class);
     private final DeviceService deviceService =
             org.mockito.Mockito.mock(DeviceService.class);
     private final SeniorRepository seniorRepository =
@@ -83,8 +76,6 @@ class FamilyServiceTest {
                 familyPhotoViewRepository,
                 familyPhotoPermissionService,
                 familyMemberRepository,
-                photoGroupRepository,
-                photoGroupFamilyRepository,
                 deviceService,
                 seniorRepository,
                 new FamilyPhotoResponseMapper(s3Service)
@@ -110,13 +101,8 @@ class FamilyServiceTest {
                 .seniorId(10L)
                 .family(family)
                 .build();
-        PhotoGroup defaultPhotoGroup = PhotoGroup.builder()
-                .id(100L)
-                .name("Family 1")
-                .build();
         FamilyPhoto photo = FamilyPhoto.builder()
                 .familyPhotoId(30L)
-                .photoGroup(defaultPhotoGroup)
                 .user(uploader)
                 .imageKey("photo.jpg")
                 .build();
@@ -177,26 +163,19 @@ class FamilyServiceTest {
                 .seniorId(10L)
                 .family(family)
                 .build();
-        PhotoGroup defaultPhotoGroup = PhotoGroup.builder()
-                .id(100L)
-                .name("Family 1")
-                .build();
         FamilyPhoto withThumbnail = FamilyPhoto.builder()
                 .familyPhotoId(31L)
-                .photoGroup(defaultPhotoGroup)
                 .user(uploader)
                 .imageKey("photo-31.jpg")
                 .thumbnailKey("thumb-31.jpg")
                 .build();
         FamilyPhoto withoutThumbnail = FamilyPhoto.builder()
                 .familyPhotoId(32L)
-                .photoGroup(defaultPhotoGroup)
                 .user(uploader)
                 .imageKey("photo-32.jpg")
                 .build();
         FamilyPhoto blankThumbnail = FamilyPhoto.builder()
                 .familyPhotoId(33L)
-                .photoGroup(defaultPhotoGroup)
                 .user(uploader)
                 .imageKey("photo-33.jpg")
                 .thumbnailKey(" ")

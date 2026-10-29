@@ -6,13 +6,9 @@ import com.example.senioron.domain.family.dto.response.*;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
-import com.example.senioron.domain.family.entity.PhotoGroup;
-import com.example.senioron.domain.family.entity.PhotoGroupFamily;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
-import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
-import com.example.senioron.domain.family.repository.PhotoGroupRepository;
 import com.example.senioron.domain.family.support.FamilyPhotoResponseMapper;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
@@ -46,8 +42,6 @@ public class FamilyService {
     private final FamilyPhotoViewRepository familyPhotoViewRepository;
     private final FamilyPhotoPermissionService familyPhotoPermissionService;
     private final FamilyMemberRepository familyMemberRepository;
-    private final PhotoGroupRepository photoGroupRepository;
-    private final PhotoGroupFamilyRepository photoGroupFamilyRepository;
     private final DeviceService deviceService;
     private final SeniorRepository seniorRepository;
     private final FamilyPhotoResponseMapper familyPhotoResponseMapper;
@@ -75,7 +69,6 @@ public class FamilyService {
         Family savedFamily = familyRepository.save(family);
 
         createFamilyMember(user, savedFamily, ManagerType.PRIMARY, null);
-        createDefaultPhotoGroup(savedFamily);
 
         return SeniorCodeCreateResponse.builder()
                 .familyId(savedFamily.getFamilyId())
@@ -445,21 +438,6 @@ public class FamilyService {
         }
 
         familyMemberRepository.save(builder.build());
-    }
-
-    private void createDefaultPhotoGroup(Family family) {
-        PhotoGroup photoGroup = photoGroupRepository.save(
-                PhotoGroup.builder()
-                        .name("Family " + family.getFamilyId())
-                        .build()
-        );
-
-        photoGroupFamilyRepository.save(
-                PhotoGroupFamily.builder()
-                        .family(family)
-                        .photoGroup(photoGroup)
-                        .build()
-        );
     }
 
     private void linkParentUserToFamilySenior(User parentUser, Family family) {
