@@ -438,12 +438,13 @@ public class FamilyService {
     @Transactional(readOnly = true)
     public SeniorCodeResponse getSeniorCode(
             User principal,
-            Long seniorId
+            Long familyId
     ) {
         User user = userRepository.findById(principal.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        Family family = resolveAccessibleFamily(user, seniorId);
+        Family family = familyRepository.findById(familyId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND));
 
         FamilyMember member = familyMemberRepository
                 .findByUserAndFamily(user, family)
@@ -451,6 +452,10 @@ public class FamilyService {
 
         if (member.getManagerType() != ManagerType.PRIMARY) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+
+        if (family.getSeniorCode() == null) {
+            throw new BusinessException(ErrorCode.SENIOR_CODE_NOT_FOUND);
         }
 
         long familyMemberCount = familyMemberRepository.countByFamily(family);

@@ -898,7 +898,7 @@ class FamilyServiceTest {
     }
 
     @Test
-    void getSeniorCodeReturnsSelectedSeniorFamilyCodeAndMemberCount() {
+    void getSeniorCodeReturnsSelectedFamilyCodeAndMemberCountWithoutSenior() {
         Family firstFamily = Family.builder()
                 .familyId(1L)
                 .seniorCode("FIRST-001")
@@ -910,17 +910,11 @@ class FamilyServiceTest {
         User currentUser = createUser(1L, "현재 사용자");
         currentUser.updateFamily(firstFamily);
         currentUser.updateManagerType(ManagerType.SUB);
-        Senior selectedSenior = Senior.builder()
-                .seniorId(20L)
-                .family(selectedFamily)
-                .build();
 
         given(userRepository.findById(1L))
                 .willReturn(Optional.of(currentUser));
-        given(seniorRepository.findById(20L))
-                .willReturn(Optional.of(selectedSenior));
-        given(familyMemberRepository.existsByUserAndFamily(currentUser, selectedFamily))
-                .willReturn(true);
+        given(familyRepository.findById(2L))
+                .willReturn(Optional.of(selectedFamily));
         given(familyMemberRepository.findByUserAndFamily(currentUser, selectedFamily))
                 .willReturn(Optional.of(createMember(
                         1L, currentUser, selectedFamily, ManagerType.PRIMARY
@@ -928,12 +922,41 @@ class FamilyServiceTest {
         given(familyMemberRepository.countByFamily(selectedFamily))
                 .willReturn(3L);
 
-        var response = familyService.getSeniorCode(currentUser, 20L);
+        var response = familyService.getSeniorCode(currentUser, 2L);
 
         assertThat(response.getSeniorCode()).isEqualTo("SELECTED");
         assertThat(response.getFamilyMemberCount()).isEqualTo(3L);
         verify(familyMemberRepository).countByFamily(selectedFamily);
         verify(familyMemberRepository, never()).countByFamily(firstFamily);
+        verify(seniorRepository, never()).findById(any());
+    }
+
+    @Test
+    void getSeniorCodeReturnsFamilyCodeWhenSeniorExists() {
+        Family family = Family.builder()
+                .familyId(2L)
+                .seniorCode("SELECTED")
+                .build();
+        Senior senior = Senior.builder()
+                .seniorId(20L)
+                .family(family)
+                .build();
+        ReflectionTestUtils.setField(family, "senior", senior);
+        User currentUser = createUser(1L, "현재 사용자");
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
+        given(familyRepository.findById(2L)).willReturn(Optional.of(family));
+        given(familyMemberRepository.findByUserAndFamily(currentUser, family))
+                .willReturn(Optional.of(createMember(
+                        1L, currentUser, family, ManagerType.PRIMARY
+                )));
+        given(familyMemberRepository.countByFamily(family)).willReturn(2L);
+
+        var response = familyService.getSeniorCode(currentUser, 2L);
+
+        assertThat(response.getSeniorCode()).isEqualTo("SELECTED");
+        assertThat(response.getFamilyMemberCount()).isEqualTo(2L);
+        verify(seniorRepository, never()).findById(any());
     }
 
     @Test
@@ -943,21 +966,15 @@ class FamilyServiceTest {
         User currentUser = createUser(1L, "다른 가족의 주 담당자");
         currentUser.updateFamily(firstFamily);
         currentUser.updateManagerType(ManagerType.PRIMARY);
-        Senior selectedSenior = Senior.builder()
-                .seniorId(20L)
-                .family(selectedFamily)
-                .build();
 
         given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
-        given(seniorRepository.findById(20L)).willReturn(Optional.of(selectedSenior));
-        given(familyMemberRepository.existsByUserAndFamily(currentUser, selectedFamily))
-                .willReturn(true);
+        given(familyRepository.findById(2L)).willReturn(Optional.of(selectedFamily));
         given(familyMemberRepository.findByUserAndFamily(currentUser, selectedFamily))
                 .willReturn(Optional.of(createMember(
                         2L, currentUser, selectedFamily, ManagerType.SUB
                 )));
 
-        assertThatThrownBy(() -> familyService.getSeniorCode(currentUser, 20L))
+        assertThatThrownBy(() -> familyService.getSeniorCode(currentUser, 2L))
                 .isInstanceOf(BusinessException.class)
                 .asInstanceOf(type(BusinessException.class))
                 .extracting(BusinessException::getCode)
@@ -970,23 +987,81 @@ class FamilyServiceTest {
     void getSeniorCodeRejectsUserOutsideSelectedFamily() {
         Family selectedFamily = Family.builder().familyId(2L).build();
         User currentUser = createUser(1L, "다른 가족 사용자");
-        Senior selectedSenior = Senior.builder()
-                .seniorId(20L)
-                .family(selectedFamily)
-                .build();
 
         given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
-        given(seniorRepository.findById(20L)).willReturn(Optional.of(selectedSenior));
-        given(familyMemberRepository.existsByUserAndFamily(currentUser, selectedFamily))
-                .willReturn(false);
+        given(familyRepository.findById(2L)).willReturn(Optional.of(selectedFamily));
+        given(familyMemberRepository.findByUserAndFamily(currentUser, selectedFamily))
+                .willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> familyService.getSeniorCode(currentUser, 20L))
+        assertThatThrownBy(() -> familyService.getSeniorCode(currentUser, 2L))
                 .isInstanceOf(BusinessException.class)
                 .asInstanceOf(type(BusinessException.class))
                 .extracting(BusinessException::getCode)
-                .isEqualTo(ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED);
+                .isEqualTo(ErrorCode.FORBIDDEN);
 
         verify(familyMemberRepository, never()).countByFamily(any());
+    }
+
+    @Test
+    void getSeniorCodeRejectsMissingFamily() {
+        User currentUser = createUser(1L, "현재 사용자");
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
+        given(familyRepository.findById(99L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> familyService.getSeniorCode(currentUser, 99L))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.FAMILY_NOT_FOUND);
+
+        verify(familyMemberRepository, never()).findByUserAndFamily(any(), any());
+    }
+
+    @Test
+    void getSeniorCodeRejectsFamilyWithoutSeniorCode() {
+        Family family = Family.builder().familyId(2L).build();
+        User currentUser = createUser(1L, "현재 사용자");
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
+        given(familyRepository.findById(2L)).willReturn(Optional.of(family));
+        given(familyMemberRepository.findByUserAndFamily(currentUser, family))
+                .willReturn(Optional.of(createMember(
+                        1L, currentUser, family, ManagerType.PRIMARY
+                )));
+
+        assertThatThrownBy(() -> familyService.getSeniorCode(currentUser, 2L))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_CODE_NOT_FOUND);
+
+        verify(familyMemberRepository, never()).countByFamily(any());
+    }
+
+    @Test
+    void getSeniorCodeReturnsSameCodeOnRepeatedQueries() {
+        Family family = Family.builder()
+                .familyId(2L)
+                .seniorCode("SELECTED")
+                .build();
+        User currentUser = createUser(1L, "현재 사용자");
+        FamilyMember primaryMember = createMember(
+                1L, currentUser, family, ManagerType.PRIMARY
+        );
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
+        given(familyRepository.findById(2L)).willReturn(Optional.of(family));
+        given(familyMemberRepository.findByUserAndFamily(currentUser, family))
+                .willReturn(Optional.of(primaryMember));
+        given(familyMemberRepository.countByFamily(family)).willReturn(2L);
+
+        var firstResponse = familyService.getSeniorCode(currentUser, 2L);
+        var secondResponse = familyService.getSeniorCode(currentUser, 2L);
+
+        assertThat(firstResponse.getSeniorCode()).isEqualTo("SELECTED");
+        assertThat(secondResponse.getSeniorCode()).isEqualTo("SELECTED");
+        verify(familyRepository, never()).save(any());
     }
 
     @Test
