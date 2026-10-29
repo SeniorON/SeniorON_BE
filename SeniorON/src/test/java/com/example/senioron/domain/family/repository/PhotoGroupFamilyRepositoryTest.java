@@ -40,68 +40,7 @@ class PhotoGroupFamilyRepositoryTest {
     private SeniorRepository seniorRepository;
 
     @Test
-    void returnsTrueWhenFamiliesBelongToSamePhotoGroup() {
-        Family currentFamily = saveFamily("CURRENT1");
-        Family targetFamily = saveFamily("TARGET-1");
-        PhotoGroup sharedGroup = savePhotoGroup("shared-group");
-        savePhotoGroupFamily(currentFamily, sharedGroup);
-        savePhotoGroupFamily(targetFamily, sharedGroup);
-
-        boolean result = photoGroupFamilyRepository.existsSharedPhotoGroup(
-                currentFamily,
-                targetFamily
-        );
-
-        assertThat(result).isTrue();
-    }
-
-    @Test
-    void returnsFalseWhenTargetSharesOnlyWithAnotherFamily() {
-        Family currentFamily = saveFamily("CURRENT1");
-        Family targetFamily = saveFamily("TARGET-1");
-        Family anotherFamily = saveFamily("ANOTHER1");
-        PhotoGroup currentGroup = savePhotoGroup("current-group");
-        PhotoGroup otherSharedGroup = savePhotoGroup("other-shared-group");
-        savePhotoGroupFamily(currentFamily, currentGroup);
-        savePhotoGroupFamily(targetFamily, otherSharedGroup);
-        savePhotoGroupFamily(anotherFamily, otherSharedGroup);
-
-        boolean result = photoGroupFamilyRepository.existsSharedPhotoGroup(
-                currentFamily,
-                targetFamily
-        );
-
-        assertThat(result).isFalse();
-    }
-
-    @Test
-    void findsOnlyFamiliesDirectlyConnectedThroughCurrentFamilyPhotoGroups() {
-        Family currentFamily = saveFamily("CURRENT1");
-        Family targetFamily = saveFamily("TARGET-1");
-        Family indirectFamily = saveFamily("INDIRECT");
-        PhotoGroup defaultGroup = savePhotoGroup("current-default");
-        PhotoGroup directGroup = savePhotoGroup("current-target");
-        PhotoGroup indirectGroup = savePhotoGroup("target-indirect");
-
-        savePhotoGroupFamily(currentFamily, defaultGroup);
-        savePhotoGroupFamily(currentFamily, directGroup);
-        PhotoGroupFamily expectedLink =
-                savePhotoGroupFamily(targetFamily, directGroup);
-        savePhotoGroupFamily(targetFamily, indirectGroup);
-        savePhotoGroupFamily(indirectFamily, indirectGroup);
-
-        List<PhotoGroupFamily> result =
-                photoGroupFamilyRepository.findConnectedFamilyLinks(
-                        currentFamily
-                );
-
-        assertThat(result).containsExactly(expectedLink);
-        assertThat(result.get(0).getPhotoGroup()).isEqualTo(directGroup);
-        assertThat(result.get(0).getFamily()).isEqualTo(targetFamily);
-    }
-
-    @Test
-    void excludesDisconnectedGroupFromConnectionAndUploadQueries() {
+    void excludesDisconnectedGroupFromUploadQueries() {
         Family currentFamily = saveFamily("CURRENT1");
         Family targetFamily = saveFamily("TARGET-1");
         PhotoGroup disconnectedGroup = savePhotoGroup("disconnected-group");
@@ -110,20 +49,9 @@ class PhotoGroupFamilyRepositoryTest {
         disconnectedGroup.disconnect();
         photoGroupRepository.saveAndFlush(disconnectedGroup);
 
-        assertThat(photoGroupFamilyRepository.existsSharedPhotoGroup(
-                currentFamily,
-                targetFamily
-        )).isFalse();
-        assertThat(photoGroupFamilyRepository.findConnectedFamilyLinks(
-                currentFamily
-        )).isEmpty();
         assertThat(photoGroupFamilyRepository.findAllByFamilyAndPhotoGroupIds(
                 currentFamily,
                 List.of(disconnectedGroup.getId())
-        )).isEmpty();
-        assertThat(photoGroupFamilyRepository.findAllSharedLinks(
-                currentFamily,
-                disconnectedGroup.getId()
         )).isEmpty();
     }
 
@@ -141,8 +69,6 @@ class PhotoGroupFamilyRepositoryTest {
         PhotoGroupFamily fatherLink = saveDefaultGroup(father);
         PhotoGroupFamily grandmotherLink = saveDefaultGroup(grandmother);
 
-        assertThat(photoGroupFamilyRepository.findManagedConnectedFamilyLinks(mother, assistant))
-                .isEmpty();
         assertThat(photoGroupFamilyRepository.findManagedUploadGroupLinks(
                 mother, assistant, List.of(motherLink.getPhotoGroup().getId(),
                         fatherLink.getPhotoGroup().getId(), grandmotherLink.getPhotoGroup().getId())
@@ -168,8 +94,6 @@ class PhotoGroupFamilyRepositoryTest {
         savePhotoGroupFamily(mother, motherGrandmother);
         savePhotoGroupFamily(grandmother, motherGrandmother);
 
-        assertThat(photoGroupFamilyRepository.findManagedConnectedFamilyLinks(mother, assistant))
-                .containsExactly(fatherSharedLink);
         assertThat(photoGroupFamilyRepository.findManagedUploadGroupLinks(
                 mother, assistant, List.of(motherLink.getPhotoGroup().getId(),
                         fatherLink.getPhotoGroup().getId(), grandmotherLink.getPhotoGroup().getId(),
@@ -192,8 +116,6 @@ class PhotoGroupFamilyRepositoryTest {
         sharedGroup.disconnect();
         photoGroupRepository.flush();
 
-        assertThat(photoGroupFamilyRepository.findManagedConnectedFamilyLinks(mother, assistant))
-                .isEmpty();
         assertThat(photoGroupFamilyRepository.findManagedUploadGroupLinks(
                 mother, assistant, List.of(motherLink.getPhotoGroup().getId(),
                         sharedGroup.getId())
