@@ -121,6 +121,54 @@ public class Device extends BaseEntity {
         this.lastConnectedAt = lastConnectedAt;
     }
 
+    public void patchDeviceInfo(
+            String deviceName,
+            Integer batteryLevel,
+            Boolean charging,
+            Boolean deviceStatusSharingEnabled,
+            Boolean networkConnected,
+            Boolean defaultHomeEnabled,
+            Boolean locationPermissionGranted,
+            Boolean gpsEnabled,
+            Boolean notificationPermissionGranted,
+            Boolean appExecutionMaintained,
+            LocalDateTime lastConnectedAt
+    ) {
+        if (deviceName != null) {
+            this.deviceName = deviceName;
+        }
+        if (batteryLevel != null) {
+            this.batteryLevel = batteryLevel;
+        }
+        if (charging != null) {
+            this.charging = charging;
+        }
+        if (deviceStatusSharingEnabled != null) {
+            this.deviceStatusSharingEnabled = deviceStatusSharingEnabled;
+        }
+        if (networkConnected != null) {
+            this.networkConnected = networkConnected;
+        }
+        if (defaultHomeEnabled != null) {
+            this.defaultHomeEnabled = defaultHomeEnabled;
+        }
+        if (locationPermissionGranted != null) {
+            this.locationPermissionGranted = locationPermissionGranted;
+        }
+        if (gpsEnabled != null) {
+            this.gpsEnabled = gpsEnabled;
+        }
+        if (notificationPermissionGranted != null) {
+            this.notificationPermissionGranted = notificationPermissionGranted;
+        }
+        if (appExecutionMaintained != null) {
+            this.appExecutionMaintained = appExecutionMaintained;
+        }
+
+        this.connectionStatus = DeviceStatus.ONLINE;
+        this.lastConnectedAt = lastConnectedAt;
+    }
+
     public void disconnect() {
         this.connectionStatus = DeviceStatus.DISCONNECTED;
     }

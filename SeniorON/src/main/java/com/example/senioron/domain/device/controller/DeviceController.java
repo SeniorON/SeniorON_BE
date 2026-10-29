@@ -7,6 +7,7 @@ import com.example.senioron.domain.device.dto.request.DeviceLocationUpdateReques
 import com.example.senioron.domain.device.dto.response.DeviceLocationResponse;
 import com.example.senioron.domain.device.dto.response.HomeLocationResponse;
 import com.example.senioron.domain.device.dto.response.DeviceReconnectionStatusResponse;
+import com.example.senioron.domain.device.dto.request.DeviceStatusPatchRequest;
 import com.example.senioron.domain.user.entity.User;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -46,6 +47,26 @@ public class DeviceController {
 
         return ResponseEntity.noContent().build();
     }
+
+    @Operation(
+            summary = "시니어 기기 상태 부분 갱신",
+            description = "변경된 기기 상태 정보만 갱신하고 마지막 접속 시간 갱신"
+    )
+    @PatchMapping("/status")
+    public ResponseEntity<Void> patchDeviceStatus(
+            @Valid @RequestBody DeviceStatusPatchRequest request,
+            Authentication authentication
+    ) {
+        User currentUser = (User) authentication.getPrincipal();
+
+        deviceService.patchDeviceStatus(
+                currentUser,
+                request
+        );
+
+        return ResponseEntity.noContent().build();
+    }
+
 
     @Operation(
             summary = "FCM 토큰 갱신",
