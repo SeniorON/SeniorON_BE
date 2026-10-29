@@ -3,9 +3,11 @@ package com.example.senioron.domain.family.repository;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.senior.dto.response.ManagedSeniorResponse;
+import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import jakarta.persistence.LockModeType;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -84,6 +86,22 @@ public interface FamilyMemberRepository extends JpaRepository<FamilyMember, Long
             """)
     List<FamilyMember> findAllByUserWithFamilyAndSeniorOrderByIdAsc(
             @Param("user") User user
+    );
+
+    // 담당 중이며 시니어 기기가 연결된 사진 공유 대상
+    @Query("""
+            SELECT fm
+            FROM FamilyMember fm
+            JOIN FETCH fm.family f
+            JOIN FETCH f.senior s
+            WHERE fm.user = :user
+              AND fm.managerType IN :managerTypes
+              AND s.parentUser IS NOT NULL
+            ORDER BY f.familyId ASC
+            """)
+    List<FamilyMember> findPhotoShareTargetMembers(
+            @Param("user") User user,
+            @Param("managerTypes") Collection<ManagerType> managerTypes
     );
 
     @Query("""

@@ -8,7 +8,6 @@ import lombok.Getter;
 @Builder
 public class PhotoShareTargetResponse {
 
-    private Long photoGroupId;
     private Long seniorId;
     private String name;
     private SeniorRelation relation;

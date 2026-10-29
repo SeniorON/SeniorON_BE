@@ -14,10 +14,13 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
+import com.example.senioron.domain.user.entity.ManagerType;
+import com.example.senioron.domain.family.entity.FamilyMember;
+import com.example.senioron.domain.family.entity.FamilyPhotoSenior;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
+import com.example.senioron.domain.family.repository.FamilyPhotoSeniorRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoViewRepository;
-import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
 import com.example.senioron.domain.family.support.FamilyPhotoResponseMapper;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
@@ -63,8 +66,9 @@ class FamilyPhotoServiceTest {
             org.mockito.Mockito.mock(FamilyMemberRepository.class);
     private final SeniorRepository seniorRepository =
             org.mockito.Mockito.mock(SeniorRepository.class);
-    private final PhotoGroupFamilyRepository photoGroupFamilyRepository =
-            org.mockito.Mockito.mock(PhotoGroupFamilyRepository.class);
+
+    private final FamilyPhotoSeniorRepository familyPhotoSeniorRepository =
+            org.mockito.Mockito.mock(FamilyPhotoSeniorRepository.class);
 
     private FamilyPhotoService familyPhotoService;
     private final FamilyPhotoPushTargetService familyPhotoPushTargetService =
@@ -84,10 +88,10 @@ class FamilyPhotoServiceTest {
                 photoPersistenceService,
                 familyMemberRepository,
                 seniorRepository,
-                photoGroupFamilyRepository,
                 familyPhotoPushTargetService,
                 eventPublisher,
-                new FamilyPhotoResponseMapper(s3Service)
+                new FamilyPhotoResponseMapper(s3Service),
+                familyPhotoSeniorRepository
         );
     }
 
@@ -208,7 +212,7 @@ class FamilyPhotoServiceTest {
     }
 
     @Test
-    void markPhotoAsViewedRejectsPhotoOutsideSelectedFamilyPhotoGroups() {
+    void markPhotoAsViewedRejectsPhotoNotSharedToSelectedSenior() {
         Family selectedFamily = Family.builder()
                 .familyId(2L)
                 .build();
@@ -448,8 +452,9 @@ class FamilyPhotoServiceTest {
     @Test
     void doesNotDeletePhotoFilesWithoutPermission() {
         User child = User.builder().usersId(10L).role(Role.CHILD).build();
-        FamilyPhoto photo = stubDeletablePhoto(child, "thumbnail.jpg");
-        given(familyPhotoPermissionService.canDelete(photo, child)).willReturn(false);
+        User uploader = User.builder().usersId(11L).role(Role.CHILD).build();
+        List<FamilyPhotoSenior> shares = stubSharedPhoto(child, uploader, "thumbnail.jpg");
+        stubManagerType(child, shares.get(0), ManagerType.SUB);
 
         assertThatThrownBy(() -> familyPhotoService.deletePhoto(child, 40L))
                 .isInstanceOf(BusinessException.class)
@@ -458,22 +463,68 @@ class FamilyPhotoServiceTest {
                 .isEqualTo(ErrorCode.FAMILY_PHOTO_DELETE_FORBIDDEN);
 
         verify(familyPhotoRepository, never()).delete(any(FamilyPhoto.class));
+        verify(familyPhotoSeniorRepository, never()).deleteAll(any());
         verifyNoInteractions(s3Service, familyPhotoPushTargetService, eventPublisher);
+    }
+
+    @Test
+    void primaryManagerUnsharesOnlyManagedSeniorAndKeepsPhoto() {
+        User child = User.builder().usersId(10L).role(Role.CHILD).build();
+        User uploader = User.builder().usersId(11L).role(Role.CHILD).build();
+        List<FamilyPhotoSenior> shares = stubSharedPhoto(child, uploader, "thumbnail.jpg");
+        stubManagerType(child, shares.get(0), ManagerType.PRIMARY);
+        given(familyPhotoPushTargetService.loadDeletionTokens(40L, List.of(20L)))
+                .willReturn(List.of("first-parent"));
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            familyPhotoService.deletePhoto(child, 40L);
+
+            verify(familyPhotoSeniorRepository).deleteAll(List.of(shares.get(0)));
+            verify(familyPhotoSeniorRepository, never()).deleteAllByFamilyPhoto(any());
+            verify(familyPhotoRepository, never()).delete(any(FamilyPhoto.class));
+            assertThat(TransactionSynchronizationManager.getSynchronizations()).isEmpty();
+            verify(eventPublisher).publishEvent(new FamilyPhotoDeletedEvent(40L, List.of("first-parent")));
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void primaryManagerOfEverySharedSeniorDeletesPhoto() {
+        User child = User.builder().usersId(10L).role(Role.CHILD).build();
+        User uploader = User.builder().usersId(11L).role(Role.CHILD).build();
+        List<FamilyPhotoSenior> shares = stubSharedPhoto(child, uploader, "thumbnail.jpg");
+        shares.forEach(share -> stubManagerType(child, share, ManagerType.PRIMARY));
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            familyPhotoService.deletePhoto(child, 40L);
+
+            verify(familyPhotoPushTargetService).loadDeletionTokens(40L, List.of(20L, 21L));
+            verify(familyPhotoSeniorRepository).deleteAllByFamilyPhoto(any(FamilyPhoto.class));
+            verify(familyPhotoRepository).delete(any(FamilyPhoto.class));
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(TransactionSynchronization::afterCommit);
+            verify(s3Service).delete("photo.jpg");
+            verify(s3Service).delete("thumbnail.jpg");
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     @Test
     void capturesRecipientsBeforeDeletionAndPublishesDeletionEvent() {
         User child = User.builder().usersId(10L).role(Role.CHILD).build();
         FamilyPhoto photo = stubDeletablePhoto(child, "thumbnail.jpg");
-        given(familyPhotoPushTargetService.loadDeletionTokens(40L))
+        given(familyPhotoPushTargetService.loadDeletionTokens(40L, List.of(20L, 21L)))
                 .willReturn(List.of("first-parent", "second-parent"));
         TransactionSynchronizationManager.initSynchronization();
         try {
             familyPhotoService.deletePhoto(child, 40L);
 
-            var order = org.mockito.Mockito.inOrder(
-                    familyPhotoPushTargetService, familyPhotoRepository, eventPublisher);
-            order.verify(familyPhotoPushTargetService).loadDeletionTokens(40L);
+            var order = org.mockito.Mockito.inOrder(familyPhotoPushTargetService,
+                    familyPhotoSeniorRepository, familyPhotoRepository, eventPublisher);
+            order.verify(familyPhotoPushTargetService).loadDeletionTokens(40L, List.of(20L, 21L));
+            order.verify(familyPhotoSeniorRepository).deleteAllByFamilyPhoto(photo);
             order.verify(familyPhotoRepository).delete(photo);
             order.verify(eventPublisher).publishEvent(new FamilyPhotoDeletedEvent(
                     40L, List.of("first-parent", "second-parent")));
@@ -483,17 +534,40 @@ class FamilyPhotoServiceTest {
     }
 
     private FamilyPhoto stubDeletablePhoto(User child, String thumbnailKey) {
+        return stubSharedPhoto(child, child, thumbnailKey).get(0).getFamilyPhoto();
+    }
+
+    // 시니어 20, 21에게 공유된 사진
+    private List<FamilyPhotoSenior> stubSharedPhoto(User child, User uploader, String thumbnailKey) {
         FamilyPhoto photo = FamilyPhoto.builder()
                 .familyPhotoId(40L)
-                .user(child)
+                .user(uploader)
                 .imageKey("photo.jpg")
                 .thumbnailKey(thumbnailKey)
                 .build();
+        List<FamilyPhotoSenior> shares = List.of(20L, 21L).stream()
+                .map(seniorId -> FamilyPhotoSenior.builder()
+                        .familyPhoto(photo)
+                        .senior(Senior.builder()
+                                .seniorId(seniorId)
+                                .family(Family.builder().familyId(seniorId + 100).build())
+                                .build())
+                        .build())
+                .toList();
         given(userRepository.findById(10L)).willReturn(Optional.of(child));
         given(familyPhotoRepository.findAccessibleForDeletionByFamilyPhotoIdAndUser(40L, child))
                 .willReturn(Optional.of(photo));
-        given(familyPhotoPermissionService.canDelete(photo, child)).willReturn(true);
-        return photo;
+        given(familyPhotoSeniorRepository.findAllByFamilyPhotoWithSenior(photo)).willReturn(shares);
+        return shares;
+    }
+
+    private void stubManagerType(User child, FamilyPhotoSenior share, ManagerType managerType) {
+        given(familyMemberRepository.findByUserAndFamily(child, share.getSenior().getFamily()))
+                .willReturn(Optional.of(FamilyMember.builder()
+                        .user(child)
+                        .family(share.getSenior().getFamily())
+                        .managerType(managerType)
+                        .build()));
     }
 
     @Test

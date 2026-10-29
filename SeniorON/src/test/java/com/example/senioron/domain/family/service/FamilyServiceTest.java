@@ -12,19 +12,14 @@ import static org.mockito.Mockito.verify;
 import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.family.dto.request.FamilyJoinRequest;
 import com.example.senioron.domain.family.dto.request.FamilyPrimaryManagerUpdateRequest;
-import com.example.senioron.domain.family.dto.request.PhotoGroupConnectRequest;
 import com.example.senioron.domain.family.dto.response.FamilyPhotoItemResponse;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
-import com.example.senioron.domain.family.entity.PhotoGroup;
-import com.example.senioron.domain.family.entity.PhotoGroupFamily;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoViewRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
-import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
-import com.example.senioron.domain.family.repository.PhotoGroupRepository;
 import com.example.senioron.domain.family.support.FamilyPhotoResponseMapper;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
@@ -64,10 +59,6 @@ class FamilyServiceTest {
             org.mockito.Mockito.mock(FamilyPhotoPermissionService.class);
     private final FamilyMemberRepository familyMemberRepository =
             org.mockito.Mockito.mock(FamilyMemberRepository.class);
-    private final PhotoGroupRepository photoGroupRepository =
-            org.mockito.Mockito.mock(PhotoGroupRepository.class);
-    private final PhotoGroupFamilyRepository photoGroupFamilyRepository =
-            org.mockito.Mockito.mock(PhotoGroupFamilyRepository.class);
     private final DeviceService deviceService =
             org.mockito.Mockito.mock(DeviceService.class);
     private final SeniorRepository seniorRepository =
@@ -85,8 +76,6 @@ class FamilyServiceTest {
                 familyPhotoViewRepository,
                 familyPhotoPermissionService,
                 familyMemberRepository,
-                photoGroupRepository,
-                photoGroupFamilyRepository,
                 deviceService,
                 seniorRepository,
                 new FamilyPhotoResponseMapper(s3Service)
@@ -112,17 +101,8 @@ class FamilyServiceTest {
                 .seniorId(10L)
                 .family(family)
                 .build();
-        PhotoGroup defaultPhotoGroup = PhotoGroup.builder()
-                .id(100L)
-                .name("Family 1")
-                .build();
-        PhotoGroupFamily defaultGroupLink = PhotoGroupFamily.builder()
-                .family(family)
-                .photoGroup(defaultPhotoGroup)
-                .build();
         FamilyPhoto photo = FamilyPhoto.builder()
                 .familyPhotoId(30L)
-                .photoGroup(defaultPhotoGroup)
                 .user(uploader)
                 .imageKey("photo.jpg")
                 .build();
@@ -138,18 +118,12 @@ class FamilyServiceTest {
                 .willReturn(Optional.of(senior));
         given(familyMemberRepository.existsByUserAndFamily(parent, family))
                 .willReturn(true);
-        given(photoGroupFamilyRepository.findFirstByFamilyOrderByIdAsc(family))
-                .willReturn(Optional.of(defaultGroupLink));
         given(familyMemberRepository.findAllByFamilyOrderByIdAsc(family))
                 .willReturn(List.of());
         given(familyPhotoRepository.findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
                 family,
                 PageRequest.of(0, 4)
         )).willReturn(List.of(photo));
-        given(familyPhotoRepository.findRecentUploaders(
-                family,
-                PageRequest.of(0, 3)
-        )).willReturn(List.of(uploader));
         given(familyPhotoViewRepository.findViewedFamilyPhotoIds(
                 1L,
                 List.of(30L)
@@ -189,30 +163,19 @@ class FamilyServiceTest {
                 .seniorId(10L)
                 .family(family)
                 .build();
-        PhotoGroup defaultPhotoGroup = PhotoGroup.builder()
-                .id(100L)
-                .name("Family 1")
-                .build();
-        PhotoGroupFamily defaultGroupLink = PhotoGroupFamily.builder()
-                .family(family)
-                .photoGroup(defaultPhotoGroup)
-                .build();
         FamilyPhoto withThumbnail = FamilyPhoto.builder()
                 .familyPhotoId(31L)
-                .photoGroup(defaultPhotoGroup)
                 .user(uploader)
                 .imageKey("photo-31.jpg")
                 .thumbnailKey("thumb-31.jpg")
                 .build();
         FamilyPhoto withoutThumbnail = FamilyPhoto.builder()
                 .familyPhotoId(32L)
-                .photoGroup(defaultPhotoGroup)
                 .user(uploader)
                 .imageKey("photo-32.jpg")
                 .build();
         FamilyPhoto blankThumbnail = FamilyPhoto.builder()
                 .familyPhotoId(33L)
-                .photoGroup(defaultPhotoGroup)
                 .user(uploader)
                 .imageKey("photo-33.jpg")
                 .thumbnailKey(" ")
@@ -231,18 +194,12 @@ class FamilyServiceTest {
                 .willReturn(Optional.of(senior));
         given(familyMemberRepository.existsByUserAndFamily(parent, family))
                 .willReturn(true);
-        given(photoGroupFamilyRepository.findFirstByFamilyOrderByIdAsc(family))
-                .willReturn(Optional.of(defaultGroupLink));
         given(familyMemberRepository.findAllByFamilyOrderByIdAsc(family))
                 .willReturn(List.of());
         given(familyPhotoRepository.findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
                 family,
                 PageRequest.of(0, 4)
         )).willReturn(photos);
-        given(familyPhotoRepository.findRecentUploaders(
-                family,
-                PageRequest.of(0, 3)
-        )).willReturn(List.of(uploader));
         given(familyPhotoViewRepository.findViewedFamilyPhotoIds(
                 1L,
                 List.of(31L, 32L, 33L)
@@ -278,87 +235,6 @@ class FamilyServiceTest {
                 );
         verify(familyPhotoPermissionService, never())
                 .canDelete(any(), any());
-    }
-
-    @Test
-    void getFamilyHomeReturnsDefaultPhotoGroupId() {
-        Family family = Family.builder()
-                .familyId(1L)
-                .build();
-        User currentUser = User.builder()
-                .usersId(1L)
-                .name("자녀")
-                .role(Role.CHILD)
-                .build();
-        Senior senior = Senior.builder()
-                .seniorId(10L)
-                .family(family)
-                .build();
-        PhotoGroup defaultPhotoGroup = PhotoGroup.builder()
-                .id(100L)
-                .name("Family 1")
-                .build();
-        PhotoGroupFamily defaultGroupLink = PhotoGroupFamily.builder()
-                .family(family)
-                .photoGroup(defaultPhotoGroup)
-                .build();
-
-        given(userRepository.findById(1L))
-                .willReturn(Optional.of(currentUser));
-        given(seniorRepository.findById(10L))
-                .willReturn(Optional.of(senior));
-        given(familyMemberRepository.existsByUserAndFamily(currentUser, family))
-                .willReturn(true);
-        given(photoGroupFamilyRepository.findFirstByFamilyOrderByIdAsc(family))
-                .willReturn(Optional.of(defaultGroupLink));
-        given(familyMemberRepository.findAllByFamilyOrderByIdAsc(family))
-                .willReturn(List.of());
-        given(familyPhotoRepository.findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
-                family,
-                PageRequest.of(0, 4)
-        )).willReturn(List.of());
-        given(familyPhotoRepository.findRecentUploaders(
-                family,
-                PageRequest.of(0, 3)
-        )).willReturn(List.of());
-
-        var response = familyService.getFamilyHome(currentUser, 10L);
-
-        assertThat(response.getPhotoGroupId()).isEqualTo(100L);
-    }
-
-    @Test
-    void getFamilyHomeRejectsFamilyWithoutDefaultPhotoGroup() {
-        Family family = Family.builder()
-                .familyId(1L)
-                .build();
-        User currentUser = User.builder()
-                .usersId(1L)
-                .name("자녀")
-                .role(Role.CHILD)
-                .build();
-        Senior senior = Senior.builder()
-                .seniorId(10L)
-                .family(family)
-                .build();
-
-        given(userRepository.findById(1L))
-                .willReturn(Optional.of(currentUser));
-        given(seniorRepository.findById(10L))
-                .willReturn(Optional.of(senior));
-        given(familyMemberRepository.existsByUserAndFamily(currentUser, family))
-                .willReturn(true);
-        given(photoGroupFamilyRepository.findFirstByFamilyOrderByIdAsc(family))
-                .willReturn(Optional.empty());
-
-        assertThatThrownBy(() -> familyService.getFamilyHome(currentUser, 10L))
-                .isInstanceOf(BusinessException.class)
-                .asInstanceOf(type(BusinessException.class))
-                .extracting(BusinessException::getCode)
-                .isEqualTo(ErrorCode.PHOTO_GROUP_NOT_FOUND);
-
-        verify(familyMemberRepository, never())
-                .findAllByFamilyOrderByIdAsc(family);
     }
 
     @Test
@@ -445,428 +321,6 @@ class FamilyServiceTest {
                 .findAllByFamilyOrderByIdAsc(selectedFamily);
         verify(familyMemberRepository, never())
                 .findAllByFamilyOrderByIdAsc(firstFamily);
-    }
-
-    @Test
-    void connectPhotoGroupCreatesNewGroupWithCurrentAndTargetFamilies() {
-        Family currentFamily = Family.builder()
-                .familyId(1L)
-                .seniorCode("CURRENT1")
-                .build();
-        Family targetFamily = Family.builder()
-                .familyId(2L)
-                .seniorCode("TARGET-1")
-                .build();
-        User currentUser = createUser(1L, "주 담당자");
-        Senior currentSenior = Senior.builder()
-                .seniorId(10L)
-                .family(currentFamily)
-                .build();
-        Senior targetSenior = Senior.builder()
-                .seniorId(20L)
-                .family(targetFamily)
-                .build();
-        FamilyMember primaryMember = createMember(
-                1L,
-                currentUser,
-                currentFamily,
-                ManagerType.PRIMARY
-        );
-        PhotoGroup savedPhotoGroup = PhotoGroup.builder()
-                .id(100L)
-                .name("Shared Family 1-2")
-                .build();
-
-        given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
-        given(seniorRepository.findById(10L)).willReturn(Optional.of(currentSenior));
-        given(familyMemberRepository.existsByUserAndFamily(currentUser, currentFamily))
-                .willReturn(true);
-        given(familyMemberRepository.findByUserAndFamilyForUpdate(currentUser, currentFamily))
-                .willReturn(Optional.of(primaryMember));
-        given(familyRepository.findBySeniorCode("TARGET-1"))
-                .willReturn(Optional.of(targetFamily));
-        given(seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(targetFamily))
-                .willReturn(Optional.of(targetSenior));
-        given(photoGroupFamilyRepository.existsSharedPhotoGroup(currentFamily, targetFamily))
-                .willReturn(false);
-        given(photoGroupRepository.save(any(PhotoGroup.class)))
-                .willReturn(savedPhotoGroup);
-
-        familyService.connectPhotoGroup(
-                currentUser,
-                createPhotoGroupConnectRequest(10L, "TARGET-1")
-        );
-
-        verify(photoGroupRepository).save(any(PhotoGroup.class));
-
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<Iterable<PhotoGroupFamily>> captor =
-                ArgumentCaptor.forClass(Iterable.class);
-        verify(photoGroupFamilyRepository).saveAll(captor.capture());
-
-        List<PhotoGroupFamily> mappings = StreamSupport
-                .stream(captor.getValue().spliterator(), false)
-                .toList();
-
-        assertThat(mappings).hasSize(2);
-        assertThat(mappings)
-                .extracting(PhotoGroupFamily::getFamily)
-                .containsExactlyInAnyOrder(currentFamily, targetFamily);
-        assertThat(mappings)
-                .extracting(PhotoGroupFamily::getPhotoGroup)
-                .containsOnly(savedPhotoGroup);
-    }
-
-    @Test
-    void connectPhotoGroupRejectsNonPrimaryMember() {
-        Family currentFamily = Family.builder()
-                .familyId(1L)
-                .build();
-        User currentUser = createUser(1L, "부 담당자");
-        Senior currentSenior = Senior.builder()
-                .seniorId(10L)
-                .family(currentFamily)
-                .build();
-        FamilyMember subMember = createMember(
-                1L,
-                currentUser,
-                currentFamily,
-                ManagerType.SUB
-        );
-
-        given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
-        given(seniorRepository.findById(10L)).willReturn(Optional.of(currentSenior));
-        given(familyMemberRepository.existsByUserAndFamily(currentUser, currentFamily))
-                .willReturn(true);
-        given(familyMemberRepository.findByUserAndFamilyForUpdate(currentUser, currentFamily))
-                .willReturn(Optional.of(subMember));
-
-        assertThatThrownBy(() -> familyService.connectPhotoGroup(
-                currentUser,
-                createPhotoGroupConnectRequest(10L, "TARGET-1")
-        ))
-                .isInstanceOf(BusinessException.class)
-                .asInstanceOf(type(BusinessException.class))
-                .extracting(BusinessException::getCode)
-                .isEqualTo(ErrorCode.PHOTO_GROUP_CONNECTION_FORBIDDEN);
-
-        verify(photoGroupRepository, never()).save(any(PhotoGroup.class));
-    }
-
-    @Test
-    void connectPhotoGroupRejectsCurrentFamilyCode() {
-        Family currentFamily = Family.builder()
-                .familyId(1L)
-                .seniorCode("CURRENT1")
-                .build();
-        User currentUser = createUser(1L, "주 담당자");
-        Senior currentSenior = Senior.builder()
-                .seniorId(10L)
-                .family(currentFamily)
-                .build();
-        FamilyMember primaryMember = createMember(
-                1L,
-                currentUser,
-                currentFamily,
-                ManagerType.PRIMARY
-        );
-
-        given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
-        given(seniorRepository.findById(10L)).willReturn(Optional.of(currentSenior));
-        given(familyMemberRepository.existsByUserAndFamily(currentUser, currentFamily))
-                .willReturn(true);
-        given(familyMemberRepository.findByUserAndFamilyForUpdate(currentUser, currentFamily))
-                .willReturn(Optional.of(primaryMember));
-        given(familyRepository.findBySeniorCode("CURRENT1"))
-                .willReturn(Optional.of(currentFamily));
-        given(seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(currentFamily))
-                .willReturn(Optional.of(currentSenior));
-
-        assertThatThrownBy(() -> familyService.connectPhotoGroup(
-                currentUser,
-                createPhotoGroupConnectRequest(10L, "CURRENT1")
-        ))
-                .isInstanceOf(BusinessException.class)
-                .asInstanceOf(type(BusinessException.class))
-                .extracting(BusinessException::getCode)
-                .isEqualTo(ErrorCode.PHOTO_GROUP_SELF_CONNECTION_NOT_ALLOWED);
-
-        verify(photoGroupRepository, never()).save(any(PhotoGroup.class));
-    }
-
-    @Test
-    void connectPhotoGroupRejectsAlreadyConnectedFamily() {
-        Family currentFamily = Family.builder()
-                .familyId(1L)
-                .build();
-        Family targetFamily = Family.builder()
-                .familyId(2L)
-                .seniorCode("TARGET-1")
-                .build();
-        User currentUser = createUser(1L, "주 담당자");
-        Senior currentSenior = Senior.builder()
-                .seniorId(10L)
-                .family(currentFamily)
-                .build();
-        Senior targetSenior = Senior.builder()
-                .seniorId(20L)
-                .family(targetFamily)
-                .build();
-        FamilyMember primaryMember = createMember(
-                1L,
-                currentUser,
-                currentFamily,
-                ManagerType.PRIMARY
-        );
-
-        given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
-        given(seniorRepository.findById(10L)).willReturn(Optional.of(currentSenior));
-        given(familyMemberRepository.existsByUserAndFamily(currentUser, currentFamily))
-                .willReturn(true);
-        given(familyMemberRepository.findByUserAndFamilyForUpdate(currentUser, currentFamily))
-                .willReturn(Optional.of(primaryMember));
-        given(familyRepository.findBySeniorCode("TARGET-1"))
-                .willReturn(Optional.of(targetFamily));
-        given(seniorRepository.findFirstByFamilyOrderBySeniorIdAsc(targetFamily))
-                .willReturn(Optional.of(targetSenior));
-        given(photoGroupFamilyRepository.existsSharedPhotoGroup(currentFamily, targetFamily))
-                .willReturn(true);
-
-        assertThatThrownBy(() -> familyService.connectPhotoGroup(
-                currentUser,
-                createPhotoGroupConnectRequest(10L, "TARGET-1")
-        ))
-                .isInstanceOf(BusinessException.class)
-                .asInstanceOf(type(BusinessException.class))
-                .extracting(BusinessException::getCode)
-                .isEqualTo(ErrorCode.PHOTO_GROUP_ALREADY_CONNECTED);
-
-        verify(photoGroupRepository, never()).save(any(PhotoGroup.class));
-    }
-
-    @Test
-    void disconnectPhotoGroupDeactivatesGroupAndKeepsFamilyLinks() {
-        Family currentFamily = Family.builder()
-                .familyId(1L)
-                .build();
-        Family targetFamily = Family.builder()
-                .familyId(2L)
-                .build();
-        User currentUser = createUser(1L, "주 담당자");
-        Senior currentSenior = Senior.builder()
-                .seniorId(10L)
-                .family(currentFamily)
-                .build();
-        FamilyMember primaryMember = createMember(
-                1L,
-                currentUser,
-                currentFamily,
-                ManagerType.PRIMARY
-        );
-        PhotoGroup photoGroup = PhotoGroup.builder()
-                .id(100L)
-                .name("Shared Family 1-2")
-                .build();
-        List<PhotoGroupFamily> groupLinks = List.of(
-                PhotoGroupFamily.builder()
-                        .family(currentFamily)
-                        .photoGroup(photoGroup)
-                        .build(),
-                PhotoGroupFamily.builder()
-                        .family(targetFamily)
-                        .photoGroup(photoGroup)
-                        .build()
-        );
-
-        given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
-        given(seniorRepository.findById(10L)).willReturn(Optional.of(currentSenior));
-        given(familyMemberRepository.existsByUserAndFamily(currentUser, currentFamily))
-                .willReturn(true);
-        given(familyMemberRepository.findByUserAndFamilyForUpdate(currentUser, currentFamily))
-                .willReturn(Optional.of(primaryMember));
-        given(photoGroupFamilyRepository.findAllSharedLinks(currentFamily, 100L))
-                .willReturn(groupLinks);
-
-        given(photoGroupRepository.findAllByIdsForUpdate(List.of(100L)))
-                .willReturn(List.of(photoGroup));
-
-        familyService.disconnectPhotoGroup(currentUser, 10L, 100L);
-
-        assertThat(photoGroup.isActive()).isFalse();
-        assertThat(photoGroup.getDisconnectedAt()).isNotNull();
-        var ordered = org.mockito.Mockito.inOrder(photoGroupRepository, photoGroupFamilyRepository);
-        ordered.verify(photoGroupRepository).findAllByIdsForUpdate(List.of(100L));
-        ordered.verify(photoGroupFamilyRepository).findAllSharedLinks(currentFamily, 100L);
-        verify(photoGroupFamilyRepository, never()).deleteAllInBatch(any());
-    }
-
-    @Test
-    void disconnectPhotoGroupRejectsNonPrimaryMember() {
-        Family currentFamily = Family.builder()
-                .familyId(1L)
-                .build();
-        User currentUser = createUser(1L, "부 담당자");
-        Senior currentSenior = Senior.builder()
-                .seniorId(10L)
-                .family(currentFamily)
-                .build();
-        FamilyMember subMember = createMember(
-                1L,
-                currentUser,
-                currentFamily,
-                ManagerType.SUB
-        );
-
-        given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
-        given(seniorRepository.findById(10L)).willReturn(Optional.of(currentSenior));
-        given(familyMemberRepository.existsByUserAndFamily(currentUser, currentFamily))
-                .willReturn(true);
-        given(familyMemberRepository.findByUserAndFamilyForUpdate(currentUser, currentFamily))
-                .willReturn(Optional.of(subMember));
-
-        assertThatThrownBy(() ->
-                familyService.disconnectPhotoGroup(currentUser, 10L, 100L)
-        )
-                .isInstanceOf(BusinessException.class)
-                .asInstanceOf(type(BusinessException.class))
-                .extracting(BusinessException::getCode)
-                .isEqualTo(ErrorCode.PHOTO_GROUP_CONNECTION_FORBIDDEN);
-
-        verify(photoGroupFamilyRepository, never())
-                .findAllSharedLinks(currentFamily, 100L);
-        verify(photoGroupFamilyRepository, never()).deleteAllInBatch(any());
-    }
-
-    @Test
-    void disconnectPhotoGroupRejectsUnknownConnection() {
-        Family currentFamily = Family.builder()
-                .familyId(1L)
-                .build();
-        User currentUser = createUser(1L, "주 담당자");
-        Senior currentSenior = Senior.builder()
-                .seniorId(10L)
-                .family(currentFamily)
-                .build();
-        FamilyMember primaryMember = createMember(
-                1L,
-                currentUser,
-                currentFamily,
-                ManagerType.PRIMARY
-        );
-
-        given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
-        given(seniorRepository.findById(10L)).willReturn(Optional.of(currentSenior));
-        given(familyMemberRepository.existsByUserAndFamily(currentUser, currentFamily))
-                .willReturn(true);
-        given(familyMemberRepository.findByUserAndFamilyForUpdate(currentUser, currentFamily))
-                .willReturn(Optional.of(primaryMember));
-        given(photoGroupFamilyRepository.findAllSharedLinks(currentFamily, 100L))
-                .willReturn(List.of());
-        given(photoGroupRepository.findAllByIdsForUpdate(List.of(100L)))
-                .willReturn(List.of(PhotoGroup.builder().id(100L).name("공유 그룹").build()));
-
-        assertThatThrownBy(() ->
-                familyService.disconnectPhotoGroup(currentUser, 10L, 100L)
-        )
-                .isInstanceOf(BusinessException.class)
-                .asInstanceOf(type(BusinessException.class))
-                .extracting(BusinessException::getCode)
-                .isEqualTo(ErrorCode.PHOTO_GROUP_CONNECTION_NOT_FOUND);
-
-        verify(photoGroupFamilyRepository, never()).deleteAllInBatch(any());
-    }
-
-    @Test
-    void getConnectedSeniorsReturnsDirectConnectionWithPhotoGroupId() {
-        Family currentFamily = Family.builder()
-                .familyId(1L)
-                .build();
-        Family targetFamily = Family.builder()
-                .familyId(2L)
-                .build();
-        User currentUser = createUser(1L, "현재 사용자");
-        Senior currentSenior = Senior.builder()
-                .seniorId(10L)
-                .family(currentFamily)
-                .build();
-        Senior targetSenior = Senior.builder()
-                .seniorId(20L)
-                .name("연결 시니어")
-                .family(targetFamily)
-                .build();
-        ReflectionTestUtils.setField(targetFamily, "senior", targetSenior);
-
-        LocalDateTime connectedAt = LocalDateTime.of(
-                2026,
-                9,
-                17,
-                10,
-                0
-        );
-        PhotoGroup sharedGroup = PhotoGroup.builder()
-                .id(100L)
-                .name("Shared Family 1-2")
-                .build();
-        ReflectionTestUtils.setField(sharedGroup, "createdAt", connectedAt);
-
-        PhotoGroupFamily connectedLink = PhotoGroupFamily.builder()
-                .id(200L)
-                .family(targetFamily)
-                .photoGroup(sharedGroup)
-                .build();
-
-        given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
-        given(seniorRepository.findById(10L)).willReturn(Optional.of(currentSenior));
-        given(familyMemberRepository.existsByUserAndFamily(currentUser, currentFamily))
-                .willReturn(true);
-        given(familyMemberRepository.findByUserAndFamily(currentUser, currentFamily))
-                .willReturn(Optional.of(createMember(
-                        1L, currentUser, currentFamily, ManagerType.PRIMARY
-                )));
-        given(photoGroupFamilyRepository.findConnectedFamilyLinks(currentFamily))
-                .willReturn(List.of(connectedLink));
-
-        var result = familyService.getConnectedSeniors(currentUser, 10L);
-
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).photoGroupId()).isEqualTo(100L);
-        assertThat(result.get(0).seniorId()).isEqualTo(20L);
-        assertThat(result.get(0).name()).isEqualTo("연결 시니어");
-        assertThat(result.get(0).relation()).isNull();
-        assertThat(result.get(0).customRelation()).isNull();
-        assertThat(result.get(0).connectedAt()).isEqualTo(connectedAt);
-        verify(photoGroupFamilyRepository, never())
-                .findManagedConnectedFamilyLinks(currentFamily, currentUser);
-    }
-
-    @Test
-    void getConnectedSeniorsRejectsUserOutsideSelectedFamily() {
-        Family selectedFamily = Family.builder()
-                .familyId(1L)
-                .build();
-        User currentUser = createUser(1L, "다른 가족 사용자");
-        Senior selectedSenior = Senior.builder()
-                .seniorId(10L)
-                .family(selectedFamily)
-                .build();
-
-        given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
-        given(seniorRepository.findById(10L)).willReturn(Optional.of(selectedSenior));
-        given(familyMemberRepository.existsByUserAndFamily(currentUser, selectedFamily))
-                .willReturn(false);
-
-        assertThatThrownBy(() ->
-                familyService.getConnectedSeniors(currentUser, 10L)
-        )
-                .isInstanceOf(BusinessException.class)
-                .asInstanceOf(type(BusinessException.class))
-                .extracting(BusinessException::getCode)
-                .isEqualTo(ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED);
-
-        verify(photoGroupFamilyRepository, never())
-                .findConnectedFamilyLinks(selectedFamily);
-        verify(photoGroupFamilyRepository, never())
-                .findManagedConnectedFamilyLinks(selectedFamily, currentUser);
     }
 
     @Test
@@ -960,27 +414,54 @@ class FamilyServiceTest {
     }
 
     @Test
-    void getSeniorCodeRejectsSelectedFamilySubManagerEvenWhenPrimaryElsewhere() {
-        Family firstFamily = Family.builder().familyId(1L).build();
-        Family selectedFamily = Family.builder().familyId(2L).build();
-        User currentUser = createUser(1L, "다른 가족의 주 담당자");
-        currentUser.updateFamily(firstFamily);
-        currentUser.updateManagerType(ManagerType.PRIMARY);
+    void getSeniorCodeAllowsSelectedFamilySubManager() {
+        Family selectedFamily = Family.builder()
+                .familyId(2L)
+                .seniorCode("SELECTED")
+                .build();
+        User currentUser = createUser(1L, "보조 담당자");
+        currentUser.updateManagerType(ManagerType.SUB);
 
         given(userRepository.findById(1L)).willReturn(Optional.of(currentUser));
         given(familyRepository.findById(2L)).willReturn(Optional.of(selectedFamily));
         given(familyMemberRepository.findByUserAndFamily(currentUser, selectedFamily))
                 .willReturn(Optional.of(createMember(
-                        2L, currentUser, selectedFamily, ManagerType.SUB
+                        1L, currentUser, selectedFamily, ManagerType.SUB
                 )));
+        given(familyMemberRepository.countByFamily(selectedFamily))
+                .willReturn(3L);
 
-        assertThatThrownBy(() -> familyService.getSeniorCode(currentUser, 2L))
-                .isInstanceOf(BusinessException.class)
-                .asInstanceOf(type(BusinessException.class))
-                .extracting(BusinessException::getCode)
-                .isEqualTo(ErrorCode.FORBIDDEN);
+        var response = familyService.getSeniorCode(currentUser, 2L);
 
-        verify(familyMemberRepository, never()).countByFamily(any());
+        assertThat(response.getSeniorCode()).isEqualTo("SELECTED");
+        assertThat(response.getFamilyMemberCount()).isEqualTo(3L);
+    }
+
+    @Test
+    void getSeniorCodeAllowsSelectedFamilySenior() {
+        Family selectedFamily = Family.builder()
+                .familyId(2L)
+                .seniorCode("SELECTED")
+                .build();
+        User seniorUser = User.builder()
+                .usersId(1L)
+                .name("시니어")
+                .role(Role.PARENT)
+                .build();
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(seniorUser));
+        given(familyRepository.findById(2L)).willReturn(Optional.of(selectedFamily));
+        given(familyMemberRepository.findByUserAndFamily(seniorUser, selectedFamily))
+                .willReturn(Optional.of(createMember(
+                        1L, seniorUser, selectedFamily, ManagerType.NONE
+                )));
+        given(familyMemberRepository.countByFamily(selectedFamily))
+                .willReturn(3L);
+
+        var response = familyService.getSeniorCode(seniorUser, 2L);
+
+        assertThat(response.getSeniorCode()).isEqualTo("SELECTED");
+        assertThat(response.getFamilyMemberCount()).isEqualTo(3L);
     }
 
     @Test
@@ -1131,16 +612,6 @@ class FamilyServiceTest {
         FamilyPrimaryManagerUpdateRequest request =
                 new FamilyPrimaryManagerUpdateRequest();
         ReflectionTestUtils.setField(request, "targetUserId", targetUserId);
-        return request;
-    }
-
-    private PhotoGroupConnectRequest createPhotoGroupConnectRequest(
-            Long seniorId,
-            String seniorCode
-    ) {
-        PhotoGroupConnectRequest request = new PhotoGroupConnectRequest();
-        ReflectionTestUtils.setField(request, "seniorId", seniorId);
-        ReflectionTestUtils.setField(request, "seniorCode", seniorCode);
         return request;
     }
 

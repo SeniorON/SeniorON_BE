@@ -11,18 +11,15 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.example.senioron.domain.family.entity.FamilyPhoto;
-import com.example.senioron.domain.family.entity.FamilyPhotoGroup;
-import com.example.senioron.domain.family.entity.PhotoGroup;
+import com.example.senioron.domain.family.entity.FamilyPhotoSenior;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
-import com.example.senioron.domain.family.entity.PhotoGroupFamily;
 import com.example.senioron.domain.family.event.FamilyPhotoSharedEvent;
-import com.example.senioron.domain.family.repository.FamilyPhotoGroupRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
+import com.example.senioron.domain.family.repository.FamilyPhotoSeniorRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
-import com.example.senioron.domain.family.repository.PhotoGroupRepository;
-import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
+import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.UserStatus;
@@ -44,18 +41,18 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 class FamilyPhotoPersistenceServiceTest {
 
+    private static final List<ManagerType> MANAGER_TYPES = List.of(ManagerType.PRIMARY, ManagerType.SUB);
+
     private final FamilyPhotoRepository familyPhotoRepository =
             org.mockito.Mockito.mock(FamilyPhotoRepository.class);
     private final UserRepository userRepository =
             org.mockito.Mockito.mock(UserRepository.class);
-    private final FamilyPhotoGroupRepository familyPhotoGroupRepository =
-            org.mockito.Mockito.mock(FamilyPhotoGroupRepository.class);
     private final ApplicationEventPublisher eventPublisher =
             org.mockito.Mockito.mock(ApplicationEventPublisher.class);
     private final FamilyRepository familyRepository = org.mockito.Mockito.mock(FamilyRepository.class);
     private final FamilyMemberRepository familyMemberRepository = org.mockito.Mockito.mock(FamilyMemberRepository.class);
-    private final PhotoGroupRepository photoGroupRepository = org.mockito.Mockito.mock(PhotoGroupRepository.class);
-    private final PhotoGroupFamilyRepository photoGroupFamilyRepository = org.mockito.Mockito.mock(PhotoGroupFamilyRepository.class);
+    private final FamilyPhotoSeniorRepository familyPhotoSeniorRepository =
+            org.mockito.Mockito.mock(FamilyPhotoSeniorRepository.class);
     private final Family family = Family.builder().familyId(1L).build();
 
     private FamilyPhotoPersistenceService persistenceService;
@@ -65,33 +62,25 @@ class FamilyPhotoPersistenceServiceTest {
         persistenceService = new FamilyPhotoPersistenceService(
                 familyPhotoRepository,
                 userRepository,
-                familyPhotoGroupRepository,
                 eventPublisher,
                 familyRepository,
                 familyMemberRepository,
-                photoGroupRepository,
-                photoGroupFamilyRepository
+                familyPhotoSeniorRepository
         );
     }
 
     @ParameterizedTest
     @EnumSource(value = ManagerType.class, names = {"PRIMARY", "SUB"})
-    void createWithPhotoGroupsSavesAllMappings(ManagerType managerType) {
+    void createWithSeniorsSavesShareTargets(ManagerType managerType) {
         User user = User.builder()
                 .usersId(2L)
                 .name("업로더")
                 .role(Role.CHILD)
                 .build();
-        PhotoGroup firstGroup = PhotoGroup.builder()
-                .id(3L)
-                .name("첫 번째 그룹")
-                .build();
-        PhotoGroup secondGroup = PhotoGroup.builder()
-                .id(4L)
-                .name("두 번째 그룹")
-                .build();
+        FamilyMember first = shareTarget(user, 20L);
+        FamilyMember second = shareTarget(user, 21L);
 
-        stubUploadAccess(user, List.of(firstGroup, secondGroup), managerType);
+        stubUploadAccess(user, List.of(first, second), managerType);
         given(familyPhotoRepository.saveAndFlush(any(FamilyPhoto.class)))
                 .willAnswer(invocation -> {
                     FamilyPhoto photo = invocation.getArgument(0);
@@ -101,84 +90,72 @@ class FamilyPhotoPersistenceServiceTest {
 
         FamilyPhoto savedPhoto = persistenceService.create(
                 2L,
-                "family-photos/1/multi-group-photo.jpg",
-                "family-photos/thumbnails/multi-group-photo.jpg",
-                "multi-group-idempotency-key",
-                "여러 그룹 공유",
+                "family-photos/1/multi-senior-photo.jpg",
+                "family-photos/thumbnails/multi-senior-photo.jpg",
+                "multi-senior-idempotency-key",
+                "여러 시니어 공유",
                 1L,
-                List.of(4L, 3L, 4L)
+                List.of(21L, 20L, 21L)
         );
 
-        assertThat(savedPhoto.getPhotoGroup()).isSameAs(firstGroup);
-        var accessOrder = inOrder(userRepository, photoGroupRepository, familyMemberRepository,
-                familyPhotoRepository);
+        var accessOrder = inOrder(userRepository, familyMemberRepository, familyPhotoRepository);
         accessOrder.verify(userRepository).findByIdForUpdate(2L);
-        accessOrder.verify(photoGroupRepository).findAllByIdsForUpdate(List.of(3L, 4L));
         accessOrder.verify(familyMemberRepository).findByUserAndFamily(user, family);
+        accessOrder.verify(familyMemberRepository).findPhotoShareTargetMembers(user, MANAGER_TYPES);
         accessOrder.verify(familyPhotoRepository).saveAndFlush(any(FamilyPhoto.class));
         assertThat(savedPhoto.getThumbnailKey())
-                .isEqualTo("family-photos/thumbnails/multi-group-photo.jpg");
-        verify(familyPhotoGroupRepository).saveAllAndFlush(
-                argThat(mappings -> {
-                    List<FamilyPhotoGroup> savedMappings =
-                            StreamSupport.stream(
-                                    mappings.spliterator(),
-                                    false
-                            ).toList();
+                .isEqualTo("family-photos/thumbnails/multi-senior-photo.jpg");
+        verify(familyPhotoSeniorRepository).saveAllAndFlush(
+                argThat(targets -> {
+                    List<FamilyPhotoSenior> savedTargets =
+                            StreamSupport.stream(targets.spliterator(), false).toList();
 
-                    return savedMappings.size() == 2
-                            && savedMappings.stream().allMatch(mapping ->
-                            mapping.getFamilyPhoto() == savedPhoto
-                    )
-                            && savedMappings.stream()
-                            .map(FamilyPhotoGroup::getPhotoGroup)
+                    return savedTargets.size() == 2
+                            && savedTargets.stream().allMatch(target ->
+                            target.getFamilyPhoto() == savedPhoto)
+                            && savedTargets.stream()
+                            .map(FamilyPhotoSenior::getSenior)
                             .toList()
-                            .equals(List.of(firstGroup, secondGroup));
+                            .equals(List.of(first.getFamily().getSenior(), second.getFamily().getSenior()));
                 })
         );
-        var ordered = inOrder(familyPhotoGroupRepository, eventPublisher);
-        ordered.verify(familyPhotoGroupRepository).saveAllAndFlush(any());
+        var ordered = inOrder(familyPhotoSeniorRepository, eventPublisher);
+        ordered.verify(familyPhotoSeniorRepository).saveAllAndFlush(any());
         ordered.verify(eventPublisher).publishEvent(new FamilyPhotoSharedEvent(10L));
         ordered.verifyNoMoreInteractions();
     }
 
     @Test
-    void doesNotPublishWhenSavingSharedGroupMappingsFails() {
+    void doesNotPublishWhenSavingShareTargetsFails() {
         User user = User.builder().usersId(2L).name("업로더").role(Role.CHILD).build();
-        PhotoGroup group = PhotoGroup.builder().id(3L).name("가족").build();
-        stubUploadAccess(user, List.of(group), ManagerType.PRIMARY);
+        stubUploadAccess(user, List.of(shareTarget(user, 20L)), ManagerType.PRIMARY);
         given(familyPhotoRepository.saveAndFlush(any(FamilyPhoto.class)))
                 .willAnswer(invocation -> invocation.getArgument(0));
-        doThrow(new DataIntegrityViolationException("mapping failed"))
-                .when(familyPhotoGroupRepository).saveAllAndFlush(any());
+        doThrow(new DataIntegrityViolationException("share target failed"))
+                .when(familyPhotoSeniorRepository).saveAllAndFlush(any());
 
         assertThatThrownBy(() -> persistenceService.create(
-                2L, "photo.jpg", null, "key", "설명", 1L, List.of(3L)
+                2L, "photo.jpg", null, "key", "설명", 1L, List.of(20L)
         )).isInstanceOf(DataIntegrityViolationException.class);
         verifyNoInteractions(eventPublisher);
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"inactiveGroup", "missingGroup", "removedMember", "unmanagedTarget",
-            "parent", "withdrawn", "noManagerRole"})
+    @ValueSource(strings = {"emptyTargets", "removedMember", "unmanagedTarget", "parent", "withdrawn",
+            "noManagerRole"})
     void rejectsRevokedAccessBeforeSavingOrPublishing(String reason) {
         User user = User.builder().usersId(2L).name("업로더").role(Role.CHILD).build();
-        PhotoGroup group = PhotoGroup.builder().id(3L).name("공유 그룹").build();
-        ManagerType managerType = reason.equals("noManagerRole") ? ManagerType.NONE
-                : reason.equals("unmanagedTarget")
-                ? ManagerType.SUB : ManagerType.PRIMARY;
-        stubUploadAccess(user, List.of(group), managerType);
+        ManagerType managerType = reason.equals("noManagerRole") ? ManagerType.NONE : ManagerType.PRIMARY;
+        stubUploadAccess(user, List.of(shareTarget(user, 20L)), managerType);
+        List<Long> seniorIds = reason.equals("emptyTargets") ? List.of() : List.of(20L);
         ErrorCode expected = ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN;
         switch (reason) {
-            case "inactiveGroup" -> group.disconnect();
-            case "missingGroup" -> given(photoGroupRepository.findAllByIdsForUpdate(List.of(3L)))
-                    .willReturn(List.of());
             case "removedMember" -> {
                 given(familyMemberRepository.findByUserAndFamily(user, family)).willReturn(Optional.empty());
                 expected = ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED;
             }
-            case "unmanagedTarget" -> given(photoGroupFamilyRepository
-                    .findManagedDefaultPhotoGroupLinks(user, List.of(ManagerType.PRIMARY, ManagerType.SUB)))
+            case "unmanagedTarget" -> given(familyMemberRepository
+                    .findPhotoShareTargetMembers(user, MANAGER_TYPES))
                     .willReturn(List.of());
             case "parent" -> { user.updateRole(Role.PARENT); expected = ErrorCode.FORBIDDEN; }
             case "withdrawn" -> {
@@ -188,22 +165,26 @@ class FamilyPhotoPersistenceServiceTest {
         }
         ErrorCode expectedCode = expected;
         assertThatThrownBy(() -> persistenceService.create(
-                2L, "photo.jpg", null, "key", "설명", 1L, List.of(3L)
+                2L, "photo.jpg", null, "key", "설명", 1L, seniorIds
         )).isInstanceOfSatisfying(BusinessException.class, exception ->
                 assertThat(exception.getCode()).isEqualTo(expectedCode));
-        verifyNoInteractions(familyPhotoRepository, familyPhotoGroupRepository, eventPublisher);
+        verifyNoInteractions(familyPhotoRepository, familyPhotoSeniorRepository, eventPublisher);
     }
 
-    private void stubUploadAccess(User user, List<PhotoGroup> groups, ManagerType managerType) {
-        List<Long> ids = groups.stream().map(PhotoGroup::getId).toList();
+    // 시니어 기기가 연결된 공유 대상 가족의 담당자 행
+    private FamilyMember shareTarget(User user, Long seniorId) {
+        Family targetFamily = Family.builder().familyId(seniorId + 100).build();
+        Senior senior = Senior.builder().seniorId(seniorId).family(targetFamily).build();
+        ReflectionTestUtils.setField(targetFamily, "senior", senior);
+        return FamilyMember.builder()
+                .user(user).family(targetFamily).managerType(ManagerType.SUB).build();
+    }
+
+    private void stubUploadAccess(User user, List<FamilyMember> targets, ManagerType managerType) {
         given(userRepository.findByIdForUpdate(2L)).willReturn(Optional.of(user));
-        given(photoGroupRepository.findAllByIdsForUpdate(ids)).willReturn(groups);
         given(familyRepository.findById(1L)).willReturn(Optional.of(family));
         given(familyMemberRepository.findByUserAndFamily(user, family)).willReturn(Optional.of(
                 FamilyMember.builder().user(user).family(family).managerType(managerType).build()));
-        List<PhotoGroupFamily> links = groups.stream().map(group -> PhotoGroupFamily.builder()
-                .family(family).photoGroup(group).build()).toList();
-        given(photoGroupFamilyRepository.findManagedDefaultPhotoGroupLinks(
-                user, List.of(ManagerType.PRIMARY, ManagerType.SUB))).willReturn(links);
+        given(familyMemberRepository.findPhotoShareTargetMembers(user, MANAGER_TYPES)).willReturn(targets);
     }
 }

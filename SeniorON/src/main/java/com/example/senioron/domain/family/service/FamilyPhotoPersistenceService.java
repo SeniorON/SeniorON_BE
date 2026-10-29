@@ -1,7 +1,6 @@
 package com.example.senioron.domain.family.service;
 
 import com.example.senioron.domain.family.entity.FamilyPhoto;
-import com.example.senioron.domain.family.entity.PhotoGroup;
 import com.example.senioron.domain.family.event.FamilyPhotoSharedEvent;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.user.entity.User;
@@ -14,19 +13,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
 
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
-import com.example.senioron.domain.family.entity.FamilyPhotoGroup;
-import com.example.senioron.domain.family.repository.FamilyPhotoGroupRepository;
+import com.example.senioron.domain.family.entity.FamilyPhotoSenior;
+import com.example.senioron.domain.family.repository.FamilyPhotoSeniorRepository;
 
 import java.util.List;
 
 import com.example.senioron.domain.family.entity.Family;
-import com.example.senioron.domain.family.entity.PhotoGroupFamily;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
-import com.example.senioron.domain.family.repository.PhotoGroupRepository;
-import com.example.senioron.domain.family.repository.PhotoGroupFamilyRepository;
+import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.UserStatus;
@@ -37,12 +36,10 @@ public class FamilyPhotoPersistenceService {
 
     private final FamilyPhotoRepository familyPhotoRepository;
     private final UserRepository userRepository;
-    private final FamilyPhotoGroupRepository familyPhotoGroupRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final FamilyRepository familyRepository;
     private final FamilyMemberRepository familyMemberRepository;
-    private final PhotoGroupRepository photoGroupRepository;
-    private final PhotoGroupFamilyRepository photoGroupFamilyRepository;
+    private final FamilyPhotoSeniorRepository familyPhotoSeniorRepository;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public FamilyPhoto create(
@@ -52,7 +49,7 @@ public class FamilyPhotoPersistenceService {
             String idempotencyKey,
             String description,
             Long familyId,
-            List<Long> photoGroupIds
+            List<Long> seniorIds
     ) {
         // 구성원 제외·담당자 변경 로직도 이 사용자 행을 잠근다.
         User user = userRepository.findByIdForUpdate(userId)
@@ -65,21 +62,12 @@ public class FamilyPhotoPersistenceService {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
 
-        List<Long> distinctIds = photoGroupIds.stream()
+        List<Long> distinctIds = seniorIds.stream()
                 .distinct()
                 .sorted()
                 .toList();
 
         if (distinctIds.isEmpty()) {
-            throw new BusinessException(ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN);
-        }
-
-        // 다른 권한 조회 전에 그룹을 잠그고 최신 상태를 읽는다.
-        List<PhotoGroup> photoGroups =
-                photoGroupRepository.findAllByIdsForUpdate(distinctIds);
-
-        if (photoGroups.size() != distinctIds.size()
-                || photoGroups.stream().anyMatch(group -> !group.isActive())) {
             throw new BusinessException(ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN);
         }
 
@@ -98,25 +86,25 @@ public class FamilyPhotoPersistenceService {
             throw new BusinessException(ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN);
         }
 
-        List<PhotoGroupFamily> accessibleLinks = photoGroupFamilyRepository
-                .findManagedDefaultPhotoGroupLinks(
+        // 사용자 행 잠금 이후 공유 대상 권한을 다시 확인한다.
+        Map<Long, Senior> targetSeniors = familyMemberRepository
+                .findPhotoShareTargetMembers(
                         user,
                         List.of(ManagerType.PRIMARY, ManagerType.SUB)
                 )
                 .stream()
-                .filter(link ->
-                        distinctIds.contains(link.getPhotoGroup().getId())
-                )
-                .toList();
+                .map(target -> target.getFamily().getSenior())
+                .collect(Collectors.toMap(Senior::getSeniorId, senior -> senior));
 
-        if (accessibleLinks.size() != distinctIds.size()) {
+        if (!targetSeniors.keySet().containsAll(distinctIds)) {
             throw new BusinessException(ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN);
         }
 
-        PhotoGroup representativePhotoGroup = photoGroups.get(0);
+        List<Senior> seniors = distinctIds.stream()
+                .map(targetSeniors::get)
+                .toList();
 
         FamilyPhoto familyPhoto = FamilyPhoto.builder()
-                .photoGroup(representativePhotoGroup)
                 .user(user)
                 .imageKey(imageKey)
                 .thumbnailKey(thumbnailKey)
@@ -127,17 +115,17 @@ public class FamilyPhotoPersistenceService {
         FamilyPhoto savedPhoto =
                 familyPhotoRepository.saveAndFlush(familyPhoto);
 
-        List<FamilyPhotoGroup> mappings =
-                photoGroups.stream()
-                        .map(photoGroup ->
-                                FamilyPhotoGroup.builder()
+        List<FamilyPhotoSenior> shareTargets =
+                seniors.stream()
+                        .map(senior ->
+                                FamilyPhotoSenior.builder()
                                         .familyPhoto(savedPhoto)
-                                        .photoGroup(photoGroup)
+                                        .senior(senior)
                                         .build()
                         )
                         .toList();
 
-        familyPhotoGroupRepository.saveAllAndFlush(mappings);
+        familyPhotoSeniorRepository.saveAllAndFlush(shareTargets);
 
         eventPublisher.publishEvent(
                 new FamilyPhotoSharedEvent(savedPhoto.getFamilyPhotoId())

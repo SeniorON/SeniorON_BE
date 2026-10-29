@@ -17,20 +17,15 @@ import java.util.Optional;
 public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> {
 
     // 첫 페이지 조회 메서드
-    @EntityGraph(attributePaths = {"user", "photoGroup"})
+    @EntityGraph(attributePaths = "user")
     @Query("""
     SELECT fp
     FROM FamilyPhoto fp
     WHERE EXISTS (
-        SELECT fpg.id
-        FROM FamilyPhotoGroup fpg
-        WHERE fpg.familyPhoto = fp
-          AND EXISTS (
-              SELECT pgf.id
-              FROM PhotoGroupFamily pgf
-              WHERE pgf.photoGroup = fpg.photoGroup
-                AND pgf.family = :family
-          )
+        SELECT fps.id
+        FROM FamilyPhotoSenior fps
+        WHERE fps.familyPhoto = fp
+          AND fps.senior.family = :family
     )
     ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
     """)
@@ -39,22 +34,17 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
             Pageable pageable
     );
 
-    @EntityGraph(attributePaths = {"user", "photoGroup"})
+    @EntityGraph(attributePaths = "user")
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
         SELECT fp
         FROM FamilyPhoto fp
         WHERE fp.familyPhotoId = :familyPhotoId
           AND EXISTS (
-              SELECT fpg.id
-              FROM FamilyPhotoGroup fpg
-              WHERE fpg.familyPhoto = fp
-                AND EXISTS (
-                    SELECT pgf.id
-                    FROM PhotoGroupFamily pgf
-                    WHERE pgf.photoGroup = fpg.photoGroup
-                      AND pgf.family = :family
-                )
+              SELECT fps.id
+              FROM FamilyPhotoSenior fps
+              WHERE fps.familyPhoto = fp
+                AND fps.senior.family = :family
           )
         """)
     Optional<FamilyPhoto> findAccessibleByFamilyPhotoIdAndFamily(
@@ -62,80 +52,26 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
             @Param("family") Family family
     );
 
-    @Query("""
-    SELECT fp.user
-    FROM FamilyPhoto fp
-    WHERE EXISTS (
-        SELECT fpg.id
-        FROM FamilyPhotoGroup fpg
-        WHERE fpg.familyPhoto = fp
-          AND EXISTS (
-              SELECT pgf.id
-              FROM PhotoGroupFamily pgf
-              WHERE pgf.photoGroup = fpg.photoGroup
-                AND pgf.family = :family
-          )
-    )
-      AND NOT EXISTS (
-          SELECT newer.familyPhotoId
-          FROM FamilyPhoto newer
-          WHERE newer.user = fp.user
-            AND EXISTS (
-                SELECT newerFpg.id
-                FROM FamilyPhotoGroup newerFpg
-                WHERE newerFpg.familyPhoto = newer
-                  AND EXISTS (
-                      SELECT newerPgf.id
-                      FROM PhotoGroupFamily newerPgf
-                      WHERE newerPgf.photoGroup = newerFpg.photoGroup
-                        AND newerPgf.family = :family
-                  )
-            )
-            AND (
-                newer.createdAt > fp.createdAt
-                OR (
-                    newer.createdAt = fp.createdAt
-                    AND newer.familyPhotoId > fp.familyPhotoId
-                )
-            )
-      )
-    ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
-    """)
-    List<User> findRecentUploaders(
-            @Param("family") Family family,
-            Pageable pageable
-    );
-
-    @EntityGraph(attributePaths = {"user", "photoGroup"})
+    @EntityGraph(attributePaths = "user")
     @Query("""
     SELECT fp
     FROM FamilyPhoto fp
     WHERE fp.user.role = :role
       AND EXISTS (
-          SELECT fpg.id
-          FROM FamilyPhotoGroup fpg
-          WHERE fpg.familyPhoto = fp
-            AND EXISTS (
-                SELECT pgf.id
-                FROM PhotoGroupFamily pgf
-                WHERE pgf.photoGroup = fpg.photoGroup
-                  AND pgf.family = :family
-            )
+          SELECT fps.id
+          FROM FamilyPhotoSenior fps
+          WHERE fps.familyPhoto = fp
+            AND fps.senior.family = :family
       )
       AND NOT EXISTS (
           SELECT newer.familyPhotoId
           FROM FamilyPhoto newer
           WHERE newer.user = fp.user
             AND EXISTS (
-                SELECT newerFpg.id
-                FROM FamilyPhotoGroup newerFpg
-                WHERE newerFpg.familyPhoto = newer
-                  AND EXISTS (
-                      SELECT newerPgf.id
-                      FROM PhotoGroupFamily newerPgf
-                      WHERE newerPgf.photoGroup = newerFpg.photoGroup
-                        AND newerPgf.family = :family
-                  )
+                SELECT newerFps.id
+                FROM FamilyPhotoSenior newerFps
+                WHERE newerFps.familyPhoto = newer
+                  AND newerFps.senior.family = :family
             )
             AND (
                 newer.createdAt > fp.createdAt
@@ -171,15 +107,10 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
         FROM FamilyPhoto fp
         WHERE fp.user.role = :role
           AND EXISTS (
-              SELECT fpg.id
-              FROM FamilyPhotoGroup fpg
-              WHERE fpg.familyPhoto = fp
-                AND EXISTS (
-                    SELECT pgf.id
-                    FROM PhotoGroupFamily pgf
-                    WHERE pgf.photoGroup = fpg.photoGroup
-                      AND pgf.family = :family
-                )
+              SELECT fps.id
+              FROM FamilyPhotoSenior fps
+              WHERE fps.familyPhoto = fp
+                AND fps.senior.family = :family
           )
         GROUP BY fp.user.usersId
         """)
@@ -197,7 +128,7 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
             User parent
     );
 
-    @EntityGraph(attributePaths = {"photoGroup", "user"})
+    @EntityGraph(attributePaths = "user")
     Optional<FamilyPhoto> findByUserUsersIdAndIdempotencyKey(
             Long usersId,
             String idempotencyKey
@@ -205,25 +136,20 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
 
     boolean existsByImageKey(String imageKey);
 
-    @EntityGraph(attributePaths = {"user", "photoGroup"})
+    @EntityGraph(attributePaths = "user")
     @Query("""
         SELECT fp
         FROM FamilyPhoto fp
         WHERE fp.familyPhotoId = :familyPhotoId
           AND EXISTS (
-              SELECT fpg.id
-              FROM FamilyPhotoGroup fpg
-              WHERE fpg.familyPhoto = fp
+              SELECT fps.id
+              FROM FamilyPhotoSenior fps
+              WHERE fps.familyPhoto = fp
                 AND EXISTS (
-                    SELECT pgf.id
-                    FROM PhotoGroupFamily pgf
-                    WHERE pgf.photoGroup = fpg.photoGroup
-                      AND EXISTS (
-                          SELECT fm.id
-                          FROM FamilyMember fm
-                          WHERE fm.family = pgf.family
-                            AND fm.user = :user
-                      )
+                    SELECT fm.id
+                    FROM FamilyMember fm
+                    WHERE fm.family = fps.senior.family
+                      AND fm.user = :user
                 )
           )
         """)
@@ -232,20 +158,15 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
             @Param("user") User user
     );
 
-    @EntityGraph(attributePaths = {"user", "photoGroup"})
+    @EntityGraph(attributePaths = "user")
     @Query("""
         SELECT fp
         FROM FamilyPhoto fp
         WHERE EXISTS (
-            SELECT fpg.id
-            FROM FamilyPhotoGroup fpg
-            WHERE fpg.familyPhoto = fp
-              AND EXISTS (
-                  SELECT pgf.id
-                  FROM PhotoGroupFamily pgf
-                  WHERE pgf.photoGroup = fpg.photoGroup
-                    AND pgf.family = :family
-              )
+            SELECT fps.id
+            FROM FamilyPhotoSenior fps
+            WHERE fps.familyPhoto = fp
+              AND fps.senior.family = :family
         )
         ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
         """)
@@ -254,20 +175,15 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
             Pageable pageable
     );
 
-    @EntityGraph(attributePaths = {"user", "photoGroup"})
+    @EntityGraph(attributePaths = "user")
     @Query("""
         SELECT fp
         FROM FamilyPhoto fp
         WHERE EXISTS (
-            SELECT fpg.id
-            FROM FamilyPhotoGroup fpg
-            WHERE fpg.familyPhoto = fp
-              AND EXISTS (
-                  SELECT pgf.id
-                  FROM PhotoGroupFamily pgf
-                  WHERE pgf.photoGroup = fpg.photoGroup
-                    AND pgf.family = :family
-              )
+            SELECT fps.id
+            FROM FamilyPhotoSenior fps
+            WHERE fps.familyPhoto = fp
+              AND fps.senior.family = :family
         )
           AND (
               fp.createdAt < :cursorCreatedAt
@@ -285,21 +201,16 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
             Pageable pageable
     );
 
-    @EntityGraph(attributePaths = {"user", "photoGroup"})
+    @EntityGraph(attributePaths = "user")
     @Query("""
         SELECT fp
         FROM FamilyPhoto fp
         WHERE fp.user = :uploader
           AND EXISTS (
-              SELECT fpg.id
-              FROM FamilyPhotoGroup fpg
-              WHERE fpg.familyPhoto = fp
-                AND EXISTS (
-                    SELECT pgf.id
-                    FROM PhotoGroupFamily pgf
-                    WHERE pgf.photoGroup = fpg.photoGroup
-                      AND pgf.family = :family
-                )
+              SELECT fps.id
+              FROM FamilyPhotoSenior fps
+              WHERE fps.familyPhoto = fp
+                AND fps.senior.family = :family
           )
         ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
         """)
@@ -309,21 +220,16 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
             Pageable pageable
     );
 
-    @EntityGraph(attributePaths = {"user", "photoGroup"})
+    @EntityGraph(attributePaths = "user")
     @Query("""
         SELECT fp
         FROM FamilyPhoto fp
         WHERE fp.user = :uploader
           AND EXISTS (
-              SELECT fpg.id
-              FROM FamilyPhotoGroup fpg
-              WHERE fpg.familyPhoto = fp
-                AND EXISTS (
-                    SELECT pgf.id
-                    FROM PhotoGroupFamily pgf
-                    WHERE pgf.photoGroup = fpg.photoGroup
-                      AND pgf.family = :family
-                )
+              SELECT fps.id
+              FROM FamilyPhotoSenior fps
+              WHERE fps.familyPhoto = fp
+                AND fps.senior.family = :family
           )
           AND (
               fp.createdAt < :cursorCreatedAt
@@ -346,15 +252,10 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
         SELECT COUNT(fp)
         FROM FamilyPhoto fp
         WHERE EXISTS (
-            SELECT fpg.id
-            FROM FamilyPhotoGroup fpg
-            WHERE fpg.familyPhoto = fp
-              AND EXISTS (
-                  SELECT pgf.id
-                  FROM PhotoGroupFamily pgf
-                  WHERE pgf.photoGroup = fpg.photoGroup
-                    AND pgf.family = :family
-              )
+            SELECT fps.id
+            FROM FamilyPhotoSenior fps
+            WHERE fps.familyPhoto = fp
+              AND fps.senior.family = :family
         )
         """)
     long countAccessibleByFamily(
@@ -366,15 +267,10 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
         FROM FamilyPhoto fp
         WHERE fp.user = :uploader
           AND EXISTS (
-              SELECT fpg.id
-              FROM FamilyPhotoGroup fpg
-              WHERE fpg.familyPhoto = fp
-                AND EXISTS (
-                    SELECT pgf.id
-                    FROM PhotoGroupFamily pgf
-                    WHERE pgf.photoGroup = fpg.photoGroup
-                      AND pgf.family = :family
-                )
+              SELECT fps.id
+              FROM FamilyPhotoSenior fps
+              WHERE fps.familyPhoto = fp
+                AND fps.senior.family = :family
           )
         """)
     long countAccessibleByFamilyAndUploader(
@@ -412,19 +308,14 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
     FROM FamilyPhoto fp
     WHERE fp.familyPhotoId = :familyPhotoId
       AND EXISTS (
-          SELECT fpg.id
-          FROM FamilyPhotoGroup fpg
-          WHERE fpg.familyPhoto = fp
+          SELECT fps.id
+          FROM FamilyPhotoSenior fps
+          WHERE fps.familyPhoto = fp
             AND EXISTS (
-                SELECT pgf.id
-                FROM PhotoGroupFamily pgf
-                WHERE pgf.photoGroup = fpg.photoGroup
-                  AND EXISTS (
-                      SELECT fm.id
-                      FROM FamilyMember fm
-                      WHERE fm.family = pgf.family
-                        AND fm.user = :user
-                  )
+                SELECT fm.id
+                FROM FamilyMember fm
+                WHERE fm.family = fps.senior.family
+                  AND fm.user = :user
             )
       )
     """)

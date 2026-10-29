@@ -2,7 +2,6 @@ package com.example.senioron.domain.family.controller;
 
 import com.example.senioron.domain.family.dto.request.FamilyJoinRequest;
 import com.example.senioron.domain.family.dto.request.FamilyPrimaryManagerUpdateRequest;
-import com.example.senioron.domain.family.dto.request.PhotoGroupConnectRequest;
 import com.example.senioron.domain.family.dto.response.*;
 import com.example.senioron.domain.family.service.FamilyService;
 import com.example.senioron.domain.user.entity.User;
@@ -68,7 +67,7 @@ public class FamilyController {
         return Response.ok();
     }
 
-    @Operation(summary = "가족 메인 화면 조회", description = "선택한 시니어의 가족 구성원과 공유 그룹의 최근 사진 및 업로더 프로필을 조회합니다.")
+    @Operation(summary = "가족 메인 화면 조회", description = "선택한 시니어의 가족 구성원과 해당 시니어에게 공유된 최근 사진을 조회합니다.")
     @GetMapping("/home")
     public Response<FamilyHomeResponse> getFamilyHome(
             @AuthenticationPrincipal User user,
@@ -88,40 +87,7 @@ public class FamilyController {
         );
     }
 
-    @Operation(summary = "사진 공유 시니어 연결", description = "선택한 시니어의 가족과 입력한 시니어 코드의 가족을 새로운 사진 공유 그룹으로 연결합니다.")
-    @PostMapping("/photo-groups/connections")
-    public Response<Void> connectPhotoGroup(
-            @AuthenticationPrincipal User user,
-            @Valid @RequestBody PhotoGroupConnectRequest request
-    ) {
-        familyService.connectPhotoGroup(user, request);
-        return Response.ok();
-    }
-
-    @Operation(summary = "사진 공유 시니어 연결 해제", description = "현재 선택한 시니어 가족의 주 담당자가 연결된 사진 공유 관계를 해제합니다.")
-    @DeleteMapping("/photo-groups/connections/{photoGroupId}")
-    public Response<Void> disconnectPhotoGroup(
-            @AuthenticationPrincipal User user,
-            @RequestParam Long seniorId,
-            @PathVariable Long photoGroupId
-    ) {
-        familyService.disconnectPhotoGroup(user, seniorId, photoGroupId);
-
-        return Response.ok();
-    }
-
-    @Operation(summary = "연결된 시니어 조회", description = "선택한 시니어 가족과 사진 공유 그룹으로 직접 연결된 시니어 목록을 조회합니다.")
-    @GetMapping("/photo-groups/connections")
-    public Response<List<ConnectedSeniorResponse>> getConnectedSeniors(
-            @AuthenticationPrincipal User user,
-            @RequestParam Long seniorId
-    ) {
-        return Response.ok(
-                familyService.getConnectedSeniors(user, seniorId)
-        );
-    }
-
-    @Operation(summary = "사진 공유 대상 목록 조회", description = "로그인한 자녀가 직접 추가한 시니어 목록을 조회합니다.")
+    @Operation(summary = "사진 공유 대상 목록 조회", description = "로그인한 자녀가 주·보조 담당자로 관리하며 시니어 기기가 연결된 시니어 목록을 조회합니다.")
     @GetMapping("/photos/targets")
     public Response<List<PhotoShareTargetResponse>> getPhotoShareTargets(
             @AuthenticationPrincipal User user

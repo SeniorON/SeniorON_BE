@@ -3,9 +3,10 @@ package com.example.senioron.domain.family.repository;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
-import com.example.senioron.domain.family.entity.FamilyPhotoGroup;
-import com.example.senioron.domain.family.entity.PhotoGroup;
-import com.example.senioron.domain.family.entity.PhotoGroupFamily;
+import com.example.senioron.domain.family.entity.FamilyPhotoSenior;
+import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.senior.entity.SeniorRelation;
+import java.time.LocalDate;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
@@ -54,21 +55,22 @@ class FamilyPhotoThumbnailConcurrencyTest {
             User outsider = User.builder().loginId("other-" + unique)
                     .email("other-" + unique + "@example.com")
                     .name("다른 가족 사용자").role(Role.CHILD).build();
-            PhotoGroup group = PhotoGroup.builder().name("동시 처리 사진 그룹").build();
             entityManager.persist(family);
             entityManager.persist(user);
             entityManager.persist(outsider);
-            entityManager.persist(group);
             entityManager.persist(FamilyMember.builder().user(user).family(family)
                     .managerType(ManagerType.SUB).build());
-            entityManager.persist(PhotoGroupFamily.builder().family(family).photoGroup(group).build());
-            FamilyPhoto photo = FamilyPhoto.builder().user(user).photoGroup(group)
+            FamilyPhoto photo = FamilyPhoto.builder().user(user)
                     .imageKey("original/" + unique + ".jpg").build();
             entityManager.persist(photo);
-            entityManager.persist(FamilyPhotoGroup.builder().familyPhoto(photo).photoGroup(group).build());
+            Senior senior = Senior.builder().name("동시 처리 시니어").relation(SeniorRelation.OTHER)
+                    .family(family).registeredBy(user).birth(LocalDate.of(1950, 1, 1))
+                    .phoneNumber("01012345678").build();
+            entityManager.persist(senior);
+            entityManager.persist(FamilyPhotoSenior.builder().familyPhoto(photo).senior(senior).build());
             entityManager.flush();
             return new Fixture(photo.getFamilyPhotoId(), user.getUsersId(),
-                    outsider.getUsersId(), group.getId(), family.getFamilyId());
+                    outsider.getUsersId(), family.getFamilyId());
         });
     }
 
@@ -78,15 +80,14 @@ class FamilyPhotoThumbnailConcurrencyTest {
             return;
         }
         transaction().executeWithoutResult(status -> {
-            entityManager.createQuery("DELETE FROM FamilyPhotoGroup p WHERE p.familyPhoto.familyPhotoId = :id")
+            entityManager.createQuery("DELETE FROM FamilyPhotoSenior s WHERE s.familyPhoto.familyPhotoId = :id")
                     .setParameter("id", fixture.photoId()).executeUpdate();
             repository.deleteById(fixture.photoId());
             repository.flush();
-            entityManager.createQuery("DELETE FROM PhotoGroupFamily p WHERE p.photoGroup.id = :id")
-                    .setParameter("id", fixture.groupId()).executeUpdate();
+            entityManager.createQuery("DELETE FROM Senior s WHERE s.family.familyId = :id")
+                    .setParameter("id", fixture.familyId()).executeUpdate();
             entityManager.createQuery("DELETE FROM FamilyMember m WHERE m.family.familyId = :id")
                     .setParameter("id", fixture.familyId()).executeUpdate();
-            entityManager.remove(entityManager.find(PhotoGroup.class, fixture.groupId()));
             entityManager.remove(entityManager.find(User.class, fixture.userId()));
             entityManager.remove(entityManager.find(User.class, fixture.outsiderId()));
             entityManager.remove(entityManager.find(Family.class, fixture.familyId()));
@@ -169,7 +170,7 @@ class FamilyPhotoThumbnailConcurrencyTest {
 
     private void deleteLockedPhoto(FamilyPhoto photo) {
         // H2의 JPA 생성 스키마에는 운영 migration의 ON DELETE CASCADE가 없다.
-        entityManager.createQuery("DELETE FROM FamilyPhotoGroup p WHERE p.familyPhoto.familyPhotoId = :id")
+        entityManager.createQuery("DELETE FROM FamilyPhotoSenior s WHERE s.familyPhoto.familyPhotoId = :id")
                 .setParameter("id", fixture.photoId()).executeUpdate();
         repository.delete(photo);
         repository.flush();
@@ -188,6 +189,6 @@ class FamilyPhotoThumbnailConcurrencyTest {
         }
     }
 
-    private record Fixture(Long photoId, Long userId, Long outsiderId, Long groupId, Long familyId) {
+    private record Fixture(Long photoId, Long userId, Long outsiderId, Long familyId) {
     }
 }

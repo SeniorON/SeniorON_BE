@@ -32,7 +32,7 @@ public class FamilyPhotoController {
 
     private final FamilyPhotoService familyPhotoService;
 
-    @Operation(summary = "가족 사진 등록", description = "선택한 시니어의 가족에서 접근 가능한 여러 사진 공유 그룹에 사진을 등록합니다.")
+    @Operation(summary = "가족 사진 등록", description = "선택한 시니어들에게 공유할 사진을 등록합니다.")
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Response<FamilyPhotoItemResponse> createPhoto(
             @AuthenticationPrincipal User user,
@@ -51,7 +51,7 @@ public class FamilyPhotoController {
         return Response.ok(familyPhotoService.createPhotoUploadUrl(user, request));
     }
 
-    @Operation(summary = "가족사진 업로드 완료", description = "업로드한 가족사진을 검증하고 선택한 여러 사진 공유 그룹에 등록합니다.")
+    @Operation(summary = "가족사진 업로드 완료", description = "업로드한 가족사진을 검증하고 선택한 시니어들에게 공유합니다.")
     @PostMapping(value = "/complete", consumes = MediaType.APPLICATION_JSON_VALUE)
     public Response<FamilyPhotoItemResponse> completePhotoUpload(
             @AuthenticationPrincipal User user,
@@ -61,7 +61,7 @@ public class FamilyPhotoController {
         return Response.ok(familyPhotoService.completePhotoUpload(user, idempotencyKey.toString(), request));
     }
 
-    @Operation(summary = "가족 사진 목록 조회", description = "선택한 시니어의 Family와 연결된 사진 공유 그룹의 사진을 최신순으로 조회합니다. "
+    @Operation(summary = "가족 사진 목록 조회", description = "선택한 시니어에게 공유된 사진을 최신순으로 조회합니다. "
             + "uploaderUserId를 전달하면 해당 자녀가 공유한 사진만 조회합니다.")
     @GetMapping
     public Response<FamilyPhotoListResponse> getPhotos(
