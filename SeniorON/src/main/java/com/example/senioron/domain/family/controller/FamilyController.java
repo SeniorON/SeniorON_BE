@@ -67,7 +67,7 @@ public class FamilyController {
         return Response.ok();
     }
 
-    @Operation(summary = "가족 메인 화면 조회", description = "선택한 시니어의 가족 구성원과 공유 그룹의 최근 사진 및 업로더 프로필을 조회합니다.")
+    @Operation(summary = "가족 메인 화면 조회", description = "선택한 시니어의 가족 구성원과 해당 시니어에게 공유된 최근 사진을 조회합니다.")
     @GetMapping("/home")
     public Response<FamilyHomeResponse> getFamilyHome(
             @AuthenticationPrincipal User user,
