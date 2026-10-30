@@ -67,6 +67,62 @@ class FamilyMemberRepositoryTest {
     }
 
     @Test
+    void findsEachManagersOwnRelationForSameFamilySenior() {
+        User firstManager = saveUser("managed-shared-first");
+        User secondManager = saveUser("managed-shared-second");
+        Family family = saveFamily("MANAGED9");
+        saveFamilyMember(
+                firstManager,
+                family,
+                ManagerType.PRIMARY,
+                SeniorRelation.MOTHER,
+                null
+        );
+        saveFamilyMember(
+                secondManager,
+                family,
+                ManagerType.SUB,
+                SeniorRelation.OTHER,
+                "이모"
+        );
+        Senior senior = saveSenior(family, firstManager);
+
+        var firstResult = familyMemberRepository.findManagedSeniorResponsesByUserId(
+                firstManager.getUsersId()
+        );
+        var secondResult = familyMemberRepository.findManagedSeniorResponsesByUserId(
+                secondManager.getUsersId()
+        );
+
+        assertThat(firstResult)
+                .extracting(
+                        "familyId",
+                        "seniorId",
+                        "relation",
+                        "customRelation"
+                )
+                .containsExactly(tuple(
+                        family.getFamilyId(),
+                        senior.getSeniorId(),
+                        SeniorRelation.MOTHER,
+                        null
+                ));
+        assertThat(secondResult)
+                .extracting(
+                        "familyId",
+                        "seniorId",
+                        "relation",
+                        "customRelation"
+                )
+                .containsExactly(tuple(
+                        family.getFamilyId(),
+                        senior.getSeniorId(),
+                        SeniorRelation.OTHER,
+                        "이모"
+                ));
+    }
+
+    @Test
     void findsFamilyWithNullSeniorIdWhenSeniorDoesNotExist() {
         User user = saveUser("managed-no-senior");
         Family family = saveFamily("MANAGED2");
@@ -135,8 +191,20 @@ class FamilyMemberRepositoryTest {
         User user = saveUser("managed-all-seniors");
         Family firstFamily = saveFamily("MANAGED5");
         Family secondFamily = saveFamily("MANAGED6");
-        saveFamilyMemberWithRelation(user, firstFamily);
-        saveFamilyMemberWithRelation(user, secondFamily);
+        saveFamilyMember(
+                user,
+                firstFamily,
+                ManagerType.PRIMARY,
+                SeniorRelation.MOTHER,
+                null
+        );
+        saveFamilyMember(
+                user,
+                secondFamily,
+                ManagerType.SUB,
+                SeniorRelation.OTHER,
+                "친할머니"
+        );
         Senior firstSenior = saveSenior(firstFamily, user);
         Senior secondSenior = saveSenior(secondFamily, user);
 
@@ -166,8 +234,8 @@ class FamilyMemberRepositoryTest {
                                 secondFamily.getFamilyId(),
                                 secondSenior.getSeniorId(),
                                 "김영희",
-                                SeniorRelation.MOTHER,
-                                null,
+                                SeniorRelation.OTHER,
+                                "친할머니",
                                 true
                         )
                 );
@@ -190,8 +258,24 @@ class FamilyMemberRepositoryTest {
         User parent = saveUser("onboarding-parent", Role.PARENT);
         Family firstFamily = saveFamily("MANAGED7");
         Family secondFamily = saveFamily("MANAGED8");
-        saveFamilyMember(child, firstFamily, ManagerType.PRIMARY);
-        saveFamilyMember(child, secondFamily, ManagerType.SUB);
+        saveFamilyMember(
+                child,
+                firstFamily,
+                ManagerType.PRIMARY,
+                SeniorRelation.MOTHER
+        );
+        saveFamilyMember(
+                child,
+                secondFamily,
+                ManagerType.SUB,
+                SeniorRelation.GRANDPARENT
+        );
+        saveFamilyMember(
+                parent,
+                firstFamily,
+                ManagerType.NONE,
+                SeniorRelation.FATHER
+        );
         Senior senior = saveSenior(firstFamily, child, parent);
         entityManager.flush();
         entityManager.clear();
@@ -205,6 +289,7 @@ class FamilyMemberRepositoryTest {
                 .extracting(
                         member -> member.getFamily().getFamilyId(),
                         FamilyMember::getManagerType,
+                        FamilyMember::getRelation,
                         member -> member.getFamily().getSenior() == null
                                 ? null
                                 : member.getFamily().getSenior().getSeniorId(),
@@ -217,10 +302,17 @@ class FamilyMemberRepositoryTest {
                         tuple(
                                 firstFamily.getFamilyId(),
                                 ManagerType.PRIMARY,
+                                SeniorRelation.MOTHER,
                                 senior.getSeniorId(),
                                 parent.getUsersId()
                         ),
-                        tuple(secondFamily.getFamilyId(), ManagerType.SUB, null, null)
+                        tuple(
+                                secondFamily.getFamilyId(),
+                                ManagerType.SUB,
+                                SeniorRelation.GRANDPARENT,
+                                null,
+                                null
+                        )
                 );
     }
 
@@ -252,22 +344,42 @@ class FamilyMemberRepositoryTest {
     }
 
     private void saveFamilyMemberWithRelation(User user, Family family) {
-        familyMemberRepository.saveAndFlush(
-                FamilyMember.builder()
-                        .user(user)
-                        .family(family)
-                        .managerType(ManagerType.NONE)
-                        .relation(SeniorRelation.MOTHER)
-                        .build()
+        saveFamilyMember(
+                user,
+                family,
+                ManagerType.NONE,
+                SeniorRelation.MOTHER,
+                null
         );
     }
 
     private void saveFamilyMember(User user, Family family, ManagerType managerType) {
+        saveFamilyMember(user, family, managerType, null);
+    }
+
+    private void saveFamilyMember(
+            User user,
+            Family family,
+            ManagerType managerType,
+            SeniorRelation relation
+    ) {
+        saveFamilyMember(user, family, managerType, relation, null);
+    }
+
+    private void saveFamilyMember(
+            User user,
+            Family family,
+            ManagerType managerType,
+            SeniorRelation relation,
+            String customRelation
+    ) {
         familyMemberRepository.saveAndFlush(
                 FamilyMember.builder()
                         .user(user)
                         .family(family)
                         .managerType(managerType)
+                        .relation(relation)
+                        .customRelation(customRelation)
                         .build()
         );
     }

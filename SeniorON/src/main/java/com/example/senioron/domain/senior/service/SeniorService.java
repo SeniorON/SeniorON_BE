@@ -104,11 +104,10 @@ public class SeniorService {
         FamilyMember registeringMember = familyMemberRepository
                 .findByUserAndFamily(user, lockedFamily)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FORBIDDEN));
+        String resolvedCustomRelation = resolveCustomRelation(request);
 
         Senior senior = Senior.builder()
                 .name(request.name())
-                .relation(request.relation())
-                .customRelation(resolveCustomRelation(request))
                 .birth(request.birth())
                 .phoneNumber(normalizePhoneNumber(request.phoneNumber()))
                 .address(request.address())
@@ -125,10 +124,10 @@ public class SeniorService {
 
         registeringMember.updateRelation(
                 request.relation(),
-                resolveCustomRelation(request)
+                resolvedCustomRelation
         );
 
-        return SeniorCreateResponse.from(savedSenior);
+        return SeniorCreateResponse.from(savedSenior, registeringMember);
     }
 
     private Senior saveSeniorOrThrowAlreadyExists(Senior senior) {

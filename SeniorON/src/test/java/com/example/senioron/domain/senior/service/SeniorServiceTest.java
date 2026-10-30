@@ -237,27 +237,66 @@ class SeniorServiceTest {
         Family family = Family.builder().familyId(1L).build();
         User user = createChild(1L, family, ManagerType.PRIMARY);
         Senior savedSenior = createSenior(10L, family, user);
+        FamilyMember registeringMember = FamilyMember.builder()
+                .user(user)
+                .family(family)
+                .managerType(ManagerType.PRIMARY)
+                .build();
 
         given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
         given(familyMemberRepository.existsByUserAndFamily(user, family)).willReturn(true);
         given(familyMemberRepository.findByUserAndFamily(user, family))
-                .willReturn(Optional.of(
-                        FamilyMember.builder()
-                                .user(user)
-                                .family(family)
-                                .managerType(ManagerType.PRIMARY)
-                                .build()
-                ));
+                .willReturn(Optional.of(registeringMember));
         given(seniorRepository.saveAndFlush(any(Senior.class))).willReturn(savedSenior);
 
         var response = seniorService.createSenior(
                 user,
-                createRequest(SeniorRelation.MOTHER, null)
+                createRequest(SeniorRelation.FATHER, null)
         );
 
         assertThat(response.seniorId()).isEqualTo(10L);
-        assertThat(response.relation()).isEqualTo(SeniorRelation.MOTHER);
-        verify(seniorRepository).saveAndFlush(any(Senior.class));
+        assertThat(response.relation()).isEqualTo(SeniorRelation.FATHER);
+        assertThat(response.customRelation()).isNull();
+        assertThat(registeringMember.getRelation()).isEqualTo(SeniorRelation.FATHER);
+        assertThat(registeringMember.getCustomRelation()).isNull();
+
+        ArgumentCaptor<Senior> seniorCaptor = ArgumentCaptor.forClass(Senior.class);
+        verify(seniorRepository).saveAndFlush(seniorCaptor.capture());
+        assertThat(seniorCaptor.getValue().getRelation()).isNull();
+        assertThat(seniorCaptor.getValue().getCustomRelation()).isNull();
+    }
+
+    @Test
+    void createSeniorStoresCustomRelationOnlyInRegisteringFamilyMember() {
+        Family family = Family.builder().familyId(1L).build();
+        User user = createChild(1L, family, ManagerType.PRIMARY);
+        Senior savedSenior = createSenior(10L, family, user);
+        FamilyMember registeringMember = FamilyMember.builder()
+                .user(user)
+                .family(family)
+                .managerType(ManagerType.PRIMARY)
+                .build();
+
+        given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
+        given(familyMemberRepository.existsByUserAndFamily(user, family)).willReturn(true);
+        given(familyMemberRepository.findByUserAndFamily(user, family))
+                .willReturn(Optional.of(registeringMember));
+        given(seniorRepository.saveAndFlush(any(Senior.class))).willReturn(savedSenior);
+
+        var response = seniorService.createSenior(
+                user,
+                createRequest(SeniorRelation.OTHER, "  친할머니  ")
+        );
+
+        assertThat(response.relation()).isEqualTo(SeniorRelation.OTHER);
+        assertThat(response.customRelation()).isEqualTo("친할머니");
+        assertThat(registeringMember.getRelation()).isEqualTo(SeniorRelation.OTHER);
+        assertThat(registeringMember.getCustomRelation()).isEqualTo("친할머니");
+
+        ArgumentCaptor<Senior> seniorCaptor = ArgumentCaptor.forClass(Senior.class);
+        verify(seniorRepository).saveAndFlush(seniorCaptor.capture());
+        assertThat(seniorCaptor.getValue().getRelation()).isNull();
+        assertThat(seniorCaptor.getValue().getCustomRelation()).isNull();
     }
 
     @Test
