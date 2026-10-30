@@ -366,7 +366,13 @@ public class UserService {
             throw new BusinessException(ErrorCode.INVALID_WITHDRAWAL_CONFIRMATION);
         }
 
-        if (user.getManagerType() == ManagerType.PRIMARY) {
+        boolean hasPrimaryMembership = familyMemberRepository.findAllByUser(user)
+                .stream()
+                .anyMatch(familyMember ->
+                        familyMember.getManagerType() == ManagerType.PRIMARY
+                );
+
+        if (hasPrimaryMembership) {
             throw new BusinessException(ErrorCode.PRIMARY_USER_CANNOT_WITHDRAW);
         }
 
