@@ -12,6 +12,8 @@ import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.entity.FamilyPhotoSenior;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
+import com.example.senioron.domain.family.entity.PhotoReportStatus;
+import com.example.senioron.domain.family.repository.FamilyPhotoReportRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoSeniorRepository;
 import com.example.senioron.domain.family.repository.projection.FamilyPhotoAlbumCountProjection;
@@ -68,6 +70,7 @@ public class FamilyPhotoService {
     private final ApplicationEventPublisher eventPublisher;
     private final FamilyPhotoResponseMapper familyPhotoResponseMapper;
     private final FamilyPhotoSeniorRepository familyPhotoSeniorRepository;
+    private final FamilyPhotoReportRepository familyPhotoReportRepository;
 
     private static final int NEW_PHOTO_WINDOW_HOURS = 24;
     private static final long MAX_FAMILY_PHOTO_SIZE = 10L * 1024 * 1024;
@@ -736,10 +739,18 @@ public class FamilyPhotoService {
         if (isUploader || removedTargets.size() == shareTargets.size()) {
             String imageKey = photo.getImageKey();
             String thumbnailKey = photo.getThumbnailKey();
+            // 처리 대기 중인 신고가 있으면 관리자 검토를 위해 원본은 남겨 둔다.
+            boolean hasPendingReport = familyPhotoReportRepository
+                    .existsByFamilyPhoto_FamilyPhotoIdAndStatus(
+                            familyPhotoId,
+                            PhotoReportStatus.PENDING
+                    );
 
             familyPhotoSeniorRepository.deleteAllByFamilyPhoto(photo);
             familyPhotoRepository.delete(photo);
-            registerS3DeleteAfterCommit(imageKey);
+            if (!hasPendingReport) {
+                registerS3DeleteAfterCommit(imageKey);
+            }
             registerS3DeleteAfterCommit(thumbnailKey);
         } else {
             familyPhotoSeniorRepository.deleteAll(removedTargets);

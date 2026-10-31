@@ -34,6 +34,14 @@ public class FamilyPhotoReportService {
                 .findById(principal.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
+        // 숨김 신고한 사진은 접근 조회에서 제외되므로 중복 신고를 먼저 확인한다.
+        if (familyPhotoReportRepository.existsByFamilyPhoto_FamilyPhotoIdAndReporter_UsersId(
+                familyPhotoId,
+                currentUser.getUsersId()
+        )) {
+            throw new BusinessException(ErrorCode.FAMILY_PHOTO_ALREADY_REPORTED);
+        }
+
         FamilyPhoto photo = familyPhotoRepository
                 .findAccessibleByFamilyPhotoIdAndUser(
                         familyPhotoId,
@@ -46,16 +54,10 @@ public class FamilyPhotoReportService {
             throw new BusinessException(ErrorCode.FAMILY_PHOTO_REPORT_OWN_PHOTO);
         }
 
-        if (familyPhotoReportRepository.existsByFamilyPhoto_FamilyPhotoIdAndReporter_UsersId(
-                familyPhotoId,
-                currentUser.getUsersId()
-        )) {
-            throw new BusinessException(ErrorCode.FAMILY_PHOTO_ALREADY_REPORTED);
-        }
-
         FamilyPhotoReport report = FamilyPhotoReport.builder()
                 .familyPhoto(photo)
                 .reporter(currentUser)
+                .reportedUser(photo.getUser())
                 .imageKey(photo.getImageKey())
                 .reason(request.getReason())
                 .detail(request.getDetail())

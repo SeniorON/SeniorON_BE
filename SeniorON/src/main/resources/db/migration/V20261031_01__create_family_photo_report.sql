@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS family_photo_report (
     family_photo_report_id BIGINT NOT NULL AUTO_INCREMENT,
     family_photo_id BIGINT NULL,
     reporter_user_id BIGINT NOT NULL,
+    reported_user_id BIGINT NULL,
     image_key VARCHAR(255) NOT NULL,
     reason VARCHAR(30) NOT NULL,
     detail VARCHAR(200) NULL,
@@ -27,6 +28,11 @@ CREATE TABLE IF NOT EXISTS family_photo_report (
         FOREIGN KEY (reporter_user_id)
             REFERENCES users (users_id)
             ON DELETE CASCADE,
+
+    CONSTRAINT fk_family_photo_report_reported_user
+        FOREIGN KEY (reported_user_id)
+            REFERENCES users (users_id)
+            ON DELETE SET NULL,
 
     CONSTRAINT fk_family_photo_report_processed_admin
         FOREIGN KEY (processed_by_admin_id)

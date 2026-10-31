@@ -72,6 +72,12 @@ public class FamilyPhotoReport extends BaseEntity {
     @OnDelete(action = OnDeleteAction.CASCADE)
     private User reporter;
 
+    // 사진이 삭제돼도 관리자가 업로더를 확인할 수 있도록 신고 시점의 업로더를 남긴다.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reported_user_id")
+    @OnDelete(action = OnDeleteAction.SET_NULL)
+    private User reportedUser;
+
     @Column(name = "image_key", nullable = false)
     private String imageKey;
 

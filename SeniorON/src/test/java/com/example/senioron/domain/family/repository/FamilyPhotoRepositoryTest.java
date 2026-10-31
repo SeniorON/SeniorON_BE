@@ -329,6 +329,8 @@ class FamilyPhotoRepositoryTest {
                 .hasValueSatisfying(saved -> {
                     assertThat(saved.getFamilyPhoto()).isNull();
                     assertThat(saved.getImageKey()).isEqualTo("retain-photo.jpg");
+                    assertThat(saved.getReportedUser().getUsersId())
+                            .isEqualTo(uploader.getUsersId());
                 });
     }
 
@@ -493,6 +495,7 @@ class FamilyPhotoRepositoryTest {
                 FamilyPhotoReport.builder()
                         .familyPhoto(photo)
                         .reporter(reporter)
+                        .reportedUser(photo.getUser())
                         .imageKey(photo.getImageKey())
                         .reason(PhotoReportReason.ETC)
                         .hidden(hidden)

@@ -85,6 +85,7 @@ class FamilyPhotoReportServiceTest {
         FamilyPhotoReport saved = captor.getValue();
         assertThat(saved.getFamilyPhoto()).isSameAs(photo);
         assertThat(saved.getReporter()).isSameAs(reporter);
+        assertThat(saved.getReportedUser()).isSameAs(uploader);
         assertThat(saved.getImageKey()).isEqualTo("family/photo.jpg");
         assertThat(saved.getReason()).isEqualTo(PhotoReportReason.ADVERTISEMENT);
         assertThat(saved.getDetail()).isEqualTo("광고 사진이에요.");
@@ -152,6 +153,26 @@ class FamilyPhotoReportServiceTest {
                 .isEqualTo(ErrorCode.FAMILY_PHOTO_ALREADY_REPORTED);
 
         verify(familyPhotoReportRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void rejectsRepeatedReportOnHiddenPhotoAsDuplicate() {
+        // 숨김 신고한 사진은 접근 조회에서 제외되지만 404가 아니라 중복 신고로 응답한다.
+        given(familyPhotoReportRepository
+                .existsByFamilyPhoto_FamilyPhotoIdAndReporter_UsersId(40L, 10L))
+                .willReturn(true);
+        given(familyPhotoRepository.findAccessibleByFamilyPhotoIdAndUser(40L, reporter))
+                .willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> familyPhotoReportService.reportPhoto(
+                reporter,
+                40L,
+                request(PhotoReportReason.ABUSE, null, true)
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.FAMILY_PHOTO_ALREADY_REPORTED);
     }
 
     @Test
