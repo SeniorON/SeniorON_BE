@@ -332,6 +332,7 @@ public class FamilyService {
         List<FamilyPhoto> recentPhotoEntities =
                 familyPhotoRepository.findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
                         family,
+                        currentUser,
                         PageRequest.of(0, RECENT_PHOTO_COUNT)
                 );
 

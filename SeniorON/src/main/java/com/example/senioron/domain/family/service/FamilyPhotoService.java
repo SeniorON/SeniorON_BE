@@ -589,12 +589,14 @@ public class FamilyPhotoService {
                 fetchedPhotos = familyPhotoRepository
                         .findAllAccessibleByFamily(
                                 family,
+                                currentUser,
                                 pageable
                         );
             } else {
                 fetchedPhotos = familyPhotoRepository
                         .findNextAccessiblePageByFamily(
                                 family,
+                                currentUser,
                                 cursorCreatedAt,
                                 cursorId,
                                 pageable
@@ -606,6 +608,7 @@ public class FamilyPhotoService {
                         .findAllAccessibleByFamilyAndUploader(
                                 family,
                                 uploader,
+                                currentUser,
                                 pageable
                         );
             } else {
@@ -613,6 +616,7 @@ public class FamilyPhotoService {
                         .findNextAccessiblePageByFamilyAndUploader(
                                 family,
                                 uploader,
+                                currentUser,
                                 cursorCreatedAt,
                                 cursorId,
                                 pageable
@@ -671,10 +675,11 @@ public class FamilyPhotoService {
                         .toList();
 
         long totalCount = uploader == null
-                ? familyPhotoRepository.countAccessibleByFamily(family)
+                ? familyPhotoRepository.countAccessibleByFamily(family, currentUser)
                 : familyPhotoRepository.countAccessibleByFamilyAndUploader(
                 family,
-                uploader
+                uploader,
+                currentUser
         );
 
         return FamilyPhotoListResponse.builder()
@@ -803,7 +808,8 @@ public class FamilyPhotoService {
         // 자녀마다 가장 최근에 올린 사진 한 장 조회
         List<FamilyPhoto> latestPhotos = familyPhotoRepository.findLatestPhotosByUploader(
                 family,
-                Role.CHILD
+                Role.CHILD,
+                parent
         );
 
         if (latestPhotos.isEmpty()) {

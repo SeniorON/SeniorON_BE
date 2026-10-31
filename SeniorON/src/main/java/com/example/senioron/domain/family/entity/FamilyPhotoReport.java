@@ -21,6 +21,8 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
 
 @Entity
 @Table(
@@ -56,8 +58,10 @@ public class FamilyPhotoReport extends BaseEntity {
     @Column(name = "family_photo_report_id")
     private Long id;
 
+    // 사진이 삭제돼도 신고 기록은 남긴다 (마이그레이션의 ON DELETE SET NULL과 동일)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "family_photo_id")
+    @OnDelete(action = OnDeleteAction.SET_NULL)
     private FamilyPhoto familyPhoto;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -65,6 +69,7 @@ public class FamilyPhotoReport extends BaseEntity {
             name = "reporter_user_id",
             nullable = false
     )
+    @OnDelete(action = OnDeleteAction.CASCADE)
     private User reporter;
 
     @Column(name = "image_key", nullable = false)

@@ -298,9 +298,10 @@ class FamilyPhotoServiceTest {
                 .willReturn(true);
         given(familyPhotoRepository.findAllAccessibleByFamily(
                 family,
+                parent,
                 PageRequest.of(0, 11)
         )).willReturn(List.of(photo));
-        given(familyPhotoRepository.countAccessibleByFamily(family))
+        given(familyPhotoRepository.countAccessibleByFamily(family, parent))
                 .willReturn(1L);
         given(familyPhotoViewRepository.findViewedFamilyPhotoIds(
                 10L,
@@ -357,9 +358,9 @@ class FamilyPhotoServiceTest {
         given(familyMemberRepository.existsByUserAndFamily(parent, family))
                 .willReturn(true);
         given(familyPhotoRepository.findAllAccessibleByFamily(
-                family, PageRequest.of(0, 11)
+                family, parent, PageRequest.of(0, 11)
         )).willReturn(List.of(photo));
-        given(familyPhotoRepository.countAccessibleByFamily(family)).willReturn(1L);
+        given(familyPhotoRepository.countAccessibleByFamily(family, parent)).willReturn(1L);
         given(familyPhotoRepository.findAccessibleByFamilyPhotoIdAndUser(40L, parent))
                 .willReturn(Optional.of(photo));
         given(s3Service.getFileUrl("photo.jpg")).willReturn(originalUrl);
