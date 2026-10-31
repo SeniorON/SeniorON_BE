@@ -48,5 +48,16 @@ firebase:
 
 jwt:
   secret: local-test-jwt-secret-key-local-test-jwt-secret-key
+  admin-secret: local-test-admin-jwt-secret-key-local-test-admin-key
   access-token-expiration: ${JWT_ACCESS_EXPIRATION:3600000}
   refresh-token-expiration: ${JWT_REFRESH_EXPIRATION:1209600000}
+  admin-access-token-expiration: ${JWT_ADMIN_ACCESS_EXPIRATION:1800000}
+  admin-refresh-token-expiration: ${JWT_ADMIN_REFRESH_EXPIRATION:86400000}
+
+admin:
+  web:
+    base-url: ${ADMIN_WEB_BASE_URL:http://localhost:5173/admin}
+  bootstrap:
+    email: ${ADMIN_BOOTSTRAP_EMAIL:}
+  invitation:
+    log-link: true

@@ -32,8 +32,11 @@ spring:
 
 jwt:
   secret: ${JWT_SECRET}
+  admin-secret: ${JWT_ADMIN_SECRET}
   access-token-expiration: 3600000
   refresh-token-expiration: 1209600000
+  admin-access-token-expiration: 1800000
+  admin-refresh-token-expiration: 86400000
 
 management:
   endpoints:
@@ -104,3 +107,11 @@ ai:
 app:
   cors:
     allowed-origins: http://localhost:3000
+
+admin:
+  web:
+    base-url: ${ADMIN_WEB_BASE_URL:https://senioron.site/admin}
+  bootstrap:
+    email: ${ADMIN_BOOTSTRAP_EMAIL:}
+  invitation:
+    log-link: false

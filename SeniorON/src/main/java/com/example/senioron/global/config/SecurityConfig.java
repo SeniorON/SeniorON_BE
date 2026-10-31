@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -15,6 +16,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
 
@@ -73,10 +75,15 @@ public class SecurityConfig {
                                 "/api/social-accounts/login/google",
                                 "/api/social-accounts/signup",
                                 "/api/social-accounts/login/kakao/callback",
+                                "/api/admin/auth/login",
+                                "/api/admin/auth/token/refresh",
+                                "/api/admin/auth/invitations/verify",
+                                "/api/admin/auth/invitations/accept",
                                 "/h2-console/**",
                                 "/actuator/health/readiness",
                                 "/actuator/prometheus"
                         ).permitAll()
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .httpBasic(httpBasic -> httpBasic.disable())

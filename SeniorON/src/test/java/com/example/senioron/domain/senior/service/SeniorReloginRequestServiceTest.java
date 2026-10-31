@@ -562,7 +562,10 @@ class SeniorReloginRequestServiceTest {
             jwtUtil = new JwtUtil(
                     "01234567890123456789012345678901",
                     3_600_000L,
-                    1_209_600_000L
+                    1_209_600_000L,
+                    "admin-test-secret-key-123456789012",
+                    1_800_000L,
+                    86_400_000L
             );
         }
         return jwtUtil;
