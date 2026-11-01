@@ -30,7 +30,6 @@ public class AdminInquiryService {
     private final InquiryAnswerRepository inquiryAnswerRepository;
     private final S3Service s3Service;
 
-    // 관리자 문의 목록 조회 (#600)
     @Transactional(readOnly = true)
     public AdminInquiryListResponse getInquiries(
             String status,
@@ -52,7 +51,7 @@ public class AdminInquiryService {
         );
     }
 
-    // 관리자 문의 상세 조회 (#602)
+
     @Transactional(readOnly = true)
     public AdminInquiryDetailResponse getInquiryDetail(
             Long inquiryId
@@ -81,7 +80,6 @@ public class AdminInquiryService {
         );
     }
 
-    // 관리자 문의 답변 등록 (#605)
     @Transactional
     public AdminInquiryAnswerResponse createAnswer(
             Long inquiryId,
