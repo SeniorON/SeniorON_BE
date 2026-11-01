@@ -1,3 +1,4 @@
+
 package com.example.senioron.domain.inquiry.entity;
 
 import com.example.senioron.domain.user.entity.User;
@@ -38,11 +39,28 @@ public class Inquiry {
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
-    @OneToMany(mappedBy = "inquiry", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Column(name = "device_model", length = 255)
+    private String deviceModel;
+
+    @Column(name = "os_version", length = 255)
+    private String osVersion;
+
+    @Column(name = "app_version", length = 255)
+    private String appVersion;
+
+    @OneToMany(
+            mappedBy = "inquiry",
+            cascade = CascadeType.ALL,
+            orphanRemoval = true
+    )
     @Builder.Default
     private List<InquiryImage> images = new ArrayList<>();
 
-    @OneToMany(mappedBy = "inquiry", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(
+            mappedBy = "inquiry",
+            cascade = CascadeType.ALL,
+            orphanRemoval = true
+    )
     @Builder.Default
     private List<InquiryAnswer> answers = new ArrayList<>();
 
