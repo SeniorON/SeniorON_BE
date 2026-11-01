@@ -65,6 +65,40 @@ public class Admin extends BaseEntity {
         this.lastLoginAt = now;
     }
 
+    public boolean changeRole(AdminRole adminRole) {
+        if (this.adminRole == adminRole) {
+            return false;
+        }
+        this.adminRole = adminRole;
+        return true;
+    }
+
+    public boolean suspend() {
+        return changeStatus(statusAfterActiveChange(false));
+    }
+
+    public boolean reactivate() {
+        return changeStatus(statusAfterActiveChange(true));
+    }
+
+    public AdminStatus statusAfterActiveChange(boolean active) {
+        if (!active) {
+            return AdminStatus.SUSPENDED;
+        }
+        if (status != AdminStatus.SUSPENDED) {
+            return status;
+        }
+        return password == null ? AdminStatus.INVITED : AdminStatus.ACTIVE;
+    }
+
+    private boolean changeStatus(AdminStatus status) {
+        if (this.status == status) {
+            return false;
+        }
+        this.status = status;
+        return true;
+    }
+
     public boolean isActive() {
         return status == AdminStatus.ACTIVE;
     }

@@ -62,8 +62,10 @@ public enum ErrorCode implements BaseCode {
     ADMIN_NOT_ACTIVE(HttpStatus.FORBIDDEN, "ADMIN403", "활성화된 관리자 계정이 아닙니다."),
     DUPLICATE_ADMIN_EMAIL(HttpStatus.CONFLICT, "ADMIN409", "이미 등록된 운영자 이메일입니다."),
     ADMIN_STATUS_CONFLICT(HttpStatus.CONFLICT, "ADMIN409_1", "현재 관리자 상태에서는 처리할 수 없습니다."),
+    LAST_SUPER_ADMIN(HttpStatus.CONFLICT, "ADMIN409_2", "활성 최고관리자는 최소 1명 있어야 합니다."),
     INVALID_INVITATION_TOKEN(HttpStatus.BAD_REQUEST, "ADMIN400", "사용할 수 없는 링크예요."),
     INVALID_ADMIN_PASSWORD(HttpStatus.BAD_REQUEST, "ADMIN400_1", "비밀번호는 영문·숫자 포함 8자 이상이어야 합니다."),
+    CANNOT_MODIFY_SELF(HttpStatus.BAD_REQUEST, "ADMIN400_2", "본인 계정은 변경할 수 없습니다."),
 
     // Email Error
     EMAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "EMAIL500", "이메일 발송에 실패했습니다."),
