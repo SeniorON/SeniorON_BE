@@ -16,6 +16,10 @@ public interface AdminRepository extends JpaRepository<Admin, Long> {
     Optional<Admin> findByEmail(String email);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select admin from Admin admin where admin.email = :email")
+    Optional<Admin> findByEmailForUpdate(@Param("email") String email);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select admin from Admin admin where admin.adminId = :adminId")
     Optional<Admin> findByIdForUpdate(@Param("adminId") Long adminId);
 
