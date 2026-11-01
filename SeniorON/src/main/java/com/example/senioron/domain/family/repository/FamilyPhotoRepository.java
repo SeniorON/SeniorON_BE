@@ -27,10 +27,18 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
         WHERE fps.familyPhoto = fp
           AND fps.senior.family = :family
     )
+      AND NOT EXISTS (
+          SELECT fpr.id
+          FROM FamilyPhotoReport fpr
+          WHERE fpr.familyPhoto = fp
+            AND fpr.reporter = :viewer
+            AND fpr.hidden = true
+      )
     ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
     """)
     List<FamilyPhoto> findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
             @Param("family") Family family,
+            @Param("viewer") User viewer,
             Pageable pageable
     );
 
@@ -64,6 +72,13 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
             AND fps.senior.family = :family
       )
       AND NOT EXISTS (
+          SELECT fpr.id
+          FROM FamilyPhotoReport fpr
+          WHERE fpr.familyPhoto = fp
+            AND fpr.reporter = :viewer
+            AND fpr.hidden = true
+      )
+      AND NOT EXISTS (
           SELECT newer.familyPhotoId
           FROM FamilyPhoto newer
           WHERE newer.user = fp.user
@@ -72,6 +87,13 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
                 FROM FamilyPhotoSenior newerFps
                 WHERE newerFps.familyPhoto = newer
                   AND newerFps.senior.family = :family
+            )
+            AND NOT EXISTS (
+                SELECT newerFpr.id
+                FROM FamilyPhotoReport newerFpr
+                WHERE newerFpr.familyPhoto = newer
+                  AND newerFpr.reporter = :viewer
+                  AND newerFpr.hidden = true
             )
             AND (
                 newer.createdAt > fp.createdAt
@@ -85,7 +107,8 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
     """)
     List<FamilyPhoto> findLatestPhotosByUploader(
             @Param("family") Family family,
-            @Param("role") Role role
+            @Param("role") Role role,
+            @Param("viewer") User viewer
     );
 
     @Query("""
@@ -111,6 +134,13 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
               FROM FamilyPhotoSenior fps
               WHERE fps.familyPhoto = fp
                 AND fps.senior.family = :family
+          )
+          AND NOT EXISTS (
+              SELECT fpr.id
+              FROM FamilyPhotoReport fpr
+              WHERE fpr.familyPhoto = fp
+                AND fpr.reporter = :parent
+                AND fpr.hidden = true
           )
         GROUP BY fp.user.usersId
         """)
@@ -152,8 +182,39 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
                       AND fm.user = :user
                 )
           )
+          AND NOT EXISTS (
+              SELECT fpr.id
+              FROM FamilyPhotoReport fpr
+              WHERE fpr.familyPhoto = fp
+                AND fpr.reporter = :user
+                AND fpr.hidden = true
+          )
         """)
     Optional<FamilyPhoto> findAccessibleByFamilyPhotoIdAndUser(
+            @Param("familyPhotoId") Long familyPhotoId,
+            @Param("user") User user
+    );
+
+    // 신고 접수용: 사진 삭제와 순서를 맞추기 위해 사진 행을 잠그고 조회한다.
+    @EntityGraph(attributePaths = "user")
+    @Lock(LockModeType.PESSIMISTIC_READ)
+    @Query("""
+        SELECT fp
+        FROM FamilyPhoto fp
+        WHERE fp.familyPhotoId = :familyPhotoId
+          AND EXISTS (
+              SELECT fps.id
+              FROM FamilyPhotoSenior fps
+              WHERE fps.familyPhoto = fp
+                AND EXISTS (
+                    SELECT fm.id
+                    FROM FamilyMember fm
+                    WHERE fm.family = fps.senior.family
+                      AND fm.user = :user
+                )
+          )
+        """)
+    Optional<FamilyPhoto> findAccessibleForReportByFamilyPhotoIdAndUser(
             @Param("familyPhotoId") Long familyPhotoId,
             @Param("user") User user
     );
@@ -168,10 +229,18 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
             WHERE fps.familyPhoto = fp
               AND fps.senior.family = :family
         )
+          AND NOT EXISTS (
+              SELECT fpr.id
+              FROM FamilyPhotoReport fpr
+              WHERE fpr.familyPhoto = fp
+                AND fpr.reporter = :viewer
+                AND fpr.hidden = true
+          )
         ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
         """)
     List<FamilyPhoto> findAllAccessibleByFamily(
             @Param("family") Family family,
+            @Param("viewer") User viewer,
             Pageable pageable
     );
 
@@ -185,6 +254,13 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
             WHERE fps.familyPhoto = fp
               AND fps.senior.family = :family
         )
+          AND NOT EXISTS (
+              SELECT fpr.id
+              FROM FamilyPhotoReport fpr
+              WHERE fpr.familyPhoto = fp
+                AND fpr.reporter = :viewer
+                AND fpr.hidden = true
+          )
           AND (
               fp.createdAt < :cursorCreatedAt
               OR (
@@ -196,6 +272,7 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
         """)
     List<FamilyPhoto> findNextAccessiblePageByFamily(
             @Param("family") Family family,
+            @Param("viewer") User viewer,
             @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
             @Param("cursorId") Long cursorId,
             Pageable pageable
@@ -212,11 +289,19 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
               WHERE fps.familyPhoto = fp
                 AND fps.senior.family = :family
           )
+          AND NOT EXISTS (
+              SELECT fpr.id
+              FROM FamilyPhotoReport fpr
+              WHERE fpr.familyPhoto = fp
+                AND fpr.reporter = :viewer
+                AND fpr.hidden = true
+          )
         ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
         """)
     List<FamilyPhoto> findAllAccessibleByFamilyAndUploader(
             @Param("family") Family family,
             @Param("uploader") User uploader,
+            @Param("viewer") User viewer,
             Pageable pageable
     );
 
@@ -230,6 +315,13 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
               FROM FamilyPhotoSenior fps
               WHERE fps.familyPhoto = fp
                 AND fps.senior.family = :family
+          )
+          AND NOT EXISTS (
+              SELECT fpr.id
+              FROM FamilyPhotoReport fpr
+              WHERE fpr.familyPhoto = fp
+                AND fpr.reporter = :viewer
+                AND fpr.hidden = true
           )
           AND (
               fp.createdAt < :cursorCreatedAt
@@ -243,6 +335,7 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
     List<FamilyPhoto> findNextAccessiblePageByFamilyAndUploader(
             @Param("family") Family family,
             @Param("uploader") User uploader,
+            @Param("viewer") User viewer,
             @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
             @Param("cursorId") Long cursorId,
             Pageable pageable
@@ -257,9 +350,17 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
             WHERE fps.familyPhoto = fp
               AND fps.senior.family = :family
         )
+          AND NOT EXISTS (
+              SELECT fpr.id
+              FROM FamilyPhotoReport fpr
+              WHERE fpr.familyPhoto = fp
+                AND fpr.reporter = :viewer
+                AND fpr.hidden = true
+          )
         """)
     long countAccessibleByFamily(
-            @Param("family") Family family
+            @Param("family") Family family,
+            @Param("viewer") User viewer
     );
 
     @Query("""
@@ -272,10 +373,18 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
               WHERE fps.familyPhoto = fp
                 AND fps.senior.family = :family
           )
+          AND NOT EXISTS (
+              SELECT fpr.id
+              FROM FamilyPhotoReport fpr
+              WHERE fpr.familyPhoto = fp
+                AND fpr.reporter = :viewer
+                AND fpr.hidden = true
+          )
         """)
     long countAccessibleByFamilyAndUploader(
             @Param("family") Family family,
-            @Param("uploader") User uploader
+            @Param("uploader") User uploader,
+            @Param("viewer") User viewer
     );
 
     @Query("""

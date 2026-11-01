@@ -23,6 +23,8 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import com.example.senioron.domain.family.dto.request.FamilyPhotoReportRequest;
+import com.example.senioron.domain.family.service.FamilyPhotoReportService;
 
 @Tag(name = "가족 사진", description = "가족 사진 관련 API")
 @RestController
@@ -31,6 +33,7 @@ import java.util.UUID;
 public class FamilyPhotoController {
 
     private final FamilyPhotoService familyPhotoService;
+    private final FamilyPhotoReportService familyPhotoReportService;
 
     @Operation(summary = "가족 사진 등록", description = "선택한 시니어들에게 공유할 사진을 등록합니다.")
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -124,5 +127,16 @@ public class FamilyPhotoController {
                 user,
                 familyPhotoId
         ));
+    }
+
+    @Operation(summary = "가족 사진 신고", description = "가족 사진을 신고 사유와 함께 신고합니다. " + "hide가 true이면 신고한 사용자에게 해당 사진이 더 이상 보이지 않습니다.")
+    @PostMapping(value = "/{familyPhotoId}/reports", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public Response<Void> reportPhoto(
+            @AuthenticationPrincipal User user,
+            @PathVariable("familyPhotoId") Long familyPhotoId,
+            @Valid @RequestBody FamilyPhotoReportRequest request
+    ) {
+        familyPhotoReportService.reportPhoto(user, familyPhotoId, request);
+        return Response.ok();
     }
 }

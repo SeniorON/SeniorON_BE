@@ -8,6 +8,9 @@ import com.example.senioron.domain.family.dto.response.FamilyPhotoItemResponse;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.entity.FamilyPhotoSenior;
+import com.example.senioron.domain.family.dto.request.FamilyPhotoReportRequest;
+import com.example.senioron.domain.family.entity.PhotoReportReason;
+import com.example.senioron.domain.family.repository.FamilyPhotoReportRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoSeniorRepository;
@@ -77,7 +80,7 @@ import static org.mockito.Mockito.verify;
 @DataJpaTest(showSql = false)
 @Import({FamilyService.class, FamilyPhotoService.class, FamilyPhotoPersistenceService.class,
         FamilyPhotoPermissionService.class, ThumbnailService.class,
-        FamilyPhotoResponseMapper.class})
+        FamilyPhotoResponseMapper.class, FamilyPhotoReportService.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @Timeout(30)
 class FamilyPhotoUploadAuthorizationIntegrationTest {
@@ -86,6 +89,8 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
     @Autowired private FamilyPhotoService photoService;
     @Autowired private FamilyPhotoPersistenceService persistenceService;
     @Autowired private FamilyPhotoRepository photos;
+    @Autowired private FamilyPhotoReportService reportService;
+    @Autowired private FamilyPhotoReportRepository reports;
     @Autowired private FamilyMemberRepository members;
     @Autowired private EntityManager entityManager;
     @Autowired private PlatformTransactionManager transactionManager;
@@ -141,6 +146,8 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
                     fixture.uploader().getUsersId());
             List<Long> parentIds = List.of(fixture.parentA().getUsersId(), fixture.parentB().getUsersId());
             List<Long> familyIds = List.of(fixture.familyA().getFamilyId(), fixture.familyB().getFamilyId());
+            entityManager.createQuery("DELETE FROM FamilyPhotoReport r WHERE r.reporter.usersId IN :ids")
+                    .setParameter("ids", userIds).executeUpdate();
             entityManager.createQuery("DELETE FROM FamilyPhotoView v WHERE v.familyPhoto.user.usersId IN :ids")
                     .setParameter("ids", userIds).executeUpdate();
             entityManager.createQuery("DELETE FROM FamilyPhotoSenior t WHERE t.familyPhoto.user.usersId IN :ids")
@@ -187,8 +194,8 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getCode()).isEqualTo(expected));
         assertRevoked(revocation);
-        assertThat(photos.countAccessibleByFamily(fixture.familyA())).isZero();
-        assertThat(photos.countAccessibleByFamily(fixture.familyB())).isZero();
+        assertThat(photos.countAccessibleByFamily(fixture.familyA(), fixture.uploader())).isZero();
+        assertThat(photos.countAccessibleByFamily(fixture.familyB(), fixture.uploader())).isZero();
         verify(storage).delete(thumbnailKey);
         if (multipart) {
             verify(storage).delete(imageKey);
@@ -254,7 +261,7 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
             }
             assertRevoked(revocation);
             // Previously committed shares survive revocation; a later save is rejected.
-            assertThat(photos.countAccessibleByFamily(fixture.familyB())).isEqualTo(revocationFirst ? 0 : 1);
+            assertThat(photos.countAccessibleByFamily(fixture.familyB(), fixture.uploader())).isEqualTo(revocationFirst ? 0 : 1);
         } finally {
             releaseHolder.countDown();
             executor.shutdownNow();
@@ -295,8 +302,8 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
         upload(fixture.uploader(), multipart);
         assertThat(members.findByUserAndFamily(fixture.uploader(), fixture.familyA()).orElseThrow()
                 .getManagerType()).isEqualTo(ManagerType.SUB);
-        assertThat(photos.countAccessibleByFamily(fixture.familyA())).isEqualTo(1);
-        assertThat(photos.countAccessibleByFamily(fixture.familyB())).isEqualTo(1);
+        assertThat(photos.countAccessibleByFamily(fixture.familyA(), fixture.uploader())).isEqualTo(1);
+        assertThat(photos.countAccessibleByFamily(fixture.familyB(), fixture.uploader())).isEqualTo(1);
     }
 
     @ParameterizedTest
@@ -307,8 +314,8 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
                 .extracting(PhotoShareTargetResponse::getSeniorId).containsExactlyElementsOf(seniorIds);
 
         var response = upload(fixture.uploader(), multipart, seniorIds);
-        assertThat(photos.countAccessibleByFamily(fixture.familyA())).isEqualTo(1);
-        assertThat(photos.countAccessibleByFamily(fixture.familyB())).isEqualTo(1);
+        assertThat(photos.countAccessibleByFamily(fixture.familyA(), fixture.uploader())).isEqualTo(1);
+        assertThat(photos.countAccessibleByFamily(fixture.familyB(), fixture.uploader())).isEqualTo(1);
         assertThat(savedSeniorIds(response.getFamilyPhotoId())).containsExactlyInAnyOrderElementsOf(seniorIds);
     }
 
@@ -320,8 +327,8 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
                 List.of(fixture.seniorA().getSeniorId(), fixture.seniorB().getSeniorId())))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getCode()).isEqualTo(ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN));
-        assertThat(photos.countAccessibleByFamily(fixture.familyA())).isZero();
-        assertThat(photos.countAccessibleByFamily(fixture.familyB())).isZero();
+        assertThat(photos.countAccessibleByFamily(fixture.familyA(), fixture.uploader())).isZero();
+        assertThat(photos.countAccessibleByFamily(fixture.familyB(), fixture.uploader())).isZero();
         verify(storage, never()).upload(any(), anyString());
         verify(storage, never()).findObjectInfo(anyString());
     }
@@ -337,8 +344,8 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
                 List.of(fixture.seniorA().getSeniorId(), fixture.seniorB().getSeniorId())))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getCode()).isEqualTo(ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN));
-        assertThat(photos.countAccessibleByFamily(fixture.familyA())).isZero();
-        assertThat(photos.countAccessibleByFamily(fixture.familyB())).isZero();
+        assertThat(photos.countAccessibleByFamily(fixture.familyA(), fixture.uploader())).isZero();
+        assertThat(photos.countAccessibleByFamily(fixture.familyB(), fixture.uploader())).isZero();
         verify(storage).delete(thumbnailKey);
     }
 
@@ -441,9 +448,47 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
         verify(storage, never()).delete(imageKey);
     }
 
+    @Test
+    void uploaderDeletesPhotoSharedToSeveralSeniors() {
+        Long photoId = upload(fixture.uploader(), false).getFamilyPhotoId();
+
+        photoService.deletePhoto(fixture.uploader(), photoId);
+
+        assertThat(photos.findById(photoId)).isEmpty();
+        assertThat(savedSeniorIds(photoId)).isEmpty();
+        verify(storage).delete(imageKey);
+        verify(storage).delete(thumbnailKey);
+    }
+
+    @Test
+    void keepsReportedOriginalEvenWhenSameFileIsRegisteredAgainAndDeleted() {
+        Long photoId = upload(fixture.uploader(), false).getFamilyPhotoId();
+        FamilyPhotoReportRequest request = new FamilyPhotoReportRequest();
+        request.setReason(PhotoReportReason.ETC);
+        request.setHide(true);
+        reportService.reportPhoto(fixture.primaryA(), photoId, request);
+
+        photoService.deletePhoto(fixture.uploader(), photoId);
+
+        verify(storage, never()).delete(imageKey);
+        verify(storage).delete(thumbnailKey);
+        List<Boolean> retainedReports = transaction().execute(status -> reports.findAll().stream()
+                .filter(report -> report.getImageKey().equals(imageKey))
+                .map(report -> report.getFamilyPhoto() == null
+                        && report.getReportedUser().getUsersId().equals(fixture.uploader().getUsersId()))
+                .toList());
+        assertThat(retainedReports).containsExactly(true);
+
+        // 보존된 원본 키로 다시 등록한 사진을 지워도 신고 원본은 남는다.
+        Long reRegisteredId = upload(fixture.uploader(), false).getFamilyPhotoId();
+        photoService.deletePhoto(fixture.uploader(), reRegisteredId);
+
+        verify(storage, never()).delete(imageKey);
+    }
+
     private void assertNoPhotoSideEffects() {
-        assertThat(photos.countAccessibleByFamily(fixture.familyA())).isZero();
-        assertThat(photos.countAccessibleByFamily(fixture.familyB())).isZero();
+        assertThat(photos.countAccessibleByFamily(fixture.familyA(), fixture.uploader())).isZero();
+        assertThat(photos.countAccessibleByFamily(fixture.familyB(), fixture.uploader())).isZero();
         Long shareTargetCount = transaction().execute(status -> shareTargets.findAll().stream()
                 .filter(target -> target.getFamilyPhoto().getUser().getUsersId()
                         .equals(fixture.uploader().getUsersId())).count());
@@ -452,8 +497,8 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
     }
 
     private void assertSavedForBothSeniors(Long photoId) {
-        assertThat(photos.countAccessibleByFamily(fixture.familyA())).isEqualTo(1);
-        assertThat(photos.countAccessibleByFamily(fixture.familyB())).isEqualTo(1);
+        assertThat(photos.countAccessibleByFamily(fixture.familyA(), fixture.uploader())).isEqualTo(1);
+        assertThat(photos.countAccessibleByFamily(fixture.familyB(), fixture.uploader())).isEqualTo(1);
         assertThat(savedSeniorIds(photoId))
                 .containsExactlyInAnyOrder(fixture.seniorA().getSeniorId(), fixture.seniorB().getSeniorId());
     }

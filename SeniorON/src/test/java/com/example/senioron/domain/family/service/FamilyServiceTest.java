@@ -122,6 +122,7 @@ class FamilyServiceTest {
                 .willReturn(List.of());
         given(familyPhotoRepository.findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
                 family,
+                parent,
                 PageRequest.of(0, 4)
         )).willReturn(List.of(photo));
         given(familyPhotoViewRepository.findViewedFamilyPhotoIds(
@@ -198,6 +199,7 @@ class FamilyServiceTest {
                 .willReturn(List.of());
         given(familyPhotoRepository.findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
                 family,
+                parent,
                 PageRequest.of(0, 4)
         )).willReturn(photos);
         given(familyPhotoViewRepository.findViewedFamilyPhotoIds(

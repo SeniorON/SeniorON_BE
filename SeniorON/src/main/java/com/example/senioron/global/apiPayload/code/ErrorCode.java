@@ -135,6 +135,8 @@ public enum ErrorCode implements BaseCode {
     FAMILY_PHOTO_SIZE_EXCEEDED(HttpStatus.BAD_REQUEST, "FAMILY_PHOTO400_1", "사진 크기는 10MB 이하여야 합니다."),
     FAMILY_PHOTO_INVALID_IMAGE(HttpStatus.BAD_REQUEST, "FAMILY_PHOTO400_2", "해독 가능한 JPG, PNG, WEBP 사진을 업로드해 주세요."),
     FAMILY_PHOTO_ALREADY_REGISTERED(HttpStatus.CONFLICT, "FAMILY_PHOTO409", "이미 등록 완료된 사진입니다."),
+    FAMILY_PHOTO_ALREADY_REPORTED(HttpStatus.CONFLICT, "FAMILY_PHOTO409_1", "이미 신고한 사진입니다."),
+    FAMILY_PHOTO_REPORT_OWN_PHOTO(HttpStatus.BAD_REQUEST, "FAMILY_PHOTO400_3", "본인이 올린 사진은 신고할 수 없습니다."),
     PRIMARY_MANAGER_MUST_BE_CHILD(HttpStatus.BAD_REQUEST, "FAMILY400_3", "주 담당자는 자녀 계정만 지정할 수 있습니다."),
 
     // Photo Error

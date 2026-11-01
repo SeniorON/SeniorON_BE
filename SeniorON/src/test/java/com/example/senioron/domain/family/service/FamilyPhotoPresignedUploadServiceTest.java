@@ -9,6 +9,7 @@ import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
+import com.example.senioron.domain.family.repository.FamilyPhotoReportRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoSeniorRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoViewRepository;
@@ -91,6 +92,8 @@ class FamilyPhotoPresignedUploadServiceTest {
 
     private final FamilyPhotoSeniorRepository familyPhotoSeniorRepository =
             mock(FamilyPhotoSeniorRepository.class);
+    private final FamilyPhotoReportRepository familyPhotoReportRepository =
+            org.mockito.Mockito.mock(FamilyPhotoReportRepository.class);
 
     private FamilyPhotoService familyPhotoService;
     private final FamilyPhotoPushTargetService familyPhotoPushTargetService =
@@ -114,7 +117,8 @@ class FamilyPhotoPresignedUploadServiceTest {
                 familyPhotoPushTargetService,
                 eventPublisher,
                 new FamilyPhotoResponseMapper(s3Service),
-                familyPhotoSeniorRepository
+                familyPhotoSeniorRepository,
+                familyPhotoReportRepository
         );
     }
 

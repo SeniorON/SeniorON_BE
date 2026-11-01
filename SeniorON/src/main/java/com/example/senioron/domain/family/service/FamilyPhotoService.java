@@ -12,6 +12,8 @@ import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.entity.FamilyPhotoSenior;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
+import com.example.senioron.domain.family.entity.PhotoReportStatus;
+import com.example.senioron.domain.family.repository.FamilyPhotoReportRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoSeniorRepository;
 import com.example.senioron.domain.family.repository.projection.FamilyPhotoAlbumCountProjection;
@@ -68,6 +70,7 @@ public class FamilyPhotoService {
     private final ApplicationEventPublisher eventPublisher;
     private final FamilyPhotoResponseMapper familyPhotoResponseMapper;
     private final FamilyPhotoSeniorRepository familyPhotoSeniorRepository;
+    private final FamilyPhotoReportRepository familyPhotoReportRepository;
 
     private static final int NEW_PHOTO_WINDOW_HOURS = 24;
     private static final long MAX_FAMILY_PHOTO_SIZE = 10L * 1024 * 1024;
@@ -589,12 +592,14 @@ public class FamilyPhotoService {
                 fetchedPhotos = familyPhotoRepository
                         .findAllAccessibleByFamily(
                                 family,
+                                currentUser,
                                 pageable
                         );
             } else {
                 fetchedPhotos = familyPhotoRepository
                         .findNextAccessiblePageByFamily(
                                 family,
+                                currentUser,
                                 cursorCreatedAt,
                                 cursorId,
                                 pageable
@@ -606,6 +611,7 @@ public class FamilyPhotoService {
                         .findAllAccessibleByFamilyAndUploader(
                                 family,
                                 uploader,
+                                currentUser,
                                 pageable
                         );
             } else {
@@ -613,6 +619,7 @@ public class FamilyPhotoService {
                         .findNextAccessiblePageByFamilyAndUploader(
                                 family,
                                 uploader,
+                                currentUser,
                                 cursorCreatedAt,
                                 cursorId,
                                 pageable
@@ -671,10 +678,11 @@ public class FamilyPhotoService {
                         .toList();
 
         long totalCount = uploader == null
-                ? familyPhotoRepository.countAccessibleByFamily(family)
+                ? familyPhotoRepository.countAccessibleByFamily(family, currentUser)
                 : familyPhotoRepository.countAccessibleByFamilyAndUploader(
                 family,
-                uploader
+                uploader,
+                currentUser
         );
 
         return FamilyPhotoListResponse.builder()
@@ -731,10 +739,22 @@ public class FamilyPhotoService {
         if (isUploader || removedTargets.size() == shareTargets.size()) {
             String imageKey = photo.getImageKey();
             String thumbnailKey = photo.getThumbnailKey();
+            // 처리 대기 중인 신고가 있으면 관리자 검토를 위해 원본은 남겨 둔다.
+            // 같은 원본을 다시 등록한 사진이 지워져도 보존되도록 원본 키로 확인하고,
+            // 방금 접수된 신고도 놓치지 않도록 잠금 조회로 최신 상태를 읽는다.
+            boolean hasPendingReport = !familyPhotoReportRepository
+                    .findIdsByImageKeyAndStatus(
+                            imageKey,
+                            PhotoReportStatus.PENDING
+                    )
+                    .isEmpty();
 
-            familyPhotoSeniorRepository.deleteAllByFamilyPhoto(photo);
+            // 조회한 공유 대상이 영속성 컨텍스트에 남지 않도록 엔티티 단위로 삭제한다.
+            familyPhotoSeniorRepository.deleteAll(shareTargets);
             familyPhotoRepository.delete(photo);
-            registerS3DeleteAfterCommit(imageKey);
+            if (!hasPendingReport) {
+                registerS3DeleteAfterCommit(imageKey);
+            }
             registerS3DeleteAfterCommit(thumbnailKey);
         } else {
             familyPhotoSeniorRepository.deleteAll(removedTargets);
@@ -803,7 +823,8 @@ public class FamilyPhotoService {
         // 자녀마다 가장 최근에 올린 사진 한 장 조회
         List<FamilyPhoto> latestPhotos = familyPhotoRepository.findLatestPhotosByUploader(
                 family,
-                Role.CHILD
+                Role.CHILD,
+                parent
         );
 
         if (latestPhotos.isEmpty()) {

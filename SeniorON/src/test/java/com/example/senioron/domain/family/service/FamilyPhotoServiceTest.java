@@ -17,7 +17,9 @@ import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.entity.FamilyPhotoSenior;
+import com.example.senioron.domain.family.entity.PhotoReportStatus;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
+import com.example.senioron.domain.family.repository.FamilyPhotoReportRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoSeniorRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoViewRepository;
@@ -69,6 +71,8 @@ class FamilyPhotoServiceTest {
 
     private final FamilyPhotoSeniorRepository familyPhotoSeniorRepository =
             org.mockito.Mockito.mock(FamilyPhotoSeniorRepository.class);
+    private final FamilyPhotoReportRepository familyPhotoReportRepository =
+            org.mockito.Mockito.mock(FamilyPhotoReportRepository.class);
 
     private FamilyPhotoService familyPhotoService;
     private final FamilyPhotoPushTargetService familyPhotoPushTargetService =
@@ -91,7 +95,8 @@ class FamilyPhotoServiceTest {
                 familyPhotoPushTargetService,
                 eventPublisher,
                 new FamilyPhotoResponseMapper(s3Service),
-                familyPhotoSeniorRepository
+                familyPhotoSeniorRepository,
+                familyPhotoReportRepository
         );
     }
 
@@ -298,9 +303,10 @@ class FamilyPhotoServiceTest {
                 .willReturn(true);
         given(familyPhotoRepository.findAllAccessibleByFamily(
                 family,
+                parent,
                 PageRequest.of(0, 11)
         )).willReturn(List.of(photo));
-        given(familyPhotoRepository.countAccessibleByFamily(family))
+        given(familyPhotoRepository.countAccessibleByFamily(family, parent))
                 .willReturn(1L);
         given(familyPhotoViewRepository.findViewedFamilyPhotoIds(
                 10L,
@@ -357,9 +363,9 @@ class FamilyPhotoServiceTest {
         given(familyMemberRepository.existsByUserAndFamily(parent, family))
                 .willReturn(true);
         given(familyPhotoRepository.findAllAccessibleByFamily(
-                family, PageRequest.of(0, 11)
+                family, parent, PageRequest.of(0, 11)
         )).willReturn(List.of(photo));
-        given(familyPhotoRepository.countAccessibleByFamily(family)).willReturn(1L);
+        given(familyPhotoRepository.countAccessibleByFamily(family, parent)).willReturn(1L);
         given(familyPhotoRepository.findAccessibleByFamilyPhotoIdAndUser(40L, parent))
                 .willReturn(Optional.of(photo));
         given(s3Service.getFileUrl("photo.jpg")).willReturn(originalUrl);
@@ -500,11 +506,33 @@ class FamilyPhotoServiceTest {
             familyPhotoService.deletePhoto(child, 40L);
 
             verify(familyPhotoPushTargetService).loadDeletionTokens(40L, List.of(20L, 21L));
-            verify(familyPhotoSeniorRepository).deleteAllByFamilyPhoto(any(FamilyPhoto.class));
+            verify(familyPhotoSeniorRepository).deleteAll(shares);
             verify(familyPhotoRepository).delete(any(FamilyPhoto.class));
             TransactionSynchronizationManager.getSynchronizations()
                     .forEach(TransactionSynchronization::afterCommit);
             verify(s3Service).delete("photo.jpg");
+            verify(s3Service).delete("thumbnail.jpg");
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void keepsOriginalFileForAdminReviewWhenPendingReportExists() {
+        User child = User.builder().usersId(10L).role(Role.CHILD).build();
+        stubDeletablePhoto(child, "thumbnail.jpg");
+        given(familyPhotoReportRepository.findIdsByImageKeyAndStatus(
+                "photo.jpg",
+                PhotoReportStatus.PENDING
+        )).willReturn(List.of(1L));
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            familyPhotoService.deletePhoto(child, 40L);
+
+            verify(familyPhotoRepository).delete(any(FamilyPhoto.class));
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(TransactionSynchronization::afterCommit);
+            verify(s3Service, never()).delete("photo.jpg");
             verify(s3Service).delete("thumbnail.jpg");
         } finally {
             TransactionSynchronizationManager.clearSynchronization();
@@ -524,7 +552,7 @@ class FamilyPhotoServiceTest {
             var order = org.mockito.Mockito.inOrder(familyPhotoPushTargetService,
                     familyPhotoSeniorRepository, familyPhotoRepository, eventPublisher);
             order.verify(familyPhotoPushTargetService).loadDeletionTokens(40L, List.of(20L, 21L));
-            order.verify(familyPhotoSeniorRepository).deleteAllByFamilyPhoto(photo);
+            order.verify(familyPhotoSeniorRepository).deleteAll(any());
             order.verify(familyPhotoRepository).delete(photo);
             order.verify(eventPublisher).publishEvent(new FamilyPhotoDeletedEvent(
                     40L, List.of("first-parent", "second-parent")));
