@@ -1,10 +1,14 @@
 
 package com.example.senioron.domain.inquiry.service;
 
+import com.example.senioron.domain.inquiry.dto.request.AdminInquiryAnswerRequest;
+import com.example.senioron.domain.inquiry.dto.response.AdminInquiryAnswerResponse;
 import com.example.senioron.domain.inquiry.dto.response.AdminInquiryDetailResponse;
 import com.example.senioron.domain.inquiry.dto.response.AdminInquiryListResponse;
 import com.example.senioron.domain.inquiry.entity.Inquiry;
+import com.example.senioron.domain.inquiry.entity.InquiryAnswer;
 import com.example.senioron.domain.inquiry.entity.InquiryStatus;
+import com.example.senioron.domain.inquiry.repository.InquiryAnswerRepository;
 import com.example.senioron.domain.inquiry.repository.InquiryRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
@@ -20,9 +24,11 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AdminInquiryService {
 
-    private final InquiryRepository inquiryRepository;
-    private final S3Service s3Service;
+    private static final int MAX_ANSWER_LENGTH = 2000;
 
+    private final InquiryRepository inquiryRepository;
+    private final InquiryAnswerRepository inquiryAnswerRepository;
+    private final S3Service s3Service;
 
     @Transactional(readOnly = true)
     public AdminInquiryListResponse getInquiries(
@@ -72,6 +78,68 @@ public class AdminInquiryService {
                 inquiry,
                 images
         );
+    }
+
+    @Transactional
+    public AdminInquiryAnswerResponse createAnswer(
+            Long inquiryId,
+            AdminInquiryAnswerRequest request
+    ) {
+        validateAnswerRequest(request);
+
+        InquiryStatus inquiryStatus =
+                parseRequiredStatus(request.status());
+
+        Inquiry inquiry = inquiryRepository.findById(inquiryId)
+                .orElseThrow(
+                        () -> new BusinessException(
+                                ErrorCode.INQUIRY_NOT_FOUND
+                        )
+                );
+
+        InquiryAnswer answer = InquiryAnswer.builder()
+                .inquiry(inquiry)
+                .content(request.content())
+                .build();
+
+        InquiryAnswer savedAnswer =
+                inquiryAnswerRepository.saveAndFlush(answer);
+
+        inquiry.updateStatus(inquiryStatus);
+
+        return new AdminInquiryAnswerResponse(
+                savedAnswer.getInquiryAnswerId()
+        );
+    }
+
+    private void validateAnswerRequest(
+            AdminInquiryAnswerRequest request
+    ) {
+        if (request == null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+
+        String content = request.content();
+
+        if (content == null
+                || content.isBlank()
+                || content.length() > MAX_ANSWER_LENGTH) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+    }
+
+    private InquiryStatus parseRequiredStatus(
+            String status
+    ) {
+        if (status == null || status.isBlank()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+
+        try {
+            return InquiryStatus.valueOf(status);
+        } catch (IllegalArgumentException exception) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
     }
 
     private void validatePagination(int page, int size) {
