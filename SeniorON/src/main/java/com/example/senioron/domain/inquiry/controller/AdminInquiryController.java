@@ -1,6 +1,7 @@
 
 package com.example.senioron.domain.inquiry.controller;
 
+import com.example.senioron.domain.inquiry.dto.response.AdminInquiryDetailResponse;
 import com.example.senioron.domain.inquiry.dto.response.AdminInquiryListResponse;
 import com.example.senioron.domain.inquiry.service.AdminInquiryService;
 import com.example.senioron.global.apiPayload.response.Response;
@@ -9,6 +10,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -61,6 +63,25 @@ public class AdminInquiryController {
                         page,
                         size
                 )
+        );
+    }
+
+
+    @Operation(
+            summary = "관리자 문의 상세 조회",
+            description = "문의 ID를 기준으로 문의 내용, 작성자, 첨부 이미지, 기기 정보 및 답변 내역을 조회합니다."
+    )
+    @GetMapping("/{inquiryId}")
+    public Response<AdminInquiryDetailResponse> getInquiryDetail(
+            @Parameter(
+                    description = "조회할 문의 ID",
+                    required = true
+            )
+            @PathVariable("inquiryId")
+            Long inquiryId
+    ) {
+        return Response.ok(
+                adminInquiryService.getInquiryDetail(inquiryId)
         );
     }
 }
