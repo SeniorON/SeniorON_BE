@@ -31,7 +31,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class InquiryService {
 
     private static final int MAX_IMAGE_COUNT = 5;
-    private static final int MAX_FILENAME_LENGTH = 255;
+    private static final int MAX_ORIGINAL_FILE_NAME_LENGTH = 255;
 
     private final InquiryRepository inquiryRepository;
     private final UserRepository userRepository;
@@ -45,19 +45,20 @@ public class InquiryService {
     ) {
         validateRequest(request);
 
-        // 첨부된 이미지 개수를 먼저 검사
-        if (images != null && images.size() > MAX_IMAGE_COUNT) {
+
+        List<MultipartFile> validImages = normalizeImages(images);
+
+        if (validImages.size() > MAX_IMAGE_COUNT) {
             throw new BusinessException(
                     ErrorCode.INQUIRY_IMAGE_LIMIT_EXCEEDED
             );
         }
 
-        List<MultipartFile> validImages = normalizeImages(images);
-
         User user = userRepository.findById(principal.getUsersId())
-                .orElseThrow(() ->
-                        new BusinessException(ErrorCode.USER_NOT_FOUND)
+                .orElseThrow(
+                        () -> new BusinessException(ErrorCode.USER_NOT_FOUND)
                 );
+
 
         Inquiry inquiry = Inquiry.builder()
                 .user(user)
@@ -69,36 +70,43 @@ public class InquiryService {
                 .status(InquiryStatus.WAITING)
                 .build();
 
-        List<String> uploadedImageKeys =
-                uploadImages(user.getUsersId(), validImages);
 
-        registerUploadedImageRollbackCleanup(uploadedImageKeys);
+        List<String> uploadedImageKeys = uploadImages(
+                user.getUsersId(),
+                validImages
+        );
+
 
         for (int i = 0; i < uploadedImageKeys.size(); i++) {
             String imageKey = uploadedImageKeys.get(i);
-            MultipartFile uploadedFile = validImages.get(i);
+            MultipartFile imageFile = validImages.get(i);
+
+            String originalFileName = sanitizeOriginalFileName(
+                    imageFile.getOriginalFilename()
+            );
 
             InquiryImage image = InquiryImage.builder()
                     .inquiry(inquiry)
                     .imageUrl(imageKey)
-                    .originalFileName(
-                            sanitizeOriginalFileName(
-                                    uploadedFile.getOriginalFilename()
-                            )
-                    )
+                    .originalFileName(originalFileName)
                     .build();
 
             inquiry.addImage(image);
         }
 
-        Inquiry savedInquiry =
-                inquiryRepository.saveAndFlush(inquiry);
+
+        registerUploadedImageRollbackCleanup(uploadedImageKeys);
+
+        Inquiry savedInquiry = inquiryRepository.saveAndFlush(inquiry);
 
         List<String> imageUrls = uploadedImageKeys.stream()
                 .map(s3Service::getFileUrl)
                 .toList();
 
-        return InquiryCreateResponse.from(savedInquiry, imageUrls);
+        return InquiryCreateResponse.from(
+                savedInquiry,
+                imageUrls
+        );
     }
 
     @Transactional(readOnly = true)
@@ -106,8 +114,8 @@ public class InquiryService {
             User principal
     ) {
         User user = userRepository.findById(principal.getUsersId())
-                .orElseThrow(() ->
-                        new BusinessException(ErrorCode.USER_NOT_FOUND)
+                .orElseThrow(
+                        () -> new BusinessException(ErrorCode.USER_NOT_FOUND)
                 );
 
         return inquiryRepository
@@ -125,8 +133,8 @@ public class InquiryService {
             Long inquiryId
     ) {
         User user = userRepository.findById(principal.getUsersId())
-                .orElseThrow(() ->
-                        new BusinessException(ErrorCode.USER_NOT_FOUND)
+                .orElseThrow(
+                        () -> new BusinessException(ErrorCode.USER_NOT_FOUND)
                 );
 
         Inquiry inquiry = inquiryRepository
@@ -134,17 +142,24 @@ public class InquiryService {
                         inquiryId,
                         user.getUsersId()
                 )
-                .orElseThrow(() ->
-                        new BusinessException(ErrorCode.INQUIRY_NOT_FOUND)
+                .orElseThrow(
+                        () -> new BusinessException(
+                                ErrorCode.INQUIRY_NOT_FOUND
+                        )
                 );
 
-        List<String> imageUrls = inquiry.getImages().stream()
+        List<String> imageUrls = inquiry.getImages()
+                .stream()
                 .map(InquiryImage::getImageUrl)
                 .map(s3Service::getFileUrl)
                 .toList();
 
-        return InquiryDetailResponse.from(inquiry, imageUrls);
+        return InquiryDetailResponse.from(
+                inquiry,
+                imageUrls
+        );
     }
+
 
     private void validateRequest(InquiryCreateRequest request) {
         if (request == null
@@ -163,6 +178,7 @@ public class InquiryService {
         }
     }
 
+
     private List<MultipartFile> normalizeImages(
             List<MultipartFile> images
     ) {
@@ -175,6 +191,7 @@ public class InquiryService {
                 .toList();
     }
 
+
     private String sanitizeOriginalFileName(
             String originalFileName
     ) {
@@ -182,19 +199,31 @@ public class InquiryService {
             return null;
         }
 
-        String sanitized = originalFileName
-                .replace("/", "")
-                .replace("\\", "");
 
-        int length = Math.min(
-                sanitized.codePointCount(0, sanitized.length()),
-                MAX_FILENAME_LENGTH
+        String normalized = originalFileName.replace('\\', '/');
+
+
+        String sanitized = normalized.substring(
+                normalized.lastIndexOf('/') + 1
         );
 
-        int endIndex = sanitized.offsetByCodePoints(0, length);
 
-        return sanitized.substring(0, endIndex);
+        if (sanitized.codePointCount(
+                0,
+                sanitized.length()
+        ) > MAX_ORIGINAL_FILE_NAME_LENGTH) {
+            sanitized = sanitized.substring(
+                    0,
+                    sanitized.offsetByCodePoints(
+                            0,
+                            MAX_ORIGINAL_FILE_NAME_LENGTH
+                    )
+            );
+        }
+
+        return sanitized;
     }
+
 
     private List<String> uploadImages(
             Long userId,
@@ -221,6 +250,7 @@ public class InquiryService {
         return uploadedImageKeys;
     }
 
+
     private void registerUploadedImageRollbackCleanup(
             List<String> uploadedImageKeys
     ) {
@@ -232,6 +262,7 @@ public class InquiryService {
 
         TransactionSynchronizationManager.registerSynchronization(
                 new TransactionSynchronization() {
+
                     @Override
                     public void afterCompletion(int status) {
                         if (status == STATUS_ROLLED_BACK) {
@@ -243,6 +274,7 @@ public class InquiryService {
                 }
         );
     }
+
 
     private void deleteUploadedImagesSafely(
             List<String> imageKeys

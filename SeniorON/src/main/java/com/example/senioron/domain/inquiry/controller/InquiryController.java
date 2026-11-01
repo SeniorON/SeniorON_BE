@@ -1,3 +1,4 @@
+
 package com.example.senioron.domain.inquiry.controller;
 
 import com.example.senioron.domain.inquiry.dto.request.InquiryCreateRequest;
@@ -15,6 +16,7 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Encoding;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import java.util.List;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -45,10 +47,18 @@ public class InquiryController {
                     required = true,
                     content = @Content(
                             mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
-                            schema = @Schema(implementation = InquiryCreateMultipartRequest.class),
+                            schema = @Schema(
+                                    implementation = InquiryCreateMultipartRequest.class
+                            ),
                             encoding = {
-                                    @Encoding(name = "request", contentType = MediaType.APPLICATION_JSON_VALUE),
-                                    @Encoding(name = "images", contentType = MediaType.APPLICATION_OCTET_STREAM_VALUE)
+                                    @Encoding(
+                                            name = "request",
+                                            contentType = MediaType.APPLICATION_JSON_VALUE
+                                    ),
+                                    @Encoding(
+                                            name = "images",
+                                            contentType = MediaType.APPLICATION_OCTET_STREAM_VALUE
+                                    )
                             }
                     )
             )
@@ -58,10 +68,15 @@ public class InquiryController {
     public Response<InquiryCreateResponse> createInquiry(
             @Parameter(hidden = true)
             @AuthenticationPrincipal User user,
+
             @Parameter(hidden = true)
-            @RequestPart(name = "request", required = false) InquiryCreateRequest request,
+            @Valid
+            @RequestPart(name = "request", required = false)
+            InquiryCreateRequest request,
+
             @Parameter(hidden = true)
-            @RequestPart(name = "images", required = false) List<MultipartFile> images
+            @RequestPart(name = "images", required = false)
+            List<MultipartFile> images
     ) {
         InquiryCreateResponse result = inquiryService.createInquiry(
                 user,
@@ -72,7 +87,10 @@ public class InquiryController {
         return Response.ok(ResultCode.CREATED, result);
     }
 
-    @Operation(summary = "나의 1:1 문의 목록 조회", description = "현재 로그인한 사용자가 작성한 1:1 문의 목록을 최신순으로 조회합니다.")
+    @Operation(
+            summary = "나의 1:1 문의 목록 조회",
+            description = "현재 로그인한 사용자가 작성한 1:1 문의 목록을 최신순으로 조회합니다."
+    )
     @GetMapping
     public Response<List<InquiryListItemResponse>> getMyInquiries(
             @Parameter(hidden = true)
@@ -81,14 +99,21 @@ public class InquiryController {
         return Response.ok(inquiryService.getMyInquiries(user));
     }
 
-    @Operation(summary = "1:1 문의 상세 조회", description = "현재 로그인한 사용자가 작성한 특정 문의의 내용, 첨부 이미지 및 답변을 조회합니다.")
+    @Operation(
+            summary = "1:1 문의 상세 조회",
+            description = "현재 로그인한 사용자가 작성한 특정 문의의 내용, 첨부 이미지 및 답변을 조회합니다."
+    )
     @GetMapping("/{inquiryId}")
     public Response<InquiryDetailResponse> getMyInquiry(
             @Parameter(hidden = true)
             @AuthenticationPrincipal User user,
-            @PathVariable("inquiryId") Long inquiryId
+
+            @PathVariable("inquiryId")
+            Long inquiryId
     ) {
-        return Response.ok(inquiryService.getMyInquiry(user, inquiryId));
+        return Response.ok(
+                inquiryService.getMyInquiry(user, inquiryId)
+        );
     }
 
     @Getter
@@ -108,9 +133,17 @@ public class InquiryController {
         private InquiryCreateRequest request;
 
         @ArraySchema(
-                arraySchema = @Schema(description = "문의 첨부 이미지 목록 (선택, 최대 5장)"),
-                schema = @Schema(type = "string", format = "binary"),
-                items = @Schema(type = "string", format = "binary")
+                arraySchema = @Schema(
+                        description = "문의 첨부 이미지 목록 (선택, 최대 5장)"
+                ),
+                schema = @Schema(
+                        type = "string",
+                        format = "binary"
+                ),
+                items = @Schema(
+                        type = "string",
+                        format = "binary"
+                )
         )
         private List<String> images;
     }
