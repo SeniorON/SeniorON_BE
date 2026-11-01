@@ -1,18 +1,25 @@
 
 package com.example.senioron.domain.inquiry.controller;
 
+import com.example.senioron.domain.inquiry.dto.request.AdminInquiryAnswerRequest;
+import com.example.senioron.domain.inquiry.dto.response.AdminInquiryAnswerResponse;
 import com.example.senioron.domain.inquiry.dto.response.AdminInquiryDetailResponse;
 import com.example.senioron.domain.inquiry.dto.response.AdminInquiryListResponse;
 import com.example.senioron.domain.inquiry.service.AdminInquiryService;
+import com.example.senioron.global.apiPayload.code.ResultCode;
 import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(
@@ -25,6 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminInquiryController {
 
     private final AdminInquiryService adminInquiryService;
+
 
     @Operation(
             summary = "관리자 문의 목록 조회",
@@ -82,6 +90,33 @@ public class AdminInquiryController {
     ) {
         return Response.ok(
                 adminInquiryService.getInquiryDetail(inquiryId)
+        );
+    }
+
+
+    @Operation(
+            summary = "관리자 문의 답변 등록",
+            description = "문의에 답변을 등록하고 요청한 처리 상태로 변경합니다."
+    )
+    @PostMapping("/{inquiryId}/answers")
+    @ResponseStatus(HttpStatus.CREATED)
+    public Response<AdminInquiryAnswerResponse> createAnswer(
+            @Parameter(
+                    description = "답변을 등록할 문의 ID",
+                    required = true
+            )
+            @PathVariable("inquiryId")
+            Long inquiryId,
+
+            @RequestBody
+            AdminInquiryAnswerRequest request
+    ) {
+        return Response.ok(
+                ResultCode.CREATED,
+                adminInquiryService.createAnswer(
+                        inquiryId,
+                        request
+                )
         );
     }
 }

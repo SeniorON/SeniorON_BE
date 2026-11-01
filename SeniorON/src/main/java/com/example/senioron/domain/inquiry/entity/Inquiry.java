@@ -78,4 +78,8 @@ public class Inquiry {
             createdAt = LocalDateTime.now();
         }
     }
+
+    public void updateStatus(InquiryStatus status) {
+        this.status = status;
+    }
 }
