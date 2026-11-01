@@ -740,13 +740,17 @@ public class FamilyPhotoService {
             String imageKey = photo.getImageKey();
             String thumbnailKey = photo.getThumbnailKey();
             // 처리 대기 중인 신고가 있으면 관리자 검토를 위해 원본은 남겨 둔다.
-            boolean hasPendingReport = familyPhotoReportRepository
-                    .existsByFamilyPhoto_FamilyPhotoIdAndStatus(
-                            familyPhotoId,
+            // 같은 원본을 다시 등록한 사진이 지워져도 보존되도록 원본 키로 확인하고,
+            // 방금 접수된 신고도 놓치지 않도록 잠금 조회로 최신 상태를 읽는다.
+            boolean hasPendingReport = !familyPhotoReportRepository
+                    .findIdsByImageKeyAndStatus(
+                            imageKey,
                             PhotoReportStatus.PENDING
-                    );
+                    )
+                    .isEmpty();
 
-            familyPhotoSeniorRepository.deleteAllByFamilyPhoto(photo);
+            // 조회한 공유 대상이 영속성 컨텍스트에 남지 않도록 엔티티 단위로 삭제한다.
+            familyPhotoSeniorRepository.deleteAll(shareTargets);
             familyPhotoRepository.delete(photo);
             if (!hasPendingReport) {
                 registerS3DeleteAfterCommit(imageKey);

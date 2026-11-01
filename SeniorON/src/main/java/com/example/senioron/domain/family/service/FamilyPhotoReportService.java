@@ -43,7 +43,7 @@ public class FamilyPhotoReportService {
         }
 
         FamilyPhoto photo = familyPhotoRepository
-                .findAccessibleByFamilyPhotoIdAndUser(
+                .findAccessibleForReportByFamilyPhotoIdAndUser(
                         familyPhotoId,
                         currentUser
                 )

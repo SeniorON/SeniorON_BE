@@ -69,7 +69,7 @@ class FamilyPhotoReportServiceTest {
 
     @Test
     void savesPendingReportWithImageKeySnapshot() {
-        given(familyPhotoRepository.findAccessibleByFamilyPhotoIdAndUser(40L, reporter))
+        given(familyPhotoRepository.findAccessibleForReportByFamilyPhotoIdAndUser(40L, reporter))
                 .willReturn(Optional.of(photo));
 
         familyPhotoReportService.reportPhoto(
@@ -95,7 +95,7 @@ class FamilyPhotoReportServiceTest {
 
     @Test
     void rejectsPhotoNotAccessibleToReporter() {
-        given(familyPhotoRepository.findAccessibleByFamilyPhotoIdAndUser(40L, reporter))
+        given(familyPhotoRepository.findAccessibleForReportByFamilyPhotoIdAndUser(40L, reporter))
                 .willReturn(Optional.empty());
 
         assertThatThrownBy(() -> familyPhotoReportService.reportPhoto(
@@ -118,7 +118,7 @@ class FamilyPhotoReportServiceTest {
                 .user(reporter)
                 .imageKey("family/own.jpg")
                 .build();
-        given(familyPhotoRepository.findAccessibleByFamilyPhotoIdAndUser(41L, reporter))
+        given(familyPhotoRepository.findAccessibleForReportByFamilyPhotoIdAndUser(41L, reporter))
                 .willReturn(Optional.of(ownPhoto));
 
         assertThatThrownBy(() -> familyPhotoReportService.reportPhoto(
@@ -136,7 +136,7 @@ class FamilyPhotoReportServiceTest {
 
     @Test
     void rejectsDuplicateReport() {
-        given(familyPhotoRepository.findAccessibleByFamilyPhotoIdAndUser(40L, reporter))
+        given(familyPhotoRepository.findAccessibleForReportByFamilyPhotoIdAndUser(40L, reporter))
                 .willReturn(Optional.of(photo));
         given(familyPhotoReportRepository
                 .existsByFamilyPhoto_FamilyPhotoIdAndReporter_UsersId(40L, 10L))
@@ -161,7 +161,7 @@ class FamilyPhotoReportServiceTest {
         given(familyPhotoReportRepository
                 .existsByFamilyPhoto_FamilyPhotoIdAndReporter_UsersId(40L, 10L))
                 .willReturn(true);
-        given(familyPhotoRepository.findAccessibleByFamilyPhotoIdAndUser(40L, reporter))
+        given(familyPhotoRepository.findAccessibleForReportByFamilyPhotoIdAndUser(40L, reporter))
                 .willReturn(Optional.empty());
 
         assertThatThrownBy(() -> familyPhotoReportService.reportPhoto(
@@ -177,7 +177,7 @@ class FamilyPhotoReportServiceTest {
 
     @Test
     void convertsConcurrentDuplicateInsertToAlreadyReported() {
-        given(familyPhotoRepository.findAccessibleByFamilyPhotoIdAndUser(40L, reporter))
+        given(familyPhotoRepository.findAccessibleForReportByFamilyPhotoIdAndUser(40L, reporter))
                 .willReturn(Optional.of(photo));
         given(familyPhotoReportRepository.saveAndFlush(any()))
                 .willThrow(new DataIntegrityViolationException("uk_family_photo_report_photo_reporter"));

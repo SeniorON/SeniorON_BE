@@ -195,6 +195,30 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
             @Param("user") User user
     );
 
+    // 신고 접수용: 사진 삭제와 순서를 맞추기 위해 사진 행을 잠그고 조회한다.
+    @EntityGraph(attributePaths = "user")
+    @Lock(LockModeType.PESSIMISTIC_READ)
+    @Query("""
+        SELECT fp
+        FROM FamilyPhoto fp
+        WHERE fp.familyPhotoId = :familyPhotoId
+          AND EXISTS (
+              SELECT fps.id
+              FROM FamilyPhotoSenior fps
+              WHERE fps.familyPhoto = fp
+                AND EXISTS (
+                    SELECT fm.id
+                    FROM FamilyMember fm
+                    WHERE fm.family = fps.senior.family
+                      AND fm.user = :user
+                )
+          )
+        """)
+    Optional<FamilyPhoto> findAccessibleForReportByFamilyPhotoIdAndUser(
+            @Param("familyPhotoId") Long familyPhotoId,
+            @Param("user") User user
+    );
+
     @EntityGraph(attributePaths = "user")
     @Query("""
         SELECT fp

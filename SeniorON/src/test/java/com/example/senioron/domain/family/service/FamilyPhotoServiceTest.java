@@ -506,7 +506,7 @@ class FamilyPhotoServiceTest {
             familyPhotoService.deletePhoto(child, 40L);
 
             verify(familyPhotoPushTargetService).loadDeletionTokens(40L, List.of(20L, 21L));
-            verify(familyPhotoSeniorRepository).deleteAllByFamilyPhoto(any(FamilyPhoto.class));
+            verify(familyPhotoSeniorRepository).deleteAll(shares);
             verify(familyPhotoRepository).delete(any(FamilyPhoto.class));
             TransactionSynchronizationManager.getSynchronizations()
                     .forEach(TransactionSynchronization::afterCommit);
@@ -521,10 +521,10 @@ class FamilyPhotoServiceTest {
     void keepsOriginalFileForAdminReviewWhenPendingReportExists() {
         User child = User.builder().usersId(10L).role(Role.CHILD).build();
         stubDeletablePhoto(child, "thumbnail.jpg");
-        given(familyPhotoReportRepository.existsByFamilyPhoto_FamilyPhotoIdAndStatus(
-                40L,
+        given(familyPhotoReportRepository.findIdsByImageKeyAndStatus(
+                "photo.jpg",
                 PhotoReportStatus.PENDING
-        )).willReturn(true);
+        )).willReturn(List.of(1L));
         TransactionSynchronizationManager.initSynchronization();
         try {
             familyPhotoService.deletePhoto(child, 40L);
@@ -552,7 +552,7 @@ class FamilyPhotoServiceTest {
             var order = org.mockito.Mockito.inOrder(familyPhotoPushTargetService,
                     familyPhotoSeniorRepository, familyPhotoRepository, eventPublisher);
             order.verify(familyPhotoPushTargetService).loadDeletionTokens(40L, List.of(20L, 21L));
-            order.verify(familyPhotoSeniorRepository).deleteAllByFamilyPhoto(photo);
+            order.verify(familyPhotoSeniorRepository).deleteAll(any());
             order.verify(familyPhotoRepository).delete(photo);
             order.verify(eventPublisher).publishEvent(new FamilyPhotoDeletedEvent(
                     40L, List.of("first-parent", "second-parent")));

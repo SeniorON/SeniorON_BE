@@ -45,6 +45,11 @@ CREATE TABLE IF NOT EXISTS family_photo_report (
         family_photo_id
     ),
 
+    INDEX idx_family_photo_report_image_key_status (
+        image_key,
+        status
+    ),
+
     INDEX idx_family_photo_report_status_created (
         status,
         created_at

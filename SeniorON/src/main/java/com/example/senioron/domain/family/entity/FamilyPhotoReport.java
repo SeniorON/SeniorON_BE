@@ -42,6 +42,10 @@ import org.hibernate.annotations.OnDeleteAction;
                         columnList = "reporter_user_id, hidden, family_photo_id"
                 ),
                 @Index(
+                        name = "idx_family_photo_report_image_key_status",
+                        columnList = "image_key, status"
+                ),
+                @Index(
                         name = "idx_family_photo_report_status_created",
                         columnList = "status, created_at"
                 )
