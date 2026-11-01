@@ -1,3 +1,4 @@
+
 package com.example.senioron.domain.inquiry.entity;
 
 import jakarta.persistence.*;
@@ -22,4 +23,7 @@ public class InquiryImage {
 
     @Column(nullable = false, length = 1000)
     private String imageUrl;
+
+    @Column(name = "original_file_name", length = 255)
+    private String originalFileName;
 }

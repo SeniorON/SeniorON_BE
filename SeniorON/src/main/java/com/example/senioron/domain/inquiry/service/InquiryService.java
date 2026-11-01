@@ -1,3 +1,4 @@
+
 package com.example.senioron.domain.inquiry.service;
 
 import com.example.senioron.domain.inquiry.dto.request.InquiryCreateRequest;
@@ -30,6 +31,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class InquiryService {
 
     private static final int MAX_IMAGE_COUNT = 5;
+    private static final int MAX_ORIGINAL_FILE_NAME_LENGTH = 255;
 
     private final InquiryRepository inquiryRepository;
     private final UserRepository userRepository;
@@ -43,50 +45,83 @@ public class InquiryService {
     ) {
         validateRequest(request);
 
+
         List<MultipartFile> validImages = normalizeImages(images);
 
         if (validImages.size() > MAX_IMAGE_COUNT) {
-            throw new BusinessException(ErrorCode.INQUIRY_IMAGE_LIMIT_EXCEEDED);
+            throw new BusinessException(
+                    ErrorCode.INQUIRY_IMAGE_LIMIT_EXCEEDED
+            );
         }
 
         User user = userRepository.findById(principal.getUsersId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+                .orElseThrow(
+                        () -> new BusinessException(ErrorCode.USER_NOT_FOUND)
+                );
+
 
         Inquiry inquiry = Inquiry.builder()
                 .user(user)
                 .title(request.getTitle())
                 .content(request.getContent())
+                .deviceModel(request.getDeviceModel())
+                .osVersion(request.getOsVersion())
+                .appVersion(request.getAppVersion())
                 .status(InquiryStatus.WAITING)
                 .build();
 
-        List<String> uploadedImageKeys = uploadImages(user.getUsersId(), validImages);
 
-        for (String imageKey : uploadedImageKeys) {
+        List<String> uploadedImageKeys = uploadImages(
+                user.getUsersId(),
+                validImages
+        );
+
+
+        for (int i = 0; i < uploadedImageKeys.size(); i++) {
+            String imageKey = uploadedImageKeys.get(i);
+            MultipartFile imageFile = validImages.get(i);
+
+            String originalFileName = sanitizeOriginalFileName(
+                    imageFile.getOriginalFilename()
+            );
+
             InquiryImage image = InquiryImage.builder()
                     .inquiry(inquiry)
                     .imageUrl(imageKey)
+                    .originalFileName(originalFileName)
                     .build();
 
             inquiry.addImage(image);
         }
 
+
         registerUploadedImageRollbackCleanup(uploadedImageKeys);
 
         Inquiry savedInquiry = inquiryRepository.saveAndFlush(inquiry);
+
         List<String> imageUrls = uploadedImageKeys.stream()
                 .map(s3Service::getFileUrl)
                 .toList();
 
-        return InquiryCreateResponse.from(savedInquiry, imageUrls);
+        return InquiryCreateResponse.from(
+                savedInquiry,
+                imageUrls
+        );
     }
 
     @Transactional(readOnly = true)
-    public List<InquiryListItemResponse> getMyInquiries(User principal) {
+    public List<InquiryListItemResponse> getMyInquiries(
+            User principal
+    ) {
         User user = userRepository.findById(principal.getUsersId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+                .orElseThrow(
+                        () -> new BusinessException(ErrorCode.USER_NOT_FOUND)
+                );
 
         return inquiryRepository
-                .findByUserUsersIdOrderByCreatedAtDescInquiryIdDesc(user.getUsersId())
+                .findByUserUsersIdOrderByCreatedAtDescInquiryIdDesc(
+                        user.getUsersId()
+                )
                 .stream()
                 .map(InquiryListItemResponse::from)
                 .toList();
@@ -98,31 +133,55 @@ public class InquiryService {
             Long inquiryId
     ) {
         User user = userRepository.findById(principal.getUsersId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+                .orElseThrow(
+                        () -> new BusinessException(ErrorCode.USER_NOT_FOUND)
+                );
 
         Inquiry inquiry = inquiryRepository
-                .findByInquiryIdAndUserUsersId(inquiryId, user.getUsersId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.INQUIRY_NOT_FOUND));
+                .findByInquiryIdAndUserUsersId(
+                        inquiryId,
+                        user.getUsersId()
+                )
+                .orElseThrow(
+                        () -> new BusinessException(
+                                ErrorCode.INQUIRY_NOT_FOUND
+                        )
+                );
 
-        List<String> imageUrls = inquiry.getImages().stream()
+        List<String> imageUrls = inquiry.getImages()
+                .stream()
                 .map(InquiryImage::getImageUrl)
                 .map(s3Service::getFileUrl)
                 .toList();
 
-        return InquiryDetailResponse.from(inquiry, imageUrls);
+        return InquiryDetailResponse.from(
+                inquiry,
+                imageUrls
+        );
     }
+
 
     private void validateRequest(InquiryCreateRequest request) {
-        if (request == null || request.getTitle() == null || request.getTitle().isBlank()) {
-            throw new BusinessException(ErrorCode.INQUIRY_TITLE_REQUIRED);
+        if (request == null
+                || request.getTitle() == null
+                || request.getTitle().isBlank()) {
+            throw new BusinessException(
+                    ErrorCode.INQUIRY_TITLE_REQUIRED
+            );
         }
 
-        if (request.getContent() == null || request.getContent().isBlank()) {
-            throw new BusinessException(ErrorCode.INQUIRY_CONTENT_REQUIRED);
+        if (request.getContent() == null
+                || request.getContent().isBlank()) {
+            throw new BusinessException(
+                    ErrorCode.INQUIRY_CONTENT_REQUIRED
+            );
         }
     }
 
-    private List<MultipartFile> normalizeImages(List<MultipartFile> images) {
+
+    private List<MultipartFile> normalizeImages(
+            List<MultipartFile> images
+    ) {
         if (images == null) {
             return Collections.emptyList();
         }
@@ -131,6 +190,40 @@ public class InquiryService {
                 .filter(image -> image != null && !image.isEmpty())
                 .toList();
     }
+
+
+    private String sanitizeOriginalFileName(
+            String originalFileName
+    ) {
+        if (originalFileName == null) {
+            return null;
+        }
+
+
+        String normalized = originalFileName.replace('\\', '/');
+
+
+        String sanitized = normalized.substring(
+                normalized.lastIndexOf('/') + 1
+        );
+
+
+        if (sanitized.codePointCount(
+                0,
+                sanitized.length()
+        ) > MAX_ORIGINAL_FILE_NAME_LENGTH) {
+            sanitized = sanitized.substring(
+                    0,
+                    sanitized.offsetByCodePoints(
+                            0,
+                            MAX_ORIGINAL_FILE_NAME_LENGTH
+                    )
+            );
+        }
+
+        return sanitized;
+    }
+
 
     private List<String> uploadImages(
             Long userId,
@@ -145,7 +238,9 @@ public class InquiryService {
 
         try {
             for (MultipartFile image : images) {
-                uploadedImageKeys.add(s3Service.upload(image, directory));
+                uploadedImageKeys.add(
+                        s3Service.upload(image, directory)
+                );
             }
         } catch (RuntimeException exception) {
             deleteUploadedImagesSafely(uploadedImageKeys);
@@ -155,25 +250,35 @@ public class InquiryService {
         return uploadedImageKeys;
     }
 
-    private void registerUploadedImageRollbackCleanup(List<String> uploadedImageKeys) {
+
+    private void registerUploadedImageRollbackCleanup(
+            List<String> uploadedImageKeys
+    ) {
         if (uploadedImageKeys.isEmpty()
-                || !TransactionSynchronizationManager.isSynchronizationActive()) {
+                || !TransactionSynchronizationManager
+                .isSynchronizationActive()) {
             return;
         }
 
         TransactionSynchronizationManager.registerSynchronization(
                 new TransactionSynchronization() {
+
                     @Override
                     public void afterCompletion(int status) {
                         if (status == STATUS_ROLLED_BACK) {
-                            deleteUploadedImagesSafely(uploadedImageKeys);
+                            deleteUploadedImagesSafely(
+                                    uploadedImageKeys
+                            );
                         }
                     }
                 }
         );
     }
 
-    private void deleteUploadedImagesSafely(List<String> imageKeys) {
+
+    private void deleteUploadedImagesSafely(
+            List<String> imageKeys
+    ) {
         for (String imageKey : imageKeys) {
             try {
                 s3Service.delete(imageKey);
