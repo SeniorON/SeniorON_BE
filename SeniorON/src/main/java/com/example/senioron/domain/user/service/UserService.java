@@ -385,24 +385,35 @@ public class UserService {
     }
 
     // 계정의 역할 수정 서비스
+
     public UserRoleUpdateResponse updateRole(
             User principal,
             UserRoleUpdateRequest request
     ) {
-        User user = userRepository.findById(principal.getUsersId())
+        if (request == null || request.getRole() == null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+
+        Role requestedRole = request.getRole();
+
+        if (requestedRole != Role.PARENT && requestedRole != Role.CHILD) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+
+        User user = userRepository.findByIdForUpdate(principal.getUsersId())
                 .orElseThrow(() ->
                         new BusinessException(ErrorCode.USER_NOT_FOUND)
                 );
 
-        System.out.println("=== 역할 변경 전 ===");
-        System.out.println("userId = " + user.getUsersId());
-        System.out.println("role = " + user.getRole());
+        if (user.getRole() != requestedRole) {
+            if (getOnboardingStatus(user).isOnboardingCompleted()) {
+                throw new BusinessException(
+                        ErrorCode.ROLE_CHANGE_AFTER_ONBOARDING_FORBIDDEN
+                );
+            }
 
-        user.updateRole(request.getRole());
-
-        System.out.println("=== 역할 변경 후 ===");
-        System.out.println("userId = " + user.getUsersId());
-        System.out.println("role = " + user.getRole());
+            user.updateRole(requestedRole);
+        }
 
         return UserRoleUpdateResponse.builder()
                 .usersId(user.getUsersId())
@@ -410,6 +421,7 @@ public class UserService {
                 .role(user.getRole())
                 .build();
     }
+
 
     private String generateVerificationCode() {
         return String.format("%06d", SECURE_RANDOM.nextInt(VERIFICATION_CODE_BOUND));
