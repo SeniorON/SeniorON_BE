@@ -12,6 +12,7 @@ import com.example.senioron.domain.inquiry.dto.response.AdminInquiryAnswerRespon
 import com.example.senioron.domain.inquiry.dto.response.AdminInquiryAnswerUpdateResponse;
 import com.example.senioron.domain.inquiry.dto.response.AdminInquiryDetailResponse;
 import com.example.senioron.domain.inquiry.dto.response.AdminInquiryListResponse;
+import com.example.senioron.domain.inquiry.dto.response.AdminInquiryStatsResponse;
 import com.example.senioron.domain.inquiry.dto.response.AdminInquiryStatusUpdateResponse;
 import com.example.senioron.domain.inquiry.entity.Inquiry;
 import com.example.senioron.domain.inquiry.entity.InquiryAnswer;
@@ -21,6 +22,12 @@ import com.example.senioron.domain.inquiry.repository.InquiryRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.storage.S3Service;
+import java.time.DayOfWeek;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +41,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AdminInquiryService {
 
     private static final int MAX_ANSWER_LENGTH = 2000;
+    private static final ZoneId SEOUL_ZONE = ZoneId.of("Asia/Seoul");
 
     private final InquiryRepository inquiryRepository;
     private final InquiryAnswerRepository inquiryAnswerRepository;
@@ -62,6 +70,87 @@ public class AdminInquiryService {
     }
 
     @Transactional(readOnly = true)
+    public AdminInquiryStatsResponse getInquiryStats() {
+        ZonedDateTime nowInSeoul = ZonedDateTime.now(SEOUL_ZONE);
+
+        ZonedDateTime todayStartInSeoul =
+                nowInSeoul.toLocalDate().atStartOfDay(SEOUL_ZONE);
+
+        ZonedDateTime weekStartInSeoul =
+                nowInSeoul.toLocalDate()
+                        .with(TemporalAdjusters.previousOrSame(
+                                DayOfWeek.MONDAY
+                        ))
+                        .atStartOfDay(SEOUL_ZONE);
+
+        LocalDateTime now = toStorageTime(nowInSeoul);
+        LocalDateTime todayStart = toStorageTime(todayStartInSeoul);
+        LocalDateTime weekStart = toStorageTime(weekStartInSeoul);
+        LocalDateTime sevenDaysAgo =
+                toStorageTime(nowInSeoul.minusDays(7));
+
+        long waitingCount = inquiryRepository.countByStatus(
+                InquiryStatus.WAITING
+        );
+
+        long todayCount = inquiryRepository
+                .countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+                        todayStart,
+                        now
+                );
+
+        long weekCompletedCount = inquiryRepository
+                .countByStatusAndCompletedAtGreaterThanEqualAndCompletedAtLessThan(
+                        InquiryStatus.COMPLETED,
+                        weekStart,
+                        now
+                );
+
+        List<InquiryRepository.FirstAnswerTimeProjection> responseTimes =
+                inquiryRepository.findFirstAnswerTimes(
+                        sevenDaysAgo,
+                        now
+                );
+
+        double totalResponseHours = 0.0;
+        long answeredCount = 0;
+
+        for (InquiryRepository.FirstAnswerTimeProjection responseTime
+                : responseTimes) {
+
+            LocalDateTime createdAt =
+                    responseTime.getInquiryCreatedAt();
+
+            LocalDateTime firstAnswerAt =
+                    responseTime.getFirstAnswerAt();
+
+            if (createdAt == null
+                    || firstAnswerAt == null
+                    || firstAnswerAt.isBefore(createdAt)
+                    || firstAnswerAt.isAfter(now)) {
+                continue;
+            }
+
+            totalResponseHours +=
+                    Duration.between(createdAt, firstAnswerAt)
+                            .toMillis() / 3_600_000.0;
+
+            answeredCount++;
+        }
+
+        Double avgResponseHours = answeredCount == 0
+                ? null
+                : totalResponseHours / answeredCount;
+
+        return new AdminInquiryStatsResponse(
+                waitingCount,
+                todayCount,
+                avgResponseHours,
+                weekCompletedCount
+        );
+    }
+
+    @Transactional(readOnly = true)
     public AdminInquiryDetailResponse getInquiryDetail(
             Long inquiryId
     ) {
@@ -78,7 +167,9 @@ public class AdminInquiryService {
                         .map(image ->
                                 AdminInquiryDetailResponse.ImageResponse.from(
                                         image,
-                                        s3Service.getFileUrl(image.getImageUrl())
+                                        s3Service.getFileUrl(
+                                                image.getImageUrl()
+                                        )
                                 )
                         )
                         .toList();
@@ -234,6 +325,12 @@ public class AdminInquiryService {
         }
 
         return AdminInquiryStatusUpdateResponse.from(inquiry);
+    }
+
+    private LocalDateTime toStorageTime(ZonedDateTime dateTime) {
+        return dateTime
+                .withZoneSameInstant(ZoneId.systemDefault())
+                .toLocalDateTime();
     }
 
     private Admin getCurrentAdmin(Authentication authentication) {
