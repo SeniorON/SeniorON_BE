@@ -8,6 +8,7 @@ import com.example.senioron.domain.inquiry.dto.response.AdminInquiryAnswerRespon
 import com.example.senioron.domain.inquiry.dto.response.AdminInquiryAnswerUpdateResponse;
 import com.example.senioron.domain.inquiry.dto.response.AdminInquiryDetailResponse;
 import com.example.senioron.domain.inquiry.dto.response.AdminInquiryListResponse;
+import com.example.senioron.domain.inquiry.dto.response.AdminInquiryStatsResponse;
 import com.example.senioron.domain.inquiry.dto.response.AdminInquiryStatusUpdateResponse;
 import com.example.senioron.domain.inquiry.service.AdminInquiryService;
 import com.example.senioron.global.apiPayload.code.ResultCode;
@@ -41,26 +42,22 @@ public class AdminInquiryController {
             @Parameter(
                     description = "문의 상태 (WAITING, COMPLETED). 생략 시 전체 조회"
             )
-            @RequestParam(required = false)
-            String status,
+            @RequestParam(required = false) String status,
 
             @Parameter(
                     description = "문의 제목 또는 작성자 원본 이름 검색"
             )
-            @RequestParam(required = false)
-            String keyword,
+            @RequestParam(required = false) String keyword,
 
             @Parameter(
                     description = "페이지 번호 (0부터 시작)"
             )
-            @RequestParam(defaultValue = "0")
-            int page,
+            @RequestParam(defaultValue = "0") int page,
 
             @Parameter(
                     description = "페이지 크기 (기본 20, 대시보드는 5)"
             )
-            @RequestParam(defaultValue = "20")
-            int size
+            @RequestParam(defaultValue = "20") int size
     ) {
         return Response.ok(
                 adminInquiryService.getInquiries(
@@ -69,6 +66,17 @@ public class AdminInquiryController {
                         page,
                         size
                 )
+        );
+    }
+
+    @Operation(
+            summary = "관리자 문의 통계 조회",
+            description = "답변 대기 건수, 오늘 접수 건수, 최근 7일 평균 응답시간, 이번 주 해결 건수를 조회합니다."
+    )
+    @GetMapping("/stats")
+    public Response<AdminInquiryStatsResponse> getInquiryStats() {
+        return Response.ok(
+                adminInquiryService.getInquiryStats()
         );
     }
 
@@ -82,8 +90,7 @@ public class AdminInquiryController {
                     description = "조회할 문의 ID",
                     required = true
             )
-            @PathVariable("inquiryId")
-            Long inquiryId
+            @PathVariable("inquiryId") Long inquiryId
     ) {
         return Response.ok(
                 adminInquiryService.getInquiryDetail(inquiryId)
@@ -101,11 +108,9 @@ public class AdminInquiryController {
                     description = "답변을 등록할 문의 ID",
                     required = true
             )
-            @PathVariable("inquiryId")
-            Long inquiryId,
+            @PathVariable("inquiryId") Long inquiryId,
 
-            @RequestBody
-            AdminInquiryAnswerRequest request,
+            @RequestBody AdminInquiryAnswerRequest request,
 
             Authentication authentication
     ) {
@@ -129,18 +134,15 @@ public class AdminInquiryController {
                     description = "문의 ID",
                     required = true
             )
-            @PathVariable("inquiryId")
-            Long inquiryId,
+            @PathVariable("inquiryId") Long inquiryId,
 
             @Parameter(
                     description = "답변 ID",
                     required = true
             )
-            @PathVariable("answerId")
-            Long answerId,
+            @PathVariable("answerId") Long answerId,
 
-            @RequestBody
-            AdminInquiryAnswerUpdateRequest request,
+            @RequestBody AdminInquiryAnswerUpdateRequest request,
 
             Authentication authentication,
 
@@ -167,11 +169,9 @@ public class AdminInquiryController {
                     description = "상태를 변경할 문의 ID",
                     required = true
             )
-            @PathVariable("inquiryId")
-            Long inquiryId,
+            @PathVariable("inquiryId") Long inquiryId,
 
-            @RequestBody
-            AdminInquiryStatusUpdateRequest request,
+            @RequestBody AdminInquiryStatusUpdateRequest request,
 
             Authentication authentication,
 

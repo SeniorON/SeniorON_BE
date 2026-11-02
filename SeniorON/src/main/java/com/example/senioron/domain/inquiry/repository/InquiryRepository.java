@@ -4,6 +4,7 @@ package com.example.senioron.domain.inquiry.repository;
 import com.example.senioron.domain.inquiry.entity.Inquiry;
 import com.example.senioron.domain.inquiry.entity.InquiryStatus;
 import jakarta.persistence.LockModeType;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -61,4 +62,39 @@ public interface InquiryRepository extends JpaRepository<Inquiry, Long> {
     Optional<Inquiry> findByIdForUpdate(
             @Param("inquiryId") Long inquiryId
     );
+
+    long countByStatus(InquiryStatus status);
+
+    long countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+            LocalDateTime start,
+            LocalDateTime end
+    );
+
+    long countByStatusAndCompletedAtGreaterThanEqualAndCompletedAtLessThan(
+            InquiryStatus status,
+            LocalDateTime start,
+            LocalDateTime end
+    );
+
+    @Query("""
+            SELECT
+                i.createdAt AS inquiryCreatedAt,
+                MIN(a.createdAt) AS firstAnswerAt
+            FROM Inquiry i
+            JOIN i.answers a
+            WHERE i.createdAt >= :start
+              AND i.createdAt < :end
+            GROUP BY i.inquiryId, i.createdAt
+            """)
+    List<FirstAnswerTimeProjection> findFirstAnswerTimes(
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
+
+    interface FirstAnswerTimeProjection {
+
+        LocalDateTime getInquiryCreatedAt();
+
+        LocalDateTime getFirstAnswerAt();
+    }
 }
