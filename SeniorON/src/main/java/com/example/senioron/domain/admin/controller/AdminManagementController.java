@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.http.HttpStatus;
 
 @RestController
-@Tag(name = "Admin - Account")
+@Tag(name = "관리자 계정", description = "운영자 초대, 목록 조회, 정보 수정 API")
 @RequestMapping("/api/admin/admins")
 @RequiredArgsConstructor
 public class AdminManagementController {
