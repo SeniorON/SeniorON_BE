@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "Admin - Auth", description = "관리자 인증 API")
+@Tag(name = "관리자 인증", description = "관리자 로그인, 토큰, 초대 링크 확인·비밀번호 설정 API")
 @RestController
 @RequestMapping("/api/admin")
 @RequiredArgsConstructor
