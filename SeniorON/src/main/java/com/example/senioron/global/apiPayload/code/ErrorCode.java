@@ -54,6 +54,7 @@ public enum ErrorCode implements BaseCode {
     UNDER_AGE_14(HttpStatus.BAD_REQUEST, "USER400_15", "만 14세 이상만 가입할 수 있습니다."),
     INVALID_BIRTH_DATE(HttpStatus.BAD_REQUEST, "USER400_16", "생년월일이 올바르지 않습니다."),
     INVALID_SOCIAL_TOKEN(HttpStatus.BAD_REQUEST, "USER400_17", "유효하지 않거나 만료된 소셜 토큰입니다."),
+    ROLE_CHANGE_AFTER_ONBOARDING_FORBIDDEN(HttpStatus.FORBIDDEN, "USER403_2", "온보딩 이후에는 역할을 변경할 수 없습니다."),
 
     // Admin Error
     ADMIN_NOT_FOUND(HttpStatus.NOT_FOUND, "ADMIN404", "관리자를 찾을 수 없습니다."),
@@ -149,11 +150,7 @@ public enum ErrorCode implements BaseCode {
     INQUIRY_CONTENT_REQUIRED(HttpStatus.BAD_REQUEST, "INQUIRY400_2", "문의글 내용을 입력해주세요."),
     INQUIRY_IMAGE_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "INQUIRY400_3", "문의 이미지는 최대 5장까지 첨부할 수 있습니다."),
     INQUIRY_NOT_FOUND(HttpStatus.NOT_FOUND, "INQUIRY404", "문의글을 찾을 수 없습니다."),
-    INQUIRY_ANSWER_NOT_FOUND(
-            HttpStatus.NOT_FOUND,
-            "INQUIRY404_1",
-            "답변을 찾을 수 없습니다."
-    ),
+    INQUIRY_ANSWER_NOT_FOUND(HttpStatus.NOT_FOUND, "INQUIRY404_1", "답변을 찾을 수 없습니다."),
 
     // Medication Error
     MEDICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "MED404", "복약 정보를 찾을 수 없습니다."),
