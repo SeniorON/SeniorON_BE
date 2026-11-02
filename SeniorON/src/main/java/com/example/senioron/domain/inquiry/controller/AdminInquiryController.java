@@ -1,11 +1,14 @@
+
 package com.example.senioron.domain.inquiry.controller;
 
 import com.example.senioron.domain.inquiry.dto.request.AdminInquiryAnswerRequest;
 import com.example.senioron.domain.inquiry.dto.request.AdminInquiryAnswerUpdateRequest;
+import com.example.senioron.domain.inquiry.dto.request.AdminInquiryStatusUpdateRequest;
 import com.example.senioron.domain.inquiry.dto.response.AdminInquiryAnswerResponse;
 import com.example.senioron.domain.inquiry.dto.response.AdminInquiryAnswerUpdateResponse;
 import com.example.senioron.domain.inquiry.dto.response.AdminInquiryDetailResponse;
 import com.example.senioron.domain.inquiry.dto.response.AdminInquiryListResponse;
+import com.example.senioron.domain.inquiry.dto.response.AdminInquiryStatusUpdateResponse;
 import com.example.senioron.domain.inquiry.service.AdminInquiryService;
 import com.example.senioron.global.apiPayload.code.ResultCode;
 import com.example.senioron.global.apiPayload.response.Response;
@@ -18,7 +21,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-@Tag(name = "Admin - Inquiry", description = "관리자 문의 관리 API")
+@Tag(
+        name = "Admin - Inquiry",
+        description = "관리자 문의 관리 API"
+)
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/admin/inquiries")
@@ -32,17 +38,29 @@ public class AdminInquiryController {
     )
     @GetMapping
     public Response<AdminInquiryListResponse> getInquiries(
-            @Parameter(description = "문의 상태 (WAITING, COMPLETED). 생략 시 전체 조회")
-            @RequestParam(required = false) String status,
+            @Parameter(
+                    description = "문의 상태 (WAITING, COMPLETED). 생략 시 전체 조회"
+            )
+            @RequestParam(required = false)
+            String status,
 
-            @Parameter(description = "문의 제목 또는 작성자 원본 이름 검색")
-            @RequestParam(required = false) String keyword,
+            @Parameter(
+                    description = "문의 제목 또는 작성자 원본 이름 검색"
+            )
+            @RequestParam(required = false)
+            String keyword,
 
-            @Parameter(description = "페이지 번호 (0부터 시작)")
-            @RequestParam(defaultValue = "0") int page,
+            @Parameter(
+                    description = "페이지 번호 (0부터 시작)"
+            )
+            @RequestParam(defaultValue = "0")
+            int page,
 
-            @Parameter(description = "페이지 크기 (기본 20, 대시보드는 5)")
-            @RequestParam(defaultValue = "20") int size
+            @Parameter(
+                    description = "페이지 크기 (기본 20, 대시보드는 5)"
+            )
+            @RequestParam(defaultValue = "20")
+            int size
     ) {
         return Response.ok(
                 adminInquiryService.getInquiries(
@@ -60,8 +78,12 @@ public class AdminInquiryController {
     )
     @GetMapping("/{inquiryId}")
     public Response<AdminInquiryDetailResponse> getInquiryDetail(
-            @Parameter(description = "조회할 문의 ID", required = true)
-            @PathVariable("inquiryId") Long inquiryId
+            @Parameter(
+                    description = "조회할 문의 ID",
+                    required = true
+            )
+            @PathVariable("inquiryId")
+            Long inquiryId
     ) {
         return Response.ok(
                 adminInquiryService.getInquiryDetail(inquiryId)
@@ -75,10 +97,15 @@ public class AdminInquiryController {
     @PostMapping("/{inquiryId}/answers")
     @ResponseStatus(HttpStatus.CREATED)
     public Response<AdminInquiryAnswerResponse> createAnswer(
-            @Parameter(description = "답변을 등록할 문의 ID", required = true)
-            @PathVariable("inquiryId") Long inquiryId,
+            @Parameter(
+                    description = "답변을 등록할 문의 ID",
+                    required = true
+            )
+            @PathVariable("inquiryId")
+            Long inquiryId,
 
-            @RequestBody AdminInquiryAnswerRequest request,
+            @RequestBody
+            AdminInquiryAnswerRequest request,
 
             Authentication authentication
     ) {
@@ -98,13 +125,22 @@ public class AdminInquiryController {
     )
     @PatchMapping("/{inquiryId}/answers/{answerId}")
     public Response<AdminInquiryAnswerUpdateResponse> updateAnswer(
-            @Parameter(description = "문의 ID", required = true)
-            @PathVariable("inquiryId") Long inquiryId,
+            @Parameter(
+                    description = "문의 ID",
+                    required = true
+            )
+            @PathVariable("inquiryId")
+            Long inquiryId,
 
-            @Parameter(description = "답변 ID", required = true)
-            @PathVariable("answerId") Long answerId,
+            @Parameter(
+                    description = "답변 ID",
+                    required = true
+            )
+            @PathVariable("answerId")
+            Long answerId,
 
-            @RequestBody AdminInquiryAnswerUpdateRequest request,
+            @RequestBody
+            AdminInquiryAnswerUpdateRequest request,
 
             Authentication authentication,
 
@@ -114,6 +150,36 @@ public class AdminInquiryController {
                 adminInquiryService.updateAnswer(
                         inquiryId,
                         answerId,
+                        request,
+                        authentication,
+                        httpServletRequest.getRemoteAddr()
+                )
+        );
+    }
+
+    @Operation(
+            summary = "관리자 문의 처리 상태 변경",
+            description = "문의 처리 상태를 변경하고 실제 변경 시 관리자 활동 기록을 저장합니다."
+    )
+    @PatchMapping("/{inquiryId}/status")
+    public Response<AdminInquiryStatusUpdateResponse> updateInquiryStatus(
+            @Parameter(
+                    description = "상태를 변경할 문의 ID",
+                    required = true
+            )
+            @PathVariable("inquiryId")
+            Long inquiryId,
+
+            @RequestBody
+            AdminInquiryStatusUpdateRequest request,
+
+            Authentication authentication,
+
+            HttpServletRequest httpServletRequest
+    ) {
+        return Response.ok(
+                adminInquiryService.updateInquiryStatus(
+                        inquiryId,
                         request,
                         authentication,
                         httpServletRequest.getRemoteAddr()

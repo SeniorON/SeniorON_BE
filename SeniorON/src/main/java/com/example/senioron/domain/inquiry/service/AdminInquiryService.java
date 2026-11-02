@@ -7,10 +7,12 @@ import com.example.senioron.domain.admin.entity.AdminActivityType;
 import com.example.senioron.domain.admin.service.AdminActivityLogService;
 import com.example.senioron.domain.inquiry.dto.request.AdminInquiryAnswerRequest;
 import com.example.senioron.domain.inquiry.dto.request.AdminInquiryAnswerUpdateRequest;
+import com.example.senioron.domain.inquiry.dto.request.AdminInquiryStatusUpdateRequest;
 import com.example.senioron.domain.inquiry.dto.response.AdminInquiryAnswerResponse;
 import com.example.senioron.domain.inquiry.dto.response.AdminInquiryAnswerUpdateResponse;
 import com.example.senioron.domain.inquiry.dto.response.AdminInquiryDetailResponse;
 import com.example.senioron.domain.inquiry.dto.response.AdminInquiryListResponse;
+import com.example.senioron.domain.inquiry.dto.response.AdminInquiryStatusUpdateResponse;
 import com.example.senioron.domain.inquiry.entity.Inquiry;
 import com.example.senioron.domain.inquiry.entity.InquiryAnswer;
 import com.example.senioron.domain.inquiry.entity.InquiryStatus;
@@ -60,7 +62,9 @@ public class AdminInquiryService {
     }
 
     @Transactional(readOnly = true)
-    public AdminInquiryDetailResponse getInquiryDetail(Long inquiryId) {
+    public AdminInquiryDetailResponse getInquiryDetail(
+            Long inquiryId
+    ) {
         Inquiry inquiry = inquiryRepository.findById(inquiryId)
                 .orElseThrow(
                         () -> new BusinessException(
@@ -79,7 +83,10 @@ public class AdminInquiryService {
                         )
                         .toList();
 
-        return AdminInquiryDetailResponse.from(inquiry, images);
+        return AdminInquiryDetailResponse.from(
+                inquiry,
+                images
+        );
     }
 
     @Transactional
@@ -93,12 +100,17 @@ public class AdminInquiryService {
         InquiryStatus inquiryStatus =
                 parseRequiredStatus(request.status());
 
-        Inquiry inquiry = inquiryRepository.findById(inquiryId)
+        Inquiry inquiry = inquiryRepository
+                .findByIdForUpdate(inquiryId)
                 .orElseThrow(
                         () -> new BusinessException(
                                 ErrorCode.INQUIRY_NOT_FOUND
                         )
                 );
+
+        if (inquiryAnswerRepository.existsByInquiry_InquiryId(inquiryId)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
 
         Admin admin = getCurrentAdmin(authentication);
 
@@ -111,7 +123,7 @@ public class AdminInquiryService {
         InquiryAnswer savedAnswer =
                 inquiryAnswerRepository.saveAndFlush(answer);
 
-        inquiry.updateStatus(inquiryStatus);
+        inquiry.changeStatus(inquiryStatus, admin);
 
         return new AdminInquiryAnswerResponse(
                 savedAnswer.getInquiryAnswerId()
@@ -167,6 +179,61 @@ public class AdminInquiryService {
                 answer.getInquiryAnswerId(),
                 answer.getUpdatedAt()
         );
+    }
+
+    @Transactional
+    public AdminInquiryStatusUpdateResponse updateInquiryStatus(
+            Long inquiryId,
+            AdminInquiryStatusUpdateRequest request,
+            Authentication authentication,
+            String ipAddress
+    ) {
+        if (request == null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+
+        InquiryStatus newStatus =
+                parseRequiredStatus(request.status());
+
+        Inquiry inquiry = inquiryRepository
+                .findByIdForUpdate(inquiryId)
+                .orElseThrow(
+                        () -> new BusinessException(
+                                ErrorCode.INQUIRY_NOT_FOUND
+                        )
+                );
+
+        Admin admin = getCurrentAdmin(authentication);
+
+        InquiryStatus previousStatus = inquiry.getStatus();
+
+        boolean changed = inquiry.changeStatus(
+                newStatus,
+                admin
+        );
+
+        if (changed) {
+            String title = inquiry.getTitle();
+
+            if (title != null && title.length() > 100) {
+                title = title.substring(0, 100);
+            }
+
+            adminActivityLogService.record(
+                    admin,
+                    AdminActivityType.INQUIRY_STATUS_CHANGED,
+                    AdminActivityTargetType.INQUIRY,
+                    inquiryId,
+                    title,
+                    "문의 처리 상태 변경: "
+                            + previousStatus
+                            + " → "
+                            + newStatus,
+                    ipAddress
+            );
+        }
+
+        return AdminInquiryStatusUpdateResponse.from(inquiry);
     }
 
     private Admin getCurrentAdmin(Authentication authentication) {

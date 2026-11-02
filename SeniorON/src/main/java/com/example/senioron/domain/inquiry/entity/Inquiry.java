@@ -1,6 +1,7 @@
 
 package com.example.senioron.domain.inquiry.entity;
 
+import com.example.senioron.domain.admin.entity.Admin;
 import com.example.senioron.domain.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
@@ -48,6 +49,13 @@ public class Inquiry {
     @Column(name = "app_version", length = 255)
     private String appVersion;
 
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "completed_by_admin_id")
+    private Admin completedByAdmin;
+
     @OneToMany(
             mappedBy = "inquiry",
             cascade = CascadeType.ALL,
@@ -81,5 +89,26 @@ public class Inquiry {
 
     public void updateStatus(InquiryStatus status) {
         this.status = status;
+    }
+
+    public boolean changeStatus(
+            InquiryStatus newStatus,
+            Admin admin
+    ) {
+        if (this.status == newStatus) {
+            return false;
+        }
+
+        this.status = newStatus;
+
+        if (newStatus == InquiryStatus.COMPLETED) {
+            this.completedAt = LocalDateTime.now();
+            this.completedByAdmin = admin;
+        } else {
+            this.completedAt = null;
+            this.completedByAdmin = null;
+        }
+
+        return true;
     }
 }
