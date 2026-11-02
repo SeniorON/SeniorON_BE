@@ -33,7 +33,7 @@ public class AdminAuthService {
 
     @Transactional
     public AdminLoginResponse login(AdminLoginRequest request) {
-        Admin admin = adminRepository.findByEmail(
+        Admin admin = adminRepository.findByEmailForUpdate(
                         request.email().trim().toLowerCase(Locale.ROOT)
                 )
                 .orElseThrow(() -> new BusinessException(

@@ -25,9 +25,9 @@ class AdminAuthServiceTest {
     @BeforeEach void setUp() { service = new AdminAuthService(adminRepository, tokenRepository, encoder, jwt); }
 
     @Test void missingEmailAndWrongPasswordReturnSameError() {
-        given(adminRepository.findByEmail("missing@example.com")).willReturn(Optional.empty());
+        given(adminRepository.findByEmailForUpdate("missing@example.com")).willReturn(Optional.empty());
         Admin active = admin(AdminStatus.ACTIVE);
-        given(adminRepository.findByEmail("admin@example.com")).willReturn(Optional.of(active));
+        given(adminRepository.findByEmailForUpdate("admin@example.com")).willReturn(Optional.of(active));
         BusinessException missing = catchThrowableOfType(() -> service.login(new AdminLoginRequest("missing@example.com", "bad")), BusinessException.class);
         BusinessException wrong = catchThrowableOfType(() -> service.login(new AdminLoginRequest("admin@example.com", "bad")), BusinessException.class);
         assertThat(missing.getErrorCode()).isEqualTo(ErrorCode.INVALID_ADMIN_CREDENTIAL.getCode());
@@ -36,7 +36,7 @@ class AdminAuthServiceTest {
 
     @Test void inactiveAdminWithWrongPasswordReturnsCredentialError() {
         for (AdminStatus status : new AdminStatus[]{AdminStatus.INVITED, AdminStatus.SUSPENDED}) {
-            given(adminRepository.findByEmail(status.name().toLowerCase() + "@example.com")).willReturn(Optional.of(admin(status)));
+            given(adminRepository.findByEmailForUpdate(status.name().toLowerCase() + "@example.com")).willReturn(Optional.of(admin(status)));
             assertThatThrownBy(() -> service.login(new AdminLoginRequest(status.name().toLowerCase() + "@example.com", "wrong")))
                     .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getCode()).isEqualTo(ErrorCode.INVALID_ADMIN_CREDENTIAL));
         }
@@ -44,7 +44,7 @@ class AdminAuthServiceTest {
 
     @Test void inactiveAdminWithCorrectPasswordReturnsNotActiveError() {
         Admin suspended = admin(AdminStatus.SUSPENDED);
-        given(adminRepository.findByEmail("suspended@example.com")).willReturn(Optional.of(suspended));
+        given(adminRepository.findByEmailForUpdate("suspended@example.com")).willReturn(Optional.of(suspended));
         assertThatThrownBy(() -> service.login(new AdminLoginRequest("suspended@example.com", "password")))
                 .isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getCode()).isEqualTo(ErrorCode.ADMIN_NOT_ACTIVE));
     }
