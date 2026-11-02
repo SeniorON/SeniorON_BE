@@ -400,7 +400,7 @@ public class UserService {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
 
-        User user = userRepository.findById(principal.getUsersId())
+        User user = userRepository.findByIdForUpdate(principal.getUsersId())
                 .orElseThrow(() ->
                         new BusinessException(ErrorCode.USER_NOT_FOUND)
                 );
