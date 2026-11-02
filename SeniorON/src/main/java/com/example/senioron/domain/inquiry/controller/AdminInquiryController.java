@@ -22,8 +22,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 @Tag(
-        name = "Admin - Inquiry",
-        description = "관리자 문의 관리 API"
+        name = "관리자 문의",
+        description = "관리자 문의 목록·통계·상세 조회, 답변 등록·수정, 처리 상태 변경 API"
 )
 @RestController
 @RequiredArgsConstructor
