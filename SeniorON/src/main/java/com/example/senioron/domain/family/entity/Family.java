@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import com.example.senioron.common.entity.BaseEntity;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -24,10 +25,19 @@ public class Family extends BaseEntity {
     @Column(name = "senior_code", unique = true)
     private String seniorCode;
 
+    @Column(name = "first_senior_connected_at", nullable = true)
+    private LocalDateTime firstSeniorConnectedAt;
+
     @OneToMany(mappedBy = "family")
     @Builder.Default
     private List<FamilyMember> familyMembers = new ArrayList<>();
 
     @OneToOne(mappedBy = "family", fetch = FetchType.LAZY)
     private Senior senior;
+
+    public void recordFirstSeniorConnectedAt(LocalDateTime connectedAt) {
+        if (firstSeniorConnectedAt == null) {
+            firstSeniorConnectedAt = connectedAt;
+        }
+    }
 }

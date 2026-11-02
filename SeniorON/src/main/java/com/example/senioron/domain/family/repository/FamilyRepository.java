@@ -13,7 +13,11 @@ public interface FamilyRepository extends JpaRepository<Family, Long> {
 
     boolean existsBySeniorCode(String seniorCode);
 
-    Optional<Family> findBySeniorCode(String seniorCode);
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT f FROM Family f WHERE f.seniorCode = :seniorCode")
+    Optional<Family> findBySeniorCodeForUpdate(
+            @Param("seniorCode") String seniorCode
+    );
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT f FROM Family f WHERE f.familyId = :familyId")
