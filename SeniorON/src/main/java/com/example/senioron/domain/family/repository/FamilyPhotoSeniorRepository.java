@@ -2,6 +2,7 @@ package com.example.senioron.domain.family.repository;
 
 import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.entity.FamilyPhotoSenior;
+import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
@@ -17,6 +18,8 @@ import java.util.Set;
 
 public interface FamilyPhotoSeniorRepository
         extends JpaRepository<FamilyPhotoSenior, Long> {
+
+    boolean existsBySenior(Senior senior);
 
     @Query("""
     SELECT fps

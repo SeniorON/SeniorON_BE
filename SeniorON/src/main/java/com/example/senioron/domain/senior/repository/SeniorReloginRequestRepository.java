@@ -15,6 +15,8 @@ import org.springframework.data.repository.query.Param;
 
 public interface SeniorReloginRequestRepository extends JpaRepository<SeniorReloginRequest, Long> {
 
+    boolean existsBySenior(Senior senior);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     List<SeniorReloginRequest> findAllBySeniorAndDeviceAndStatusOrderByCreatedAtDesc(
             Senior senior,

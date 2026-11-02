@@ -34,11 +34,14 @@ class FamilyConnectionServiceTest {
     private final FamilyMemberRepository familyMemberRepository =
             mock(FamilyMemberRepository.class);
     private final SeniorRepository seniorRepository = mock(SeniorRepository.class);
+    private final UnusedFamilyCleanupService unusedFamilyCleanupService =
+            mock(UnusedFamilyCleanupService.class);
     private final FamilyConnectionService service = new FamilyConnectionService(
             userRepository,
             familyRepository,
             familyMemberRepository,
-            seniorRepository
+            seniorRepository,
+            unusedFamilyCleanupService
     );
 
     @Test
@@ -63,6 +66,7 @@ class FamilyConnectionServiceTest {
         verify(familyRepository, never())
                 .delete(org.mockito.ArgumentMatchers.any());
         verifyNoInteractions(seniorRepository);
+        verifyNoInteractions(unusedFamilyCleanupService);
     }
 
     @Test
@@ -71,20 +75,22 @@ class FamilyConnectionServiceTest {
         fixture.user().updateManagerType(ManagerType.SUB);
         given(familyMemberRepository.findAllByFamilyOrderByIdAsc(fixture.family()))
                 .willReturn(List.of(fixture.member()));
-        given(seniorRepository.findAllByFamilyOrderBySeniorIdAscForUpdate(
-                fixture.family()
-        )).willReturn(List.of(Senior.builder()
+        Senior senior = Senior.builder()
                 .seniorId(10L)
                 .family(fixture.family())
-                .build()));
+                .build();
+        given(seniorRepository.findAllByFamilyOrderBySeniorIdAscForUpdate(
+                fixture.family()
+        )).willReturn(List.of(senior));
 
         service.disconnect(fixture.user(), fixture.family().getFamilyId());
 
         verify(familyMemberRepository).delete(fixture.member());
-        verify(familyRepository, never())
-                .delete(org.mockito.ArgumentMatchers.any());
-        verify(seniorRepository, never())
-                .delete(org.mockito.ArgumentMatchers.any());
+        verify(familyMemberRepository).flush();
+        verify(unusedFamilyCleanupService).cleanup(
+                fixture.family(),
+                List.of(senior)
+        );
     }
 
     @Test
@@ -123,6 +129,7 @@ class FamilyConnectionServiceTest {
         );
 
         verifyNoInteractions(seniorRepository);
+        verifyNoInteractions(unusedFamilyCleanupService);
     }
 
     @Test
@@ -232,6 +239,7 @@ class FamilyConnectionServiceTest {
                 .isEqualTo(ErrorCode.FAMILY_NOT_FOUND);
 
         verifyNoInteractions(familyMemberRepository, seniorRepository);
+        verifyNoInteractions(unusedFamilyCleanupService);
     }
 
     private Fixture stubMembership(

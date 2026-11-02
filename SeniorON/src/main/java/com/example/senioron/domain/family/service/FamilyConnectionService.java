@@ -4,6 +4,7 @@ import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
+import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
@@ -25,6 +26,7 @@ public class FamilyConnectionService {
     private final FamilyRepository familyRepository;
     private final FamilyMemberRepository familyMemberRepository;
     private final SeniorRepository seniorRepository;
+    private final UnusedFamilyCleanupService unusedFamilyCleanupService;
 
     @Transactional
     public void disconnect(User principal, Long familyId) {
@@ -42,11 +44,17 @@ public class FamilyConnectionService {
 
         validateDisconnectRole(currentUser, currentMember);
 
+        List<Senior> lockedSeniors = null;
         if (currentMember.getManagerType() == ManagerType.PRIMARY) {
-            validatePrimaryDisconnect(currentMember, family);
+            lockedSeniors = validatePrimaryDisconnect(currentMember, family);
         }
 
         familyMemberRepository.delete(currentMember);
+
+        if (lockedSeniors != null) {
+            familyMemberRepository.flush();
+            unusedFamilyCleanupService.cleanup(family, lockedSeniors);
+        }
     }
 
     private void validateDisconnectRole(
@@ -64,7 +72,7 @@ public class FamilyConnectionService {
         }
     }
 
-    private void validatePrimaryDisconnect(
+    private List<Senior> validatePrimaryDisconnect(
             FamilyMember currentMember,
             Family family
     ) {
@@ -96,9 +104,9 @@ public class FamilyConnectionService {
             );
         }
 
-        boolean hasLinkedParent = seniorRepository
-                .findAllByFamilyOrderBySeniorIdAscForUpdate(family)
-                .stream()
+        List<Senior> lockedSeniors = seniorRepository
+                .findAllByFamilyOrderBySeniorIdAscForUpdate(family);
+        boolean hasLinkedParent = lockedSeniors.stream()
                 .anyMatch(senior -> senior.getParentUser() != null);
 
         if (hasLinkedParent) {
@@ -106,5 +114,7 @@ public class FamilyConnectionService {
                     ErrorCode.PRIMARY_CONNECTION_DISCONNECT_PARENT_EXISTS
             );
         }
+
+        return lockedSeniors;
     }
 }

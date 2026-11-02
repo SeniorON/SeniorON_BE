@@ -2,6 +2,7 @@ package com.example.senioron.domain.event.repository;
 
 import com.example.senioron.domain.event.entity.Event;
 import com.example.senioron.domain.event.entity.EventType;
+import com.example.senioron.domain.senior.entity.Senior;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -12,6 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Repository
 public interface EventRepository extends JpaRepository<Event, Long> {
+    boolean existsBySenior(Senior senior);
+
     Optional<Event> findByTriggeredUser_UsersIdAndClientEventIdAndEventType(
             Long userId, String clientEventId, EventType eventType);
 

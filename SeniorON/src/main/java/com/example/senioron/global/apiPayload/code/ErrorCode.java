@@ -145,6 +145,7 @@ public enum ErrorCode implements BaseCode {
     PRIMARY_CONNECTION_DISCONNECT_HISTORY_EXISTS(HttpStatus.CONFLICT, "FAMILY409", "시니어 연결 이력이 있는 가족의 주 담당자는 연결을 해제할 수 없습니다."),
     PRIMARY_CONNECTION_DISCONNECT_GUARDIAN_EXISTS(HttpStatus.CONFLICT, "FAMILY409_1", "다른 보호자가 남아 있어 주 담당자 연결을 해제할 수 없습니다."),
     PRIMARY_CONNECTION_DISCONNECT_PARENT_EXISTS(HttpStatus.CONFLICT, "FAMILY409_2", "연결된 시니어 계정이 있어 주 담당자 연결을 해제할 수 없습니다."),
+    UNUSED_FAMILY_CLEANUP_BLOCKED(HttpStatus.CONFLICT, "FAMILY409_3", "사용 중인 연관 데이터가 있어 가족 연결을 해제할 수 없습니다."),
 
     // Photo Error
     UNSUPPORTED_IMAGE_TYPE(HttpStatus.BAD_REQUEST,"IMAGE400_1", "JPG, PNG, WEBP 형식의 이미지만 업로드할 수 있습니다."),
