@@ -62,6 +62,13 @@ public interface FamilyPhotoSeniorRepository
           WHERE fm.family = senior.family
             AND fm.user = parent
       )
+      AND NOT EXISTS (
+          SELECT fur.id
+          FROM FamilyUserReport fur
+          WHERE fur.reporter = parent
+            AND fur.reportedUser = fps.familyPhoto.user
+            AND fur.hidden = true
+      )
     """)
     List<User> findRecipientParents(
             @Param("familyPhotoId") Long familyPhotoId,

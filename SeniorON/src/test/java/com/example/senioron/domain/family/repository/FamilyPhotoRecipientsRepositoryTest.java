@@ -6,6 +6,9 @@ import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.entity.FamilyPhotoSenior;
+import com.example.senioron.domain.family.entity.FamilyUserReport;
+import com.example.senioron.domain.family.entity.PhotoReportReason;
+import com.example.senioron.domain.family.entity.PhotoReportStatus;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
@@ -74,6 +77,36 @@ class FamilyPhotoRecipientsRepositoryTest {
         entityManager.flush();
 
         assertThat(findRecipients(recipient)).isEmpty();
+    }
+
+    @Test
+    void excludesParentWhoHidUploaderByReport() {
+        Recipient hiding = recipient(Role.PARENT, UserStatus.ACTIVE, true, true, true);
+        Recipient reportedOnly = recipient(Role.PARENT, UserStatus.ACTIVE, true, true, true);
+        Recipient eligible = recipient(Role.PARENT, UserStatus.ACTIVE, true, true, true);
+        persistUploaderReport(hiding.parent(), true);
+        persistUploaderReport(reportedOnly.parent(), false);
+        entityManager.flush();
+
+        // 게시자를 숨긴 부모만 공유·삭제 알림 대상에서 빠진다.
+        assertThat(findRecipients(hiding, reportedOnly, eligible))
+                .extracting(User::getUsersId)
+                .containsExactlyInAnyOrder(
+                        reportedOnly.parent().getUsersId(),
+                        eligible.parent().getUsersId()
+                );
+    }
+
+    private void persistUploaderReport(User reporter, boolean hidden) {
+        persist(FamilyUserReport.builder()
+                .reporter(reporter)
+                .reportedUser(uploader)
+                .familyPhoto(photo)
+                .imageKey(photo.getImageKey())
+                .reason(PhotoReportReason.ETC)
+                .hidden(hidden)
+                .status(PhotoReportStatus.PENDING)
+                .build());
     }
 
     private List<User> findRecipients(Recipient... recipients) {

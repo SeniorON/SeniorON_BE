@@ -14,6 +14,7 @@ import com.example.senioron.domain.family.entity.FamilyPhotoSenior;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.entity.PhotoReportStatus;
 import com.example.senioron.domain.family.repository.FamilyPhotoReportRepository;
+import com.example.senioron.domain.family.repository.FamilyUserReportRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoSeniorRepository;
 import com.example.senioron.domain.family.repository.projection.FamilyPhotoAlbumCountProjection;
@@ -71,6 +72,7 @@ public class FamilyPhotoService {
     private final FamilyPhotoResponseMapper familyPhotoResponseMapper;
     private final FamilyPhotoSeniorRepository familyPhotoSeniorRepository;
     private final FamilyPhotoReportRepository familyPhotoReportRepository;
+    private final FamilyUserReportRepository familyUserReportRepository;
 
     private static final int NEW_PHOTO_WINDOW_HOURS = 24;
     private static final long MAX_FAMILY_PHOTO_SIZE = 10L * 1024 * 1024;
@@ -743,6 +745,12 @@ public class FamilyPhotoService {
             // 같은 원본을 다시 등록한 사진이 지워져도 보존되도록 원본 키로 확인하고,
             // 방금 접수된 신고도 놓치지 않도록 잠금 조회로 최신 상태를 읽는다.
             boolean hasPendingReport = !familyPhotoReportRepository
+                    .findIdsByImageKeyAndStatus(
+                            imageKey,
+                            PhotoReportStatus.PENDING
+                    )
+                    .isEmpty()
+                    || !familyUserReportRepository
                     .findIdsByImageKeyAndStatus(
                             imageKey,
                             PhotoReportStatus.PENDING

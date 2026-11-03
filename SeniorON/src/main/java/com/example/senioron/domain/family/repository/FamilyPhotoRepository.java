@@ -34,6 +34,13 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
             AND fpr.reporter = :viewer
             AND fpr.hidden = true
       )
+      AND NOT EXISTS (
+          SELECT fur.id
+          FROM FamilyUserReport fur
+          WHERE fur.reportedUser = fp.user
+            AND fur.reporter = :viewer
+            AND fur.hidden = true
+      )
     ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
     """)
     List<FamilyPhoto> findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
@@ -77,6 +84,13 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
           WHERE fpr.familyPhoto = fp
             AND fpr.reporter = :viewer
             AND fpr.hidden = true
+      )
+      AND NOT EXISTS (
+          SELECT fur.id
+          FROM FamilyUserReport fur
+          WHERE fur.reportedUser = fp.user
+            AND fur.reporter = :viewer
+            AND fur.hidden = true
       )
       AND NOT EXISTS (
           SELECT newer.familyPhotoId
@@ -142,6 +156,13 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
                 AND fpr.reporter = :parent
                 AND fpr.hidden = true
           )
+          AND NOT EXISTS (
+              SELECT fur.id
+              FROM FamilyUserReport fur
+              WHERE fur.reportedUser = fp.user
+                AND fur.reporter = :parent
+                AND fur.hidden = true
+          )
         GROUP BY fp.user.usersId
         """)
     List<FamilyPhotoAlbumCountProjection> countAlbumPhotosByUploader(
@@ -188,6 +209,13 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
               WHERE fpr.familyPhoto = fp
                 AND fpr.reporter = :user
                 AND fpr.hidden = true
+          )
+          AND NOT EXISTS (
+              SELECT fur.id
+              FROM FamilyUserReport fur
+              WHERE fur.reportedUser = fp.user
+                AND fur.reporter = :user
+                AND fur.hidden = true
           )
         """)
     Optional<FamilyPhoto> findAccessibleByFamilyPhotoIdAndUser(
@@ -236,6 +264,13 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
                 AND fpr.reporter = :viewer
                 AND fpr.hidden = true
           )
+          AND NOT EXISTS (
+              SELECT fur.id
+              FROM FamilyUserReport fur
+              WHERE fur.reportedUser = fp.user
+                AND fur.reporter = :viewer
+                AND fur.hidden = true
+          )
         ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
         """)
     List<FamilyPhoto> findAllAccessibleByFamily(
@@ -260,6 +295,13 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
               WHERE fpr.familyPhoto = fp
                 AND fpr.reporter = :viewer
                 AND fpr.hidden = true
+          )
+          AND NOT EXISTS (
+              SELECT fur.id
+              FROM FamilyUserReport fur
+              WHERE fur.reportedUser = fp.user
+                AND fur.reporter = :viewer
+                AND fur.hidden = true
           )
           AND (
               fp.createdAt < :cursorCreatedAt
@@ -296,6 +338,13 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
                 AND fpr.reporter = :viewer
                 AND fpr.hidden = true
           )
+          AND NOT EXISTS (
+              SELECT fur.id
+              FROM FamilyUserReport fur
+              WHERE fur.reportedUser = fp.user
+                AND fur.reporter = :viewer
+                AND fur.hidden = true
+          )
         ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
         """)
     List<FamilyPhoto> findAllAccessibleByFamilyAndUploader(
@@ -322,6 +371,13 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
               WHERE fpr.familyPhoto = fp
                 AND fpr.reporter = :viewer
                 AND fpr.hidden = true
+          )
+          AND NOT EXISTS (
+              SELECT fur.id
+              FROM FamilyUserReport fur
+              WHERE fur.reportedUser = fp.user
+                AND fur.reporter = :viewer
+                AND fur.hidden = true
           )
           AND (
               fp.createdAt < :cursorCreatedAt
@@ -357,6 +413,13 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
                 AND fpr.reporter = :viewer
                 AND fpr.hidden = true
           )
+          AND NOT EXISTS (
+              SELECT fur.id
+              FROM FamilyUserReport fur
+              WHERE fur.reportedUser = fp.user
+                AND fur.reporter = :viewer
+                AND fur.hidden = true
+          )
         """)
     long countAccessibleByFamily(
             @Param("family") Family family,
@@ -379,6 +442,13 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
               WHERE fpr.familyPhoto = fp
                 AND fpr.reporter = :viewer
                 AND fpr.hidden = true
+          )
+          AND NOT EXISTS (
+              SELECT fur.id
+              FROM FamilyUserReport fur
+              WHERE fur.reportedUser = fp.user
+                AND fur.reporter = :viewer
+                AND fur.hidden = true
           )
         """)
     long countAccessibleByFamilyAndUploader(
