@@ -1,13 +1,12 @@
 package com.example.senioron.domain.family.controller;
 
-import com.example.senioron.domain.family.dto.request.FamilyPhotoCreateRequest;
-import com.example.senioron.domain.family.dto.request.FamilyPhotoUploadCompleteRequest;
-import com.example.senioron.domain.family.dto.request.FamilyPhotoUploadUrlRequest;
+import com.example.senioron.domain.family.dto.request.*;
 import com.example.senioron.domain.family.dto.response.FamilyPhotoAlbumResponse;
 import com.example.senioron.domain.family.dto.response.FamilyPhotoItemResponse;
 import com.example.senioron.domain.family.dto.response.FamilyPhotoListResponse;
 import com.example.senioron.domain.family.dto.response.FamilyPhotoUploadUrlResponse;
 import com.example.senioron.domain.family.service.FamilyPhotoService;
+import com.example.senioron.domain.family.service.FamilyUserReportService;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.global.apiPayload.code.ResultCode;
 import com.example.senioron.global.apiPayload.response.Response;
@@ -23,7 +22,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
-import com.example.senioron.domain.family.dto.request.FamilyPhotoReportRequest;
+
 import com.example.senioron.domain.family.service.FamilyPhotoReportService;
 
 @Tag(name = "가족 사진", description = "가족 사진 관련 API")
@@ -34,6 +33,7 @@ public class FamilyPhotoController {
 
     private final FamilyPhotoService familyPhotoService;
     private final FamilyPhotoReportService familyPhotoReportService;
+    private final FamilyUserReportService familyUserReportService;
 
     @Operation(summary = "가족 사진 등록", description = "선택한 시니어들에게 공유할 사진을 등록합니다.")
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -137,6 +137,17 @@ public class FamilyPhotoController {
             @Valid @RequestBody FamilyPhotoReportRequest request
     ) {
         familyPhotoReportService.reportPhoto(user, familyPhotoId, request);
+        return Response.ok();
+    }
+
+    @Operation(summary = "가족 사진 게시자 신고", description = "사진을 올린 게시자를 신고 사유와 함께 신고합니다. " + "hide가 true이면 신고한 사용자에게 해당 게시자가 올린 사진이 모두 보이지 않습니다.")
+    @PostMapping(value = "/{familyPhotoId}/uploader-reports", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public Response<Void> reportUploader(
+            @AuthenticationPrincipal User user,
+            @PathVariable("familyPhotoId") Long familyPhotoId,
+            @Valid @RequestBody FamilyUserReportRequest request
+    ) {
+        familyUserReportService.reportUploader(user, familyPhotoId, request);
         return Response.ok();
     }
 }
