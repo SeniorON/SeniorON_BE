@@ -48,4 +48,4 @@ springdoc:
 
 app:
   cors:
-    allowed-origins: https://senioron.site
+    allowed-origins: https://senioron.site,http://localhost:5173,http://localhost:3000
