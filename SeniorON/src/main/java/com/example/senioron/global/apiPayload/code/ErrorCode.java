@@ -127,6 +127,7 @@ public enum ErrorCode implements BaseCode {
     INVALID_SENIOR_CODE(HttpStatus.BAD_REQUEST, "FAMILY400", "유효하지 않은 시니어 코드입니다."),
     FAMILY_MEMBER_REMOVE_FORBIDDEN(HttpStatus.FORBIDDEN, "FAMILY403", "가족 구성원을 제외할 권한이 없습니다."),
     SENIOR_CODE_CREATE_PARENT_FORBIDDEN(HttpStatus.FORBIDDEN, "FAMILY403_1", "부모 계정은 시니어 코드를 생성할 수 없습니다."),
+    FAMILY_CONNECTION_DISCONNECT_FORBIDDEN(HttpStatus.FORBIDDEN, "FAMILY403_2", "현재 역할로는 가족 연결을 해제할 수 없습니다."),
     FAMILY_MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "FAMILY404_1", "해당 가족 구성원을 찾을 수 없습니다."),
     CANNOT_REMOVE_SELF(HttpStatus.BAD_REQUEST, "FAMILY400_1", "주 담당자는 자기 자신을 가족에서 제외할 수 없습니다."),
     CANNOT_REMOVE_SENIOR_PARENT(HttpStatus.BAD_REQUEST, "FAMILY400_4", "시니어 본인 계정은 가족에서 제외할 수 없습니다."),
@@ -143,6 +144,10 @@ public enum ErrorCode implements BaseCode {
     FAMILY_USER_ALREADY_REPORTED(HttpStatus.CONFLICT, "FAMILY_PHOTO409_2", "이미 신고한 게시자입니다."),
     FAMILY_USER_REPORT_SELF(HttpStatus.BAD_REQUEST, "FAMILY_PHOTO400_4", "본인은 신고할 수 없습니다."),
     PRIMARY_MANAGER_MUST_BE_CHILD(HttpStatus.BAD_REQUEST, "FAMILY400_3", "주 담당자는 자녀 계정만 지정할 수 있습니다."),
+    PRIMARY_CONNECTION_DISCONNECT_HISTORY_EXISTS(HttpStatus.CONFLICT, "FAMILY409", "시니어 연결 이력이 있는 가족의 주 담당자는 연결을 해제할 수 없습니다."),
+    PRIMARY_CONNECTION_DISCONNECT_GUARDIAN_EXISTS(HttpStatus.CONFLICT, "FAMILY409_1", "다른 보호자가 남아 있어 주 담당자 연결을 해제할 수 없습니다."),
+    PRIMARY_CONNECTION_DISCONNECT_PARENT_EXISTS(HttpStatus.CONFLICT, "FAMILY409_2", "연결된 시니어 계정이 있어 주 담당자 연결을 해제할 수 없습니다."),
+    UNUSED_FAMILY_CLEANUP_BLOCKED(HttpStatus.CONFLICT, "FAMILY409_3", "사용 중인 연관 데이터가 있어 가족 연결을 해제할 수 없습니다."),
 
     // Photo Error
     UNSUPPORTED_IMAGE_TYPE(HttpStatus.BAD_REQUEST,"IMAGE400_1", "JPG, PNG, WEBP 형식의 이미지만 업로드할 수 있습니다."),

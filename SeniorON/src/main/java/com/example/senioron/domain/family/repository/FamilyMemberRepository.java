@@ -27,6 +27,8 @@ public interface FamilyMemberRepository extends JpaRepository<FamilyMember, Long
 
     long countByFamily(Family family);
 
+    boolean existsByFamily(Family family);
+
     void deleteByUserAndFamily(User user, Family family);
 
     void deleteAllByUser(User user);

@@ -108,7 +108,7 @@ public class FamilyService {
                         new BusinessException(ErrorCode.USER_NOT_FOUND)
                 );
 
-        Family family = familyRepository.findBySeniorCode(request.getSeniorCode())
+        Family family = familyRepository.findBySeniorCodeForUpdate(request.getSeniorCode())
                 .orElseThrow(() ->
                         new BusinessException(ErrorCode.INVALID_SENIOR_CODE)
                 );
@@ -138,10 +138,19 @@ public class FamilyService {
                     .orElse(null);
         }
 
-        createFamilyMember(user, family, managerType, primaryMember);
+        boolean newlyJoined = createFamilyMember(
+                user,
+                family,
+                managerType,
+                primaryMember
+        );
 
         if (user.getRole() == Role.PARENT) {
             linkParentUserToFamilySenior(user, family);
+
+            if (newlyJoined) {
+                family.recordFirstSeniorConnectedAt(LocalDateTime.now());
+            }
         }
 
         return FamilyJoinResponse.builder()
@@ -171,15 +180,17 @@ public class FamilyService {
             Long seniorId,
             FamilyPrimaryManagerUpdateRequest request
     ){
+        Family family = findFamilyBySeniorIdForUpdate(seniorId);
+
         // 현재 로그인한 사용자가 실제 DB에 없는 경우
         User currentUser = userRepository.findByIdForUpdate(principal.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        Family family = resolveAccessibleFamily(currentUser, seniorId);
-
         FamilyMember currentMember = familyMemberRepository
                 .findByUserAndFamilyForUpdate(currentUser, family)
-                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED
+                ));
 
         if(currentMember.getManagerType() != ManagerType.PRIMARY){
             throw new BusinessException(ErrorCode.FORBIDDEN);
@@ -218,18 +229,16 @@ public class FamilyService {
             Long seniorId,
             Long targetUserId
     ) {
+        Family family = findFamilyBySeniorIdForUpdate(seniorId);
+
+        Senior senior = seniorRepository.findByIdForUpdate(seniorId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SENIOR_NOT_FOUND));
+
         User currentUser = userRepository
                 .findByIdForUpdate(principal.getUsersId())
                 .orElseThrow(() ->
                         new BusinessException(ErrorCode.USER_NOT_FOUND)
                 );
-
-        Senior senior = resolveAccessibleSenior(
-                currentUser,
-                seniorId
-        );
-
-        Family family = senior.getFamily();
 
         FamilyMember currentMember = familyMemberRepository
                 .findByUserAndFamilyForUpdate(
@@ -237,7 +246,9 @@ public class FamilyService {
                         family
                 )
                 .orElseThrow(() ->
-                        new BusinessException(ErrorCode.FAMILY_NOT_FOUND)
+                        new BusinessException(
+                                ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED
+                        )
                 );
 
         if (currentMember.getManagerType() != ManagerType.PRIMARY) {
@@ -425,7 +436,7 @@ public class FamilyService {
                 .build();
     }
 
-    private void createFamilyMember(
+    private boolean createFamilyMember(
             User user,
             Family family,
             ManagerType managerType,
@@ -433,7 +444,7 @@ public class FamilyService {
     ) {
         // 기존 가족 구성원이면 관계를 다시 복사하지 않음
         if (familyMemberRepository.existsByUserAndFamily(user, family)) {
-            return;
+            return false;
         }
 
         FamilyMember.FamilyMemberBuilder builder = FamilyMember.builder()
@@ -448,6 +459,7 @@ public class FamilyService {
         }
 
         familyMemberRepository.save(builder.build());
+        return true;
     }
 
     private void linkParentUserToFamilySenior(User parentUser, Family family) {
@@ -491,6 +503,14 @@ public class FamilyService {
                 user,
                 seniorId
         ).getFamily();
+    }
+
+    private Family findFamilyBySeniorIdForUpdate(Long seniorId) {
+        Long familyId = seniorRepository.findFamilyIdBySeniorId(seniorId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SENIOR_NOT_FOUND));
+
+        return familyRepository.findByIdForUpdate(familyId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND));
     }
 
     private Senior resolveAccessibleSenior(

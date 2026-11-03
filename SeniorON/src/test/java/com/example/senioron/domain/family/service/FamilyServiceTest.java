@@ -240,6 +240,26 @@ class FamilyServiceTest {
     }
 
     @Test
+    void createFamilyStartsWithoutFirstSeniorConnectionHistory() {
+        User child = User.builder()
+                .usersId(1L)
+                .name("자녀")
+                .role(Role.CHILD)
+                .build();
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(child));
+        given(familyRepository.save(any(Family.class)))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        familyService.createFamily(child);
+
+        ArgumentCaptor<Family> familyCaptor =
+                ArgumentCaptor.forClass(Family.class);
+        verify(familyRepository).save(familyCaptor.capture());
+        assertThat(familyCaptor.getValue().getFirstSeniorConnectedAt()).isNull();
+    }
+
+    @Test
     void joinFamilyLinksParentUserToExistingFamilySenior() {
         Family family = Family.builder()
                 .familyId(1L)
@@ -265,7 +285,8 @@ class FamilyServiceTest {
                 .build();
 
         given(userRepository.findById(2L)).willReturn(Optional.of(parent));
-        given(familyRepository.findBySeniorCode("ABCD-1234")).willReturn(Optional.of(family));
+        given(familyRepository.findBySeniorCodeForUpdate("ABCD-1234"))
+                .willReturn(Optional.of(family));
         given(familyMemberRepository.existsByUserAndFamily(parent, family)).willReturn(false);
         given(seniorRepository.findAllByFamilyOrderBySeniorIdAscForUpdate(family))
                 .willReturn(List.of(senior));
@@ -274,8 +295,161 @@ class FamilyServiceTest {
         familyService.joinFamily(parent, createJoinRequest("ABCD-1234"));
 
         assertThat(senior.getParentUser()).isEqualTo(parent);
+        assertThat(family.getFirstSeniorConnectedAt()).isNotNull();
         verify(deviceService).reconnectDevice(parent);
         verify(seniorRepository).saveAndFlush(senior);
+        verify(familyRepository).findBySeniorCodeForUpdate("ABCD-1234");
+    }
+
+    @Test
+    void joinFamilyRecordsParentConnectionWithoutSeniorProfile() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .seniorCode("ABCD-1234")
+                .build();
+        User parent = User.builder()
+                .usersId(2L)
+                .name("부모")
+                .role(Role.PARENT)
+                .build();
+        LocalDateTime beforeJoin = LocalDateTime.now();
+
+        given(userRepository.findById(2L)).willReturn(Optional.of(parent));
+        given(familyRepository.findBySeniorCodeForUpdate("ABCD-1234"))
+                .willReturn(Optional.of(family));
+        given(familyMemberRepository.existsByUserAndFamily(parent, family))
+                .willReturn(false);
+        given(seniorRepository.findAllByFamilyOrderBySeniorIdAscForUpdate(family))
+                .willReturn(List.of());
+
+        familyService.joinFamily(parent, createJoinRequest("ABCD-1234"));
+
+        assertThat(family.getFirstSeniorConnectedAt())
+                .isBetween(beforeJoin, LocalDateTime.now());
+    }
+
+    @Test
+    void joinFamilyDoesNotRecordConnectionForDuplicateParentMembership() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .seniorCode("ABCD-1234")
+                .build();
+        User parent = User.builder()
+                .usersId(2L)
+                .name("부모")
+                .role(Role.PARENT)
+                .build();
+
+        given(userRepository.findById(2L)).willReturn(Optional.of(parent));
+        given(familyRepository.findBySeniorCodeForUpdate("ABCD-1234"))
+                .willReturn(Optional.of(family));
+        given(familyMemberRepository.existsByUserAndFamily(parent, family))
+                .willReturn(true);
+        given(seniorRepository.findAllByFamilyOrderBySeniorIdAscForUpdate(family))
+                .willReturn(List.of());
+
+        familyService.joinFamily(parent, createJoinRequest("ABCD-1234"));
+
+        assertThat(family.getFirstSeniorConnectedAt()).isNull();
+        verify(familyMemberRepository, never()).save(any());
+    }
+
+    @Test
+    void joinFamilyNeverOverwritesExistingFirstConnectionTime() {
+        LocalDateTime firstConnectionTime =
+                LocalDateTime.of(2026, 10, 1, 12, 0);
+        Family family = Family.builder()
+                .familyId(1L)
+                .seniorCode("ABCD-1234")
+                .firstSeniorConnectedAt(firstConnectionTime)
+                .build();
+        User parent = User.builder()
+                .usersId(2L)
+                .name("부모")
+                .role(Role.PARENT)
+                .build();
+
+        given(userRepository.findById(2L)).willReturn(Optional.of(parent));
+        given(familyRepository.findBySeniorCodeForUpdate("ABCD-1234"))
+                .willReturn(Optional.of(family));
+        given(familyMemberRepository.existsByUserAndFamily(parent, family))
+                .willReturn(false);
+        given(seniorRepository.findAllByFamilyOrderBySeniorIdAscForUpdate(family))
+                .willReturn(List.of());
+
+        familyService.joinFamily(parent, createJoinRequest("ABCD-1234"));
+
+        assertThat(family.getFirstSeniorConnectedAt())
+                .isEqualTo(firstConnectionTime);
+    }
+
+    @Test
+    void joinFamilyDoesNotRecordConnectionWhenParentJoinFails() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .seniorCode("ABCD-1234")
+                .build();
+        User joiningParent = User.builder()
+                .usersId(2L)
+                .name("가입 부모")
+                .role(Role.PARENT)
+                .build();
+        User linkedParent = User.builder()
+                .usersId(3L)
+                .name("기존 부모")
+                .role(Role.PARENT)
+                .build();
+        Senior senior = Senior.builder()
+                .seniorId(10L)
+                .family(family)
+                .parentUser(linkedParent)
+                .build();
+
+        given(userRepository.findById(2L))
+                .willReturn(Optional.of(joiningParent));
+        given(familyRepository.findBySeniorCodeForUpdate("ABCD-1234"))
+                .willReturn(Optional.of(family));
+        given(familyMemberRepository.existsByUserAndFamily(joiningParent, family))
+                .willReturn(false);
+        given(seniorRepository.findAllByFamilyOrderBySeniorIdAscForUpdate(family))
+                .willReturn(List.of(senior));
+
+        assertThatThrownBy(() -> familyService.joinFamily(
+                joiningParent,
+                createJoinRequest("ABCD-1234")
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_ALREADY_LINKED_TO_PARENT);
+
+        assertThat(family.getFirstSeniorConnectedAt()).isNull();
+    }
+
+    @Test
+    void joinFamilyDoesNotRecordConnectionForChild() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .seniorCode("ABCD-1234")
+                .build();
+        User child = User.builder()
+                .usersId(2L)
+                .name("자녀")
+                .role(Role.CHILD)
+                .build();
+
+        given(userRepository.findById(2L)).willReturn(Optional.of(child));
+        given(familyRepository.findBySeniorCodeForUpdate("ABCD-1234"))
+                .willReturn(Optional.of(family));
+        given(familyMemberRepository.existsByUserAndFamily(child, family))
+                .willReturn(false);
+        given(familyMemberRepository.findAllByFamilyOrderByIdAsc(family))
+                .willReturn(List.of());
+
+        familyService.joinFamily(child, createJoinRequest("ABCD-1234"));
+
+        assertThat(family.getFirstSeniorConnectedAt()).isNull();
+        verify(deviceService, never()).reconnectDevice(any());
     }
 
     @Test
@@ -558,10 +732,6 @@ class FamilyServiceTest {
         User currentUser = createUser(1L, "기존 주 담당자");
         currentUser.updateFamily(firstFamily);
         User targetUser = createUser(2L, "새 주 담당자");
-        Senior selectedSenior = Senior.builder()
-                .seniorId(20L)
-                .family(selectedFamily)
-                .build();
         FamilyMember currentMember = createMember(
                 1L,
                 currentUser,
@@ -577,10 +747,10 @@ class FamilyServiceTest {
 
         given(userRepository.findByIdForUpdate(1L))
                 .willReturn(Optional.of(currentUser));
-        given(seniorRepository.findById(20L))
-                .willReturn(Optional.of(selectedSenior));
-        given(familyMemberRepository.existsByUserAndFamily(currentUser, selectedFamily))
-                .willReturn(true);
+        given(seniorRepository.findFamilyIdBySeniorId(20L))
+                .willReturn(Optional.of(2L));
+        given(familyRepository.findByIdForUpdate(2L))
+                .willReturn(Optional.of(selectedFamily));
         given(familyMemberRepository.findByUserAndFamilyForUpdate(currentUser, selectedFamily))
                 .willReturn(Optional.of(currentMember));
         given(userRepository.findByIdForUpdate(2L))
@@ -664,10 +834,12 @@ class FamilyServiceTest {
 
         given(userRepository.findByIdForUpdate(1L))
                 .willReturn(Optional.of(currentUser));
-        given(seniorRepository.findById(10L))
+        given(seniorRepository.findFamilyIdBySeniorId(10L))
+                .willReturn(Optional.of(1L));
+        given(familyRepository.findByIdForUpdate(1L))
+                .willReturn(Optional.of(family));
+        given(seniorRepository.findByIdForUpdate(10L))
                 .willReturn(Optional.of(senior));
-        given(familyMemberRepository.existsByUserAndFamily(currentUser, family))
-                .willReturn(true);
         given(familyMemberRepository.findByUserAndFamilyForUpdate(currentUser, family))
                 .willReturn(Optional.of(primaryMember));
         given(userRepository.findByIdForUpdate(2L))
@@ -714,10 +886,12 @@ class FamilyServiceTest {
 
         given(userRepository.findByIdForUpdate(1L))
                 .willReturn(Optional.of(currentUser));
-        given(seniorRepository.findById(20L))
+        given(seniorRepository.findFamilyIdBySeniorId(20L))
+                .willReturn(Optional.of(2L));
+        given(familyRepository.findByIdForUpdate(2L))
+                .willReturn(Optional.of(selectedFamily));
+        given(seniorRepository.findByIdForUpdate(20L))
                 .willReturn(Optional.of(selectedSenior));
-        given(familyMemberRepository.existsByUserAndFamily(currentUser, selectedFamily))
-                .willReturn(true);
         given(familyMemberRepository.findByUserAndFamilyForUpdate(currentUser, selectedFamily))
                 .willReturn(Optional.of(currentMember));
         given(userRepository.findByIdForUpdate(2L))

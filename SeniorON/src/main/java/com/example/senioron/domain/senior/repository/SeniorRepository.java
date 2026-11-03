@@ -26,6 +26,9 @@ public interface SeniorRepository extends JpaRepository<Senior, Long> {
 
     Optional<Senior> findByParentUser(User parentUser);
 
+    @Query("SELECT s.family.familyId FROM Senior s WHERE s.seniorId = :seniorId")
+    Optional<Long> findFamilyIdBySeniorId(@Param("seniorId") Long seniorId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT s FROM Senior s LEFT JOIN FETCH s.parentUser WHERE s.seniorId = :seniorId")
     Optional<Senior> findByIdForUpdate(@Param("seniorId") Long seniorId);
