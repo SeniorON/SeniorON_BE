@@ -1,5 +1,6 @@
 package com.example.senioron.domain.family.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static org.mockito.BDDMockito.given;
@@ -9,6 +10,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
+import com.example.senioron.domain.family.dto.response.FamilyConnectionDisconnectResponse;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
@@ -49,8 +51,13 @@ class FamilyConnectionServiceTest {
         Fixture fixture = stubMembership(Role.CHILD, ManagerType.SUB, null);
         fixture.user().updateManagerType(ManagerType.PRIMARY);
 
-        service.disconnect(fixture.user(), fixture.family().getFamilyId());
+        FamilyConnectionDisconnectResponse response = service.disconnect(
+                fixture.user(),
+                fixture.family().getFamilyId()
+        );
 
+        assertThat(response.familyId()).isEqualTo(fixture.family().getFamilyId());
+        assertThat(response.familyDeleted()).isFalse();
         verify(familyMemberRepository).delete(fixture.member());
         InOrder lockOrder = inOrder(
                 userRepository,
@@ -83,8 +90,13 @@ class FamilyConnectionServiceTest {
                 fixture.family()
         )).willReturn(List.of(senior));
 
-        service.disconnect(fixture.user(), fixture.family().getFamilyId());
+        FamilyConnectionDisconnectResponse response = service.disconnect(
+                fixture.user(),
+                fixture.family().getFamilyId()
+        );
 
+        assertThat(response.familyId()).isEqualTo(fixture.family().getFamilyId());
+        assertThat(response.familyDeleted()).isTrue();
         verify(familyMemberRepository).delete(fixture.member());
         verify(familyMemberRepository).flush();
         verify(unusedFamilyCleanupService).cleanup(

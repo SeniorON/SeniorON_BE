@@ -6,6 +6,7 @@ import static org.assertj.core.api.InstanceOfAssertFactories.type;
 
 import com.example.senioron.domain.event.entity.Event;
 import com.example.senioron.domain.event.repository.EventRepository;
+import com.example.senioron.domain.family.dto.response.FamilyConnectionDisconnectResponse;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
@@ -51,7 +52,8 @@ class FamilyConnectionServiceIntegrationTest {
         saveMember(primary, family, ManagerType.PRIMARY);
         saveMember(sub, family, ManagerType.SUB);
 
-        service.disconnect(sub, family.getFamilyId());
+        FamilyConnectionDisconnectResponse response =
+                service.disconnect(sub, family.getFamilyId());
         entityManager.flush();
         entityManager.clear();
 
@@ -69,6 +71,8 @@ class FamilyConnectionServiceIntegrationTest {
                 persistedPrimary,
                 persistedFamily
         )).isPresent();
+        assertThat(response.familyId()).isEqualTo(family.getFamilyId());
+        assertThat(response.familyDeleted()).isFalse();
     }
 
     @Test
@@ -89,7 +93,8 @@ class FamilyConnectionServiceIntegrationTest {
                         .build()
         );
 
-        service.disconnect(primary, family.getFamilyId());
+        FamilyConnectionDisconnectResponse response =
+                service.disconnect(primary, family.getFamilyId());
         entityManager.clear();
 
         assertThat(familyMemberRepository.findById(member.getId())).isEmpty();
@@ -98,6 +103,8 @@ class FamilyConnectionServiceIntegrationTest {
         assertThat(seniorRepository.findById(senior.getSeniorId())).isEmpty();
         assertThat(familyRepository.findById(family.getFamilyId())).isEmpty();
         assertThat(userRepository.findById(primary.getUsersId())).isPresent();
+        assertThat(response.familyId()).isEqualTo(family.getFamilyId());
+        assertThat(response.familyDeleted()).isTrue();
     }
 
     @Test
@@ -106,11 +113,14 @@ class FamilyConnectionServiceIntegrationTest {
         User primary = saveUser("no-senior-primary");
         saveMember(primary, family, ManagerType.PRIMARY);
 
-        service.disconnect(primary, family.getFamilyId());
+        FamilyConnectionDisconnectResponse response =
+                service.disconnect(primary, family.getFamilyId());
         entityManager.clear();
 
         assertThat(familyRepository.findById(family.getFamilyId())).isEmpty();
         assertThat(userRepository.findById(primary.getUsersId())).isPresent();
+        assertThat(response.familyId()).isEqualTo(family.getFamilyId());
+        assertThat(response.familyDeleted()).isTrue();
     }
 
     @Test

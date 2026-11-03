@@ -1,5 +1,6 @@
 package com.example.senioron.domain.family.service;
 
+import com.example.senioron.domain.family.dto.response.FamilyConnectionDisconnectResponse;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
@@ -29,7 +30,10 @@ public class FamilyConnectionService {
     private final UnusedFamilyCleanupService unusedFamilyCleanupService;
 
     @Transactional
-    public void disconnect(User principal, Long familyId) {
+    public FamilyConnectionDisconnectResponse disconnect(
+            User principal,
+            Long familyId
+    ) {
         Family family = familyRepository.findByIdForUpdate(familyId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND));
 
@@ -54,7 +58,10 @@ public class FamilyConnectionService {
         if (lockedSeniors != null) {
             familyMemberRepository.flush();
             unusedFamilyCleanupService.cleanup(family, lockedSeniors);
+            return new FamilyConnectionDisconnectResponse(familyId, true);
         }
+
+        return new FamilyConnectionDisconnectResponse(familyId, false);
     }
 
     private void validateDisconnectRole(
