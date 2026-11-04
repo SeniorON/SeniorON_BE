@@ -115,3 +115,7 @@ admin:
     email: ${ADMIN_BOOTSTRAP_EMAIL:}
   invitation:
     log-link: false
+
+senior:
+  withdrawal-notice:
+    retention-days: ${SENIOR_WITHDRAWAL_NOTICE_RETENTION_DAYS:30}

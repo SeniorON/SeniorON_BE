@@ -40,4 +40,8 @@ public class Family extends BaseEntity {
             firstSeniorConnectedAt = connectedAt;
         }
     }
+
+    public void invalidateSeniorCode() {
+        seniorCode = null;
+    }
 }

@@ -22,6 +22,7 @@ import com.example.senioron.domain.inactivity.service.InactivitySettingService;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
+import com.example.senioron.domain.senior.service.SeniorWithdrawalService;
 import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeSendRequest;
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeVerifyRequest;
@@ -78,6 +79,7 @@ class UserServiceTest {
     private final DeviceRepository deviceRepository = mock(DeviceRepository.class);
     private final DeviceService deviceService = mock(DeviceService.class);
     private final SeniorRepository seniorRepository = mock(SeniorRepository.class);
+    private final SeniorWithdrawalService seniorWithdrawalService = mock(SeniorWithdrawalService.class);
     private final FamilyMemberRepository familyMemberRepository = mock(FamilyMemberRepository.class);
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
@@ -101,7 +103,7 @@ class UserServiceTest {
                 socialAccountRepository,
                 refreshTokenService,
                 deviceRepository,
-                seniorRepository,
+                seniorWithdrawalService,
                 familyMemberRepository,
                 passwordEncoder,
                 jwtUtil,
@@ -359,6 +361,43 @@ class UserServiceTest {
         verify(deviceRepository).deleteAllByUser(user);
         verify(socialAccountRepository).deleteAllByUser(user);
         verify(familyMemberRepository).deleteAllByUser(user);
+        verify(seniorWithdrawalService, never()).withdrawParent(any(User.class));
+    }
+
+    @Test
+    void parentWithdrawalCleansUpSeniorDataBeforeCommonWithdrawal() {
+        User user = createWithdrawalUser(null);
+        ReflectionTestUtils.setField(user, "role", Role.PARENT);
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(user));
+        given(familyMemberRepository.findAllByUser(user)).willReturn(List.of());
+
+        userService.withdraw(user, createWithdrawalRequest(UserService.WITHDRAWAL_CONFIRMATION));
+
+        verify(seniorWithdrawalService).withdrawParent(user);
+        verify(refreshTokenRepository).deleteAllByUser(user);
+        verify(deviceRepository).deleteAllByUser(user);
+        verify(socialAccountRepository).deleteAllByUser(user);
+        verify(familyMemberRepository).deleteAllByUser(user);
+        assertThat(user.getStatus()).isEqualTo(UserStatus.WITHDRAWN);
+    }
+
+    @Test
+    void repeatedParentWithdrawalDoesNotCreateAnotherWithdrawalNotice() {
+        User user = createWithdrawalUser(null);
+        ReflectionTestUtils.setField(user, "role", Role.PARENT);
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(user));
+        given(familyMemberRepository.findAllByUser(user)).willReturn(List.of());
+        UserWithdrawalRequest request = createWithdrawalRequest(UserService.WITHDRAWAL_CONFIRMATION);
+
+        userService.withdraw(user, request);
+
+        assertThatThrownBy(() -> userService.withdraw(user, request))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.WITHDRAWN_USER);
+        verify(seniorWithdrawalService, times(1)).withdrawParent(user);
+        verify(refreshTokenRepository, times(1)).deleteAllByUser(user);
     }
 
     @Test
@@ -378,6 +417,7 @@ class UserServiceTest {
         verify(deviceRepository, never()).deleteAllByUser(any(User.class));
         verify(socialAccountRepository, never()).deleteAllByUser(any(User.class));
         verify(familyMemberRepository, never()).deleteAllByUser(any(User.class));
+        verify(seniorWithdrawalService, never()).withdrawParent(any(User.class));
     }
 
     @Test
