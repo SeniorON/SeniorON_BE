@@ -17,7 +17,10 @@ import com.example.senioron.domain.senior.dto.request.SeniorCreateRequest;
 import com.example.senioron.domain.senior.dto.response.ManagedSeniorResponse;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
+import com.example.senioron.domain.senior.entity.SeniorWithdrawalNotice;
+import com.example.senioron.domain.senior.entity.SeniorWithdrawalNoticeRecipient;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
+import com.example.senioron.domain.senior.repository.SeniorWithdrawalNoticeRecipientRepository;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
@@ -25,6 +28,7 @@ import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,6 +46,8 @@ class SeniorServiceTest {
             org.mockito.Mockito.mock(FamilyRepository.class);
     private final FamilyMemberRepository familyMemberRepository =
             org.mockito.Mockito.mock(FamilyMemberRepository.class);
+    private final SeniorWithdrawalNoticeRecipientRepository withdrawalRecipientRepository =
+            org.mockito.Mockito.mock(SeniorWithdrawalNoticeRecipientRepository.class);
 
     private SeniorService seniorService;
 
@@ -51,8 +57,12 @@ class SeniorServiceTest {
                 seniorRepository,
                 userRepository,
                 familyRepository,
-                familyMemberRepository
+                familyMemberRepository,
+                withdrawalRecipientRepository
         );
+        given(withdrawalRecipientRepository
+                .findUnacknowledgedAndUnexpiredByRecipientUserId(any(), any()))
+                .willReturn(List.of());
     }
 
     @Test
@@ -80,6 +90,8 @@ class SeniorServiceTest {
         assertThat(response.get(0).relation()).isEqualTo(SeniorRelation.MOTHER);
         assertThat(response.get(0).customRelation()).isNull();
         assertThat(response.get(0).seniorProfileCompleted()).isTrue();
+        assertThat(response.get(0).withdrawn()).isFalse();
+        assertThat(response.get(0).withdrawalNoticeId()).isNull();
         verify(familyMemberRepository).findManagedSeniorResponsesByUserId(1L);
         verify(seniorRepository, never()).findFirstByFamilyOrderBySeniorIdAsc(any());
     }
@@ -104,6 +116,56 @@ class SeniorServiceTest {
         var response = seniorService.getManagedSeniors(user);
 
         assertThat(response).isEmpty();
+    }
+
+    @Test
+    void getManagedSeniorsMergesWithdrawalSnapshotAndRemovesEmptyPlaceholder() {
+        Family family = Family.builder().familyId(1L).build();
+        User user = createChild(1L, family, ManagerType.PRIMARY);
+        ManagedSeniorResponse normal = new ManagedSeniorResponse(
+                1L, 10L, "정상 시니어", SeniorRelation.FATHER, null, true);
+        ManagedSeniorResponse emptyPlaceholder = new ManagedSeniorResponse(
+                2L, null, null, SeniorRelation.MOTHER, null, false);
+        SeniorWithdrawalNotice notice = SeniorWithdrawalNotice.builder()
+                .seniorWithdrawalNoticeId(50L)
+                .seniorId(20L)
+                .familyId(2L)
+                .seniorName("탈퇴 시니어")
+                .withdrawnAt(LocalDateTime.now().minusDays(1))
+                .expiresAt(LocalDateTime.now().plusDays(29))
+                .build();
+        SeniorWithdrawalNoticeRecipient recipient =
+                SeniorWithdrawalNoticeRecipient.builder()
+                        .notice(notice)
+                        .recipientUser(user)
+                        .relation(SeniorRelation.MOTHER)
+                        .build();
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(familyMemberRepository.findManagedSeniorResponsesByUserId(1L))
+                .willReturn(List.of(normal, emptyPlaceholder));
+        given(withdrawalRecipientRepository
+                .findUnacknowledgedAndUnexpiredByRecipientUserId(
+                        org.mockito.ArgumentMatchers.eq(1L),
+                        any()
+                ))
+                .willReturn(List.of(recipient));
+
+        var response = seniorService.getManagedSeniors(user);
+
+        assertThat(response).containsExactly(
+                normal,
+                new ManagedSeniorResponse(
+                        2L,
+                        20L,
+                        "탈퇴 시니어",
+                        SeniorRelation.MOTHER,
+                        null,
+                        true,
+                        true,
+                        50L
+                )
+        );
     }
 
     @Test

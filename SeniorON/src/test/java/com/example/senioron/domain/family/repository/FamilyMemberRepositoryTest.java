@@ -54,7 +54,9 @@ class FamilyMemberRepositoryTest {
                         "seniorName",
                         "relation",
                         "customRelation",
-                        "seniorProfileCompleted"
+                        "seniorProfileCompleted",
+                        "withdrawn",
+                        "withdrawalNoticeId"
                 )
                 .containsExactly(tuple(
                         family.getFamilyId(),
@@ -62,7 +64,9 @@ class FamilyMemberRepositoryTest {
                         "김영희",
                         SeniorRelation.MOTHER,
                         null,
-                        true
+                        true,
+                        false,
+                        null
                 ));
     }
 
@@ -149,6 +153,19 @@ class FamilyMemberRepositoryTest {
                         null,
                         false
                 ));
+    }
+
+    @Test
+    void excludesInvalidatedFamilyWithoutSeniorAfterWithdrawal() {
+        User user = saveUser("managed-withdrawn-empty-family");
+        Family family = familyRepository.saveAndFlush(Family.builder().build());
+        saveFamilyMember(user, family);
+
+        var result = familyMemberRepository.findManagedSeniorResponsesByUserId(
+                user.getUsersId()
+        );
+
+        assertThat(result).isEmpty();
     }
 
     @Test
