@@ -1,7 +1,9 @@
 package com.example.senioron.domain.senior.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -143,6 +145,190 @@ class SeniorWithdrawalNoticeControllerIntegrationTest {
     void requestWithoutJwtIsRejected() throws Exception {
         mvc.perform(get(PATH))
                 .andExpect(status().isUnauthorized());
+        mvc.perform(patch(PATH + "/{noticeId}/acknowledgement", 1L))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void acknowledgesOnlyCurrentChildAndCompletesAfterLastRecipient() throws Exception {
+        LocalDateTime now = LocalDateTime.now();
+        SeniorWithdrawalNotice notice = notice(
+                301L, 31L, "확인 대상", now.minusHours(1), now.plusDays(30));
+        SeniorWithdrawalNoticeRecipient childRecipient = recipient(
+                notice, child, SeniorRelation.MOTHER, null, null);
+        SeniorWithdrawalNoticeRecipient otherRecipient = recipient(
+                notice, otherChild, SeniorRelation.MOTHER, null, null);
+        entityManager.flush();
+        entityManager.clear();
+
+        mvc.perform(patch(PATH + "/{noticeId}/acknowledgement",
+                        notice.getSeniorWithdrawalNoticeId())
+                        .header("Authorization", bearer(child)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("COMMON_200"));
+
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(recipientRepository.findById(
+                childRecipient.getSeniorWithdrawalNoticeRecipientId()).orElseThrow()
+                .getAcknowledgedAt()).isNotNull();
+        assertThat(recipientRepository.findById(
+                otherRecipient.getSeniorWithdrawalNoticeRecipientId()).orElseThrow()
+                .getAcknowledgedAt()).isNull();
+        assertThat(noticeRepository.findById(
+                notice.getSeniorWithdrawalNoticeId()).orElseThrow()
+                .getCompletedAt()).isNull();
+
+        mvc.perform(get(PATH).header("Authorization", bearer(child)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isEmpty());
+        mvc.perform(get(PATH).header("Authorization", bearer(otherChild)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].withdrawalNoticeId")
+                        .value(notice.getSeniorWithdrawalNoticeId().intValue()));
+
+        mvc.perform(patch(PATH + "/{noticeId}/acknowledgement",
+                        notice.getSeniorWithdrawalNoticeId())
+                        .header("Authorization", bearer(otherChild)))
+                .andExpect(status().isOk());
+
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(noticeRepository.findById(
+                notice.getSeniorWithdrawalNoticeId()).orElseThrow()
+                .getCompletedAt()).isNotNull();
+        assertThat(noticeRepository.existsById(
+                notice.getSeniorWithdrawalNoticeId())).isTrue();
+    }
+
+    @Test
+    void duplicateAcknowledgementKeepsOriginalTimestamps() throws Exception {
+        LocalDateTime now = LocalDateTime.now();
+        SeniorWithdrawalNotice notice = notice(
+                302L, 32L, "중복 확인", now.minusHours(1), now.plusDays(30));
+        SeniorWithdrawalNoticeRecipient recipient = recipient(
+                notice, child, SeniorRelation.FATHER, null, null);
+        entityManager.flush();
+
+        mvc.perform(patch(PATH + "/{noticeId}/acknowledgement",
+                        notice.getSeniorWithdrawalNoticeId())
+                        .header("Authorization", bearer(child)))
+                .andExpect(status().isOk());
+        entityManager.flush();
+        entityManager.clear();
+        LocalDateTime firstAcknowledgedAt = recipientRepository.findById(
+                recipient.getSeniorWithdrawalNoticeRecipientId()).orElseThrow()
+                .getAcknowledgedAt();
+        LocalDateTime firstCompletedAt = noticeRepository.findById(
+                notice.getSeniorWithdrawalNoticeId()).orElseThrow()
+                .getCompletedAt();
+
+        mvc.perform(patch(PATH + "/{noticeId}/acknowledgement",
+                        notice.getSeniorWithdrawalNoticeId())
+                        .header("Authorization", bearer(child)))
+                .andExpect(status().isOk());
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(recipientRepository.findById(
+                recipient.getSeniorWithdrawalNoticeRecipientId()).orElseThrow()
+                .getAcknowledgedAt()).isEqualTo(firstAcknowledgedAt);
+        assertThat(noticeRepository.findById(
+                notice.getSeniorWithdrawalNoticeId()).orElseThrow()
+                .getCompletedAt()).isEqualTo(firstCompletedAt);
+    }
+
+    @Test
+    void childCannotAcknowledgeAnotherChildNotice() throws Exception {
+        SeniorWithdrawalNotice notice = notice(
+                303L, 33L, "타인 알림", LocalDateTime.now().minusHours(1),
+                LocalDateTime.now().plusDays(30));
+        SeniorWithdrawalNoticeRecipient otherRecipient = recipient(
+                notice, otherChild, SeniorRelation.MOTHER, null, null);
+        entityManager.flush();
+
+        mvc.perform(patch(PATH + "/{noticeId}/acknowledgement",
+                        notice.getSeniorWithdrawalNoticeId())
+                        .header("Authorization", bearer(child)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(
+                        ErrorCode.SENIOR_WITHDRAWAL_NOTICE_ACCESS_DENIED.getCode()));
+
+        entityManager.clear();
+        assertThat(recipientRepository.findById(
+                otherRecipient.getSeniorWithdrawalNoticeRecipientId()).orElseThrow()
+                .getAcknowledgedAt()).isNull();
+    }
+
+    @Test
+    void parentCannotAcknowledgeWithdrawalNotice() throws Exception {
+        SeniorWithdrawalNotice notice = notice(
+                304L, 34L, "부모 확인 차단", LocalDateTime.now().minusHours(1),
+                LocalDateTime.now().plusDays(30));
+        recipient(notice, parent, SeniorRelation.MOTHER, null, null);
+        entityManager.flush();
+
+        mvc.perform(patch(PATH + "/{noticeId}/acknowledgement",
+                        notice.getSeniorWithdrawalNoticeId())
+                        .header("Authorization", bearer(parent)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(
+                        ErrorCode.SENIOR_WITHDRAWAL_NOTICE_CHILD_ONLY.getCode()));
+    }
+
+    @Test
+    void missingWithdrawalNoticeReturnsNotFound() throws Exception {
+        mvc.perform(patch(PATH + "/{noticeId}/acknowledgement", Long.MAX_VALUE)
+                        .header("Authorization", bearer(child)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value(
+                        ErrorCode.SENIOR_WITHDRAWAL_NOTICE_NOT_FOUND.getCode()));
+    }
+
+    @Test
+    void unacknowledgedExpiredNoticeCannotBeAcknowledged() throws Exception {
+        SeniorWithdrawalNotice notice = notice(
+                305L, 35L, "만료 알림", LocalDateTime.now().minusDays(31),
+                LocalDateTime.now().minusSeconds(1));
+        SeniorWithdrawalNoticeRecipient recipient = recipient(
+                notice, child, SeniorRelation.GRANDPARENT, null, null);
+        entityManager.flush();
+
+        mvc.perform(patch(PATH + "/{noticeId}/acknowledgement",
+                        notice.getSeniorWithdrawalNoticeId())
+                        .header("Authorization", bearer(child)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(
+                        ErrorCode.SENIOR_WITHDRAWAL_NOTICE_EXPIRED.getCode()));
+
+        entityManager.clear();
+        assertThat(recipientRepository.findById(
+                recipient.getSeniorWithdrawalNoticeRecipientId()).orElseThrow()
+                .getAcknowledgedAt()).isNull();
+    }
+
+    @Test
+    void acknowledgedExpiredNoticeRemainsIdempotent() throws Exception {
+        LocalDateTime acknowledgedAt = LocalDateTime.now().minusDays(2);
+        SeniorWithdrawalNotice notice = notice(
+                306L, 36L, "확인 후 만료", LocalDateTime.now().minusDays(31),
+                LocalDateTime.now().minusDays(1));
+        SeniorWithdrawalNoticeRecipient recipient = recipient(
+                notice, child, SeniorRelation.GRANDPARENT, null, acknowledgedAt);
+        notice.complete(acknowledgedAt);
+        entityManager.flush();
+        entityManager.clear();
+
+        mvc.perform(patch(PATH + "/{noticeId}/acknowledgement",
+                        notice.getSeniorWithdrawalNoticeId())
+                        .header("Authorization", bearer(child)))
+                .andExpect(status().isOk());
+
+        entityManager.clear();
+        assertThat(recipientRepository.findById(
+                recipient.getSeniorWithdrawalNoticeRecipientId()).orElseThrow()
+                .getAcknowledgedAt()).isEqualTo(acknowledgedAt);
     }
 
     private User user(String loginId, Role role) {

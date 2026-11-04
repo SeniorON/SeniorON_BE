@@ -10,6 +10,8 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -30,5 +32,18 @@ public class SeniorWithdrawalNoticeController {
             @AuthenticationPrincipal User user
     ) {
         return Response.ok(noticeService.getUnacknowledgedNotices(user));
+    }
+
+    @Operation(
+            summary = "시니어 탈퇴 알림 확인",
+            description = "로그인한 자녀에게 발급된 시니어 탈퇴 알림을 확인 완료 처리합니다."
+    )
+    @PatchMapping("/{noticeId}/acknowledgement")
+    public Response<Void> acknowledgeNotice(
+            @AuthenticationPrincipal User user,
+            @PathVariable Long noticeId
+    ) {
+        noticeService.acknowledgeNotice(user, noticeId);
+        return Response.ok();
     }
 }

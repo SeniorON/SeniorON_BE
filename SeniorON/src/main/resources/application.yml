@@ -119,3 +119,5 @@ admin:
 senior:
   withdrawal-notice:
     retention-days: ${SENIOR_WITHDRAWAL_NOTICE_RETENTION_DAYS:30}
+    completion-grace-days: ${SENIOR_WITHDRAWAL_NOTICE_COMPLETION_GRACE_DAYS:1}
+    cleanup-cron: ${SENIOR_WITHDRAWAL_NOTICE_CLEANUP_CRON:0 30 4 * * *}

@@ -31,6 +31,10 @@ import lombok.NoArgsConstructor;
                 @Index(
                         name = "idx_senior_withdrawal_notice_expires_at",
                         columnList = "expires_at"
+                ),
+                @Index(
+                        name = "idx_senior_withdrawal_notice_completed_at",
+                        columnList = "completed_at"
                 )
         }
 )

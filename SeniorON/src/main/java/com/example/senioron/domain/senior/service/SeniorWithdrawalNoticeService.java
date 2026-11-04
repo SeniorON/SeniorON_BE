@@ -1,6 +1,9 @@
 package com.example.senioron.domain.senior.service;
 
 import com.example.senioron.domain.senior.dto.response.SeniorWithdrawalNoticeResponse;
+import com.example.senioron.domain.senior.entity.SeniorWithdrawalNotice;
+import com.example.senioron.domain.senior.entity.SeniorWithdrawalNoticeRecipient;
+import com.example.senioron.domain.senior.repository.SeniorWithdrawalNoticeRepository;
 import com.example.senioron.domain.senior.repository.SeniorWithdrawalNoticeRecipientRepository;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
@@ -19,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class SeniorWithdrawalNoticeService {
 
     private final UserRepository userRepository;
+    private final SeniorWithdrawalNoticeRepository noticeRepository;
     private final SeniorWithdrawalNoticeRecipientRepository recipientRepository;
 
     public List<SeniorWithdrawalNoticeResponse> getUnacknowledgedNotices(User principal) {
@@ -33,6 +37,41 @@ public class SeniorWithdrawalNoticeService {
                 .stream()
                 .map(SeniorWithdrawalNoticeResponse::from)
                 .toList();
+    }
+
+    @Transactional
+    public void acknowledgeNotice(User principal, Long noticeId) {
+        User child = getAuthenticatedChild(principal);
+        SeniorWithdrawalNotice notice = noticeRepository.findByIdForUpdate(noticeId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.SENIOR_WITHDRAWAL_NOTICE_NOT_FOUND
+                ));
+        SeniorWithdrawalNoticeRecipient recipient = recipientRepository
+                .findByNoticeIdAndRecipientUserId(noticeId, child.getUsersId())
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.SENIOR_WITHDRAWAL_NOTICE_ACCESS_DENIED
+                ));
+
+        if (recipient.getAcknowledgedAt() != null) {
+            return;
+        }
+
+        LocalDateTime acknowledgedAt = LocalDateTime.now();
+        if (!notice.getExpiresAt().isAfter(acknowledgedAt)) {
+            throw new BusinessException(ErrorCode.SENIOR_WITHDRAWAL_NOTICE_EXPIRED);
+        }
+
+        recipient.acknowledge(acknowledgedAt);
+        recipientRepository.flush();
+
+        boolean hasUnacknowledgedRecipient =
+                recipientRepository
+                        .existsByNoticeSeniorWithdrawalNoticeIdAndAcknowledgedAtIsNull(
+                                noticeId
+                        );
+        if (!hasUnacknowledgedRecipient) {
+            notice.complete(acknowledgedAt);
+        }
     }
 
     private User getAuthenticatedChild(User principal) {
