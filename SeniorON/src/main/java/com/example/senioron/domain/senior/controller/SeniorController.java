@@ -25,7 +25,10 @@ public class SeniorController {
 
     private final SeniorService seniorService;
 
-    @Operation(summary = "내가 속한 가족/시니어 목록", description = "현재 로그인한 사용자가 속한 가족과 각 가족에 연결된 시니어를 전환 목록으로 조회합니다.")
+    @Operation(
+            summary = "내가 속한 가족/시니어 목록",
+            description = "현재 관리 중인 시니어와 아직 확인하지 않은 탈퇴 시니어를 함께 조회합니다."
+    )
     @GetMapping("/me")
     public Response<List<ManagedSeniorResponse>> getManagedSeniors(
             @AuthenticationPrincipal User user

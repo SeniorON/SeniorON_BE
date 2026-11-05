@@ -13,7 +13,7 @@ import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.senior.entity.Senior;
-import com.example.senioron.domain.senior.repository.SeniorRepository;
+import com.example.senioron.domain.senior.service.SeniorWithdrawalService;
 import com.example.senioron.domain.user.entity.RefreshToken;
 import com.example.senioron.domain.user.entity.SignupEmailVerificationCode;
 import com.example.senioron.domain.device.service.DeviceCredentialIssueResult;
@@ -63,7 +63,7 @@ public class UserService {
     private final SocialAccountRepository socialAccountRepository;
     private final RefreshTokenService refreshTokenService;
     private final DeviceRepository deviceRepository;
-    private final SeniorRepository seniorRepository;
+    private final SeniorWithdrawalService seniorWithdrawalService;
     private final FamilyMemberRepository familyMemberRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
@@ -374,6 +374,10 @@ public class UserService {
 
         if (hasPrimaryMembership) {
             throw new BusinessException(ErrorCode.PRIMARY_USER_CANNOT_WITHDRAW);
+        }
+
+        if (user.getRole() == Role.PARENT) {
+            seniorWithdrawalService.withdrawParent(user);
         }
 
         refreshTokenRepository.deleteAllByUser(user);

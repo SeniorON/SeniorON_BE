@@ -119,6 +119,7 @@ public interface FamilyMemberRepository extends JpaRepository<FamilyMember, Long
             JOIN fm.family f
             LEFT JOIN f.senior s
             WHERE fm.user.usersId = :userId
+              AND (s IS NOT NULL OR f.seniorCode IS NOT NULL)
             ORDER BY fm.id ASC
             """)
     List<ManagedSeniorResponse> findManagedSeniorResponsesByUserId(

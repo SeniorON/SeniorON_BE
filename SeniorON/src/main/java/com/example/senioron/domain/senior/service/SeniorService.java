@@ -12,17 +12,21 @@ import com.example.senioron.domain.senior.dto.response.SeniorFamilyResponse;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
+import com.example.senioron.domain.senior.repository.SeniorWithdrawalNoticeRecipientRepository;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -33,6 +37,7 @@ public class SeniorService {
     private final UserRepository userRepository;
     private final FamilyRepository familyRepository;
     private final FamilyMemberRepository familyMemberRepository;
+    private final SeniorWithdrawalNoticeRecipientRepository withdrawalRecipientRepository;
 
     public List<ManagedSeniorResponse> getManagedSeniors(User user) {
         if (user == null) {
@@ -42,9 +47,44 @@ public class SeniorService {
         User foundUser = userRepository.findById(user.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        return familyMemberRepository.findManagedSeniorResponsesByUserId(
-                foundUser.getUsersId()
-        );
+        List<ManagedSeniorResponse> managedSeniors =
+                familyMemberRepository.findManagedSeniorResponsesByUserId(
+                        foundUser.getUsersId()
+                );
+        List<ManagedSeniorResponse> withdrawnSeniors = withdrawalRecipientRepository
+                .findUnacknowledgedAndUnexpiredByRecipientUserId(
+                        foundUser.getUsersId(),
+                        LocalDateTime.now()
+                )
+                .stream()
+                .map(ManagedSeniorResponse::withdrawn)
+                .toList();
+
+        Set<Long> withdrawnSeniorIds = withdrawnSeniors.stream()
+                .map(ManagedSeniorResponse::seniorId)
+                .collect(Collectors.toSet());
+        Set<Long> withdrawalFamilyIds = withdrawnSeniors.stream()
+                .map(ManagedSeniorResponse::familyId)
+                .collect(Collectors.toSet());
+
+        Stream<ManagedSeniorResponse> normalItems = managedSeniors.stream()
+                .filter(item -> !isDuplicateWithdrawalItem(
+                        item,
+                        withdrawnSeniorIds,
+                        withdrawalFamilyIds
+                ));
+        return Stream.concat(normalItems, withdrawnSeniors.stream()).toList();
+    }
+
+    private boolean isDuplicateWithdrawalItem(
+            ManagedSeniorResponse item,
+            Set<Long> withdrawnSeniorIds,
+            Set<Long> withdrawalFamilyIds
+    ) {
+        if (item.seniorId() == null) {
+            return withdrawalFamilyIds.contains(item.familyId());
+        }
+        return withdrawnSeniorIds.contains(item.seniorId());
     }
 
     public List<SeniorFamilyResponse> getFamilySeniors(User principal, Long familyId) {
