@@ -98,6 +98,7 @@ class ParentWithdrawalFamilyDeletionIntegrationTest {
         Long otherSeniorId = otherSenior.getSeniorId();
         Long firstChildId = firstChild.getUsersId();
         Long secondChildId = secondChild.getUsersId();
+        Long otherParentId = otherParent.getUsersId();
         String parentToken = bearer(targetParent);
         String firstChildToken = bearer(firstChild);
         String secondChildToken = bearer(secondChild);
@@ -117,10 +118,16 @@ class ParentWithdrawalFamilyDeletionIntegrationTest {
         assertThat(seniorRepository.findById(targetSeniorId)).isEmpty();
         assertThat(familyRepository.findById(targetFamilyId)).isEmpty();
         assertThat(familyMemberRepository.findAll())
-                .allSatisfy(member ->
-                        assertThat(member.getFamily().getFamilyId()).isEqualTo(otherFamilyId)
-                );
-        assertThat(familyMemberRepository.findAll()).hasSize(2);
+                .filteredOn(member ->
+                        member.getFamily().getFamilyId().equals(targetFamilyId)
+                )
+                .isEmpty();
+        assertThat(familyMemberRepository.findAll())
+                .filteredOn(member ->
+                        member.getFamily().getFamilyId().equals(otherFamilyId)
+                )
+                .extracting(member -> member.getUser().getUsersId())
+                .containsExactlyInAnyOrder(firstChildId, otherParentId);
         assertThat(userRepository.findById(firstChildId)).hasValueSatisfying(child ->
                 assertThat(child.getStatus()).isEqualTo(UserStatus.ACTIVE)
         );
@@ -134,6 +141,9 @@ class ParentWithdrawalFamilyDeletionIntegrationTest {
                 .orElseThrow();
         assertThat(notice.getFamilyId()).isEqualTo(targetFamilyId);
         assertThat(recipientRepository.findAll())
+                .filteredOn(recipient -> recipient.getNotice()
+                        .getSeniorWithdrawalNoticeId()
+                        .equals(notice.getSeniorWithdrawalNoticeId()))
                 .extracting(recipient -> recipient.getRecipientUser().getUsersId())
                 .containsExactlyInAnyOrder(firstChildId, secondChildId);
 

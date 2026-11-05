@@ -68,7 +68,11 @@ class ParentWithdrawalRollbackIntegrationTest {
         transaction.executeWithoutResult(status -> {
             assertThat(familyRepository.findById(fixture.familyId())).isPresent();
             assertThat(seniorRepository.findById(fixture.seniorId())).isPresent();
-            assertThat(familyMemberRepository.findAll()).hasSize(2);
+            assertThat(familyMemberRepository.findAll())
+                    .filteredOn(member -> member.getFamily()
+                            .getFamilyId()
+                            .equals(fixture.familyId()))
+                    .hasSize(2);
             assertThat(noticeRepository.findBySeniorId(fixture.seniorId())).isEmpty();
             assertThat(userRepository.findById(fixture.parentId()))
                     .hasValueSatisfying(parent ->

@@ -84,7 +84,12 @@ class SeniorWithdrawalServiceIntegrationTest {
         assertThat(notice.getSeniorName()).isEqualTo("김영희");
         assertThat(notice.getExpiresAt()).isEqualTo(notice.getWithdrawnAt().plusDays(30));
 
-        assertThat(recipientRepository.findAll()).singleElement().satisfies(recipient -> {
+        assertThat(recipientRepository.findAll())
+                .filteredOn(recipient -> recipient.getNotice()
+                        .getSeniorWithdrawalNoticeId()
+                        .equals(notice.getSeniorWithdrawalNoticeId()))
+                .singleElement()
+                .satisfies(recipient -> {
             assertThat(recipient.getNotice().getSeniorWithdrawalNoticeId())
                     .isEqualTo(notice.getSeniorWithdrawalNoticeId());
             assertThat(recipient.getRecipientUser().getUsersId()).isEqualTo(child.getUsersId());
@@ -92,7 +97,9 @@ class SeniorWithdrawalServiceIntegrationTest {
             assertThat(recipient.getRelation()).isEqualTo(SeniorRelation.MOTHER);
         });
         assertThat(familyRepository.findById(familyId)).isEmpty();
-        assertThat(familyMemberRepository.findAll()).isEmpty();
+        assertThat(familyMemberRepository.findAll())
+                .filteredOn(member -> member.getFamily().getFamilyId().equals(familyId))
+                .isEmpty();
         assertThat(userRepository.findById(child.getUsersId())).isPresent();
         assertThat(userRepository.findById(parent.getUsersId())).isPresent();
     }
@@ -152,6 +159,14 @@ class SeniorWithdrawalServiceIntegrationTest {
         assertThat(familyRepository.findById(targetFamilyId)).isEmpty();
         assertThat(familyRepository.findById(otherFamilyId)).isPresent();
         assertThat(familyMemberRepository.findAll())
+                .filteredOn(member ->
+                        member.getFamily().getFamilyId().equals(targetFamilyId)
+                )
+                .isEmpty();
+        assertThat(familyMemberRepository.findAll())
+                .filteredOn(member ->
+                        member.getFamily().getFamilyId().equals(otherFamilyId)
+                )
                 .singleElement()
                 .satisfies(member -> {
                     assertThat(member.getFamily().getFamilyId()).isEqualTo(otherFamilyId);
@@ -159,13 +174,16 @@ class SeniorWithdrawalServiceIntegrationTest {
                 });
         assertThat(userRepository.findById(firstChild.getUsersId())).isPresent();
         assertThat(userRepository.findById(secondChild.getUsersId())).isPresent();
+        SeniorWithdrawalNotice notice = noticeRepository
+                .findBySeniorId(targetSenior.getSeniorId())
+                .orElseThrow();
         assertThat(recipientRepository.findAll())
+                .filteredOn(recipient -> recipient.getNotice()
+                        .getSeniorWithdrawalNoticeId()
+                        .equals(notice.getSeniorWithdrawalNoticeId()))
                 .extracting(recipient -> recipient.getRecipientUser().getUsersId())
                 .containsExactlyInAnyOrder(firstChild.getUsersId(), secondChild.getUsersId());
-        assertThat(noticeRepository.findBySeniorId(targetSenior.getSeniorId()))
-                .hasValueSatisfying(notice ->
-                        assertThat(notice.getFamilyId()).isEqualTo(targetFamilyId)
-                );
+        assertThat(notice.getFamilyId()).isEqualTo(targetFamilyId);
     }
 
     @Test
@@ -193,9 +211,14 @@ class SeniorWithdrawalServiceIntegrationTest {
 
         assertThat(seniorRepository.findById(seniorId)).isEmpty();
         assertThat(familyRepository.findById(familyId)).isEmpty();
-        assertThat(recipientRepository.findAll()).isEmpty();
-        assertThat(noticeRepository.findBySeniorId(seniorId))
-                .hasValueSatisfying(notice -> assertThat(notice.getCompletedAt()).isNotNull());
+        SeniorWithdrawalNotice notice = noticeRepository.findBySeniorId(seniorId)
+                .orElseThrow();
+        assertThat(recipientRepository.findAll())
+                .filteredOn(recipient -> recipient.getNotice()
+                        .getSeniorWithdrawalNoticeId()
+                        .equals(notice.getSeniorWithdrawalNoticeId()))
+                .isEmpty();
+        assertThat(notice.getCompletedAt()).isNotNull();
     }
 
     private User user(String loginId, Role role) {
