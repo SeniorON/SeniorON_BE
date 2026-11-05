@@ -22,6 +22,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.servlet.Filter;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -310,7 +311,9 @@ class SeniorWithdrawalNoticeControllerIntegrationTest {
 
     @Test
     void acknowledgedExpiredNoticeRemainsIdempotent() throws Exception {
-        LocalDateTime acknowledgedAt = LocalDateTime.now().minusDays(2);
+        LocalDateTime acknowledgedAt = LocalDateTime.now()
+                .minusDays(2)
+                .truncatedTo(ChronoUnit.MICROS);
         SeniorWithdrawalNotice notice = notice(
                 306L, 36L, "확인 후 만료", LocalDateTime.now().minusDays(31),
                 LocalDateTime.now().minusDays(1));
