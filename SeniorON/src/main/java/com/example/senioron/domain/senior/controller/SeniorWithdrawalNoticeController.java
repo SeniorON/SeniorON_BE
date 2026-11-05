@@ -35,8 +35,9 @@ public class SeniorWithdrawalNoticeController {
     }
 
     @Operation(
-            summary = "시니어 탈퇴 알림 확인",
-            description = "로그인한 자녀에게 발급된 시니어 탈퇴 알림을 확인 완료 처리합니다."
+            summary = "시니어 탈퇴 알림 확인 처리",
+            description = "로그인한 자녀가 시니어 탈퇴 알림을 확인한 것으로 처리합니다. "
+                    + "확인 처리된 알림은 미확인 알림 목록과 시니어 목록에서 제외됩니다."
     )
     @PatchMapping("/{noticeId}/acknowledgement")
     public Response<Void> acknowledgeNotice(
