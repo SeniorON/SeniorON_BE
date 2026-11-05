@@ -18,6 +18,7 @@ import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
@@ -25,6 +26,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -174,8 +176,28 @@ public class SeniorService {
         try {
             return seniorRepository.saveAndFlush(senior);
         } catch (DataIntegrityViolationException e) {
-            throw new BusinessException(ErrorCode.SENIOR_ALREADY_EXISTS);
+            if (isDuplicateKeyViolation(e)) {
+                throw new BusinessException(ErrorCode.SENIOR_ALREADY_EXISTS);
+            }
+            throw e;
         }
+    }
+
+    private boolean isDuplicateKeyViolation(DataIntegrityViolationException exception) {
+        if (exception instanceof DuplicateKeyException) {
+            return true;
+        }
+
+        Throwable current = exception;
+        while (current != null) {
+            if (current instanceof SQLException sqlException
+                    && (sqlException.getErrorCode() == 1062
+                    || "23505".equals(sqlException.getSQLState()))) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     /**

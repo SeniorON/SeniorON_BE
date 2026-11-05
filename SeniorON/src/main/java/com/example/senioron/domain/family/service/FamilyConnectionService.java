@@ -113,6 +113,7 @@ public class FamilyConnectionService {
 
         List<Senior> lockedSeniors = seniorRepository
                 .findAllByFamilyOrderBySeniorIdAscForUpdate(family);
+
         boolean hasLinkedParent = lockedSeniors.stream()
                 .anyMatch(senior -> senior.getParentUser() != null);
 

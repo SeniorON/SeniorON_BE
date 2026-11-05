@@ -112,12 +112,10 @@ class FamilyConnectionServiceTest {
                 ManagerType.PRIMARY,
                 LocalDateTime.of(2026, 11, 1, 10, 0)
         );
-
         assertDisconnectError(
                 fixture,
                 ErrorCode.PRIMARY_CONNECTION_DISCONNECT_HISTORY_EXISTS
         );
-
         verify(familyMemberRepository, never())
                 .findAllByFamilyOrderByIdAsc(fixture.family());
     }
