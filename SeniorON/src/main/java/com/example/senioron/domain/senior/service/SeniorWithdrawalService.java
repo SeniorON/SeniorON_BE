@@ -5,6 +5,7 @@ import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
+import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorWithdrawalNotice;
 import com.example.senioron.domain.senior.entity.SeniorWithdrawalNoticeRecipient;
@@ -17,6 +18,8 @@ import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.entity.UserStatus;
+import com.example.senioron.global.apiPayload.code.ErrorCode;
+import com.example.senioron.global.apiPayload.exception.BusinessException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -37,6 +40,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class SeniorWithdrawalService {
 
     private final SeniorRepository seniorRepository;
+    private final FamilyRepository familyRepository;
     private final FamilyMemberRepository familyMemberRepository;
     private final DeviceRepository deviceRepository;
     private final SeniorWithdrawalNoticeRepository noticeRepository;
@@ -57,9 +61,12 @@ public class SeniorWithdrawalService {
         }
 
         Senior senior = optionalSenior.get();
-        Family family = senior.getFamily();
+        Family family = familyRepository.findByIdForUpdate(senior.getFamily().getFamilyId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND));
         LocalDateTime withdrawnAt = LocalDateTime.now();
-        List<FamilyMember> guardianMembers = findActiveGuardians(family);
+        List<FamilyMember> familyMembers = familyMemberRepository
+                .findAllByFamilyOrderByIdAsc(family);
+        List<FamilyMember> guardianMembers = findActiveGuardians(familyMembers);
         SeniorWithdrawalNoticeCreatedEvent event = createNoticeEvent(
                 senior,
                 family,
@@ -69,22 +76,21 @@ public class SeniorWithdrawalService {
 
         cleanupRepository.deleteParentDependentData(parentUser, senior);
 
-        if (!seniorRepository.existsByFamilyAndSeniorIdNot(family, senior.getSeniorId())) {
-            family.invalidateSeniorCode();
-        }
-
+        familyMemberRepository.deleteAll(familyMembers);
+        familyMemberRepository.flush();
+        family.unlinkSenior();
         seniorRepository.delete(senior);
         seniorRepository.flush();
+        familyRepository.delete(family);
+        familyRepository.flush();
 
         if (event != null) {
             eventPublisher.publishEvent(event);
         }
     }
 
-    private List<FamilyMember> findActiveGuardians(Family family) {
-        Map<Long, FamilyMember> uniqueGuardians = familyMemberRepository
-                .findAllByFamilyOrderByIdAsc(family)
-                .stream()
+    private List<FamilyMember> findActiveGuardians(List<FamilyMember> familyMembers) {
+        Map<Long, FamilyMember> uniqueGuardians = familyMembers.stream()
                 .filter(member -> member.getUser().getRole() == Role.CHILD)
                 .filter(member -> member.getUser().getStatus() == UserStatus.ACTIVE)
                 .filter(member -> member.getManagerType() == ManagerType.PRIMARY

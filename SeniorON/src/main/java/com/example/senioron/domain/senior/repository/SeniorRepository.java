@@ -26,8 +26,6 @@ public interface SeniorRepository extends JpaRepository<Senior, Long> {
 
     Optional<Senior> findByParentUser(User parentUser);
 
-    boolean existsByFamilyAndSeniorIdNot(Family family, Long seniorId);
-
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             SELECT s

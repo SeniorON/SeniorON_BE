@@ -44,4 +44,12 @@ public class Family extends BaseEntity {
     public void invalidateSeniorCode() {
         seniorCode = null;
     }
+
+    /**
+     * Senior 삭제 전에 양방향 연관관계의 역방향 참조를 제거한다.
+     * 실제 FK는 Senior.family가 소유하므로 이 메서드는 DB FK를 갱신하지 않는다.
+     */
+    public void unlinkSenior() {
+        senior = null;
+    }
 }

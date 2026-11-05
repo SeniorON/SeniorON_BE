@@ -42,7 +42,7 @@ class SeniorWithdrawalServiceIntegrationTest {
     @Autowired private EntityManager entityManager;
 
     @Test
-    void noticeAndRecipientRemainAfterSeniorIsPhysicallyDeleted() {
+    void noticeAndRecipientRemainAfterSeniorAndFamilyArePhysicallyDeleted() {
         User child = userRepository.save(user("child", Role.CHILD));
         User parent = userRepository.save(user("parent", Role.PARENT));
         Family family = familyRepository.save(Family.builder().seniorCode("ABCD-EFGH").build());
@@ -72,6 +72,8 @@ class SeniorWithdrawalServiceIntegrationTest {
                 .build());
         Long seniorId = senior.getSeniorId();
         Long familyId = family.getFamilyId();
+        entityManager.flush();
+        entityManager.clear();
 
         service.withdrawParent(parent);
         entityManager.clear();
@@ -89,10 +91,111 @@ class SeniorWithdrawalServiceIntegrationTest {
             assertThat(recipient.getAcknowledgedAt()).isNull();
             assertThat(recipient.getRelation()).isEqualTo(SeniorRelation.MOTHER);
         });
-        assertThat(familyRepository.findById(familyId).orElseThrow().getSeniorCode()).isNull();
-        assertThat(familyMemberRepository.findAllByFamilyOrderByIdAsc(family)).hasSize(2);
+        assertThat(familyRepository.findById(familyId)).isEmpty();
+        assertThat(familyMemberRepository.findAll()).isEmpty();
         assertThat(userRepository.findById(child.getUsersId())).isPresent();
         assertThat(userRepository.findById(parent.getUsersId())).isPresent();
+    }
+
+    @Test
+    void deletesOnlyTargetFamilyWhenGuardiansBelongToMultipleFamilies() {
+        User firstChild = userRepository.save(user("first-child", Role.CHILD));
+        User secondChild = userRepository.save(user("second-child", Role.CHILD));
+        User parent = userRepository.save(user("target-parent", Role.PARENT));
+        Family targetFamily = familyRepository.save(
+                Family.builder().seniorCode("TARGET-01").build()
+        );
+        Family otherFamily = familyRepository.save(
+                Family.builder().seniorCode("OTHER-01").build()
+        );
+        familyMemberRepository.save(FamilyMember.builder()
+                .user(firstChild)
+                .family(targetFamily)
+                .managerType(ManagerType.PRIMARY)
+                .relation(SeniorRelation.MOTHER)
+                .build());
+        familyMemberRepository.save(FamilyMember.builder()
+                .user(secondChild)
+                .family(targetFamily)
+                .managerType(ManagerType.SUB)
+                .relation(SeniorRelation.OTHER)
+                .customRelation("이모")
+                .build());
+        familyMemberRepository.save(FamilyMember.builder()
+                .user(parent)
+                .family(targetFamily)
+                .managerType(ManagerType.NONE)
+                .build());
+        familyMemberRepository.save(FamilyMember.builder()
+                .user(firstChild)
+                .family(otherFamily)
+                .managerType(ManagerType.PRIMARY)
+                .relation(SeniorRelation.FATHER)
+                .build());
+        Senior targetSenior = seniorRepository.saveAndFlush(Senior.builder()
+                .name("탈퇴 시니어")
+                .birth(LocalDate.of(1950, 1, 1))
+                .phoneNumber("010-0000-0000")
+                .family(targetFamily)
+                .registeredBy(firstChild)
+                .parentUser(parent)
+                .build());
+        Long targetFamilyId = targetFamily.getFamilyId();
+        Long otherFamilyId = otherFamily.getFamilyId();
+        entityManager.flush();
+        entityManager.clear();
+
+        service.withdrawParent(parent);
+        entityManager.clear();
+
+        assertThat(seniorRepository.findById(targetSenior.getSeniorId())).isEmpty();
+        assertThat(familyRepository.findById(targetFamilyId)).isEmpty();
+        assertThat(familyRepository.findById(otherFamilyId)).isPresent();
+        assertThat(familyMemberRepository.findAll())
+                .singleElement()
+                .satisfies(member -> {
+                    assertThat(member.getFamily().getFamilyId()).isEqualTo(otherFamilyId);
+                    assertThat(member.getUser().getUsersId()).isEqualTo(firstChild.getUsersId());
+                });
+        assertThat(userRepository.findById(firstChild.getUsersId())).isPresent();
+        assertThat(userRepository.findById(secondChild.getUsersId())).isPresent();
+        assertThat(recipientRepository.findAll())
+                .extracting(recipient -> recipient.getRecipientUser().getUsersId())
+                .containsExactlyInAnyOrder(firstChild.getUsersId(), secondChild.getUsersId());
+        assertThat(noticeRepository.findBySeniorId(targetSenior.getSeniorId()))
+                .hasValueSatisfying(notice ->
+                        assertThat(notice.getFamilyId()).isEqualTo(targetFamilyId)
+                );
+    }
+
+    @Test
+    void deletesFamilyWithoutCreatingRecipientsWhenNoGuardianExists() {
+        User registrar = userRepository.save(user("no-guardian-registrar", Role.CHILD));
+        User parent = userRepository.save(user("no-guardian-parent", Role.PARENT));
+        Family family = familyRepository.save(
+                Family.builder().seniorCode("NO-GUARDIAN").build()
+        );
+        Senior senior = seniorRepository.saveAndFlush(Senior.builder()
+                .name("보호자 없는 시니어")
+                .birth(LocalDate.of(1950, 1, 1))
+                .phoneNumber("010-0000-0000")
+                .family(family)
+                .registeredBy(registrar)
+                .parentUser(parent)
+                .build());
+        Long familyId = family.getFamilyId();
+        Long seniorId = senior.getSeniorId();
+        entityManager.flush();
+        entityManager.clear();
+
+        service.withdrawParent(parent);
+        entityManager.clear();
+
+        assertThat(seniorRepository.findById(seniorId)).isEmpty();
+        assertThat(familyRepository.findById(familyId)).isEmpty();
+        assertThat(recipientRepository.findAll()).isEmpty();
+        assertThat(noticeRepository.findBySeniorId(seniorId))
+                .hasValueSatisfying(notice -> assertThat(notice.getCompletedAt()).isNotNull());
     }
 
     private User user(String loginId, Role role) {

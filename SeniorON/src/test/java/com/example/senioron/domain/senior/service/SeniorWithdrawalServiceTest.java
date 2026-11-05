@@ -11,6 +11,7 @@ import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
+import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
 import com.example.senioron.domain.senior.entity.SeniorWithdrawalNotice;
@@ -37,6 +38,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 class SeniorWithdrawalServiceTest {
 
     private final SeniorRepository seniorRepository = org.mockito.Mockito.mock(SeniorRepository.class);
+    private final FamilyRepository familyRepository = org.mockito.Mockito.mock(FamilyRepository.class);
     private final FamilyMemberRepository familyMemberRepository = org.mockito.Mockito.mock(FamilyMemberRepository.class);
     private final DeviceRepository deviceRepository = org.mockito.Mockito.mock(DeviceRepository.class);
     private final SeniorWithdrawalNoticeRepository noticeRepository =
@@ -54,6 +56,7 @@ class SeniorWithdrawalServiceTest {
     void setUp() {
         service = new SeniorWithdrawalService(
                 seniorRepository,
+                familyRepository,
                 familyMemberRepository,
                 deviceRepository,
                 noticeRepository,
@@ -87,6 +90,7 @@ class SeniorWithdrawalServiceTest {
                 .user(sub).deviceIdentifier("sub-device").deviceToken(null).build();
 
         given(seniorRepository.findByParentUserForUpdate(parent)).willReturn(Optional.of(senior));
+        given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
         given(familyMemberRepository.findAllByFamilyOrderByIdAsc(family)).willReturn(List.of(
                 primaryMember, subMember, withdrawnMember, parentMember));
         given(noticeRepository.findBySeniorId(100L)).willReturn(Optional.empty());
@@ -98,8 +102,6 @@ class SeniorWithdrawalServiceTest {
                 });
         given(deviceRepository.findAllByUserIn(List.of(primary, sub)))
                 .willReturn(List.of(primaryDevice, duplicatePrimaryToken, subWithoutToken));
-        given(seniorRepository.existsByFamilyAndSeniorIdNot(family, 100L)).willReturn(false);
-
         service.withdrawParent(parent);
 
         ArgumentCaptor<SeniorWithdrawalNotice> noticeCaptor =
@@ -135,9 +137,13 @@ class SeniorWithdrawalServiceTest {
         assertThat(eventCaptor.getValue().targets().get(1).tokens()).isEmpty();
 
         verify(cleanupRepository).deleteParentDependentData(parent, senior);
+        verify(familyMemberRepository).deleteAll(List.of(
+                primaryMember, subMember, withdrawnMember, parentMember));
+        verify(familyMemberRepository).flush();
         verify(seniorRepository).delete(senior);
         verify(seniorRepository).flush();
-        assertThat(family.getSeniorCode()).isNull();
+        verify(familyRepository).delete(family);
+        verify(familyRepository).flush();
     }
 
     @Test
@@ -161,6 +167,7 @@ class SeniorWithdrawalServiceTest {
         User registrar = user(20L, Role.CHILD, UserStatus.ACTIVE);
         Senior senior = senior(100L, family, registrar, parent);
         given(seniorRepository.findByParentUserForUpdate(parent)).willReturn(Optional.of(senior));
+        given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
         given(familyMemberRepository.findAllByFamilyOrderByIdAsc(family)).willReturn(List.of());
         given(noticeRepository.findBySeniorId(100L)).willReturn(Optional.empty());
         given(noticeRepository.saveAndFlush(any(SeniorWithdrawalNotice.class)))
@@ -179,7 +186,10 @@ class SeniorWithdrawalServiceTest {
         verify(recipientRepository, never()).saveAllAndFlush(any());
         verify(deviceRepository, never()).findAllByUserIn(any());
         verify(cleanupRepository).deleteParentDependentData(parent, senior);
+        verify(familyMemberRepository).deleteAll(List.of());
+        verify(familyMemberRepository).flush();
         verify(seniorRepository).delete(senior);
+        verify(familyRepository).delete(family);
     }
 
     private User user(Long id, Role role, UserStatus status) {
