@@ -40,6 +40,9 @@ public class UnusedFamilyCleanupService {
             }
             seniorPermissionSettingRepository.flush();
 
+            // Family는 Senior 삭제 시점까지 영속 상태이므로, 삭제 예정 Senior를
+            // 역방향 연관관계에서 먼저 제거한다.
+            family.unlinkSenior();
             seniorRepository.deleteAll(lockedSeniors);
             seniorRepository.flush();
 
