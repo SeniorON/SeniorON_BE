@@ -93,8 +93,16 @@ class FamilyConnectionServiceIntegrationTest {
                         .build()
         );
 
+        // Family.senior 역방향 참조가 영속성 컨텍스트에 로드된 상태에서도
+        // Senior 삭제와 이후 flush가 안전해야 한다.
+        entityManager.clear();
+        Family managedFamily = familyRepository.findById(family.getFamilyId())
+                .orElseThrow();
+        assertThat(managedFamily.getSenior()).isNotNull();
+
         FamilyConnectionDisconnectResponse response =
                 service.disconnect(primary, family.getFamilyId());
+        entityManager.flush();
         entityManager.clear();
 
         assertThat(familyMemberRepository.findById(member.getId())).isEmpty();
