@@ -112,14 +112,44 @@ class FamilyConnectionServiceTest {
                 ManagerType.PRIMARY,
                 LocalDateTime.of(2026, 11, 1, 10, 0)
         );
+        Senior senior = Senior.builder()
+                .seniorId(10L)
+                .family(fixture.family())
+                .build();
+        given(familyMemberRepository.findAllByFamilyOrderByIdAsc(fixture.family()))
+                .willReturn(List.of(fixture.member()));
+        given(seniorRepository.findAllByFamilyOrderBySeniorIdAscForUpdate(
+                fixture.family()
+        )).willReturn(List.of(senior));
 
         assertDisconnectError(
                 fixture,
                 ErrorCode.PRIMARY_CONNECTION_DISCONNECT_HISTORY_EXISTS
         );
+    }
 
-        verify(familyMemberRepository, never())
-                .findAllByFamilyOrderByIdAsc(fixture.family());
+    @Test
+    void primaryChildCanDisconnectFromHistoricalFamilyWithoutCurrentSenior() {
+        Fixture fixture = stubMembership(
+                Role.CHILD,
+                ManagerType.PRIMARY,
+                LocalDateTime.of(2026, 11, 1, 10, 0)
+        );
+        given(familyMemberRepository.findAllByFamilyOrderByIdAsc(fixture.family()))
+                .willReturn(List.of(fixture.member()));
+        given(seniorRepository.findAllByFamilyOrderBySeniorIdAscForUpdate(
+                fixture.family()
+        )).willReturn(List.of());
+
+        FamilyConnectionDisconnectResponse response = service.disconnect(
+                fixture.user(),
+                fixture.family().getFamilyId()
+        );
+
+        assertThat(response.familyDeleted()).isFalse();
+        verify(familyMemberRepository).delete(fixture.member());
+        verify(familyMemberRepository, never()).flush();
+        verifyNoInteractions(unusedFamilyCleanupService);
     }
 
     @Test
