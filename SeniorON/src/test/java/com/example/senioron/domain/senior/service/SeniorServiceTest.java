@@ -27,6 +27,7 @@ import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
+import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -420,7 +421,7 @@ class SeniorServiceTest {
     }
 
     @Test
-    void createSeniorConvertsUniqueViolationToSeniorAlreadyExists() {
+    void createSeniorConvertsMariaDbDuplicateViolationToSeniorAlreadyExists() {
         Family family = Family.builder().familyId(1L).build();
         User user = createChild(1L, family, ManagerType.PRIMARY);
 
@@ -433,9 +434,12 @@ class SeniorServiceTest {
                                 .family(family)
                                 .managerType(ManagerType.PRIMARY)
                                 .build()
-                ));
+        ));
         given(seniorRepository.saveAndFlush(any(Senior.class)))
-                .willThrow(new DataIntegrityViolationException("duplicate family senior"));
+                .willThrow(new DataIntegrityViolationException(
+                        "duplicate family senior",
+                        new SQLException("duplicate family senior", "23000", 1062)
+                ));
 
         assertThatThrownBy(() -> seniorService.createSenior(
                 user,
@@ -445,6 +449,30 @@ class SeniorServiceTest {
                 .asInstanceOf(type(BusinessException.class))
                 .extracting(BusinessException::getCode)
                 .isEqualTo(ErrorCode.SENIOR_ALREADY_EXISTS);
+    }
+
+    @Test
+    void createSeniorDoesNotConvertNonDuplicateIntegrityViolationToAlreadyExists() {
+        Family family = Family.builder().familyId(1L).build();
+        User user = createChild(1L, family, ManagerType.PRIMARY);
+
+        given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
+        given(familyMemberRepository.existsByUserAndFamily(user, family)).willReturn(true);
+        given(familyMemberRepository.findByUserAndFamily(user, family))
+                .willReturn(Optional.of(FamilyMember.builder()
+                        .user(user)
+                        .family(family)
+                        .managerType(ManagerType.PRIMARY)
+                        .build()));
+        DataIntegrityViolationException integrityViolation =
+                new DataIntegrityViolationException("relation cannot be null");
+        given(seniorRepository.saveAndFlush(any(Senior.class)))
+                .willThrow(integrityViolation);
+
+        assertThatThrownBy(() -> seniorService.createSenior(
+                user,
+                createRequest(SeniorRelation.MOTHER, null)
+        )).isSameAs(integrityViolation);
     }
 
     private SeniorCreateRequest createRequest(
