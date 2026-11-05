@@ -56,12 +56,6 @@ public class FamilyConnectionService {
         familyMemberRepository.delete(currentMember);
 
         if (lockedSeniors != null) {
-            // 과거 시니어 탈퇴로 Senior만 삭제된 가족은 연결만 해제한다.
-            // 이력 데이터가 있을 수 있으므로 가족 자체는 정리 대상으로 넘기지 않는다.
-            if (isHistoricalOrphanFamily(family, lockedSeniors)) {
-                return new FamilyConnectionDisconnectResponse(familyId, false);
-            }
-
             familyMemberRepository.flush();
             unusedFamilyCleanupService.cleanup(family, lockedSeniors);
             return new FamilyConnectionDisconnectResponse(familyId, true);
@@ -89,6 +83,12 @@ public class FamilyConnectionService {
             FamilyMember currentMember,
             Family family
     ) {
+        if (family.getFirstSeniorConnectedAt() != null) {
+            throw new BusinessException(
+                    ErrorCode.PRIMARY_CONNECTION_DISCONNECT_HISTORY_EXISTS
+            );
+        }
+
         List<FamilyMember> familyMembers =
                 familyMemberRepository.findAllByFamilyOrderByIdAsc(family);
 
@@ -114,12 +114,6 @@ public class FamilyConnectionService {
         List<Senior> lockedSeniors = seniorRepository
                 .findAllByFamilyOrderBySeniorIdAscForUpdate(family);
 
-        if (family.getFirstSeniorConnectedAt() != null && !lockedSeniors.isEmpty()) {
-            throw new BusinessException(
-                    ErrorCode.PRIMARY_CONNECTION_DISCONNECT_HISTORY_EXISTS
-            );
-        }
-
         boolean hasLinkedParent = lockedSeniors.stream()
                 .anyMatch(senior -> senior.getParentUser() != null);
 
@@ -130,13 +124,5 @@ public class FamilyConnectionService {
         }
 
         return lockedSeniors;
-    }
-
-    private boolean isHistoricalOrphanFamily(
-            Family family,
-            List<Senior> lockedSeniors
-    ) {
-        return family.getFirstSeniorConnectedAt() != null
-                && lockedSeniors.isEmpty();
     }
 }
