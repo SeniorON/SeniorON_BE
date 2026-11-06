@@ -114,7 +114,7 @@ class SocialSignupServiceTest {
     @Test
     void googleSocialSignupSucceeds() {
         given(firebaseIdTokenVerifier.verify(SOCIAL_TOKEN))
-                .willReturn(new VerifiedFirebaseUser(GOOGLE_PROVIDER_ID, EMAIL, "구글사용자"));
+                .willReturn(new VerifiedFirebaseUser(GOOGLE_PROVIDER_ID, EMAIL, true, "구글사용자"));
         given(socialAccountRepository.existsByProviderAndProviderId(LoginProvider.GOOGLE, GOOGLE_PROVIDER_ID))
                 .willReturn(false);
 
@@ -137,7 +137,7 @@ class SocialSignupServiceTest {
     @Test
     void googleSocialSignupRegistersDeviceAndBindsRefreshTokenWhenDeviceInfoProvided() {
         given(firebaseIdTokenVerifier.verify(SOCIAL_TOKEN))
-                .willReturn(new VerifiedFirebaseUser(GOOGLE_PROVIDER_ID, EMAIL, "구글사용자"));
+                .willReturn(new VerifiedFirebaseUser(GOOGLE_PROVIDER_ID, EMAIL, true, "구글사용자"));
         given(socialAccountRepository.existsByProviderAndProviderId(LoginProvider.GOOGLE, GOOGLE_PROVIDER_ID))
                 .willReturn(false);
 

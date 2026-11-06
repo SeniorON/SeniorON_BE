@@ -9,10 +9,12 @@ import com.example.senioron.domain.socialaccount.entity.SocialAccount;
 import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.entity.UserStatus;
+import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.domain.user.service.RefreshTokenService;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.jwt.JwtUtil;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class GoogleLoginTransactionService {
 
     private final SocialAccountRepository socialAccountRepository;
+    private final UserRepository userRepository;
     private final JwtUtil jwtUtil;
     private final RefreshTokenService refreshTokenService;
     private final DeviceService deviceService;
@@ -32,8 +35,38 @@ public class GoogleLoginTransactionService {
                         LoginProvider.GOOGLE,
                         firebaseUser.uid()
                 )
+                .or(() -> findAndLinkGeneralAccount(firebaseUser))
                 .map(socialAccount -> loginExistingUser(socialAccount, request))
                 .orElseGet(() -> createNewUserResponse(firebaseUser));
+    }
+
+    private Optional<SocialAccount> findAndLinkGeneralAccount(
+            VerifiedFirebaseUser firebaseUser
+    ) {
+        if (!firebaseUser.emailVerified()) {
+            return Optional.empty();
+        }
+
+        return userRepository.findGeneralAccountByEmailForUpdate(firebaseUser.email())
+                .map(user -> findOrCreateSocialAccount(user, firebaseUser.uid()));
+    }
+
+    private SocialAccount findOrCreateSocialAccount(User user, String providerId) {
+        Optional<SocialAccount> existingSocialAccount =
+                socialAccountRepository.findByUserAndProvider(user, LoginProvider.GOOGLE);
+        if (existingSocialAccount.isPresent()) {
+            SocialAccount socialAccount = existingSocialAccount.get();
+            if (!providerId.equals(socialAccount.getProviderId())) {
+                throw new BusinessException(ErrorCode.SOCIAL_ACCOUNT_ALREADY_EXISTS);
+            }
+            return socialAccount;
+        }
+
+        return socialAccountRepository.saveAndFlush(SocialAccount.builder()
+                .user(user)
+                .provider(LoginProvider.GOOGLE)
+                .providerId(providerId)
+                .build());
     }
 
     private GoogleLoginResponse loginExistingUser(

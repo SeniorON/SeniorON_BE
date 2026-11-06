@@ -42,6 +42,8 @@ class KakaoUserClientTest {
                                   "id": 12345,
                                   "kakao_account": {
                                     "email": "kakao@example.com",
+                                    "is_email_valid": true,
+                                    "is_email_verified": true,
                                     "profile": {
                                       "nickname": "kakao-user"
                                     }
@@ -55,6 +57,7 @@ class KakaoUserClientTest {
 
         assertThat(response.getId()).isEqualTo(12345L);
         assertThat(response.getEmail()).isEqualTo("kakao@example.com");
+        assertThat(response.hasVerifiedEmail()).isTrue();
         assertThat(response.getNickname()).isEqualTo("kakao-user");
         server.verify();
     }

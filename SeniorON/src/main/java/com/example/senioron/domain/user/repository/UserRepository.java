@@ -29,6 +29,16 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByLoginId(String loginId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            SELECT u
+            FROM User u
+            WHERE u.email = :email
+              AND u.loginId IS NOT NULL
+              AND u.password IS NOT NULL
+            """)
+    Optional<User> findGeneralAccountByEmailForUpdate(@Param("email") String email);
+
     Optional<User> findByNameAndEmail(String name, String email);
 
     Optional<User> findByNameAndLoginId(String name, String loginId);
