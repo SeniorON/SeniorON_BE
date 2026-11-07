@@ -9,6 +9,7 @@ import com.example.senioron.domain.socialaccount.entity.SocialAccount;
 import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.entity.UserStatus;
+import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.domain.user.service.RefreshTokenService;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
@@ -22,18 +23,19 @@ import org.springframework.transaction.annotation.Transactional;
 public class GoogleLoginTransactionService {
 
     private final SocialAccountRepository socialAccountRepository;
+    private final UserRepository userRepository;
     private final JwtUtil jwtUtil;
     private final RefreshTokenService refreshTokenService;
     private final DeviceService deviceService;
 
     @Transactional
     public GoogleLoginResponse login(GoogleLoginRequest request, VerifiedFirebaseUser firebaseUser) {
-        return socialAccountRepository.findByProviderAndProviderId(
-                        LoginProvider.GOOGLE,
-                        firebaseUser.uid()
-                )
+        return socialAccountRepository.findByProviderAndProviderId(LoginProvider.GOOGLE, firebaseUser.uid())
                 .map(socialAccount -> loginExistingUser(socialAccount, request))
-                .orElseGet(() -> createNewUserResponse(firebaseUser));
+                .orElseGet(() -> {
+                    rejectIfGeneralAccountUsesVerifiedEmail(firebaseUser);
+                    return createNewUserResponse(firebaseUser);
+                });
     }
 
     private GoogleLoginResponse loginExistingUser(
@@ -73,6 +75,26 @@ public class GoogleLoginTransactionService {
                 .role(null)
                 .newUser(true)
                 .build();
+    }
+
+    private void rejectIfGeneralAccountUsesVerifiedEmail(VerifiedFirebaseUser firebaseUser) {
+        if (!firebaseUser.emailVerified() || !hasText(firebaseUser.email())) {
+            return;
+        }
+
+        userRepository.findByEmail(firebaseUser.email())
+                .filter(this::hasGeneralLoginCredentials)
+                .ifPresent(user -> {
+                    throw new BusinessException(ErrorCode.GENERAL_ACCOUNT_EMAIL_EXISTS);
+                });
+    }
+
+    private boolean hasGeneralLoginCredentials(User user) {
+        return hasText(user.getLoginId()) || hasText(user.getPassword());
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private DeviceCredentialIssueResult registerDevice(User user, String deviceIdentifier) {

@@ -30,7 +30,8 @@ public class FirebaseIdTokenVerifier {
             return new VerifiedFirebaseUser(
                     firebaseToken.getUid(),
                     firebaseToken.getEmail(),
-                    firebaseToken.getName()
+                    firebaseToken.getName(),
+                    firebaseToken.isEmailVerified()
             );
         } catch (FirebaseAuthException | IllegalArgumentException e) {
             log.error("Firebase ID Token 검증 실패", e);

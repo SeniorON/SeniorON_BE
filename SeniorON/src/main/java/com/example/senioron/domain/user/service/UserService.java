@@ -88,9 +88,7 @@ public class UserService {
             throw new BusinessException(ErrorCode.DUPLICATE_LOGIN_ID);
         }
 
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
-        }
+        validateSignupEmailAvailable(request.getEmail());
 
         if (!request.getPassword().equals(request.getPasswordCheck())) {
             throw new BusinessException(ErrorCode.PASSWORD_MISMATCH);
@@ -127,9 +125,7 @@ public class UserService {
             SignupEmailVerificationCodeSendRequest request,
             String clientIp
     ) {
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
-        }
+        validateSignupEmailAvailable(request.getEmail());
 
         emailVerificationRateLimitService.checkAndRecord(request.getEmail(), clientIp);
 
@@ -182,9 +178,7 @@ public class UserService {
     public SignupEmailVerificationCodeVerifyResponse verifySignupEmailVerificationCode(
             SignupEmailVerificationCodeVerifyRequest request
     ) {
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
-        }
+        validateSignupEmailAvailable(request.getEmail());
 
         SignupEmailVerificationCode savedCode = signupEmailVerificationCodeRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new BusinessException(ErrorCode.SIGNUP_EMAIL_VERIFICATION_CODE_NOT_FOUND));
@@ -207,6 +201,28 @@ public class UserService {
         return SignupEmailVerificationCodeVerifyResponse.builder()
                 .verified(true)
                 .build();
+    }
+
+    private void validateSignupEmailAvailable(String email) {
+        Optional<User> existingUser = userRepository.findByEmail(email);
+        if (existingUser.isEmpty()) {
+            return;
+        }
+
+        User user = existingUser.get();
+        if (hasGeneralLoginCredentials(user) || !socialAccountRepository.existsByUser(user)) {
+            throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
+        }
+
+        throw new BusinessException(ErrorCode.SOCIAL_EMAIL_ALREADY_EXISTS);
+    }
+
+    private boolean hasGeneralLoginCredentials(User user) {
+        return hasText(user.getLoginId()) || hasText(user.getPassword());
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
 

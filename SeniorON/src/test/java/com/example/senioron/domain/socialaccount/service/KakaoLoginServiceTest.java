@@ -19,6 +19,7 @@ import com.example.senioron.domain.socialaccount.entity.SocialAccount;
 import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.domain.user.service.RefreshTokenService;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
@@ -76,11 +77,13 @@ class KakaoLoginServiceTest {
     @Test
     void kakaoLoginTransactionServiceReturnsExistingUserTokens() {
         SocialAccountRepository socialAccountRepository = mock(SocialAccountRepository.class);
+        UserRepository userRepository = mock(UserRepository.class);
         JwtUtil jwtUtil = mock(JwtUtil.class);
         RefreshTokenService refreshTokenService = mock(RefreshTokenService.class);
         DeviceService deviceService = mock(DeviceService.class);
         KakaoLoginTransactionService transactionService = new KakaoLoginTransactionService(
                 socialAccountRepository,
+                userRepository,
                 jwtUtil,
                 refreshTokenService,
                 deviceService
@@ -98,7 +101,10 @@ class KakaoLoginServiceTest {
         given(jwtUtil.createAccessToken(user)).willReturn(ACCESS_TOKEN);
         given(jwtUtil.createRefreshToken(user)).willReturn(REFRESH_TOKEN);
 
-        KakaoLoginResponse response = transactionService.login(request, createKakaoUserInfo());
+        KakaoLoginResponse response = transactionService.login(
+                request,
+                createVerifiedKakaoUserInfo("user@example.com")
+        );
 
         assertThat(response.getAccessToken()).isEqualTo(ACCESS_TOKEN);
         assertThat(response.getRefreshToken()).isEqualTo(REFRESH_TOKEN);
@@ -109,6 +115,7 @@ class KakaoLoginServiceTest {
         verify(deviceService).registerDevice(user, DEVICE_IDENTIFIER);
         verify(deviceService).updateFcmToken(user, FCM_TOKEN, DEVICE_IDENTIFIER);
         verify(refreshTokenService).saveOrRotate(user, DEVICE_IDENTIFIER, REFRESH_TOKEN);
+        verify(userRepository, never()).findByEmail(any());
     }
 
     @Test
@@ -119,6 +126,7 @@ class KakaoLoginServiceTest {
         DeviceService deviceService = mock(DeviceService.class);
         KakaoLoginTransactionService transactionService = new KakaoLoginTransactionService(
                 socialAccountRepository,
+                mock(UserRepository.class),
                 jwtUtil,
                 refreshTokenService,
                 deviceService
@@ -146,8 +154,10 @@ class KakaoLoginServiceTest {
     @Test
     void kakaoLoginTransactionServiceReturnsNewUserResponseWhenSocialAccountMissing() {
         SocialAccountRepository socialAccountRepository = mock(SocialAccountRepository.class);
+        UserRepository userRepository = mock(UserRepository.class);
         KakaoLoginTransactionService transactionService = new KakaoLoginTransactionService(
                 socialAccountRepository,
+                userRepository,
                 mock(JwtUtil.class),
                 mock(RefreshTokenService.class),
                 mock(DeviceService.class)
@@ -164,6 +174,30 @@ class KakaoLoginServiceTest {
         assertThat(response.getRole()).isNull();
         assertThat(response.getProviderId()).isEqualTo(KAKAO_PROVIDER_ID);
         assertThat(response.isNewUser()).isTrue();
+        verify(userRepository, never()).findByEmail(any());
+    }
+
+    @Test
+    void kakaoLoginTransactionServiceRejectsGeneralAccountWithSameVerifiedEmail() {
+        SocialAccountRepository socialAccountRepository = mock(SocialAccountRepository.class);
+        UserRepository userRepository = mock(UserRepository.class);
+        KakaoLoginTransactionService transactionService = new KakaoLoginTransactionService(
+                socialAccountRepository,
+                userRepository,
+                mock(JwtUtil.class),
+                mock(RefreshTokenService.class),
+                mock(DeviceService.class)
+        );
+        KakaoUserInfo kakaoUserInfo = createVerifiedKakaoUserInfo("user@example.com");
+        User generalUser = createUser();
+        given(socialAccountRepository.findByProviderAndProviderId(LoginProvider.KAKAO, KAKAO_PROVIDER_ID))
+                .willReturn(Optional.empty());
+        given(userRepository.findByEmail("user@example.com")).willReturn(Optional.of(generalUser));
+
+        assertThatThrownBy(() -> transactionService.login(createRequest(), kakaoUserInfo))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code")
+                .isEqualTo(ErrorCode.GENERAL_ACCOUNT_EMAIL_EXISTS);
     }
 
     @Test
@@ -171,6 +205,7 @@ class KakaoLoginServiceTest {
         SocialAccountRepository socialAccountRepository = mock(SocialAccountRepository.class);
         KakaoLoginTransactionService transactionService = new KakaoLoginTransactionService(
                 socialAccountRepository,
+                mock(UserRepository.class),
                 mock(JwtUtil.class),
                 mock(RefreshTokenService.class),
                 mock(DeviceService.class)
@@ -207,8 +242,10 @@ class KakaoLoginServiceTest {
     private User createUser() {
         return User.builder()
                 .usersId(1L)
+                .loginId("general-user")
                 .name("홍길동")
                 .email("user@example.com")
+                .password("encoded-password")
                 .role(Role.CHILD)
                 .build();
     }
@@ -221,6 +258,15 @@ class KakaoLoginServiceTest {
         ReflectionTestUtils.setField(kakaoAccount, "profile", profile);
         ReflectionTestUtils.setField(profile, "nickname", "카카오사용자");
         ReflectionTestUtils.setField(kakaoUserInfo, "kakaoAccount", kakaoAccount);
+        return kakaoUserInfo;
+    }
+
+    private KakaoUserInfo createVerifiedKakaoUserInfo(String email) {
+        KakaoUserInfo kakaoUserInfo = createKakaoUserInfo();
+        KakaoUserInfo.KakaoAccount kakaoAccount = kakaoUserInfo.getKakaoAccount();
+        ReflectionTestUtils.setField(kakaoAccount, "email", email);
+        ReflectionTestUtils.setField(kakaoAccount, "emailValid", true);
+        ReflectionTestUtils.setField(kakaoAccount, "emailVerified", true);
         return kakaoUserInfo;
     }
 }

@@ -944,7 +944,7 @@ class UserServiceTest {
 
     @Test
     void verifySignupEmailVerificationCodeThrowsExceptionWhenEmailAlreadyExists() {
-        given(userRepository.existsByEmail(EMAIL)).willReturn(true);
+        given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(createUser(1L)));
 
         assertThatThrownBy(() -> userService.verifySignupEmailVerificationCode(
                 createVerifyRequest(EMAIL, VERIFICATION_CODE)
@@ -953,6 +953,90 @@ class UserServiceTest {
                 .asInstanceOf(type(BusinessException.class))
                 .extracting(BusinessException::getCode)
                 .isEqualTo(ErrorCode.DUPLICATE_EMAIL);
+    }
+
+    @Test
+    void sendSignupEmailVerificationCodeRejectsSocialOnlyAccountWithoutSendingCode() {
+        User socialOnlyUser = User.builder()
+                .usersId(1L)
+                .email(EMAIL)
+                .name("소셜 회원")
+                .role(Role.CHILD)
+                .build();
+        given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(socialOnlyUser));
+        given(socialAccountRepository.existsByUser(socialOnlyUser)).willReturn(true);
+
+        assertThatThrownBy(() -> userService.sendSignupEmailVerificationCode(
+                createSendRequest(EMAIL), "127.0.0.1"
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SOCIAL_EMAIL_ALREADY_EXISTS);
+
+        assertThat(ErrorCode.SOCIAL_EMAIL_ALREADY_EXISTS.getMessage())
+                .isEqualTo("이미 해당 이메일로 가입된 소셜 계정이 있습니다. 기존 소셜 계정으로 로그인해 주세요.");
+        verify(emailVerificationRateLimitService, never()).checkAndRecord(anyString(), anyString());
+        verify(signupEmailVerificationCodeIssuer, never()).createOrReissue(
+                anyString(), anyString(), any(LocalDateTime.class), any(LocalDateTime.class)
+        );
+        verify(eventPublisher, never()).publishEvent(any(SignupEmailVerificationCodeSendEvent.class));
+    }
+
+    @Test
+    void verifySignupEmailVerificationCodeRejectsSocialOnlyAccount() {
+        User socialOnlyUser = User.builder()
+                .usersId(1L)
+                .email(EMAIL)
+                .name("소셜 회원")
+                .role(Role.CHILD)
+                .build();
+        given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(socialOnlyUser));
+        given(socialAccountRepository.existsByUser(socialOnlyUser)).willReturn(true);
+
+        assertThatThrownBy(() -> userService.verifySignupEmailVerificationCode(
+                createVerifyRequest(EMAIL, VERIFICATION_CODE)
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SOCIAL_EMAIL_ALREADY_EXISTS);
+    }
+
+    @Test
+    void signUpRejectsSocialOnlyAccount() {
+        User socialOnlyUser = User.builder()
+                .usersId(1L)
+                .email(EMAIL)
+                .name("소셜 회원")
+                .role(Role.CHILD)
+                .build();
+        given(userRepository.existsByLoginId("testId")).willReturn(false);
+        given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(socialOnlyUser));
+        given(socialAccountRepository.existsByUser(socialOnlyUser)).willReturn(true);
+
+        assertThatThrownBy(() -> userService.signUp(createSignUpRequest(Role.CHILD)))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SOCIAL_EMAIL_ALREADY_EXISTS);
+
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void signUpTreatsAccountWithGeneralLoginCredentialsAsGeneralAccountEvenWhenSocialLinked() {
+        User mixedAccountUser = createUser(1L);
+        given(userRepository.existsByLoginId("testId")).willReturn(false);
+        given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(mixedAccountUser));
+
+        assertThatThrownBy(() -> userService.signUp(createSignUpRequest(Role.CHILD)))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.DUPLICATE_EMAIL);
+
+        verify(socialAccountRepository, never()).existsByUser(mixedAccountUser);
     }
 
     @Test

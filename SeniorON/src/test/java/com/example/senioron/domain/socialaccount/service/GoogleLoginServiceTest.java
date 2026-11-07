@@ -18,6 +18,7 @@ import com.example.senioron.domain.socialaccount.entity.SocialAccount;
 import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.domain.user.service.RefreshTokenService;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
@@ -40,6 +41,7 @@ class GoogleLoginServiceTest {
 
     private final FirebaseIdTokenVerifier firebaseIdTokenVerifier = mock(FirebaseIdTokenVerifier.class);
     private final SocialAccountRepository socialAccountRepository = mock(SocialAccountRepository.class);
+    private final UserRepository userRepository = mock(UserRepository.class);
     private final JwtUtil jwtUtil = mock(JwtUtil.class);
     private final RefreshTokenService refreshTokenService = mock(RefreshTokenService.class);
     private final DeviceService deviceService = mock(DeviceService.class);
@@ -51,6 +53,7 @@ class GoogleLoginServiceTest {
     void setUp() {
         googleLoginTransactionService = new GoogleLoginTransactionService(
                 socialAccountRepository,
+                userRepository,
                 jwtUtil,
                 refreshTokenService,
                 deviceService
@@ -87,7 +90,7 @@ class GoogleLoginServiceTest {
         User user = createUser();
         SocialAccount socialAccount = createSocialAccount(user);
         given(firebaseIdTokenVerifier.verify(FIREBASE_ID_TOKEN))
-                .willReturn(new VerifiedFirebaseUser(PROVIDER_ID, EMAIL, NAME));
+                .willReturn(new VerifiedFirebaseUser(PROVIDER_ID, EMAIL, NAME, true));
         given(socialAccountRepository.findByProviderAndProviderId(LoginProvider.GOOGLE, PROVIDER_ID))
                 .willReturn(Optional.of(socialAccount));
         given(jwtUtil.createAccessToken(user)).willReturn(ACCESS_TOKEN);
@@ -102,6 +105,7 @@ class GoogleLoginServiceTest {
         assertThat(response.getRole()).isEqualTo(Role.CHILD);
         assertThat(response.isNewUser()).isFalse();
         verify(refreshTokenService).saveOrRotate(user, null, REFRESH_TOKEN);
+        verify(userRepository, never()).findByEmail(any());
     }
 
     @Test
@@ -119,11 +123,28 @@ class GoogleLoginServiceTest {
         assertThat(response.getName()).isEqualTo(NAME);
         assertThat(response.getRole()).isNull();
         assertThat(response.isNewUser()).isTrue();
+        verify(userRepository, never()).findByEmail(any());
         verify(jwtUtil, never()).createAccessToken(any());
         verify(jwtUtil, never()).createRefreshToken(any());
         verify(refreshTokenService, never()).saveOrRotate(any(), any(), any());
         verify(deviceService, never()).registerDevice(any(), any());
         verify(deviceService, never()).updateFcmToken(any(), any(), any());
+    }
+
+    @Test
+    void googleLoginRejectsGeneralAccountWithSameVerifiedEmail() {
+        User generalUser = createUser();
+        given(firebaseIdTokenVerifier.verify(FIREBASE_ID_TOKEN))
+                .willReturn(new VerifiedFirebaseUser(PROVIDER_ID, EMAIL, NAME, true));
+        given(socialAccountRepository.findByProviderAndProviderId(LoginProvider.GOOGLE, PROVIDER_ID))
+                .willReturn(Optional.empty());
+        given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(generalUser));
+
+        assertThatThrownBy(() -> googleLoginService.googleLogin(createRequest()))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.GENERAL_ACCOUNT_EMAIL_EXISTS);
     }
 
     @Test
@@ -205,7 +226,9 @@ class GoogleLoginServiceTest {
     private User createUser() {
         return User.builder()
                 .usersId(1L)
+                .loginId("general-user")
                 .email(EMAIL)
+                .password("encoded-password")
                 .name(NAME)
                 .role(Role.CHILD)
                 .build();
