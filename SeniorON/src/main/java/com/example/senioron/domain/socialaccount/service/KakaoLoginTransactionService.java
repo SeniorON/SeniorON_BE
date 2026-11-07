@@ -10,6 +10,7 @@ import com.example.senioron.domain.socialaccount.entity.SocialAccount;
 import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.entity.UserStatus;
+import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.domain.user.service.RefreshTokenService;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
@@ -24,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class KakaoLoginTransactionService {
 
     private final SocialAccountRepository socialAccountRepository;
+    private final UserRepository userRepository;
     private final JwtUtil jwtUtil;
     private final RefreshTokenService refreshTokenService;
     private final DeviceService deviceService;
@@ -63,6 +65,8 @@ public class KakaoLoginTransactionService {
                     .build();
         }
 
+        rejectIfGeneralAccountUsesVerifiedEmail(kakaoUserInfo);
+
         // 신규 카카오 회원인 경우 추가 회원가입 진행
         return KakaoLoginResponse.builder()
                 .accessToken(null)
@@ -72,6 +76,26 @@ public class KakaoLoginTransactionService {
                 .providerId(providerId)
                 .newUser(true)
                 .build();
+    }
+
+    private void rejectIfGeneralAccountUsesVerifiedEmail(KakaoUserInfo kakaoUserInfo) {
+        if (!kakaoUserInfo.hasVerifiedEmail()) {
+            return;
+        }
+
+        userRepository.findByEmail(kakaoUserInfo.getEmail())
+                .filter(this::hasGeneralLoginCredentials)
+                .ifPresent(user -> {
+                    throw new BusinessException(ErrorCode.GENERAL_ACCOUNT_EMAIL_EXISTS);
+                });
+    }
+
+    private boolean hasGeneralLoginCredentials(User user) {
+        return hasText(user.getLoginId()) || hasText(user.getPassword());
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private DeviceCredentialIssueResult registerDevice(User user, String deviceIdentifier) {

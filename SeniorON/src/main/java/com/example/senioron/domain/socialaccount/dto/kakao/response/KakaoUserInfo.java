@@ -19,6 +19,12 @@ public class KakaoUserInfo {
 
         private String email;
 
+        @JsonProperty("is_email_valid")
+        private Boolean emailValid;
+
+        @JsonProperty("is_email_verified")
+        private Boolean emailVerified;
+
         private Profile profile;
 
         private String birthday;
@@ -38,6 +44,14 @@ public class KakaoUserInfo {
 
     public String getEmail() {
         return kakaoAccount != null ? kakaoAccount.getEmail() : null;
+    }
+
+    public boolean hasVerifiedEmail() {
+        return kakaoAccount != null
+                && kakaoAccount.getEmail() != null
+                && !kakaoAccount.getEmail().isBlank()
+                && Boolean.TRUE.equals(kakaoAccount.getEmailValid())
+                && Boolean.TRUE.equals(kakaoAccount.getEmailVerified());
     }
 
     public String getNickname() {
