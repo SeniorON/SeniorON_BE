@@ -25,6 +25,8 @@ public interface SocialAccountRepository
             String providerId
     );
 
+    boolean existsByUser(User user);
+
     void deleteAllByUser(User user);
 
 }
