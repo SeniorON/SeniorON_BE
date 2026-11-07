@@ -18,13 +18,11 @@ import com.example.senioron.domain.socialaccount.entity.SocialAccount;
 import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
-import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.domain.user.service.RefreshTokenService;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.jwt.JwtUtil;
 import java.util.Optional;
-import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -42,7 +40,6 @@ class GoogleLoginServiceTest {
 
     private final FirebaseIdTokenVerifier firebaseIdTokenVerifier = mock(FirebaseIdTokenVerifier.class);
     private final SocialAccountRepository socialAccountRepository = mock(SocialAccountRepository.class);
-    private final UserRepository userRepository = mock(UserRepository.class);
     private final JwtUtil jwtUtil = mock(JwtUtil.class);
     private final RefreshTokenService refreshTokenService = mock(RefreshTokenService.class);
     private final DeviceService deviceService = mock(DeviceService.class);
@@ -54,7 +51,6 @@ class GoogleLoginServiceTest {
     void setUp() {
         googleLoginTransactionService = new GoogleLoginTransactionService(
                 socialAccountRepository,
-                userRepository,
                 jwtUtil,
                 refreshTokenService,
                 deviceService
@@ -70,7 +66,7 @@ class GoogleLoginServiceTest {
         GoogleLoginTransactionService transactionService = mock(GoogleLoginTransactionService.class);
         GoogleLoginService service = new GoogleLoginService(firebaseIdTokenVerifier, transactionService);
         GoogleLoginRequest request = createRequest();
-        VerifiedFirebaseUser firebaseUser = new VerifiedFirebaseUser(PROVIDER_ID, EMAIL, true, NAME);
+        VerifiedFirebaseUser firebaseUser = new VerifiedFirebaseUser(PROVIDER_ID, EMAIL, NAME);
         GoogleLoginResponse expected = GoogleLoginResponse.builder()
                 .name(NAME)
                 .newUser(true)
@@ -91,7 +87,7 @@ class GoogleLoginServiceTest {
         User user = createUser();
         SocialAccount socialAccount = createSocialAccount(user);
         given(firebaseIdTokenVerifier.verify(FIREBASE_ID_TOKEN))
-                .willReturn(new VerifiedFirebaseUser(PROVIDER_ID, EMAIL, true, NAME));
+                .willReturn(new VerifiedFirebaseUser(PROVIDER_ID, EMAIL, NAME));
         given(socialAccountRepository.findByProviderAndProviderId(LoginProvider.GOOGLE, PROVIDER_ID))
                 .willReturn(Optional.of(socialAccount));
         given(jwtUtil.createAccessToken(user)).willReturn(ACCESS_TOKEN);
@@ -111,10 +107,8 @@ class GoogleLoginServiceTest {
     @Test
     void googleLoginReturnsNewUserWithoutCreatingAccountOrIssuingJwt() {
         given(firebaseIdTokenVerifier.verify(FIREBASE_ID_TOKEN))
-                .willReturn(new VerifiedFirebaseUser(PROVIDER_ID, EMAIL, true, NAME));
+                .willReturn(new VerifiedFirebaseUser(PROVIDER_ID, EMAIL, NAME));
         given(socialAccountRepository.findByProviderAndProviderId(LoginProvider.GOOGLE, PROVIDER_ID))
-                .willReturn(Optional.empty());
-        given(userRepository.findGeneralAccountByEmailForUpdate(EMAIL))
                 .willReturn(Optional.empty());
 
         GoogleLoginResponse response = googleLoginService.googleLogin(createRequest());
@@ -133,55 +127,11 @@ class GoogleLoginServiceTest {
     }
 
     @Test
-    void googleLoginLinksVerifiedEmailToExistingGeneralAccount() {
-        User user = createGeneralUser();
-        given(firebaseIdTokenVerifier.verify(FIREBASE_ID_TOKEN))
-                .willReturn(new VerifiedFirebaseUser(PROVIDER_ID, EMAIL, true, NAME));
-        given(socialAccountRepository.findByProviderAndProviderId(LoginProvider.GOOGLE, PROVIDER_ID))
-                .willReturn(Optional.empty());
-        given(userRepository.findGeneralAccountByEmailForUpdate(EMAIL))
-                .willReturn(Optional.of(user));
-        given(socialAccountRepository.findByUserAndProvider(user, LoginProvider.GOOGLE))
-                .willReturn(Optional.empty());
-        given(socialAccountRepository.saveAndFlush(any(SocialAccount.class)))
-                .willAnswer(invocation -> invocation.getArgument(0));
-        given(jwtUtil.createAccessToken(user)).willReturn(ACCESS_TOKEN);
-        given(jwtUtil.createRefreshToken(user)).willReturn(REFRESH_TOKEN);
-
-        GoogleLoginResponse response = googleLoginService.googleLogin(createRequest());
-
-        assertThat(response.getUsersId()).isEqualTo(user.getUsersId());
-        assertThat(response.getAccessToken()).isEqualTo(ACCESS_TOKEN);
-        assertThat(response.isNewUser()).isFalse();
-        ArgumentCaptor<SocialAccount> socialAccountCaptor =
-                ArgumentCaptor.forClass(SocialAccount.class);
-        verify(socialAccountRepository).saveAndFlush(socialAccountCaptor.capture());
-        assertThat(socialAccountCaptor.getValue().getUser()).isSameAs(user);
-        assertThat(socialAccountCaptor.getValue().getProvider())
-                .isEqualTo(LoginProvider.GOOGLE);
-        assertThat(socialAccountCaptor.getValue().getProviderId()).isEqualTo(PROVIDER_ID);
-    }
-
-    @Test
-    void googleLoginDoesNotLinkUnverifiedEmailToGeneralAccount() {
-        given(firebaseIdTokenVerifier.verify(FIREBASE_ID_TOKEN))
-                .willReturn(new VerifiedFirebaseUser(PROVIDER_ID, EMAIL, false, NAME));
-        given(socialAccountRepository.findByProviderAndProviderId(LoginProvider.GOOGLE, PROVIDER_ID))
-                .willReturn(Optional.empty());
-
-        GoogleLoginResponse response = googleLoginService.googleLogin(createRequest());
-
-        assertThat(response.isNewUser()).isTrue();
-        verify(userRepository, never()).findGeneralAccountByEmailForUpdate(any());
-        verify(socialAccountRepository, never()).saveAndFlush(any(SocialAccount.class));
-    }
-
-    @Test
     void googleLoginRegistersFcmTokenWhenProvided() {
         User user = createUser();
         SocialAccount socialAccount = createSocialAccount(user);
         given(firebaseIdTokenVerifier.verify(FIREBASE_ID_TOKEN))
-                .willReturn(new VerifiedFirebaseUser(PROVIDER_ID, EMAIL, true, NAME));
+                .willReturn(new VerifiedFirebaseUser(PROVIDER_ID, EMAIL, NAME));
         given(socialAccountRepository.findByProviderAndProviderId(LoginProvider.GOOGLE, PROVIDER_ID))
                 .willReturn(Optional.of(socialAccount));
         given(jwtUtil.createAccessToken(user)).willReturn(ACCESS_TOKEN);
@@ -199,7 +149,7 @@ class GoogleLoginServiceTest {
         User user = createUser();
         SocialAccount socialAccount = createSocialAccount(user);
         given(firebaseIdTokenVerifier.verify(FIREBASE_ID_TOKEN))
-                .willReturn(new VerifiedFirebaseUser(PROVIDER_ID, EMAIL, true, NAME));
+                .willReturn(new VerifiedFirebaseUser(PROVIDER_ID, EMAIL, NAME));
         given(socialAccountRepository.findByProviderAndProviderId(LoginProvider.GOOGLE, PROVIDER_ID))
                 .willReturn(Optional.of(socialAccount));
         given(jwtUtil.createAccessToken(user)).willReturn(ACCESS_TOKEN);
@@ -229,7 +179,7 @@ class GoogleLoginServiceTest {
         GoogleLoginTransactionService transactionService = mock(GoogleLoginTransactionService.class);
         GoogleLoginService service = new GoogleLoginService(firebaseIdTokenVerifier, transactionService);
         given(firebaseIdTokenVerifier.verify(anyString()))
-                .willReturn(new VerifiedFirebaseUser(PROVIDER_ID, EMAIL, true, " "));
+                .willReturn(new VerifiedFirebaseUser(PROVIDER_ID, EMAIL, " "));
 
         assertThatThrownBy(() -> service.googleLogin(createRequest()))
                 .isInstanceOf(BusinessException.class)
@@ -255,17 +205,6 @@ class GoogleLoginServiceTest {
     private User createUser() {
         return User.builder()
                 .usersId(1L)
-                .email(EMAIL)
-                .name(NAME)
-                .role(Role.CHILD)
-                .build();
-    }
-
-    private User createGeneralUser() {
-        return User.builder()
-                .usersId(1L)
-                .loginId("general-user")
-                .password("encoded-password")
                 .email(EMAIL)
                 .name(NAME)
                 .role(Role.CHILD)

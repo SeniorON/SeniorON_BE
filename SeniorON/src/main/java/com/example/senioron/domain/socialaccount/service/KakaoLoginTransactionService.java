@@ -10,7 +10,6 @@ import com.example.senioron.domain.socialaccount.entity.SocialAccount;
 import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.entity.UserStatus;
-import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.domain.user.service.RefreshTokenService;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
@@ -25,7 +24,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class KakaoLoginTransactionService {
 
     private final SocialAccountRepository socialAccountRepository;
-    private final UserRepository userRepository;
     private final JwtUtil jwtUtil;
     private final RefreshTokenService refreshTokenService;
     private final DeviceService deviceService;
@@ -42,71 +40,29 @@ public class KakaoLoginTransactionService {
 
         // 기존 카카오 회원인 경우 JWT 발급 후 로그인
         if (existingSocialAccount.isPresent()) {
-            return loginExistingUser(existingSocialAccount.get().getUser(), request);
-        }
-
-        return findAndLinkGeneralAccount(kakaoUserInfo, providerId)
-                .map(socialAccount -> loginExistingUser(socialAccount.getUser(), request))
-                .orElseGet(() -> createNewUserResponse(kakaoUserInfo, providerId));
-    }
-
-    private KakaoLoginResponse loginExistingUser(User user, KakaoLoginRequest request) {
-        if (user.getStatus() == UserStatus.WITHDRAWN) {
-            throw new BusinessException(ErrorCode.WITHDRAWN_USER);
-        }
-
-        String accessToken = jwtUtil.createAccessToken(user);
-        String refreshToken = jwtUtil.createRefreshToken(user);
-        DeviceCredentialIssueResult deviceCredentialIssueResult =
-                registerDevice(user, request.getDeviceIdentifier());
-        updateFcmTokenIfPresent(user, request.getFcmToken(), request.getDeviceIdentifier());
-        refreshTokenService.saveOrRotate(user, request.getDeviceIdentifier(), refreshToken);
-
-        return KakaoLoginResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(refreshToken)
-                .deviceAuthToken(deviceAuthToken(deviceCredentialIssueResult))
-                .usersId(user.getUsersId())
-                .name(user.getName())
-                .role(user.getRole())
-                .newUser(false)
-                .build();
-    }
-
-    private Optional<SocialAccount> findAndLinkGeneralAccount(
-            KakaoUserInfo kakaoUserInfo,
-            String providerId
-    ) {
-        if (!kakaoUserInfo.hasVerifiedEmail()) {
-            return Optional.empty();
-        }
-
-        return userRepository.findGeneralAccountByEmailForUpdate(kakaoUserInfo.getEmail())
-                .map(user -> findOrCreateSocialAccount(user, providerId));
-    }
-
-    private SocialAccount findOrCreateSocialAccount(User user, String providerId) {
-        Optional<SocialAccount> existingSocialAccount =
-                socialAccountRepository.findByUserAndProvider(user, LoginProvider.KAKAO);
-        if (existingSocialAccount.isPresent()) {
-            SocialAccount socialAccount = existingSocialAccount.get();
-            if (!providerId.equals(socialAccount.getProviderId())) {
-                throw new BusinessException(ErrorCode.SOCIAL_ACCOUNT_ALREADY_EXISTS);
+            User user = existingSocialAccount.get().getUser();
+            if (user.getStatus() == UserStatus.WITHDRAWN) {
+                throw new BusinessException(ErrorCode.WITHDRAWN_USER);
             }
-            return socialAccount;
+
+            String accessToken = jwtUtil.createAccessToken(user);
+            String refreshToken = jwtUtil.createRefreshToken(user);
+            DeviceCredentialIssueResult deviceCredentialIssueResult =
+                    registerDevice(user, request.getDeviceIdentifier());
+            updateFcmTokenIfPresent(user, request.getFcmToken(), request.getDeviceIdentifier());
+            refreshTokenService.saveOrRotate(user, request.getDeviceIdentifier(), refreshToken);
+
+            return KakaoLoginResponse.builder()
+                    .accessToken(accessToken)
+                    .refreshToken(refreshToken)
+                    .deviceAuthToken(deviceAuthToken(deviceCredentialIssueResult))
+                    .usersId(user.getUsersId())
+                    .name(user.getName())
+                    .role(user.getRole())
+                    .newUser(false)
+                    .build();
         }
 
-        return socialAccountRepository.saveAndFlush(SocialAccount.builder()
-                .user(user)
-                .provider(LoginProvider.KAKAO)
-                .providerId(providerId)
-                .build());
-    }
-
-    private KakaoLoginResponse createNewUserResponse(
-            KakaoUserInfo kakaoUserInfo,
-            String providerId
-    ) {
         // 신규 카카오 회원인 경우 추가 회원가입 진행
         return KakaoLoginResponse.builder()
                 .accessToken(null)
