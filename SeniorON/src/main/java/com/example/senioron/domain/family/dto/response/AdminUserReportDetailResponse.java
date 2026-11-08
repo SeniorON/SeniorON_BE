@@ -21,6 +21,9 @@ public record AdminUserReportDetailResponse(
         @Schema(description = "신고된 게시자")
         ReportedUser reportedUser,
 
+        @Schema(description = "게시자 신고를 시작한 근거 사진")
+        ReportedPhoto reportedPhoto,
+
         @Schema(description = "게시자가 최근 올린 사진 (최신순, 최대 5장)")
         List<RecentPhoto> recentPhotos,
 
@@ -62,6 +65,21 @@ public record AdminUserReportDetailResponse(
     }
 
     @JsonInclude(JsonInclude.Include.ALWAYS)
+    @Schema(description = "게시자 신고의 근거 사진")
+    public record ReportedPhoto(
+
+            @Schema(description = "사진 ID. 사진이 삭제됐으면 null", example = "40", nullable = true)
+            Long familyPhotoId,
+
+            @Schema(description = "신고 당시 저장된 원본 키로 발급한 사진 URL")
+            String imageUrl,
+
+            @Schema(description = "사진 레코드 삭제 여부 (원본 파일의 존재 여부와는 별개)", example = "false")
+            boolean deleted
+    ) {
+    }
+
+    @JsonInclude(JsonInclude.Include.ALWAYS)
     @Schema(description = "최근 업로드 사진")
     public record RecentPhoto(
 
@@ -69,7 +87,13 @@ public record AdminUserReportDetailResponse(
             Long familyPhotoId,
 
             @Schema(description = "썸네일 URL. 썸네일이 없으면 원본 URL")
-            String thumbnailUrl
+            String thumbnailUrl,
+
+            @Schema(description = "원본 URL (사진 뷰어에 사용)")
+            String imageUrl,
+
+            @Schema(description = "업로드일시 (사진 뷰어에 사용)")
+            LocalDateTime uploadedAt
     ) {
     }
 

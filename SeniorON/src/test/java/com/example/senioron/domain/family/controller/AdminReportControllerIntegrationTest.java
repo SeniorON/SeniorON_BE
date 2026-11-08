@@ -242,10 +242,17 @@ class AdminReportControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.reportedUser.reportCount").value(4))
                 .andExpect(jsonPath("$.data.reportedUser.highlighted").value(true))
                 .andExpect(jsonPath("$.data.reportedUser.photoCount").value(1))
+                .andExpect(jsonPath("$.data.reportedPhoto.familyPhotoId").value(photo.getFamilyPhotoId()))
+                .andExpect(jsonPath("$.data.reportedPhoto.imageUrl")
+                        .value("https://cdn.example.com/report-review.jpg"))
+                .andExpect(jsonPath("$.data.reportedPhoto.deleted").value(false))
                 .andExpect(jsonPath("$.data.recentPhotos.length()").value(1))
                 .andExpect(jsonPath("$.data.recentPhotos[0].familyPhotoId").value(photo.getFamilyPhotoId()))
                 .andExpect(jsonPath("$.data.recentPhotos[0].thumbnailUrl")
                         .value("https://cdn.example.com/report-review.jpg"))
+                .andExpect(jsonPath("$.data.recentPhotos[0].imageUrl")
+                        .value("https://cdn.example.com/report-review.jpg"))
+                .andExpect(jsonPath("$.data.recentPhotos[0].uploadedAt").isNotEmpty())
                 .andExpect(jsonPath("$.data.report.reportId").value(userReportId))
                 .andExpect(jsonPath("$.data.report.reason").value("ABUSE"))
                 .andExpect(jsonPath("$.data.report.reporterName").value("박*훈"))
@@ -257,6 +264,59 @@ class AdminReportControllerIntegrationTest {
         assertThat(body).doesNotContain("박지훈");
 
         mockMvc.perform(authGet("/api/admin/reports/users/" + Long.MAX_VALUE))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void 신고_근거_사진을_삭제해도_게시자_신고에서_원본을_확인한다() throws Exception {
+        given(s3Service.getFileUrl("report-review.jpg"))
+                .willReturn("https://cdn.example.com/report-review.jpg");
+
+        familyPhotoRepository.deleteById(photo.getFamilyPhotoId());
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(authGet("/api/admin/reports/users/" + userReportId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.reportedPhoto.familyPhotoId").value(nullValue()))
+                .andExpect(jsonPath("$.data.reportedPhoto.imageUrl")
+                        .value("https://cdn.example.com/report-review.jpg"))
+                .andExpect(jsonPath("$.data.reportedPhoto.deleted").value(true))
+                .andExpect(jsonPath("$.data.recentPhotos.length()").value(0))
+                .andExpect(jsonPath("$.data.reportedUser.photoCount").value(0));
+
+        mockMvc.perform(authGet("/api/admin/reports/users/" + userReportId + "/photos"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content.length()").value(0))
+                .andExpect(jsonPath("$.data.totalElements").value(0))
+                .andExpect(jsonPath("$.data.totalPages").value(0));
+    }
+
+    @Test
+    void 게시자_사진_목록을_응답한다() throws Exception {
+        given(s3Service.getFileUrl("report-review.jpg"))
+                .willReturn("https://cdn.example.com/report-review.jpg");
+
+        mockMvc.perform(authGet("/api/admin/reports/users/" + userReportId + "/photos"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.userId").value(uploader.getUsersId()))
+                .andExpect(jsonPath("$.data.userName").value("김지은"))
+                .andExpect(jsonPath("$.data.page").value(0))
+                .andExpect(jsonPath("$.data.size").value(18))
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.totalPages").value(1))
+                .andExpect(jsonPath("$.data.content[0].familyPhotoId").value(photo.getFamilyPhotoId()))
+                .andExpect(jsonPath("$.data.content[0].thumbnailUrl")
+                        .value("https://cdn.example.com/report-review.jpg"))
+                .andExpect(jsonPath("$.data.content[0].imageUrl")
+                        .value("https://cdn.example.com/report-review.jpg"))
+                .andExpect(jsonPath("$.data.content[0].uploadedAt").isNotEmpty());
+
+        mockMvc.perform(authGet("/api/admin/reports/users/" + userReportId + "/photos")
+                        .param("page", "-1"))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(authGet("/api/admin/reports/users/" + Long.MAX_VALUE + "/photos"))
                 .andExpect(status().isNotFound());
     }
 

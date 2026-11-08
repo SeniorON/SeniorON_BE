@@ -6,6 +6,7 @@ import com.example.senioron.domain.family.dto.response.AdminReportListItemRespon
 import com.example.senioron.domain.family.dto.response.AdminReportListResponse;
 import com.example.senioron.domain.family.dto.response.AdminReportStatsResponse;
 import com.example.senioron.domain.family.dto.response.AdminUserReportDetailResponse;
+import com.example.senioron.domain.family.dto.response.AdminUserReportPhotoListResponse;
 import com.example.senioron.domain.family.entity.AdminReportType;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
@@ -31,6 +32,8 @@ import java.time.temporal.TemporalAdjusters;
 import java.util.List;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,6 +47,8 @@ public class AdminReportService {
     private static final String NO_CONDITION = "";
     private static final long NO_USER_CONDITION = 0L;
     private static final String WITHDRAWN_NAME = "탈퇴회원";
+    // 기획: 게시자 사진 목록은 한 줄 6장 × 3줄
+    private static final int USER_PHOTO_PAGE_SIZE = 18;
 
     private final AdminReportQueryRepository adminReportQueryRepository;
     private final FamilyPhotoReportRepository familyPhotoReportRepository;
@@ -175,12 +180,22 @@ public class AdminReportService {
                         reportedUser.getCreatedAt()
                 );
 
+        FamilyPhoto reportPhoto = report.getFamilyPhoto();
+        AdminUserReportDetailResponse.ReportedPhoto reportedPhoto =
+                new AdminUserReportDetailResponse.ReportedPhoto(
+                        reportPhoto == null ? null : reportPhoto.getFamilyPhotoId(),
+                        s3Service.getFileUrl(report.getImageKey()),
+                        reportPhoto == null
+                );
+
         List<AdminUserReportDetailResponse.RecentPhoto> recentPhotos = familyPhotoRepository
                 .findTop5ByUser_UsersIdOrderByCreatedAtDescFamilyPhotoIdDesc(reportedUser.getUsersId())
                 .stream()
                 .map(photo -> new AdminUserReportDetailResponse.RecentPhoto(
                         photo.getFamilyPhotoId(),
-                        thumbnailUrlOf(photo)
+                        thumbnailUrlOf(photo),
+                        s3Service.getFileUrl(photo.getImageKey()),
+                        photo.getCreatedAt()
                 ))
                 .toList();
 
@@ -201,9 +216,49 @@ public class AdminReportService {
                 ),
                 AdminReportType.USER,
                 reportedUserInfo,
+                reportedPhoto,
                 recentPhotos,
                 reportInfo,
                 histories
+        );
+    }
+
+    // 상세의 업로드 사진 수·최근 사진과 같은 범위(게시자가 올린 전체 사진)를 같은 순서로 나눠 조회한다.
+    public AdminUserReportPhotoListResponse getUserReportPhotos(Long reportId, int page) {
+        if (page < 0) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+
+        FamilyUserReport report = familyUserReportRepository
+                .findDetailById(reportId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ADMIN_REPORT_NOT_FOUND));
+
+        User reportedUser = report.getReportedUser();
+
+        Page<FamilyPhoto> photos = familyPhotoRepository
+                .findByUser_UsersIdOrderByCreatedAtDescFamilyPhotoIdDesc(
+                        reportedUser.getUsersId(),
+                        PageRequest.of(page, USER_PHOTO_PAGE_SIZE)
+                );
+
+        List<AdminUserReportPhotoListResponse.Photo> content = photos.getContent()
+                .stream()
+                .map(photo -> new AdminUserReportPhotoListResponse.Photo(
+                        photo.getFamilyPhotoId(),
+                        thumbnailUrlOf(photo),
+                        s3Service.getFileUrl(photo.getImageKey()),
+                        photo.getCreatedAt()
+                ))
+                .toList();
+
+        return new AdminUserReportPhotoListResponse(
+                reportedUser.getUsersId(),
+                reportedUser.getName(),
+                content,
+                page,
+                USER_PHOTO_PAGE_SIZE,
+                photos.getTotalElements(),
+                photos.getTotalPages()
         );
     }
 
