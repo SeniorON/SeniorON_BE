@@ -69,6 +69,7 @@ public enum ErrorCode implements BaseCode {
     INVALID_INVITATION_TOKEN(HttpStatus.BAD_REQUEST, "ADMIN400", "사용할 수 없는 링크예요."),
     INVALID_ADMIN_PASSWORD(HttpStatus.BAD_REQUEST, "ADMIN400_1", "비밀번호는 영문·숫자 포함 8자 이상이어야 합니다."),
     CANNOT_MODIFY_SELF(HttpStatus.BAD_REQUEST, "ADMIN400_2", "본인 계정은 변경할 수 없습니다."),
+    ADMIN_REPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "ADMIN404_1", "신고를 찾을 수 없습니다."),
 
     // Email Error
     EMAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "EMAIL500", "이메일 발송에 실패했습니다."),
