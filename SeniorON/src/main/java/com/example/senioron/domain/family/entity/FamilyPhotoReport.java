@@ -1,6 +1,7 @@
 package com.example.senioron.domain.family.entity;
 
 import com.example.senioron.common.entity.BaseEntity;
+import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -81,6 +82,16 @@ public class FamilyPhotoReport extends BaseEntity {
     @JoinColumn(name = "reported_user_id")
     @OnDelete(action = OnDeleteAction.SET_NULL)
     private User reportedUser;
+
+    // 신고자가 사진을 본 시니어. 관리자 상세의 시니어 코드·역할 조회 기준이다. (시니어 삭제 시 null)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "senior_id")
+    @OnDelete(action = OnDeleteAction.SET_NULL)
+    private Senior senior;
+
+    // 사진이 삭제돼도 관리자가 업로드일을 확인할 수 있도록 신고 시점의 값을 남긴다.
+    @Column(name = "photo_uploaded_at")
+    private LocalDateTime photoUploadedAt;
 
     @Column(name = "image_key", nullable = false)
     private String imageKey;

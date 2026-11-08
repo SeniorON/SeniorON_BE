@@ -1,5 +1,6 @@
 package com.example.senioron.domain.family.controller;
 
+import com.example.senioron.domain.family.dto.response.AdminPhotoReportDetailResponse;
 import com.example.senioron.domain.family.dto.response.AdminReportListResponse;
 import com.example.senioron.domain.family.dto.response.AdminReportStatsResponse;
 import com.example.senioron.domain.family.service.AdminReportService;
@@ -9,13 +10,14 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(
         name = "관리자 신고",
-        description = "관리자 신고 목록·통계 조회 API"
+        description = "관리자 신고 목록·상세·통계 조회 API"
 )
 @RestController
 @RequiredArgsConstructor
@@ -36,6 +38,9 @@ public class AdminReportController {
             @Parameter(description = "게시자 또는 신고자 원본 이름 검색")
             @RequestParam(required = false) String keyword,
 
+            @Parameter(description = "게시자 사용자 ID. 해당 게시자가 받은 신고만 조회 (게시자 신고 내역 보기)")
+            @RequestParam(required = false) Long reportedUserId,
+
             @Parameter(description = "페이지 번호 (0부터 시작)")
             @RequestParam(defaultValue = "0") int page,
 
@@ -43,8 +48,20 @@ public class AdminReportController {
             @RequestParam(defaultValue = "10") int size
     ) {
         return Response.ok(
-                adminReportService.getReports(type, keyword, page, size)
+                adminReportService.getReports(type, keyword, reportedUserId, page, size)
         );
+    }
+
+    @Operation(
+            summary = "관리자 게시물 신고 상세 조회",
+            description = "신고된 사진, 신고 정보, 누적 신고 횟수를 조회합니다. 같은 사진의 신고도 신고마다 따로 조회합니다."
+    )
+    @GetMapping("/photos/{reportId}")
+    public Response<AdminPhotoReportDetailResponse> getPhotoReportDetail(
+            @Parameter(description = "게시물 신고 ID (목록의 reportId)")
+            @PathVariable Long reportId
+    ) {
+        return Response.ok(adminReportService.getPhotoReportDetail(reportId));
     }
 
     @Operation(

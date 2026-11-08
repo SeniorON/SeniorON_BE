@@ -1,12 +1,21 @@
 package com.example.senioron.domain.family.service;
 
+import com.example.senioron.domain.family.dto.response.AdminPhotoReportDetailResponse;
 import com.example.senioron.domain.family.dto.response.AdminReportCountsResponse;
 import com.example.senioron.domain.family.dto.response.AdminReportListItemResponse;
 import com.example.senioron.domain.family.dto.response.AdminReportListResponse;
 import com.example.senioron.domain.family.dto.response.AdminReportStatsResponse;
 import com.example.senioron.domain.family.entity.AdminReportType;
+import com.example.senioron.domain.family.entity.FamilyMember;
+import com.example.senioron.domain.family.entity.FamilyPhotoReport;
 import com.example.senioron.domain.family.repository.AdminReportQueryRepository;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
+import com.example.senioron.domain.family.repository.FamilyPhotoReportRepository;
+import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.user.entity.ManagerType;
+import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.util.UserNameMasker;
+import com.example.senioron.global.storage.S3Service;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import java.time.DayOfWeek;
@@ -28,29 +37,37 @@ public class AdminReportService {
     private static final ZoneId SEOUL_ZONE = ZoneId.of("Asia/Seoul");
     private static final long REPEATED_REPORT_THRESHOLD = 3;
     private static final String NO_CONDITION = "";
+    private static final long NO_USER_CONDITION = 0L;
+    private static final String WITHDRAWN_NAME = "탈퇴회원";
 
     private final AdminReportQueryRepository adminReportQueryRepository;
+    private final FamilyPhotoReportRepository familyPhotoReportRepository;
+    private final FamilyMemberRepository familyMemberRepository;
+    private final S3Service s3Service;
 
     public AdminReportListResponse getReports(
             String type,
             String keyword,
+            Long reportedUserId,
             int page,
             int size
     ) {
-        if (page < 0 || size < 1) {
+        if (page < 0 || size < 1 || (reportedUserId != null && reportedUserId < 1)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
 
         AdminReportType reportType = parseType(type);
         String keywordPattern = toKeywordPattern(keyword);
+        long reportedUserCondition = reportedUserId == null ? NO_USER_CONDITION : reportedUserId;
 
-        AdminReportCountsResponse counts = getCounts(keywordPattern);
+        AdminReportCountsResponse counts = getCounts(keywordPattern, reportedUserCondition);
         long totalElements = totalElementsOf(counts, reportType);
 
         List<AdminReportListItemResponse> content = adminReportQueryRepository
                 .findReportPage(
                         reportType == null ? NO_CONDITION : reportType.name(),
                         keywordPattern,
+                        reportedUserCondition,
                         size,
                         (long) page * size
                 )
@@ -65,6 +82,56 @@ public class AdminReportService {
                 size,
                 totalElements,
                 (int) Math.ceil((double) totalElements / size)
+        );
+    }
+
+    public AdminPhotoReportDetailResponse getPhotoReportDetail(Long reportId) {
+        FamilyPhotoReport report = familyPhotoReportRepository
+                .findDetailById(reportId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ADMIN_REPORT_NOT_FOUND));
+
+        User uploader = report.getReportedUser();
+        Senior senior = report.getSenior();
+
+        long reportedUserReportCount = uploader == null
+                ? 0
+                : adminReportQueryRepository.countReportsOnUser(uploader.getUsersId());
+
+        AdminPhotoReportDetailResponse.Photo photo = new AdminPhotoReportDetailResponse.Photo(
+                s3Service.getFileUrl(report.getImageKey()),
+                report.getFamilyPhoto() == null,
+                uploader == null ? null : uploader.getUsersId(),
+                uploader == null ? WITHDRAWN_NAME : uploader.getName(),
+                managerTypeOf(uploader, senior),
+                uploadedAtOf(report),
+                senior == null ? null : senior.getFamily().getSeniorCode()
+        );
+
+        AdminPhotoReportDetailResponse.Report reportInfo = new AdminPhotoReportDetailResponse.Report(
+                report.getId(),
+                report.getReason(),
+                report.getDetail(),
+                UserNameMasker.mask(report.getReporter()),
+                managerTypeOf(report.getReporter(), senior),
+                report.getCreatedAt(),
+                report.isHidden()
+        );
+
+        AdminPhotoReportDetailResponse.Cumulative cumulative = new AdminPhotoReportDetailResponse.Cumulative(
+                familyPhotoReportRepository.countByImageKey(report.getImageKey()),
+                reportedUserReportCount,
+                reportedUserReportCount >= REPEATED_REPORT_THRESHOLD
+        );
+
+        return new AdminPhotoReportDetailResponse(
+                adminReportQueryRepository.findReportNumber(
+                        AdminReportType.PHOTO.name(),
+                        report.getId()
+                ),
+                AdminReportType.PHOTO,
+                photo,
+                reportInfo,
+                cumulative
         );
     }
 
@@ -100,12 +167,35 @@ public class AdminReportService {
         );
     }
 
-    private AdminReportCountsResponse getCounts(String keywordPattern) {
+    // 신고 시점의 시니어 가족에서 역할을 찾는다. 시니어나 연결이 없어졌으면 null이다.
+    private ManagerType managerTypeOf(User user, Senior senior) {
+        if (user == null || senior == null) {
+            return null;
+        }
+
+        return familyMemberRepository
+                .findByUserAndFamily(user, senior.getFamily())
+                .map(FamilyMember::getManagerType)
+                .orElse(null);
+    }
+
+    // 업로드일 저장 전에 접수된 신고는 남아 있는 사진의 생성일을 사용한다.
+    private LocalDateTime uploadedAtOf(FamilyPhotoReport report) {
+        if (report.getPhotoUploadedAt() != null) {
+            return report.getPhotoUploadedAt();
+        }
+
+        return report.getFamilyPhoto() == null
+                ? null
+                : report.getFamilyPhoto().getCreatedAt();
+    }
+
+    private AdminReportCountsResponse getCounts(String keywordPattern, long reportedUserCondition) {
         long photo = 0;
         long user = 0;
 
         for (AdminReportQueryRepository.ReportTypeCount count
-                : adminReportQueryRepository.countByType(keywordPattern)) {
+                : adminReportQueryRepository.countByType(keywordPattern, reportedUserCondition)) {
             if (count.getReportType() == AdminReportType.PHOTO) {
                 photo = count.getReportCount();
             } else {

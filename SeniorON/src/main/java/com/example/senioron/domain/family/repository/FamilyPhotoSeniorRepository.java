@@ -7,6 +7,7 @@ import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.entity.UserStatus;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -14,6 +15,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 public interface FamilyPhotoSeniorRepository
@@ -78,6 +80,44 @@ public interface FamilyPhotoSeniorRepository
             @Param("seniorIds") Collection<Long> seniorIds,
             @Param("role") Role role,
             @Param("status") UserStatus status
+    );
+
+    // 신고 화면의 시니어가 이 사진을 공유받았고 신고자가 그 시니어의 가족인지 확인한다.
+    @Query("""
+    SELECT senior
+    FROM FamilyPhotoSenior fps
+    JOIN fps.senior senior
+    WHERE fps.familyPhoto = :familyPhoto
+      AND senior.seniorId = :seniorId
+      AND EXISTS (
+          SELECT fm.id
+          FROM FamilyMember fm
+          WHERE fm.family = senior.family
+            AND fm.user = :user
+      )
+    """)
+    Optional<Senior> findReportContextSenior(
+            @Param("familyPhoto") FamilyPhoto familyPhoto,
+            @Param("user") User user,
+            @Param("seniorId") Long seniorId
+    );
+
+    // seniorId 없이 신고한 경우의 대체 기준: 신고자와 사진이 함께 연결된 시니어 중
+    // 신고자가 주담당자인 시니어, 먼저 공유된 시니어 순이다.
+    @Query("""
+    SELECT senior
+    FROM FamilyPhotoSenior fps
+    JOIN fps.senior senior
+    JOIN FamilyMember fm ON fm.family = senior.family
+    WHERE fps.familyPhoto = :familyPhoto
+      AND fm.user = :user
+    ORDER BY CASE WHEN fm.managerType = :primary THEN 0 ELSE 1 END, fps.id
+    """)
+    List<Senior> findReportContextSeniors(
+            @Param("familyPhoto") FamilyPhoto familyPhoto,
+            @Param("user") User user,
+            @Param("primary") ManagerType primary,
+            Pageable pageable
     );
 
     @Query("""

@@ -2,6 +2,7 @@ package com.example.senioron.domain.family.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.nullValue;
+import static org.mockito.BDDMockito.given;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -24,6 +25,7 @@ import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.jwt.JwtUtil;
+import com.example.senioron.global.storage.S3Service;
 import jakarta.persistence.EntityManager;
 import java.nio.charset.StandardCharsets;
 import org.hibernate.SessionFactory;
@@ -34,6 +36,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,10 +57,13 @@ class AdminReportControllerIntegrationTest {
     @Autowired private FamilyUserReportRepository userReportRepository;
     @Autowired private JwtUtil jwtUtil;
     @Autowired private EntityManager entityManager;
+    // 로컬 테스트에는 AWS 자격 증명이 없어 presigned URL 생성을 대체한다.
+    @MockitoBean private S3Service s3Service;
 
     private String adminToken;
     private FamilyPhoto photo;
     private User uploader;
+    private Long photoReportId;
 
     @BeforeEach
     void setUp() {
@@ -85,14 +91,14 @@ class AdminReportControllerIntegrationTest {
                 .imageKey("report-review.jpg")
                 .build());
 
-        photoReportRepository.saveAndFlush(FamilyPhotoReport.builder()
+        photoReportId = photoReportRepository.saveAndFlush(FamilyPhotoReport.builder()
                 .familyPhoto(photo)
                 .reporter(first)
                 .reportedUser(uploader)
                 .imageKey(photo.getImageKey())
                 .reason(PhotoReportReason.ADVERTISEMENT)
                 .status(PhotoReportStatus.PENDING)
-                .build());
+                .build()).getId();
 
         for (User reporter : new User[]{first, second, third}) {
             userReportRepository.saveAndFlush(FamilyUserReport.builder()
@@ -138,7 +144,7 @@ class AdminReportControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.totalElements").value(4))
                 .andExpect(jsonPath("$.data.content[0].number").value(4))
                 .andExpect(jsonPath("$.data.content[0].reportType").value("USER"))
-                .andExpect(jsonPath("$.data.content[0].cumulativeCount").value(3))
+                .andExpect(jsonPath("$.data.content[0].cumulativeCount").value(4))
                 .andExpect(jsonPath("$.data.content[0].highlighted").value(true))
                 .andExpect(jsonPath("$.data.content[0].targetName").value("김지은"))
                 .andExpect(jsonPath("$.data.content[3].reportType").value("PHOTO"))
@@ -183,6 +189,60 @@ class AdminReportControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.content[0].targetName").value("김지은"))
                 .andExpect(jsonPath("$.data.content[0].cumulativeCount").value(1))
                 .andExpect(jsonPath("$.data.content[0].photoUploadedAt").value(nullValue()));
+    }
+
+    @Test
+    void 게시물_신고_상세를_응답한다() throws Exception {
+        given(s3Service.getFileUrl("report-review.jpg"))
+                .willReturn("https://cdn.example.com/report-review.jpg");
+
+        String body = mockMvc.perform(authGet("/api/admin/reports/photos/" + photoReportId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.number").value(1))
+                .andExpect(jsonPath("$.data.reportType").value("PHOTO"))
+                .andExpect(jsonPath("$.data.photo.imageUrl").value("https://cdn.example.com/report-review.jpg"))
+                .andExpect(jsonPath("$.data.photo.deleted").value(false))
+                .andExpect(jsonPath("$.data.photo.reportedUserId").value(uploader.getUsersId()))
+                .andExpect(jsonPath("$.data.photo.uploaderName").value("김지은"))
+                .andExpect(jsonPath("$.data.photo.seniorCode").value(nullValue()))
+                .andExpect(jsonPath("$.data.report.reportId").value(photoReportId))
+                .andExpect(jsonPath("$.data.report.reason").value("ADVERTISEMENT"))
+                .andExpect(jsonPath("$.data.report.reporterName").value("박*훈"))
+                .andExpect(jsonPath("$.data.cumulative.photoReportCount").value(1))
+                .andExpect(jsonPath("$.data.cumulative.reportedUserReportCount").value(4))
+                .andExpect(jsonPath("$.data.cumulative.highlighted").value(true))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+
+        assertThat(body).doesNotContain("박지훈");
+
+        mockMvc.perform(authGet("/api/admin/reports/photos/" + Long.MAX_VALUE))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void 게시자_ID로_신고_내역을_필터링한다() throws Exception {
+        User other = saveUser("other", "최하나");
+        userReportRepository.saveAndFlush(FamilyUserReport.builder()
+                .reporter(uploader)
+                .reportedUser(other)
+                .imageKey("other.jpg")
+                .reason(PhotoReportReason.ABUSE)
+                .status(PhotoReportStatus.PENDING)
+                .build());
+
+        mockMvc.perform(authGet("/api/admin/reports")
+                        .param("reportedUserId", String.valueOf(uploader.getUsersId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.counts.total").value(4))
+                .andExpect(jsonPath("$.data.totalElements").value(4));
+
+        mockMvc.perform(authGet("/api/admin/reports")
+                        .param("reportedUserId", String.valueOf(other.getUsersId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.content[0].number").value(5));
     }
 
     @Test
