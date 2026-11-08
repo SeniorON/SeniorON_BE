@@ -6,6 +6,7 @@ import com.example.senioron.domain.family.repository.projection.FamilyPhotoAlbum
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
@@ -191,6 +192,9 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
     long countByUser_UsersId(Long usersId);
 
     List<FamilyPhoto> findTop5ByUser_UsersIdOrderByCreatedAtDescFamilyPhotoIdDesc(Long usersId);
+
+    // 관리자 게시자 사진 목록: 최근 사진과 같은 순서로 페이지 조회한다.
+    Page<FamilyPhoto> findByUser_UsersIdOrderByCreatedAtDescFamilyPhotoIdDesc(Long usersId, Pageable pageable);
 
     @EntityGraph(attributePaths = "user")
     @Query("""

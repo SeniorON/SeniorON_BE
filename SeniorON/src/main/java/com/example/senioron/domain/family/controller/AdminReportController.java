@@ -4,6 +4,7 @@ import com.example.senioron.domain.family.dto.response.AdminPhotoReportDetailRes
 import com.example.senioron.domain.family.dto.response.AdminReportListResponse;
 import com.example.senioron.domain.family.dto.response.AdminReportStatsResponse;
 import com.example.senioron.domain.family.dto.response.AdminUserReportDetailResponse;
+import com.example.senioron.domain.family.dto.response.AdminUserReportPhotoListResponse;
 import com.example.senioron.domain.family.service.AdminReportService;
 import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
@@ -67,7 +68,7 @@ public class AdminReportController {
 
     @Operation(
             summary = "관리자 게시자 신고 상세 조회",
-            description = "신고된 게시자(역할·시니어 코드·누적 신고·업로드 사진 수·가입일), 최근 업로드 사진 5장, "
+            description = "신고된 게시자(역할·시니어 코드·누적 신고·업로드 사진 수·가입일), 신고 근거 사진(원본 URL·삭제 여부), 최근 업로드 사진 5장, "
                     + "신고 정보, 게시자가 받은 신고 이력(게시물 신고 + 게시자 신고, 최신순)을 조회합니다."
     )
     @GetMapping("/users/{reportId}")
@@ -76,6 +77,22 @@ public class AdminReportController {
             @PathVariable Long reportId
     ) {
         return Response.ok(adminReportService.getUserReportDetail(reportId));
+    }
+
+    @Operation(
+            summary = "관리자 게시자 업로드 사진 목록 조회",
+            description = "게시자 신고의 게시자가 올린 전체 사진을 최신순으로 페이지당 18장씩 조회합니다. "
+                    + "사진 더 보기 화면과 게시자 신고 사진 뷰어(이전/다음, 하단 썸네일)에 사용합니다."
+    )
+    @GetMapping("/users/{reportId}/photos")
+    public Response<AdminUserReportPhotoListResponse> getUserReportPhotos(
+            @Parameter(description = "게시자 신고 ID (목록의 reportId)")
+            @PathVariable Long reportId,
+
+            @Parameter(description = "페이지 번호 (0부터 시작, 페이지당 18장)")
+            @RequestParam(defaultValue = "0") int page
+    ) {
+        return Response.ok(adminReportService.getUserReportPhotos(reportId, page));
     }
 
     @Operation(

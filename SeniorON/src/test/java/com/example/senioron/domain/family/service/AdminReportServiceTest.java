@@ -11,6 +11,7 @@ import com.example.senioron.domain.family.dto.response.AdminReportListItemRespon
 import com.example.senioron.domain.family.dto.response.AdminReportListResponse;
 import com.example.senioron.domain.family.dto.response.AdminReportStatsResponse;
 import com.example.senioron.domain.family.dto.response.AdminUserReportDetailResponse;
+import com.example.senioron.domain.family.dto.response.AdminUserReportPhotoListResponse;
 import com.example.senioron.domain.family.entity.AdminReportType;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
@@ -506,6 +507,12 @@ class AdminReportServiceTest {
                 .isEqualTo("https://cdn.example.com/p5-thumb.jpg");
         assertThat(detail.recentPhotos().get(1).thumbnailUrl())
                 .isEqualTo("https://cdn.example.com/p4.jpg");
+        assertThat(detail.recentPhotos().get(0).imageUrl())
+                .isEqualTo("https://cdn.example.com/p5.jpg");
+        assertThat(detail.recentPhotos().get(0).uploadedAt())
+                .isEqualTo(familyPhotoRepository.findById(recent.get(4).getFamilyPhotoId())
+                        .orElseThrow()
+                        .getCreatedAt());
 
         assertThat(detail.report().reportId()).isEqualTo(reportId);
         assertThat(detail.report().reason()).isEqualTo(PhotoReportReason.ABUSE);
@@ -528,10 +535,69 @@ class AdminReportServiceTest {
     }
 
     @Test
+    void 게시자_신고_근거_사진은_최근사진에_없어도_신고_원본으로_조회한다() {
+        FamilyPhoto reportedPhoto = savePhoto("current-photo.jpg");
+        updatePhotoCreatedAt(reportedPhoto.getFamilyPhotoId(), day(1));
+        Long reportId = saveUserReport(
+                reportedPhoto, "reported-original.jpg", reporter, uploader, day(2)
+        );
+        for (int i = 2; i <= 6; i++) {
+            FamilyPhoto recentPhoto = savePhoto("recent-" + i + ".jpg");
+            updatePhotoCreatedAt(recentPhoto.getFamilyPhotoId(), day(i));
+        }
+        entityManager.clear();
+
+        given(s3Service.getFileUrl(anyString()))
+                .willAnswer(invocation -> "https://cdn.example.com/" + invocation.getArgument(0));
+
+        AdminUserReportDetailResponse detail = service.getUserReportDetail(reportId);
+
+        assertThat(detail.recentPhotos()).hasSize(5);
+        assertThat(detail.recentPhotos())
+                .extracting(AdminUserReportDetailResponse.RecentPhoto::familyPhotoId)
+                .doesNotContain(reportedPhoto.getFamilyPhotoId());
+        assertThat(detail.reportedPhoto().familyPhotoId()).isEqualTo(reportedPhoto.getFamilyPhotoId());
+        // 근거 사진의 URL은 현재 사진 행 대신 신고 시점에 보존한 원본 키를 사용한다.
+        assertThat(detail.reportedPhoto().imageUrl())
+                .isEqualTo("https://cdn.example.com/reported-original.jpg");
+        assertThat(detail.reportedPhoto().deleted()).isFalse();
+    }
+
+    @Test
+    void 게시자_신고_근거_사진을_삭제해도_보존된_원본은_조회한다() {
+        FamilyPhoto reportedPhoto = savePhoto("reported-original.jpg");
+        Long reportId = saveUserReport(
+                reportedPhoto, "reported-original.jpg", reporter, uploader, day(1)
+        );
+
+        // 신고 접수와 삭제 요청의 영속성 컨텍스트를 분리하고, 실제 외래 키 SET NULL을 확인한다.
+        entityManager.clear();
+        familyPhotoRepository.deleteById(reportedPhoto.getFamilyPhotoId());
+        familyPhotoRepository.flush();
+        entityManager.clear();
+
+        given(s3Service.getFileUrl("reported-original.jpg"))
+                .willReturn("https://cdn.example.com/reported-original.jpg");
+
+        AdminUserReportDetailResponse detail = service.getUserReportDetail(reportId);
+
+        assertThat(detail.report().reportId()).isEqualTo(reportId);
+        assertThat(detail.reportedUser().photoCount()).isZero();
+        assertThat(detail.recentPhotos()).isEmpty();
+        assertThat(detail.reportedPhoto().familyPhotoId()).isNull();
+        assertThat(detail.reportedPhoto().imageUrl())
+                .isEqualTo("https://cdn.example.com/reported-original.jpg");
+        assertThat(detail.reportedPhoto().deleted()).isTrue();
+    }
+
+    @Test
     void 시니어_없는_게시자_신고는_역할과_시니어_코드가_비어있다() {
         User withdrawn = saveUser("탈퇴회원", UserStatus.WITHDRAWN);
         Long reportId = saveUserReport(withdrawn, uploader, day(1));
         entityManager.clear();
+
+        given(s3Service.getFileUrl("user-report.jpg"))
+                .willReturn("https://cdn.example.com/user-report.jpg");
 
         AdminUserReportDetailResponse detail = service.getUserReportDetail(reportId);
 
@@ -541,6 +607,10 @@ class AdminReportServiceTest {
         assertThat(detail.reportedUser().highlighted()).isFalse();
         assertThat(detail.reportedUser().photoCount()).isZero();
         assertThat(detail.recentPhotos()).isEmpty();
+        // 사진 연결이 없는 기존 신고도 저장된 원본 키로 근거 사진을 열 수 있다.
+        assertThat(detail.reportedPhoto().familyPhotoId()).isNull();
+        assertThat(detail.reportedPhoto().imageUrl()).isEqualTo("https://cdn.example.com/user-report.jpg");
+        assertThat(detail.reportedPhoto().deleted()).isTrue();
         assertThat(detail.report().reporterName()).isEqualTo("탈퇴회원");
         assertThat(detail.report().reporterManagerType()).isNull();
         assertThat(detail.histories())
@@ -560,6 +630,89 @@ class AdminReportServiceTest {
 
         assertThat(detail.histories()).hasSize(1);
         assertThat(detail.reportedUser().reportCount()).isEqualTo(1);
+    }
+
+    @Test
+    void 게시자_사진_목록은_최신순으로_18장씩_나눈다() {
+        Long reportId = saveUserReport(reporter, uploader, day(1));
+
+        // 게시자 사진 20장. 첫 사진만 썸네일이 있다.
+        List<FamilyPhoto> photos = new ArrayList<>();
+        for (int i = 1; i <= 20; i++) {
+            photos.add(familyPhotoRepository.saveAndFlush(FamilyPhoto.builder()
+                    .user(uploader)
+                    .imageKey("u" + i + ".jpg")
+                    .thumbnailKey(i == 1 ? "u1-thumb.jpg" : null)
+                    .build()));
+            updatePhotoCreatedAt(photos.get(i - 1).getFamilyPhotoId(), day(i));
+        }
+        // 다른 게시자의 사진은 포함하지 않는다.
+        familyPhotoRepository.saveAndFlush(FamilyPhoto.builder()
+                .user(reporter)
+                .imageKey("other.jpg")
+                .build());
+        entityManager.clear();
+
+        given(s3Service.getFileUrl(anyString()))
+                .willAnswer(invocation -> "https://cdn.example.com/" + invocation.getArgument(0));
+
+        AdminUserReportPhotoListResponse first = service.getUserReportPhotos(reportId, 0);
+
+        assertThat(first.userId()).isEqualTo(uploader.getUsersId());
+        assertThat(first.userName()).isEqualTo("김지은");
+        assertThat(first.page()).isZero();
+        assertThat(first.size()).isEqualTo(18);
+        assertThat(first.totalElements()).isEqualTo(20);
+        assertThat(first.totalPages()).isEqualTo(2);
+        assertThat(first.content()).hasSize(18);
+        assertThat(first.content().get(0).familyPhotoId()).isEqualTo(photos.get(19).getFamilyPhotoId());
+        assertThat(first.content().get(0).thumbnailUrl()).isEqualTo("https://cdn.example.com/u20.jpg");
+        assertThat(first.content().get(0).imageUrl()).isEqualTo("https://cdn.example.com/u20.jpg");
+        assertThat(first.content().get(0).uploadedAt()).isEqualTo(day(20));
+
+        AdminUserReportPhotoListResponse second = service.getUserReportPhotos(reportId, 1);
+
+        assertThat(second.content())
+                .extracting(AdminUserReportPhotoListResponse.Photo::familyPhotoId)
+                .containsExactly(photos.get(1).getFamilyPhotoId(), photos.get(0).getFamilyPhotoId());
+        assertThat(second.content().get(1).thumbnailUrl()).isEqualTo("https://cdn.example.com/u1-thumb.jpg");
+        assertThat(second.content().get(1).imageUrl()).isEqualTo("https://cdn.example.com/u1.jpg");
+
+        // 상세의 업로드 사진 수와 목록의 총 장 수가 같다.
+        assertThat(service.getUserReportDetail(reportId).reportedUser().photoCount())
+                .isEqualTo(first.totalElements());
+
+        assertThat(service.getUserReportPhotos(reportId, 2).content()).isEmpty();
+    }
+
+    @Test
+    void 게시자_사진_목록은_업로드_시각이_같으면_나중_사진이_먼저다() {
+        Long reportId = saveUserReport(reporter, uploader, day(1));
+        FamilyPhoto older = savePhoto("same-1.jpg");
+        FamilyPhoto newer = savePhoto("same-2.jpg");
+        updatePhotoCreatedAt(older.getFamilyPhotoId(), day(3));
+        updatePhotoCreatedAt(newer.getFamilyPhotoId(), day(3));
+        entityManager.clear();
+
+        assertThat(service.getUserReportPhotos(reportId, 0).content())
+                .extracting(AdminUserReportPhotoListResponse.Photo::familyPhotoId)
+                .containsExactly(newer.getFamilyPhotoId(), older.getFamilyPhotoId());
+    }
+
+    @Test
+    void 게시자_사진_목록의_잘못된_요청은_거절한다() {
+        Long reportId = saveUserReport(reporter, uploader, day(1));
+
+        assertThatThrownBy(() -> service.getUserReportPhotos(reportId, -1))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.BAD_REQUEST);
+        assertThatThrownBy(() -> service.getUserReportPhotos(Long.MAX_VALUE, 0))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.ADMIN_REPORT_NOT_FOUND);
     }
 
     @Test
@@ -638,10 +791,21 @@ class AdminReportServiceTest {
     }
 
     private Long saveUserReport(User reportReporter, User target, LocalDateTime createdAt) {
+        return saveUserReport(null, "user-report.jpg", reportReporter, target, createdAt);
+    }
+
+    private Long saveUserReport(
+            FamilyPhoto photo,
+            String imageKey,
+            User reportReporter,
+            User target,
+            LocalDateTime createdAt
+    ) {
         FamilyUserReport report = userReportRepository.saveAndFlush(FamilyUserReport.builder()
                 .reporter(reportReporter)
                 .reportedUser(target)
-                .imageKey("user-report.jpg")
+                .familyPhoto(photo)
+                .imageKey(imageKey)
                 .reason(PhotoReportReason.ABUSE)
                 .status(PhotoReportStatus.PENDING)
                 .build());
@@ -751,6 +915,14 @@ class AdminReportServiceTest {
                 .birth(LocalDate.of(1950, 1, 1))
                 .phoneNumber("01012345678")
                 .build());
+    }
+
+    private void updatePhotoCreatedAt(Long familyPhotoId, LocalDateTime createdAt) {
+        updateCreatedAt(
+                "UPDATE family_photo SET created_at = :createdAt WHERE family_photo_id = :id",
+                familyPhotoId,
+                createdAt
+        );
     }
 
     // created_at은 감사 기능이 채우고 수정할 수 없으므로 테스트 시각은 SQL로 지정한다.

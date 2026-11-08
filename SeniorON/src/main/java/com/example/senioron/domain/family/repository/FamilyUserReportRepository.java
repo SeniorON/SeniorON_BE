@@ -23,6 +23,7 @@ public interface FamilyUserReportRepository
     @EntityGraph(attributePaths = {
             "reporter",
             "reportedUser",
+            "familyPhoto",
             "senior",
             "senior.family"
     })
