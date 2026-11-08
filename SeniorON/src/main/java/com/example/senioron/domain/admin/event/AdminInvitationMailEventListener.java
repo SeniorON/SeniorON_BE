@@ -1,5 +1,6 @@
 package com.example.senioron.domain.admin.event;
 
+import com.example.senioron.domain.admin.entity.AdminInvitationType;
 import com.example.senioron.global.mail.EmailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,19 +23,25 @@ public class AdminInvitationMailEventListener {
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handle(AdminInvitationMailEvent event) {
+        boolean reset = event.type() == AdminInvitationType.RESET;
+        String label = reset ? "관리자 비밀번호 재설정" : "관리자 초대";
         if (mailUsername == null || mailUsername.isBlank()) {
             if (logLink) {
-                log.info("관리자 초대 링크: {}", event.link());
+                log.info("{} 링크: {}", label, event.link());
             } else {
-                log.warn("메일 설정이 없어 관리자 초대 메일을 발송하지 못했습니다: {}",
-                        maskEmail(event.email()));
+                log.warn("메일 설정이 없어 {} 메일을 발송하지 못했습니다: {}",
+                        label, maskEmail(event.email()));
             }
             return;
         }
         try {
-            emailService.sendAdminInvitation(event.email(), event.link());
+            if (reset) {
+                emailService.sendAdminPasswordReset(event.email(), event.link());
+            } else {
+                emailService.sendAdminInvitation(event.email(), event.link());
+            }
         } catch (RuntimeException e) {
-            log.error("관리자 초대 메일 발송 실패: {}", maskEmail(event.email()), e);
+            log.error("{} 메일 발송 실패: {}", label, maskEmail(event.email()), e);
         }
     }
 

@@ -16,20 +16,26 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class AdminInvitationIssuer {
     public static final long EXPIRATION_HOURS = 48;
+    public static final long RESET_EXPIRATION_HOURS = 1;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private final AdminInvitationRepository repository;
     private final ApplicationEventPublisher publisher;
     @Value("${admin.web.base-url}") private String baseUrl;
 
     public void issue(Admin admin, Admin createdBy) {
+        issue(admin, createdBy, AdminInvitationType.INVITE);
+    }
+
+    public void issue(Admin admin, Admin createdBy, AdminInvitationType type) {
         byte[] bytes = new byte[32];
         SECURE_RANDOM.nextBytes(bytes);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-        repository.save(AdminInvitation.builder().admin(admin).type(AdminInvitationType.INVITE)
+        long expirationHours = type == AdminInvitationType.RESET ? RESET_EXPIRATION_HOURS : EXPIRATION_HOURS;
+        repository.save(AdminInvitation.builder().admin(admin).type(type)
                 .tokenHash(TokenHashUtil.hashHex(token))
-                .expiresAt(LocalDateTime.now().plusHours(EXPIRATION_HOURS))
+                .expiresAt(LocalDateTime.now().plusHours(expirationHours))
                 .createdBy(createdBy).build());
         publisher.publishEvent(new AdminInvitationMailEvent(
-                admin.getEmail(), baseUrl + "/invitation?token=" + token));
+                admin.getEmail(), baseUrl + "/invitation?token=" + token, type));
     }
 }

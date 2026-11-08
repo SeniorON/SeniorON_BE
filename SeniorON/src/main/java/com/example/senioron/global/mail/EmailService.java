@@ -54,4 +54,19 @@ public class EmailService {
             throw new BusinessException(ErrorCode.EMAIL_SEND_FAILED);
         }
     }
+
+    public void sendAdminPasswordReset(String to, String link) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setTo(to);
+        message.setSubject("[SeniorON] 관리자 비밀번호 재설정 안내");
+        message.setText("관리자 계정 비밀번호를 재설정하려면 다음 링크를 이용해 주세요.\n"
+                + link + "\n"
+                + "해당 링크는 1시간 동안 유효합니다.");
+
+        try {
+            javaMailSender.send(message);
+        } catch (MailException e) {
+            throw new BusinessException(ErrorCode.EMAIL_SEND_FAILED);
+        }
+    }
 }

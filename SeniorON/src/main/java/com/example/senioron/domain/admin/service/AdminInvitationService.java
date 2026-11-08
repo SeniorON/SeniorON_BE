@@ -25,6 +25,7 @@ public class AdminInvitationService {
     private final PasswordEncoder passwordEncoder;
     private final AdminBootstrapTransactionService bootstrapTransactionService;
     private final AdminInvitationIssuer invitationIssuer;
+    private final AdminRefreshTokenRepository refreshTokenRepository;
 
     @Transactional
     public AdminInviteResponse invite(Admin actor, AdminInviteRequest request, String ipAddress) {
@@ -76,6 +77,26 @@ public class AdminInvitationService {
         return new AdminInviteResponse(invited.getAdminId(), true);
     }
 
+    @Transactional
+    public void sendPasswordReset(Admin actor, Long adminId, String ipAddress) {
+        if (actor.getAdminId().equals(adminId)) {
+            throw new BusinessException(ErrorCode.CANNOT_MODIFY_SELF);
+        }
+        Admin target = adminRepository.findByIdForUpdate(adminId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ADMIN_NOT_FOUND));
+        if (!target.isActive()) {
+            throw new BusinessException(ErrorCode.ADMIN_STATUS_CONFLICT);
+        }
+        LocalDateTime now = LocalDateTime.now();
+        invitationRepository.findAllByAdminAndType(target, AdminInvitationType.RESET)
+                .stream().filter(invitation -> invitation.isUsable(now))
+                .forEach(invitation -> invitation.invalidate(now));
+        invitationIssuer.issue(target, actor, AdminInvitationType.RESET);
+        activityLogService.record(actor, AdminActivityType.ADMIN_PASSWORD_RESET_SENT,
+                AdminActivityTargetType.ADMIN, target.getAdminId(), target.getName(),
+                "관리자 비밀번호 재설정 메일을 발송했습니다.", ipAddress);
+    }
+
     @Transactional(readOnly = true)
     public AdminInvitationVerifyResponse verify(AdminInvitationTokenRequest request) {
         AdminInvitation invitation = invitationRepository.findByTokenHash(
@@ -92,8 +113,12 @@ public class AdminInvitationService {
                 .filter(this::valid)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_INVITATION_TOKEN));
         validatePassword(request.password());
+        Admin admin = invitation.getAdmin();
         if (invitation.getType() == AdminInvitationType.INVITE) {
-            invitation.getAdmin().activate(passwordEncoder.encode(request.password()));
+            admin.activate(passwordEncoder.encode(request.password()));
+        } else if (invitation.getType() == AdminInvitationType.RESET) {
+            admin.changePassword(passwordEncoder.encode(request.password()));
+            refreshTokenRepository.revokeAllByAdminId(admin.getAdminId());
         }
         invitation.use(LocalDateTime.now());
     }
@@ -116,8 +141,14 @@ public class AdminInvitationService {
     }
 
     private boolean valid(AdminInvitation invitation) {
-        return invitation.isUsable(LocalDateTime.now())
-                && invitation.getAdmin().getStatus() != AdminStatus.SUSPENDED;
+        if (!invitation.isUsable(LocalDateTime.now())) {
+            return false;
+        }
+        AdminStatus status = invitation.getAdmin().getStatus();
+        if (invitation.getType() == AdminInvitationType.RESET) {
+            return status == AdminStatus.ACTIVE;
+        }
+        return status != AdminStatus.SUSPENDED;
     }
 
     private void validatePassword(String password) {
