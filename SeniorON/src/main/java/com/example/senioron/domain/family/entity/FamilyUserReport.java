@@ -1,6 +1,7 @@
 package com.example.senioron.domain.family.entity;
 
 import com.example.senioron.common.entity.BaseEntity;
+import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -83,6 +84,12 @@ public class FamilyUserReport extends BaseEntity {
     @JoinColumn(name = "family_photo_id")
     @OnDelete(action = OnDeleteAction.SET_NULL)
     private FamilyPhoto familyPhoto;
+
+    // 관리자 상세의 시니어 코드·역할 기준. 사용자는 여러 가족에 속할 수 있어 신고 시점의 시니어를 남긴다.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "senior_id")
+    @OnDelete(action = OnDeleteAction.SET_NULL)
+    private Senior senior;
 
     @Column(name = "image_key", nullable = false)
     private String imageKey;

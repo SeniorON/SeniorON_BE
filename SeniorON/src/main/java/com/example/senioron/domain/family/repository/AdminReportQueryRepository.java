@@ -222,6 +222,55 @@ public interface AdminReportQueryRepository extends Repository<FamilyPhotoReport
     )
     long countRepeatedReportedUsers(@Param("threshold") long threshold);
 
+    // 게시자가 받은 신고 이력 (게시물 신고 + 게시자 신고). 최신순이며 같은 시각이면 목록과 같은 순서로 정렬한다.
+    @Query(
+            value = """
+                    SELECT merged.reportType AS reportType,
+                           merged.reportId AS reportId,
+                           merged.reason AS reason,
+                           reporter_user.name AS reporterName,
+                           reporter_user.status AS reporterStatus,
+                           merged.createdAt AS createdAt
+                    FROM (
+                        SELECT 'PHOTO' AS reportType,
+                               fpr.family_photo_report_id AS reportId,
+                               fpr.reporter_user_id AS reporterUserId,
+                               fpr.reason AS reason,
+                               fpr.created_at AS createdAt
+                        FROM family_photo_report fpr
+                        WHERE fpr.reported_user_id = :userId
+                        UNION ALL
+                        SELECT 'USER',
+                               fur.family_user_report_id,
+                               fur.reporter_user_id,
+                               fur.reason,
+                               fur.created_at
+                        FROM family_user_report fur
+                        WHERE fur.reported_user_id = :userId
+                    ) merged
+                    LEFT JOIN users reporter_user
+                           ON reporter_user.users_id = merged.reporterUserId
+                    ORDER BY merged.createdAt DESC, merged.reportType DESC, merged.reportId DESC
+                    """,
+            nativeQuery = true
+    )
+    List<ReportHistoryRow> findReportHistoryOnUser(@Param("userId") Long userId);
+
+    interface ReportHistoryRow {
+
+        AdminReportType getReportType();
+
+        Long getReportId();
+
+        PhotoReportReason getReason();
+
+        String getReporterName();
+
+        UserStatus getReporterStatus();
+
+        LocalDateTime getCreatedAt();
+    }
+
     interface ReportRow {
 
         long getRowNo();

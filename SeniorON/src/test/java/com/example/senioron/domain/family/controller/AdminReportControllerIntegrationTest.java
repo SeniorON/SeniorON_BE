@@ -64,6 +64,7 @@ class AdminReportControllerIntegrationTest {
     private FamilyPhoto photo;
     private User uploader;
     private Long photoReportId;
+    private Long userReportId;
 
     @BeforeEach
     void setUp() {
@@ -101,14 +102,18 @@ class AdminReportControllerIntegrationTest {
                 .build()).getId();
 
         for (User reporter : new User[]{first, second, third}) {
-            userReportRepository.saveAndFlush(FamilyUserReport.builder()
+            Long savedId = userReportRepository.saveAndFlush(FamilyUserReport.builder()
                     .reporter(reporter)
                     .reportedUser(uploader)
                     .familyPhoto(photo)
                     .imageKey(photo.getImageKey())
                     .reason(PhotoReportReason.ABUSE)
                     .status(PhotoReportStatus.PENDING)
-                    .build());
+                    .build()).getId();
+
+            if (userReportId == null) {
+                userReportId = savedId;
+            }
         }
 
         entityManager.flush();
@@ -218,6 +223,40 @@ class AdminReportControllerIntegrationTest {
         assertThat(body).doesNotContain("박지훈");
 
         mockMvc.perform(authGet("/api/admin/reports/photos/" + Long.MAX_VALUE))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void 게시자_신고_상세를_응답한다() throws Exception {
+        given(s3Service.getFileUrl("report-review.jpg"))
+                .willReturn("https://cdn.example.com/report-review.jpg");
+
+        String body = mockMvc.perform(authGet("/api/admin/reports/users/" + userReportId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.number").value(2))
+                .andExpect(jsonPath("$.data.reportType").value("USER"))
+                .andExpect(jsonPath("$.data.reportedUser.userId").value(uploader.getUsersId()))
+                .andExpect(jsonPath("$.data.reportedUser.name").value("김지은"))
+                .andExpect(jsonPath("$.data.reportedUser.managerType").value(nullValue()))
+                .andExpect(jsonPath("$.data.reportedUser.seniorCode").value(nullValue()))
+                .andExpect(jsonPath("$.data.reportedUser.reportCount").value(4))
+                .andExpect(jsonPath("$.data.reportedUser.highlighted").value(true))
+                .andExpect(jsonPath("$.data.reportedUser.photoCount").value(1))
+                .andExpect(jsonPath("$.data.recentPhotos.length()").value(1))
+                .andExpect(jsonPath("$.data.recentPhotos[0].familyPhotoId").value(photo.getFamilyPhotoId()))
+                .andExpect(jsonPath("$.data.recentPhotos[0].thumbnailUrl")
+                        .value("https://cdn.example.com/report-review.jpg"))
+                .andExpect(jsonPath("$.data.report.reportId").value(userReportId))
+                .andExpect(jsonPath("$.data.report.reason").value("ABUSE"))
+                .andExpect(jsonPath("$.data.report.reporterName").value("박*훈"))
+                .andExpect(jsonPath("$.data.histories.length()").value(4))
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+
+        assertThat(body).doesNotContain("박지훈");
+
+        mockMvc.perform(authGet("/api/admin/reports/users/" + Long.MAX_VALUE))
                 .andExpect(status().isNotFound());
     }
 
