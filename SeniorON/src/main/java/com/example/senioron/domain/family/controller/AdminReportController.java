@@ -3,6 +3,7 @@ package com.example.senioron.domain.family.controller;
 import com.example.senioron.domain.family.dto.response.AdminPhotoReportDetailResponse;
 import com.example.senioron.domain.family.dto.response.AdminReportListResponse;
 import com.example.senioron.domain.family.dto.response.AdminReportStatsResponse;
+import com.example.senioron.domain.family.dto.response.AdminUserReportDetailResponse;
 import com.example.senioron.domain.family.service.AdminReportService;
 import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
@@ -62,6 +63,19 @@ public class AdminReportController {
             @PathVariable Long reportId
     ) {
         return Response.ok(adminReportService.getPhotoReportDetail(reportId));
+    }
+
+    @Operation(
+            summary = "관리자 게시자 신고 상세 조회",
+            description = "신고된 게시자(역할·시니어 코드·누적 신고·업로드 사진 수·가입일), 최근 업로드 사진 5장, "
+                    + "신고 정보, 게시자가 받은 신고 이력(게시물 신고 + 게시자 신고, 최신순)을 조회합니다."
+    )
+    @GetMapping("/users/{reportId}")
+    public Response<AdminUserReportDetailResponse> getUserReportDetail(
+            @Parameter(description = "게시자 신고 ID (목록의 reportId)")
+            @PathVariable Long reportId
+    ) {
+        return Response.ok(adminReportService.getUserReportDetail(reportId));
     }
 
     @Operation(

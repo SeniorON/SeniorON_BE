@@ -187,6 +187,11 @@ public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> 
 
     boolean existsByImageKey(String imageKey);
 
+    // 관리자 게시자 신고 상세: 게시자가 올린 전체 사진 수와 최근 사진
+    long countByUser_UsersId(Long usersId);
+
+    List<FamilyPhoto> findTop5ByUser_UsersIdOrderByCreatedAtDescFamilyPhotoIdDesc(Long usersId);
+
     @EntityGraph(attributePaths = "user")
     @Query("""
         SELECT fp

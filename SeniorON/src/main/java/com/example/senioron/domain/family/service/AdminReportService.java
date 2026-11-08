@@ -5,12 +5,17 @@ import com.example.senioron.domain.family.dto.response.AdminReportCountsResponse
 import com.example.senioron.domain.family.dto.response.AdminReportListItemResponse;
 import com.example.senioron.domain.family.dto.response.AdminReportListResponse;
 import com.example.senioron.domain.family.dto.response.AdminReportStatsResponse;
+import com.example.senioron.domain.family.dto.response.AdminUserReportDetailResponse;
 import com.example.senioron.domain.family.entity.AdminReportType;
 import com.example.senioron.domain.family.entity.FamilyMember;
+import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.entity.FamilyPhotoReport;
+import com.example.senioron.domain.family.entity.FamilyUserReport;
 import com.example.senioron.domain.family.repository.AdminReportQueryRepository;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoReportRepository;
+import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
+import com.example.senioron.domain.family.repository.FamilyUserReportRepository;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.User;
@@ -42,6 +47,8 @@ public class AdminReportService {
 
     private final AdminReportQueryRepository adminReportQueryRepository;
     private final FamilyPhotoReportRepository familyPhotoReportRepository;
+    private final FamilyUserReportRepository familyUserReportRepository;
+    private final FamilyPhotoRepository familyPhotoRepository;
     private final FamilyMemberRepository familyMemberRepository;
     private final S3Service s3Service;
 
@@ -135,6 +142,71 @@ public class AdminReportService {
         );
     }
 
+    public AdminUserReportDetailResponse getUserReportDetail(Long reportId) {
+        FamilyUserReport report = familyUserReportRepository
+                .findDetailById(reportId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ADMIN_REPORT_NOT_FOUND));
+
+        User reportedUser = report.getReportedUser();
+        Senior senior = report.getSenior();
+
+        // 이력은 누적 신고와 같은 범위(게시물 신고 + 게시자 신고)라서 건수를 누적 횟수로 쓴다.
+        List<AdminUserReportDetailResponse.History> histories = adminReportQueryRepository
+                .findReportHistoryOnUser(reportedUser.getUsersId())
+                .stream()
+                .map(row -> new AdminUserReportDetailResponse.History(
+                        row.getReportType(),
+                        row.getReportId(),
+                        row.getReason(),
+                        row.getCreatedAt(),
+                        UserNameMasker.mask(row.getReporterName(), row.getReporterStatus())
+                ))
+                .toList();
+
+        AdminUserReportDetailResponse.ReportedUser reportedUserInfo =
+                new AdminUserReportDetailResponse.ReportedUser(
+                        reportedUser.getUsersId(),
+                        reportedUser.getName(),
+                        managerTypeOf(reportedUser, senior),
+                        senior == null ? null : senior.getFamily().getSeniorCode(),
+                        histories.size(),
+                        histories.size() >= REPEATED_REPORT_THRESHOLD,
+                        familyPhotoRepository.countByUser_UsersId(reportedUser.getUsersId()),
+                        reportedUser.getCreatedAt()
+                );
+
+        List<AdminUserReportDetailResponse.RecentPhoto> recentPhotos = familyPhotoRepository
+                .findTop5ByUser_UsersIdOrderByCreatedAtDescFamilyPhotoIdDesc(reportedUser.getUsersId())
+                .stream()
+                .map(photo -> new AdminUserReportDetailResponse.RecentPhoto(
+                        photo.getFamilyPhotoId(),
+                        thumbnailUrlOf(photo)
+                ))
+                .toList();
+
+        AdminUserReportDetailResponse.Report reportInfo = new AdminUserReportDetailResponse.Report(
+                report.getId(),
+                report.getReason(),
+                report.getDetail(),
+                UserNameMasker.mask(report.getReporter()),
+                managerTypeOf(report.getReporter(), senior),
+                report.getCreatedAt(),
+                report.isHidden()
+        );
+
+        return new AdminUserReportDetailResponse(
+                adminReportQueryRepository.findReportNumber(
+                        AdminReportType.USER.name(),
+                        report.getId()
+                ),
+                AdminReportType.USER,
+                reportedUserInfo,
+                recentPhotos,
+                reportInfo,
+                histories
+        );
+    }
+
     public AdminReportStatsResponse getStats() {
         return calculateStats(ZonedDateTime.now(SEOUL_ZONE));
     }
@@ -177,6 +249,15 @@ public class AdminReportService {
                 .findByUserAndFamily(user, senior.getFamily())
                 .map(FamilyMember::getManagerType)
                 .orElse(null);
+    }
+
+    // 썸네일이 아직 없는 사진은 원본을 대신 보여 준다.
+    private String thumbnailUrlOf(FamilyPhoto photo) {
+        String thumbnailKey = photo.getThumbnailKey();
+
+        return thumbnailKey == null || thumbnailKey.isBlank()
+                ? s3Service.getFileUrl(photo.getImageKey())
+                : s3Service.getFileUrl(thumbnailKey);
     }
 
     // 업로드일 저장 전에 접수된 신고는 남아 있는 사진의 생성일을 사용한다.

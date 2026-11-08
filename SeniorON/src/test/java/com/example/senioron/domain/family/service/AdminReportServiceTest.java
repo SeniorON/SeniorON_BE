@@ -3,12 +3,14 @@ package com.example.senioron.domain.family.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 
 import com.example.senioron.domain.family.dto.response.AdminPhotoReportDetailResponse;
 import com.example.senioron.domain.family.dto.response.AdminReportListItemResponse;
 import com.example.senioron.domain.family.dto.response.AdminReportListResponse;
 import com.example.senioron.domain.family.dto.response.AdminReportStatsResponse;
+import com.example.senioron.domain.family.dto.response.AdminUserReportDetailResponse;
 import com.example.senioron.domain.family.entity.AdminReportType;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
@@ -39,6 +41,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -450,6 +453,124 @@ class AdminReportServiceTest {
                 .containsExactly(1L, 1L);
     }
 
+    @Test
+    void 게시자_신고_상세에_게시자_최근사진_신고정보_이력을_담는다() {
+        Family family = saveFamily("A3F9-K2M7");
+        saveMember(uploader, family, ManagerType.PRIMARY);
+        saveMember(reporter, family, ManagerType.SUB);
+        Senior senior = saveSenior(family);
+
+        // 게시물 신고 1건(사진 1장 생성) + 게시자 신고 2건
+        savePhotoReport("old.jpg", saveUser("최현수", UserStatus.ACTIVE), uploader, day(1));
+        saveUserReport(saveUser("이민수", UserStatus.ACTIVE), uploader, day(2));
+        Long reportId = saveUserReportWithContext(reporter, uploader, senior, day(4), true);
+
+        // 사진 5장 추가 (전체 6장). 마지막 사진만 썸네일이 있다.
+        List<FamilyPhoto> recent = new ArrayList<>();
+        for (int i = 1; i <= 5; i++) {
+            recent.add(familyPhotoRepository.saveAndFlush(FamilyPhoto.builder()
+                    .user(uploader)
+                    .imageKey("p" + i + ".jpg")
+                    .thumbnailKey(i == 5 ? "p5-thumb.jpg" : null)
+                    .build()));
+        }
+        entityManager.clear();
+
+        given(s3Service.getFileUrl(anyString()))
+                .willAnswer(invocation -> "https://cdn.example.com/" + invocation.getArgument(0));
+
+        AdminUserReportDetailResponse detail = service.getUserReportDetail(reportId);
+
+        assertThat(detail.number()).isEqualTo(3);
+        assertThat(detail.reportType()).isEqualTo(AdminReportType.USER);
+
+        assertThat(detail.reportedUser().userId()).isEqualTo(uploader.getUsersId());
+        assertThat(detail.reportedUser().name()).isEqualTo("김지은");
+        assertThat(detail.reportedUser().managerType()).isEqualTo(ManagerType.PRIMARY);
+        assertThat(detail.reportedUser().seniorCode()).isEqualTo("A3F9-K2M7");
+        assertThat(detail.reportedUser().reportCount()).isEqualTo(3);
+        assertThat(detail.reportedUser().highlighted()).isTrue();
+        assertThat(detail.reportedUser().photoCount()).isEqualTo(6);
+        assertThat(detail.reportedUser().joinedAt()).isNotNull();
+
+        assertThat(detail.recentPhotos())
+                .extracting(AdminUserReportDetailResponse.RecentPhoto::familyPhotoId)
+                .containsExactly(
+                        recent.get(4).getFamilyPhotoId(),
+                        recent.get(3).getFamilyPhotoId(),
+                        recent.get(2).getFamilyPhotoId(),
+                        recent.get(1).getFamilyPhotoId(),
+                        recent.get(0).getFamilyPhotoId()
+                );
+        assertThat(detail.recentPhotos().get(0).thumbnailUrl())
+                .isEqualTo("https://cdn.example.com/p5-thumb.jpg");
+        assertThat(detail.recentPhotos().get(1).thumbnailUrl())
+                .isEqualTo("https://cdn.example.com/p4.jpg");
+
+        assertThat(detail.report().reportId()).isEqualTo(reportId);
+        assertThat(detail.report().reason()).isEqualTo(PhotoReportReason.ABUSE);
+        assertThat(detail.report().detail()).isEqualTo("불쾌한 문구가 담긴 사진을 계속 올려요.");
+        assertThat(detail.report().reporterName()).isEqualTo("박*훈");
+        assertThat(detail.report().reporterManagerType()).isEqualTo(ManagerType.SUB);
+        assertThat(detail.report().createdAt()).isEqualTo(day(4));
+        assertThat(detail.report().hidden()).isTrue();
+
+        // 이력은 게시물 신고 + 게시자 신고를 최신순으로
+        assertThat(detail.histories())
+                .extracting(AdminUserReportDetailResponse.History::reportType)
+                .containsExactly(AdminReportType.USER, AdminReportType.USER, AdminReportType.PHOTO);
+        assertThat(detail.histories())
+                .extracting(AdminUserReportDetailResponse.History::reporterName)
+                .containsExactly("박*훈", "이*수", "최*수");
+        assertThat(detail.histories())
+                .extracting(AdminUserReportDetailResponse.History::createdAt)
+                .containsExactly(day(4), day(2), day(1));
+    }
+
+    @Test
+    void 시니어_없는_게시자_신고는_역할과_시니어_코드가_비어있다() {
+        User withdrawn = saveUser("탈퇴회원", UserStatus.WITHDRAWN);
+        Long reportId = saveUserReport(withdrawn, uploader, day(1));
+        entityManager.clear();
+
+        AdminUserReportDetailResponse detail = service.getUserReportDetail(reportId);
+
+        assertThat(detail.reportedUser().managerType()).isNull();
+        assertThat(detail.reportedUser().seniorCode()).isNull();
+        assertThat(detail.reportedUser().reportCount()).isEqualTo(1);
+        assertThat(detail.reportedUser().highlighted()).isFalse();
+        assertThat(detail.reportedUser().photoCount()).isZero();
+        assertThat(detail.recentPhotos()).isEmpty();
+        assertThat(detail.report().reporterName()).isEqualTo("탈퇴회원");
+        assertThat(detail.report().reporterManagerType()).isNull();
+        assertThat(detail.histories())
+                .extracting(AdminUserReportDetailResponse.History::reporterName)
+                .containsExactly("탈퇴회원");
+    }
+
+    @Test
+    void 게시자_신고_이력은_다른_게시자의_신고를_포함하지_않는다() {
+        User other = saveUser("최하나", UserStatus.ACTIVE);
+        Long reportId = saveUserReport(reporter, uploader, day(1));
+        saveUserReport(reporter, other, day(2));
+        savePhotoReport("a.jpg", reporter, other, day(3));
+        entityManager.clear();
+
+        AdminUserReportDetailResponse detail = service.getUserReportDetail(reportId);
+
+        assertThat(detail.histories()).hasSize(1);
+        assertThat(detail.reportedUser().reportCount()).isEqualTo(1);
+    }
+
+    @Test
+    void 없는_게시자_신고_상세는_찾을_수_없다() {
+        assertThatThrownBy(() -> service.getUserReportDetail(Long.MAX_VALUE))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.ADMIN_REPORT_NOT_FOUND);
+    }
+
     private LocalDateTime day(int day) {
         return LocalDateTime.of(2026, 11, day, 10, 0);
     }
@@ -516,7 +637,7 @@ class AdminReportServiceTest {
         );
     }
 
-    private void saveUserReport(User reportReporter, User target, LocalDateTime createdAt) {
+    private Long saveUserReport(User reportReporter, User target, LocalDateTime createdAt) {
         FamilyUserReport report = userReportRepository.saveAndFlush(FamilyUserReport.builder()
                 .reporter(reportReporter)
                 .reportedUser(target)
@@ -531,6 +652,36 @@ class AdminReportServiceTest {
                 report.getId(),
                 createdAt
         );
+
+        return report.getId();
+    }
+
+    private Long saveUserReportWithContext(
+            User reportReporter,
+            User target,
+            Senior senior,
+            LocalDateTime createdAt,
+            boolean hidden
+    ) {
+        FamilyUserReport report = userReportRepository.saveAndFlush(FamilyUserReport.builder()
+                .reporter(reportReporter)
+                .reportedUser(target)
+                .senior(senior)
+                .imageKey("user-report.jpg")
+                .reason(PhotoReportReason.ABUSE)
+                .detail("불쾌한 문구가 담긴 사진을 계속 올려요.")
+                .hidden(hidden)
+                .status(PhotoReportStatus.PENDING)
+                .build());
+
+        updateCreatedAt(
+                "UPDATE family_user_report SET created_at = :createdAt"
+                        + " WHERE family_user_report_id = :id",
+                report.getId(),
+                createdAt
+        );
+
+        return report.getId();
     }
 
     private FamilyPhoto savePhoto(String imageKey) {
