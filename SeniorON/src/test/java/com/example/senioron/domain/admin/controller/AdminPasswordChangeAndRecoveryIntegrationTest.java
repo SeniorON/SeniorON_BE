@@ -56,6 +56,8 @@ class AdminPasswordChangeAndRecoveryIntegrationTest {
 
     private static final String OLD_PASSWORD = "oldpassword1";
     private static final String NEW_PASSWORD = "newpassword2";
+    // 64자 이내지만 UTF-8 74바이트라 BCrypt 72바이트 제한을 넘는다.
+    private static final String OVER_72_BYTES_PASSWORD = "a1" + "가".repeat(24);
 
     private MockMvc mockMvc;
     private String clientIp;
@@ -267,6 +269,71 @@ class AdminPasswordChangeAndRecoveryIntegrationTest {
         login(admin.getEmail(), NEW_PASSWORD).andExpect(status().isOk());
         login(admin.getEmail(), OLD_PASSWORD).andExpect(status().isUnauthorized());
         refresh(oldRefreshToken).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void passwordOver72BytesIsRejectedAsPolicyViolationOnChangeAndAccept() throws Exception {
+        Admin active = save("바이트 초과 변경", AdminStatus.ACTIVE);
+        changePassword(active, OLD_PASSWORD, OVER_72_BYTES_PASSWORD)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("ADMIN400_1"));
+        login(active.getEmail(), OLD_PASSWORD).andExpect(status().isOk());
+
+        String resetToken = issueLink(active, AdminInvitationType.RESET);
+        accept(resetToken, OVER_72_BYTES_PASSWORD)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("ADMIN400_1"));
+
+        Admin invited = save("바이트 초과 초대", AdminStatus.INVITED);
+        String inviteToken = issueLink(invited, AdminInvitationType.INVITE);
+        accept(inviteToken, OVER_72_BYTES_PASSWORD)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("ADMIN400_1"));
+
+        login(active.getEmail(), OLD_PASSWORD).andExpect(status().isOk());
+        assertThat(admins.findById(invited.getAdminId()).orElseThrow().getStatus()).isEqualTo(AdminStatus.INVITED);
+    }
+
+    @Test
+    void changePasswordInvalidatesPreviouslyIssuedResetLinksButKeepsInviteLinks() throws Exception {
+        Admin admin = save("재설정 링크 무효화", AdminStatus.ACTIVE);
+        String resetToken = issueLink(admin, AdminInvitationType.RESET);
+        String inviteToken = issueLink(admin, AdminInvitationType.INVITE);
+
+        changePassword(admin, OLD_PASSWORD, NEW_PASSWORD).andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/admin/auth/invitations/verify")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"" + resetToken + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("ADMIN400"));
+        accept(resetToken, "anotherpassword3")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("ADMIN400"));
+
+        login(admin.getEmail(), NEW_PASSWORD).andExpect(status().isOk());
+        assertThat(invitations.findByTokenHash(TokenHashUtil.hashHex(resetToken)).orElseThrow()
+                .getInvalidatedAt()).isNotNull();
+        assertThat(invitations.findByTokenHash(TokenHashUtil.hashHex(inviteToken)).orElseThrow()
+                .getInvalidatedAt()).isNull();
+    }
+
+    private String issueLink(Admin admin, AdminInvitationType type) {
+        String token = type.name().toLowerCase(Locale.ROOT) + "-" + UUID.randomUUID();
+        invitations.saveAndFlush(AdminInvitation.builder()
+                .admin(admin)
+                .type(type)
+                .tokenHash(TokenHashUtil.hashHex(token))
+                .expiresAt(LocalDateTime.now().plusMinutes(30))
+                .createdBy(admin)
+                .build());
+        return token;
+    }
+
+    private ResultActions accept(String token, String password) throws Exception {
+        return mockMvc.perform(post("/api/admin/auth/invitations/accept")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"token\":\"" + token + "\",\"password\":\"" + password + "\"}"));
     }
 
     private ResultActions changePassword(Admin admin, String currentPassword, String newPassword) throws Exception {

@@ -9,7 +9,9 @@ import com.example.senioron.domain.admin.dto.response.AdminTokenResponse;
 import com.example.senioron.domain.admin.entity.Admin;
 import com.example.senioron.domain.admin.entity.AdminActivityTargetType;
 import com.example.senioron.domain.admin.entity.AdminActivityType;
+import com.example.senioron.domain.admin.entity.AdminInvitationType;
 import com.example.senioron.domain.admin.entity.AdminRefreshToken;
+import com.example.senioron.domain.admin.repository.AdminInvitationRepository;
 import com.example.senioron.domain.admin.repository.AdminRefreshTokenRepository;
 import com.example.senioron.domain.admin.repository.AdminRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
@@ -34,6 +36,7 @@ public class AdminAuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final AdminActivityLogService activityLogService;
+    private final AdminInvitationRepository invitationRepository;
 
     @Transactional
     public AdminLoginResponse login(AdminLoginRequest request) {
@@ -108,6 +111,10 @@ public class AdminAuthService {
 
         admin.changePassword(passwordEncoder.encode(request.newPassword()));
         refreshTokenRepository.revokeAllByAdminId(admin.getAdminId());
+        LocalDateTime now = LocalDateTime.now();
+        invitationRepository.findAllByAdminAndType(admin, AdminInvitationType.RESET)
+                .stream().filter(invitation -> invitation.isUsable(now))
+                .forEach(invitation -> invitation.invalidate(now));
         activityLogService.record(admin, AdminActivityType.ADMIN_PASSWORD_CHANGED,
                 AdminActivityTargetType.ADMIN, admin.getAdminId(), admin.getName(),
                 "관리자 비밀번호를 변경했습니다.", ipAddress);
