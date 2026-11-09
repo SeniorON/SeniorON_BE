@@ -4,6 +4,7 @@ import com.example.senioron.domain.admin.dto.request.*;
 import com.example.senioron.domain.admin.dto.response.*;
 import com.example.senioron.domain.admin.entity.*;
 import com.example.senioron.domain.admin.repository.*;
+import com.example.senioron.domain.user.service.EmailVerificationRateLimitService;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.jwt.TokenHashUtil;
@@ -25,6 +26,9 @@ public class AdminInvitationService {
     private final PasswordEncoder passwordEncoder;
     private final AdminBootstrapTransactionService bootstrapTransactionService;
     private final AdminInvitationIssuer invitationIssuer;
+    private final AdminRefreshTokenRepository refreshTokenRepository;
+    private final EmailVerificationRateLimitService rateLimitService;
+    private final AdminPasswordResetTransactionService passwordResetTransactionService;
 
     @Transactional
     public AdminInviteResponse invite(Admin actor, AdminInviteRequest request, String ipAddress) {
@@ -76,6 +80,30 @@ public class AdminInvitationService {
         return new AdminInviteResponse(invited.getAdminId(), true);
     }
 
+    @Transactional
+    public void sendPasswordReset(Admin actor, Long adminId, String ipAddress) {
+        if (actor.getAdminId().equals(adminId)) {
+            throw new BusinessException(ErrorCode.CANNOT_MODIFY_SELF);
+        }
+        Admin target = adminRepository.findByIdForUpdate(adminId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ADMIN_NOT_FOUND));
+        if (!target.isActive()) {
+            throw new BusinessException(ErrorCode.ADMIN_STATUS_CONFLICT);
+        }
+        passwordResetTransactionService.reissueResetLink(target, actor);
+        activityLogService.record(actor, AdminActivityType.ADMIN_PASSWORD_RESET_SENT,
+                AdminActivityTargetType.ADMIN, target.getAdminId(), target.getName(),
+                "관리자 비밀번호 재설정 메일을 발송했습니다.", ipAddress);
+    }
+
+    // 발송 제한은 자체 트랜잭션으로 커밋되므로, 커넥션을 이중으로 점유하지 않도록 바깥 트랜잭션을 두지 않는다.
+    public void requestPasswordReset(AdminPasswordResetRequest request, String ipAddress) {
+        String email = normalize(request.email());
+        // 계정 존재 여부가 드러나지 않도록 조회 전에 발송 횟수를 먼저 기록한다.
+        rateLimitService.checkAndRecord(email, ipAddress);
+        passwordResetTransactionService.issueForActiveAdmin(email, ipAddress);
+    }
+
     @Transactional(readOnly = true)
     public AdminInvitationVerifyResponse verify(AdminInvitationTokenRequest request) {
         AdminInvitation invitation = invitationRepository.findByTokenHash(
@@ -91,9 +119,13 @@ public class AdminInvitationService {
                         TokenHashUtil.hashHex(request.token()))
                 .filter(this::valid)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_INVITATION_TOKEN));
-        validatePassword(request.password());
+        AdminPasswordPolicy.validate(request.password());
+        Admin admin = invitation.getAdmin();
         if (invitation.getType() == AdminInvitationType.INVITE) {
-            invitation.getAdmin().activate(passwordEncoder.encode(request.password()));
+            admin.activate(passwordEncoder.encode(request.password()));
+        } else if (invitation.getType() == AdminInvitationType.RESET) {
+            admin.changePassword(passwordEncoder.encode(request.password()));
+            refreshTokenRepository.revokeAllByAdminId(admin.getAdminId());
         }
         invitation.use(LocalDateTime.now());
     }
@@ -116,15 +148,14 @@ public class AdminInvitationService {
     }
 
     private boolean valid(AdminInvitation invitation) {
-        return invitation.isUsable(LocalDateTime.now())
-                && invitation.getAdmin().getStatus() != AdminStatus.SUSPENDED;
-    }
-
-    private void validatePassword(String password) {
-        if (password == null || password.length() < 8 || password.length() > 64
-                || !password.matches(".*[A-Za-z].*") || !password.matches(".*\\d.*")) {
-            throw new BusinessException(ErrorCode.INVALID_ADMIN_PASSWORD);
+        if (!invitation.isUsable(LocalDateTime.now())) {
+            return false;
         }
+        AdminStatus status = invitation.getAdmin().getStatus();
+        if (invitation.getType() == AdminInvitationType.RESET) {
+            return status == AdminStatus.ACTIVE;
+        }
+        return status != AdminStatus.SUSPENDED;
     }
 
     private String normalize(String email) {

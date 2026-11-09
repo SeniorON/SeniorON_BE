@@ -55,7 +55,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             "/api/admin/auth/login",
             "/api/admin/auth/token/refresh",
             "/api/admin/auth/invitations/verify",
-            "/api/admin/auth/invitations/accept"
+            "/api/admin/auth/invitations/accept",
+            "/api/admin/auth/password-reset"
     );
 
     private static final Set<String> PUBLIC_PATH_PREFIXES = Set.of(

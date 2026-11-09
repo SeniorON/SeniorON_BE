@@ -1,12 +1,17 @@
 package com.example.senioron.domain.admin.service;
 
 import com.example.senioron.domain.admin.dto.request.AdminLoginRequest;
+import com.example.senioron.domain.admin.dto.request.AdminPasswordChangeRequest;
 import com.example.senioron.domain.admin.dto.request.AdminRefreshRequest;
 import com.example.senioron.domain.admin.dto.response.AdminLoginResponse;
 import com.example.senioron.domain.admin.dto.response.AdminMeResponse;
 import com.example.senioron.domain.admin.dto.response.AdminTokenResponse;
 import com.example.senioron.domain.admin.entity.Admin;
+import com.example.senioron.domain.admin.entity.AdminActivityTargetType;
+import com.example.senioron.domain.admin.entity.AdminActivityType;
+import com.example.senioron.domain.admin.entity.AdminInvitationType;
 import com.example.senioron.domain.admin.entity.AdminRefreshToken;
+import com.example.senioron.domain.admin.repository.AdminInvitationRepository;
 import com.example.senioron.domain.admin.repository.AdminRefreshTokenRepository;
 import com.example.senioron.domain.admin.repository.AdminRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
@@ -30,6 +35,8 @@ public class AdminAuthService {
     private final AdminRefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final AdminActivityLogService activityLogService;
+    private final AdminInvitationRepository invitationRepository;
 
     @Transactional
     public AdminLoginResponse login(AdminLoginRequest request) {
@@ -90,6 +97,27 @@ public class AdminAuthService {
 
     public AdminMeResponse me(Admin admin) {
         return AdminMeResponse.from(admin);
+    }
+
+    @Transactional
+    public void changePassword(Admin actor, AdminPasswordChangeRequest request, String ipAddress) {
+        Admin admin = adminRepository.findByIdForUpdate(actor.getAdminId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.ADMIN_NOT_FOUND));
+        if (admin.getPassword() == null
+                || !passwordEncoder.matches(request.currentPassword(), admin.getPassword())) {
+            throw new BusinessException(ErrorCode.INVALID_CURRENT_ADMIN_PASSWORD);
+        }
+        AdminPasswordPolicy.validate(request.newPassword());
+
+        admin.changePassword(passwordEncoder.encode(request.newPassword()));
+        refreshTokenRepository.revokeAllByAdminId(admin.getAdminId());
+        LocalDateTime now = LocalDateTime.now();
+        invitationRepository.findAllByAdminAndType(admin, AdminInvitationType.RESET)
+                .stream().filter(invitation -> invitation.isUsable(now))
+                .forEach(invitation -> invitation.invalidate(now));
+        activityLogService.record(admin, AdminActivityType.ADMIN_PASSWORD_CHANGED,
+                AdminActivityTargetType.ADMIN, admin.getAdminId(), admin.getName(),
+                "관리자 비밀번호를 변경했습니다.", ipAddress);
     }
 
     private Admin parseRefreshTokenAdmin(String refreshToken) {

@@ -17,12 +17,14 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 class AdminAuthServiceTest {
     private final AdminRepository adminRepository = mock(AdminRepository.class);
     private final AdminRefreshTokenRepository tokenRepository = mock(AdminRefreshTokenRepository.class);
+    private final AdminActivityLogService activityLogService = mock(AdminActivityLogService.class);
+    private final AdminInvitationRepository invitationRepository = mock(AdminInvitationRepository.class);
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
     private final JwtUtil jwt = new JwtUtil("12345678901234567890123456789012", 3600000, 1209600000,
             "admin-secret-key-12345678901234567890", 1800000, 86400000);
     private AdminAuthService service;
 
-    @BeforeEach void setUp() { service = new AdminAuthService(adminRepository, tokenRepository, encoder, jwt); }
+    @BeforeEach void setUp() { service = new AdminAuthService(adminRepository, tokenRepository, encoder, jwt, activityLogService, invitationRepository); }
 
     @Test void missingEmailAndWrongPasswordReturnSameError() {
         given(adminRepository.findByEmailForUpdate("missing@example.com")).willReturn(Optional.empty());

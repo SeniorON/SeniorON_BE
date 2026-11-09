@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.doThrow;
 
+import com.example.senioron.domain.admin.entity.AdminInvitationType;
 import com.example.senioron.global.mail.EmailService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -72,5 +73,61 @@ class AdminInvitationMailEventIntegrationTest {
                 "alice@example.com", "https://example.com/invitation?token=secret"));
         assertThat(output.getOut()).doesNotContain("alice@example.com");
         assertThat(output.getOut()).contains("a***@example.com");
+    }
+
+    @Test
+    void rollbackDoesNotSendPasswordResetMailButCommitSendsResetMailOnce() {
+        transactionTemplate.executeWithoutResult(status -> {
+            publisher.publishEvent(new AdminInvitationMailEvent("rollback-reset@example.com",
+                    "https://example.com/invitation?token=rollback-reset", AdminInvitationType.RESET));
+            status.setRollbackOnly();
+        });
+        verify(emailService, never()).sendAdminPasswordReset(anyString(), anyString());
+
+        transactionTemplate.executeWithoutResult(status -> publisher.publishEvent(
+                new AdminInvitationMailEvent("commit-reset@example.com",
+                        "https://example.com/invitation?token=commit-reset", AdminInvitationType.RESET)));
+        verify(emailService, times(1)).sendAdminPasswordReset(anyString(), anyString());
+        verify(emailService, never()).sendAdminInvitation(anyString(), anyString());
+    }
+
+    @Test
+    void disabledLinkLoggingHidesResetTokenAndMasksEmail(CapturedOutput output) {
+        AdminInvitationMailEventListener listener =
+                new AdminInvitationMailEventListener(emailService);
+        ReflectionTestUtils.setField(listener, "mailUsername", "");
+        ReflectionTestUtils.setField(listener, "logLink", false);
+        listener.handle(new AdminInvitationMailEvent("reset@example.com",
+                "https://example.com/invitation?token=raw-reset-token", AdminInvitationType.RESET));
+        assertThat(output.getOut()).doesNotContain("raw-reset-token");
+        assertThat(output.getOut()).doesNotContain("reset@example.com");
+        assertThat(output.getOut()).contains("r***@example.com");
+        verify(emailService, never()).sendAdminPasswordReset(anyString(), anyString());
+    }
+
+    @Test
+    void enabledLinkLoggingPrintsResetLinkWithoutSending(CapturedOutput output) {
+        AdminInvitationMailEventListener listener =
+                new AdminInvitationMailEventListener(emailService);
+        ReflectionTestUtils.setField(listener, "mailUsername", "");
+        ReflectionTestUtils.setField(listener, "logLink", true);
+        listener.handle(new AdminInvitationMailEvent("reset@example.com",
+                "https://example.com/invitation?token=logged-reset-token", AdminInvitationType.RESET));
+        assertThat(output.getOut()).contains("관리자 비밀번호 재설정 링크: https://example.com/invitation?token=logged-reset-token");
+        verify(emailService, never()).sendAdminPasswordReset(anyString(), anyString());
+    }
+
+    @Test
+    void resetMailFailureLogMasksRecipientEmail(CapturedOutput output) {
+        doThrow(new RuntimeException("mail failure"))
+                .when(emailService).sendAdminPasswordReset(anyString(), anyString());
+        AdminInvitationMailEventListener listener =
+                new AdminInvitationMailEventListener(emailService);
+        ReflectionTestUtils.setField(listener, "mailUsername", "sender@example.com");
+        ReflectionTestUtils.setField(listener, "logLink", false);
+        listener.handle(new AdminInvitationMailEvent("bob@example.com",
+                "https://example.com/invitation?token=secret", AdminInvitationType.RESET));
+        assertThat(output.getOut()).doesNotContain("bob@example.com");
+        assertThat(output.getOut()).contains("b***@example.com");
     }
 }
