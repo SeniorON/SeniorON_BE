@@ -1,9 +1,11 @@
 package com.example.senioron.domain.admin.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -25,6 +27,7 @@ import com.example.senioron.domain.admin.entity.AdminStatus;
 import com.example.senioron.domain.admin.repository.AdminActivityLogRepository;
 import com.example.senioron.domain.admin.repository.AdminInvitationRepository;
 import com.example.senioron.domain.admin.repository.AdminRepository;
+import com.example.senioron.domain.admin.service.AdminActivityLogService;
 import com.example.senioron.global.jwt.JwtUtil;
 import com.example.senioron.global.jwt.TokenHashUtil;
 import com.example.senioron.global.mail.EmailService;
@@ -45,6 +48,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.web.context.WebApplicationContext;
@@ -69,6 +73,7 @@ class AdminPasswordChangeAndRecoveryIntegrationTest {
     @Autowired private JwtUtil jwtUtil;
     @Autowired private PasswordEncoder passwordEncoder;
     @MockitoBean private EmailService emailService;
+    @MockitoSpyBean private AdminActivityLogService activityLogService;
 
     @BeforeEach
     void setUp() {
@@ -245,6 +250,24 @@ class AdminPasswordChangeAndRecoveryIntegrationTest {
         requestReset(randomEmail())
                 .andExpect(status().isTooManyRequests())
                 .andExpect(jsonPath("$.code").value("EMAIL429_4"));
+    }
+
+    @Test
+    void passwordResetDoesNotSendMailOrKeepLinkWhenTransactionRollsBackButKeepsRateLimitRecord() throws Exception {
+        Admin admin = save("롤백 대상", AdminStatus.ACTIVE);
+        doThrow(new IllegalStateException("활동 기록 실패"))
+                .when(activityLogService).record(any(), eq(AdminActivityType.ADMIN_PASSWORD_RESET_REQUESTED),
+                        any(), any(), any(), any(), any());
+
+        requestReset(admin.getEmail()).andExpect(status().isInternalServerError());
+
+        assertThat(invitations.findAllByAdminAndType(admin, AdminInvitationType.RESET)).isEmpty();
+        assertThat(logsTargeting(admin)).isEmpty();
+        verify(emailService, never()).sendAdminPasswordReset(anyString(), anyString());
+        // 발송 제한은 재설정 트랜잭션과 분리되어 롤백되지 않는다.
+        requestReset(admin.getEmail())
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value("EMAIL429_1"));
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.example.senioron.domain.admin.service;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.*;
 
 import com.example.senioron.domain.admin.dto.request.*;
@@ -32,7 +33,8 @@ class AdminInvitationServiceTest {
     @BeforeEach
     void setUp() throws Exception {
         service = new AdminInvitationService(
-                admins, invitations, logs, encoder, bootstrap, issuer, refreshTokens, rateLimits
+                admins, invitations, logs, encoder, bootstrap, issuer, refreshTokens, rateLimits,
+                new AdminPasswordResetTransactionService(admins, invitations, issuer, logs)
         );
     }
 
@@ -239,6 +241,22 @@ class AdminInvitationServiceTest {
                             e -> assertThat(e.getCode()).isEqualTo(ErrorCode.ADMIN_STATUS_CONFLICT));
         }
         verify(issuer, never()).issue(any(), any(), any());
+    }
+
+    @Test
+    void requestPasswordResetSkipsLookupAndIssueWhenRateLimitExceeded() {
+        willThrow(new BusinessException(ErrorCode.EMAIL_VERIFICATION_COOLDOWN))
+                .given(rateLimits).checkAndRecord("admin@example.com", "127.0.0.1");
+
+        assertThatThrownBy(() -> service.requestPasswordReset(
+                new AdminPasswordResetRequest(" ADMIN@EXAMPLE.COM "), "127.0.0.1"))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        e -> assertThat(e.getCode()).isEqualTo(ErrorCode.EMAIL_VERIFICATION_COOLDOWN));
+
+        verify(admins, never()).findByEmailForUpdate(anyString());
+        verify(invitations, never()).findAllByAdminAndType(any(), any());
+        verify(issuer, never()).issue(any(), any(), any());
+        verify(logs, never()).record(any(), any(), any(), any(), any(), any(), any());
     }
 
     private AdminInvitation resetInvitation(Admin admin, LocalDateTime expiresAt) {

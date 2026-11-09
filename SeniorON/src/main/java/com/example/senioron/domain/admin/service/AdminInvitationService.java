@@ -28,6 +28,7 @@ public class AdminInvitationService {
     private final AdminInvitationIssuer invitationIssuer;
     private final AdminRefreshTokenRepository refreshTokenRepository;
     private final EmailVerificationRateLimitService rateLimitService;
+    private final AdminPasswordResetTransactionService passwordResetTransactionService;
 
     @Transactional
     public AdminInviteResponse invite(Admin actor, AdminInviteRequest request, String ipAddress) {
@@ -89,35 +90,18 @@ public class AdminInvitationService {
         if (!target.isActive()) {
             throw new BusinessException(ErrorCode.ADMIN_STATUS_CONFLICT);
         }
-        reissueResetLink(target, actor);
+        passwordResetTransactionService.reissueResetLink(target, actor);
         activityLogService.record(actor, AdminActivityType.ADMIN_PASSWORD_RESET_SENT,
                 AdminActivityTargetType.ADMIN, target.getAdminId(), target.getName(),
                 "관리자 비밀번호 재설정 메일을 발송했습니다.", ipAddress);
     }
 
-    @Transactional
+    // 발송 제한은 자체 트랜잭션으로 커밋되므로, 커넥션을 이중으로 점유하지 않도록 바깥 트랜잭션을 두지 않는다.
     public void requestPasswordReset(AdminPasswordResetRequest request, String ipAddress) {
         String email = normalize(request.email());
         // 계정 존재 여부가 드러나지 않도록 조회 전에 발송 횟수를 먼저 기록한다.
         rateLimitService.checkAndRecord(email, ipAddress);
-        Admin target = adminRepository.findByEmailForUpdate(email)
-                .filter(Admin::isActive)
-                .orElse(null);
-        if (target == null) {
-            return;
-        }
-        reissueResetLink(target, target);
-        activityLogService.record(target, AdminActivityType.ADMIN_PASSWORD_RESET_REQUESTED,
-                AdminActivityTargetType.ADMIN, target.getAdminId(), target.getName(),
-                "관리자 비밀번호 재설정 메일을 요청했습니다.", ipAddress);
-    }
-
-    private void reissueResetLink(Admin target, Admin createdBy) {
-        LocalDateTime now = LocalDateTime.now();
-        invitationRepository.findAllByAdminAndType(target, AdminInvitationType.RESET)
-                .stream().filter(invitation -> invitation.isUsable(now))
-                .forEach(invitation -> invitation.invalidate(now));
-        invitationIssuer.issue(target, createdBy, AdminInvitationType.RESET);
+        passwordResetTransactionService.issueForActiveAdmin(email, ipAddress);
     }
 
     @Transactional(readOnly = true)
