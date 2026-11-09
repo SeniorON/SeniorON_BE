@@ -7,6 +7,7 @@ import static org.mockito.Mockito.*;
 import com.example.senioron.domain.admin.dto.request.*;
 import com.example.senioron.domain.admin.entity.*;
 import com.example.senioron.domain.admin.repository.*;
+import com.example.senioron.domain.user.service.EmailVerificationRateLimitService;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import java.time.LocalDateTime;
@@ -24,13 +25,14 @@ class AdminInvitationServiceTest {
     private final AdminBootstrapTransactionService bootstrap = mock(AdminBootstrapTransactionService.class);
     private final AdminInvitationIssuer issuer = mock(AdminInvitationIssuer.class);
     private final AdminRefreshTokenRepository refreshTokens = mock(AdminRefreshTokenRepository.class);
+    private final EmailVerificationRateLimitService rateLimits = mock(EmailVerificationRateLimitService.class);
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
     private AdminInvitationService service;
 
     @BeforeEach
     void setUp() throws Exception {
         service = new AdminInvitationService(
-                admins, invitations, logs, encoder, bootstrap, issuer, refreshTokens
+                admins, invitations, logs, encoder, bootstrap, issuer, refreshTokens, rateLimits
         );
     }
 

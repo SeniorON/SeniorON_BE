@@ -4,6 +4,7 @@ import com.example.senioron.domain.admin.dto.request.*;
 import com.example.senioron.domain.admin.dto.response.*;
 import com.example.senioron.domain.admin.entity.*;
 import com.example.senioron.domain.admin.repository.*;
+import com.example.senioron.domain.user.service.EmailVerificationRateLimitService;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.jwt.TokenHashUtil;
@@ -26,6 +27,7 @@ public class AdminInvitationService {
     private final AdminBootstrapTransactionService bootstrapTransactionService;
     private final AdminInvitationIssuer invitationIssuer;
     private final AdminRefreshTokenRepository refreshTokenRepository;
+    private final EmailVerificationRateLimitService rateLimitService;
 
     @Transactional
     public AdminInviteResponse invite(Admin actor, AdminInviteRequest request, String ipAddress) {
@@ -87,14 +89,35 @@ public class AdminInvitationService {
         if (!target.isActive()) {
             throw new BusinessException(ErrorCode.ADMIN_STATUS_CONFLICT);
         }
+        reissueResetLink(target, actor);
+        activityLogService.record(actor, AdminActivityType.ADMIN_PASSWORD_RESET_SENT,
+                AdminActivityTargetType.ADMIN, target.getAdminId(), target.getName(),
+                "관리자 비밀번호 재설정 메일을 발송했습니다.", ipAddress);
+    }
+
+    @Transactional
+    public void requestPasswordReset(AdminPasswordResetRequest request, String ipAddress) {
+        String email = normalize(request.email());
+        // 계정 존재 여부가 드러나지 않도록 조회 전에 발송 횟수를 먼저 기록한다.
+        rateLimitService.checkAndRecord(email, ipAddress);
+        Admin target = adminRepository.findByEmailForUpdate(email)
+                .filter(Admin::isActive)
+                .orElse(null);
+        if (target == null) {
+            return;
+        }
+        reissueResetLink(target, target);
+        activityLogService.record(target, AdminActivityType.ADMIN_PASSWORD_RESET_REQUESTED,
+                AdminActivityTargetType.ADMIN, target.getAdminId(), target.getName(),
+                "관리자 비밀번호 재설정 메일을 요청했습니다.", ipAddress);
+    }
+
+    private void reissueResetLink(Admin target, Admin createdBy) {
         LocalDateTime now = LocalDateTime.now();
         invitationRepository.findAllByAdminAndType(target, AdminInvitationType.RESET)
                 .stream().filter(invitation -> invitation.isUsable(now))
                 .forEach(invitation -> invitation.invalidate(now));
-        invitationIssuer.issue(target, actor, AdminInvitationType.RESET);
-        activityLogService.record(actor, AdminActivityType.ADMIN_PASSWORD_RESET_SENT,
-                AdminActivityTargetType.ADMIN, target.getAdminId(), target.getName(),
-                "관리자 비밀번호 재설정 메일을 발송했습니다.", ipAddress);
+        invitationIssuer.issue(target, createdBy, AdminInvitationType.RESET);
     }
 
     @Transactional(readOnly = true)
@@ -112,7 +135,7 @@ public class AdminInvitationService {
                         TokenHashUtil.hashHex(request.token()))
                 .filter(this::valid)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_INVITATION_TOKEN));
-        validatePassword(request.password());
+        AdminPasswordPolicy.validate(request.password());
         Admin admin = invitation.getAdmin();
         if (invitation.getType() == AdminInvitationType.INVITE) {
             admin.activate(passwordEncoder.encode(request.password()));
@@ -149,13 +172,6 @@ public class AdminInvitationService {
             return status == AdminStatus.ACTIVE;
         }
         return status != AdminStatus.SUSPENDED;
-    }
-
-    private void validatePassword(String password) {
-        if (password == null || password.length() < 8 || password.length() > 64
-                || !password.matches(".*[A-Za-z].*") || !password.matches(".*\\d.*")) {
-            throw new BusinessException(ErrorCode.INVALID_ADMIN_PASSWORD);
-        }
     }
 
     private String normalize(String email) {

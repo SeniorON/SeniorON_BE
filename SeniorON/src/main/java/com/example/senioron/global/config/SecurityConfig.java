@@ -124,6 +124,7 @@ public class SecurityConfig {
                                 "/api/admin/auth/token/refresh",
                                 "/api/admin/auth/invitations/verify",
                                 "/api/admin/auth/invitations/accept",
+                                "/api/admin/auth/password-reset",
                                 "/h2-console/**",
                                 "/actuator/health/readiness",
                                 "/actuator/prometheus"
