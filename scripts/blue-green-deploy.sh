@@ -7,6 +7,9 @@ STATE_FILE="$APP_DIR/.current-color"
 
 IMAGE_TAG="${IMAGE_TAG:?IMAGE_TAG is required}"
 
+# 배포 이미지 저장소 (docker-compose.yml의 app-blue/app-green과 동일)
+APP_IMAGE_REPO="${APP_IMAGE_REPO:-jsh424/senioron}"
+
 cd "$APP_DIR"
 
 echo "=========================================="
@@ -81,6 +84,59 @@ cleanup_service() {
 
     echo "$service cleaned up."
     return 0
+}
+
+cleanup_old_images() {
+    local repo_tag tag keep skip removed
+    local -a keep_tags=("$IMAGE_TAG" "$CURRENT_TAG" "latest")
+
+    echo ""
+    echo "Cleaning up old Docker images..."
+
+    # before/after 비교용 디스크 사용량 로그
+    echo "--- Docker disk usage (before) ---"
+    docker system df 2>/dev/null || true
+
+    removed=0
+
+    while IFS= read -r repo_tag; do
+        [[ -z "$repo_tag" || "$repo_tag" == "<none>:<none>" ]] && continue
+
+        tag="${repo_tag##*:}"
+
+        # dangling(<none>) 이미지는 아래 docker image prune에서 정리
+        [[ "$tag" == "<none>" ]] && continue
+
+        skip=0
+
+        for keep in "${keep_tags[@]}"; do
+            # 현재 배포 이미지, 직전 이미지(롤백 대상), latest는 보존
+            if [[ -n "$keep" && "$keep" != "none" && "$tag" == "$keep" ]]; then
+                skip=1
+                break
+            fi
+        done
+
+        if [[ "$skip" -eq 1 ]]; then
+            echo "Keeping image: $repo_tag"
+            continue
+        fi
+
+        # 실행 중이거나 중지된 컨테이너가 참조하는 이미지는 docker rmi가 거부하므로 안전
+        if docker rmi "$repo_tag" >/dev/null 2>&1; then
+            echo "Removed image: $repo_tag"
+            removed=$((removed + 1))
+        else
+            echo "Skipped image (in use or remove failed): $repo_tag"
+        fi
+    done < <(docker images --format '{{.Repository}}:{{.Tag}}' "$APP_IMAGE_REPO" 2>/dev/null || true)
+
+    # 태그가 사라진 dangling 이미지 정리 (기존 동작 유지)
+    docker image prune -f >/dev/null 2>&1 || true
+
+    echo "Removed $removed unused image tag(s)."
+    echo "--- Docker disk usage (after) ---"
+    docker system df 2>/dev/null || true
 }
 
 switch_upstream() {
@@ -338,6 +394,8 @@ if [[ "$CURRENT_COLOR" == "none" ]]; then
 
     echo "$NEXT_COLOR:$IMAGE_TAG" > "$STATE_FILE"
 
+    cleanup_old_images
+
     echo ""
     echo "=========================================="
     echo " Initial Bootstrap Successful"
@@ -431,8 +489,9 @@ fi
 
 echo "$NEXT_COLOR:$IMAGE_TAG" > "$STATE_FILE"
 
-# 디스크 부족 방지를 위한 미사용 댕글링 이미지 정리
-docker image prune -f 2>/dev/null || true
+# 디스크 부족 방지를 위한 미사용 이미지 정리
+# (현재 이미지 + 직전 롤백 이미지 + latest는 보존)
+cleanup_old_images
 
 echo ""
 echo "[7/7] Deployment state updated."
