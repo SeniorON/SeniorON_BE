@@ -112,6 +112,7 @@ app:
   cors:
     allowed-origins: http://localhost:5173,http://localhost:5174,http://localhost:3000
 
+# 관리자 초대 및 비밀번호 재설정 메일 URL은 ADMIN_WEB_BASE_URL 환경변수로 관리
 admin:
   web:
     base-url: ${ADMIN_WEB_BASE_URL:https://senioron.site/admin}
