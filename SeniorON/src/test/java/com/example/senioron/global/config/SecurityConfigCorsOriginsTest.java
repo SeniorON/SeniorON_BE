@@ -9,10 +9,11 @@ class SecurityConfigCorsOriginsTest {
     @Test
     void parsesCommaSeparatedOriginsTrimmingWhitespace() {
         assertThat(SecurityConfig.parseAllowedOrigins(
-                " https://senioron.site , http://localhost:5173,http://localhost:3000 "
+                " https://senioron.site , http://localhost:5173,http://localhost:5174,http://localhost:3000 "
         )).containsExactly(
                 "https://senioron.site",
                 "http://localhost:5173",
+                "http://localhost:5174",
                 "http://localhost:3000"
         );
     }

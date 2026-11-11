@@ -120,6 +120,7 @@ public class SecurityConfig {
                                 "/api/social-accounts/login/google",
                                 "/api/social-accounts/signup",
                                 "/api/social-accounts/login/kakao/callback",
+                                "/api/social-accounts/login/kakao/withdrawal",
                                 "/api/admin/auth/login",
                                 "/api/admin/auth/token/refresh",
                                 "/api/admin/auth/invitations/verify",
