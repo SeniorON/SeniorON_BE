@@ -5,9 +5,12 @@ import com.example.senioron.domain.socialaccount.dto.google.response.GoogleLogin
 import com.example.senioron.domain.socialaccount.dto.request.SocialSignupRequest;
 import com.example.senioron.domain.socialaccount.dto.response.SocialSignupResponse;
 import com.example.senioron.domain.socialaccount.dto.kakao.request.KakaoLoginRequest;
+import com.example.senioron.domain.socialaccount.dto.kakao.request.KakaoWithdrawalLoginRequest;
 import com.example.senioron.domain.socialaccount.dto.kakao.response.KakaoLoginResponse;
+import com.example.senioron.domain.socialaccount.dto.kakao.response.KakaoWithdrawalLoginResponse;
 import com.example.senioron.domain.socialaccount.service.GoogleLoginService;
 import com.example.senioron.domain.socialaccount.service.KakaoLoginService;
+import com.example.senioron.domain.socialaccount.service.KakaoWithdrawalLoginService;
 import com.example.senioron.domain.socialaccount.service.SocialSignupService;
 import com.example.senioron.global.apiPayload.response.Response;
 import io.swagger.v3.oas.annotations.Operation;
@@ -25,6 +28,7 @@ import org.springframework.web.bind.annotation.*;
 public class SocialAccountController {
 
     private final KakaoLoginService kakaoLoginService;
+    private final KakaoWithdrawalLoginService kakaoWithdrawalLoginService;
     private final GoogleLoginService googleLoginService;
     private final SocialSignupService socialSignupService;
 
@@ -39,6 +43,17 @@ public class SocialAccountController {
         return Response.ok(
                 kakaoLoginService.kakaoLogin(request)
         );
+    }
+
+    @Operation(
+            summary = "카카오 회원 탈퇴 웹 로그인",
+            description = "웹에서 발급받은 카카오 인가 코드로 기존 활성 회원만 인증하고 시니어온 Access Token을 발급합니다. 신규 회원가입과 기기 등록은 수행하지 않습니다."
+    )
+    @PostMapping("/login/kakao/withdrawal")
+    public Response<KakaoWithdrawalLoginResponse> kakaoWithdrawalLogin(
+            @Valid @RequestBody KakaoWithdrawalLoginRequest request
+    ) {
+        return Response.ok(kakaoWithdrawalLoginService.login(request));
     }
 
     @Operation(

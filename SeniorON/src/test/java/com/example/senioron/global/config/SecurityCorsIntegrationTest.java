@@ -23,6 +23,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class SecurityCorsIntegrationTest {
 
     private static final String VITE_ORIGIN = "http://localhost:5173";
+    private static final String WITHDRAWAL_WEB_ORIGIN = "http://localhost:5174";
     private static final String NEXT_ORIGIN = "http://localhost:3000";
     private static final String DISALLOWED_ORIGIN = "https://evil.example";
 
@@ -38,7 +39,7 @@ class SecurityCorsIntegrationTest {
 
     @Test
     void preflightFromAllowedOriginsReturnsAllowOrigin() throws Exception {
-        for (String origin : new String[]{VITE_ORIGIN, NEXT_ORIGIN}) {
+        for (String origin : new String[]{VITE_ORIGIN, WITHDRAWAL_WEB_ORIGIN, NEXT_ORIGIN}) {
             mvc.perform(options("/api/admin/me")
                             .header(HttpHeaders.ORIGIN, origin)
                             .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET")

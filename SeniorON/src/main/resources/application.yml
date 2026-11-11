@@ -54,7 +54,11 @@ management:
 
 kakao:
   client-id: ${KAKAO_CLIENT_ID}
+  client-secret: ${KAKAO_CLIENT_SECRET:}
   redirect-uri: ${KAKAO_REDIRECT_URI}
+  withdrawal:
+    redirect-uri: ${KAKAO_WITHDRAWAL_REDIRECT_URI:http://localhost:5174/}
+    token-url: ${KAKAO_TOKEN_URL:https://kauth.kakao.com/oauth/token}
   user:
     info-url: ${KAKAO_USER_INFO_URL:https://kapi.kakao.com/v2/user/me}
     connect-timeout: ${KAKAO_USER_CONNECT_TIMEOUT:3s}
@@ -106,7 +110,7 @@ ai:
 
 app:
   cors:
-    allowed-origins: http://localhost:5173,http://localhost:3000
+    allowed-origins: http://localhost:5173,http://localhost:5174,http://localhost:3000
 
 admin:
   web:

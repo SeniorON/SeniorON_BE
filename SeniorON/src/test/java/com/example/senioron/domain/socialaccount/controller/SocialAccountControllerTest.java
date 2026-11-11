@@ -10,8 +10,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.example.senioron.domain.socialaccount.dto.response.SocialSignupResponse;
+import com.example.senioron.domain.socialaccount.dto.kakao.response.KakaoWithdrawalLoginResponse;
 import com.example.senioron.domain.socialaccount.service.GoogleLoginService;
 import com.example.senioron.domain.socialaccount.service.KakaoLoginService;
+import com.example.senioron.domain.socialaccount.service.KakaoWithdrawalLoginService;
 import com.example.senioron.domain.socialaccount.service.SocialSignupService;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.global.apiPayload.exception.GlobalExceptionHandler;
@@ -28,22 +30,48 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class SocialAccountControllerTest {
 
     private SocialSignupService socialSignupService;
+    private KakaoWithdrawalLoginService kakaoWithdrawalLoginService;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         socialSignupService = mock(SocialSignupService.class);
+        kakaoWithdrawalLoginService = mock(KakaoWithdrawalLoginService.class);
         ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
         mockMvc = MockMvcBuilders
                 .standaloneSetup(new SocialAccountController(
                         mock(KakaoLoginService.class),
+                        kakaoWithdrawalLoginService,
                         mock(GoogleLoginService.class),
                         socialSignupService
                 ))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(objectMapper))
                 .build();
+    }
+
+    @Test
+    void kakaoWithdrawalLoginReturnsOnlyExistingMemberAccessTokenFields() throws Exception {
+        when(kakaoWithdrawalLoginService.login(any()))
+                .thenReturn(KakaoWithdrawalLoginResponse.builder()
+                        .accessToken("access-token")
+                        .usersId(1L)
+                        .name("사용자")
+                        .role(Role.CHILD)
+                        .newUser(false)
+                        .build());
+
+        mockMvc.perform(post("/api/social-accounts/login/kakao/withdrawal")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"code\":\"authorization-code\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("COMMON_200"))
+                .andExpect(jsonPath("$.data.accessToken").value("access-token"))
+                .andExpect(jsonPath("$.data.usersId").value(1))
+                .andExpect(jsonPath("$.data.newUser").value(false));
+
+        verify(kakaoWithdrawalLoginService).login(any());
     }
 
     @Test
@@ -88,6 +116,17 @@ class SocialAccountControllerTest {
                 .andExpect(jsonPath("$.code").value("COMMON400"));
 
         verifyNoInteractions(socialSignupService);
+    }
+
+    @Test
+    void kakaoWithdrawalLoginRejectsBlankAuthorizationCode() throws Exception {
+        mockMvc.perform(post("/api/social-accounts/login/kakao/withdrawal")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"code\":\" \"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMMON400"));
+
+        verifyNoInteractions(kakaoWithdrawalLoginService);
     }
 
     @Test
