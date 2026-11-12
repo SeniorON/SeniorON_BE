@@ -29,6 +29,7 @@ public class KakaoWithdrawalLoginService {
 
     private final KakaoAuthorizationClient kakaoAuthorizationClient;
     private final KakaoUserClient kakaoUserClient;
+    private final KakaoAccessTokenValidationService kakaoAccessTokenValidationService;
     private final SocialAccountRepository socialAccountRepository;
     private final JwtUtil jwtUtil;
 
@@ -39,6 +40,8 @@ public class KakaoWithdrawalLoginService {
         if (!StringUtils.hasText(kakaoAccessToken)) {
             throw new BusinessException(ErrorCode.INVALID_SOCIAL_TOKEN);
         }
+
+        kakaoAccessTokenValidationService.validate(kakaoAccessToken);
 
         KakaoUserInfo kakaoUserInfo = getKakaoUserInfo(kakaoAccessToken);
         if (kakaoUserInfo == null || kakaoUserInfo.getId() == null) {

@@ -34,7 +34,8 @@ logging:
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
 
 kakao:
-  client-id: local-dummy-kakao-client-id
+  app-id: ${KAKAO_APP_ID:0}
+  client-id: ${KAKAO_CLIENT_ID:local-dummy-kakao-client-id}
   redirect-uri: http://localhost:8080/api/social-accounts/login/kakao/callback
 
 cloud:

@@ -20,6 +20,7 @@ import org.springframework.web.client.RestClientResponseException;
 public class SocialSignupService {
 
     private final KakaoUserClient kakaoUserClient;
+    private final KakaoAccessTokenValidationService kakaoAccessTokenValidationService;
     private final FirebaseIdTokenVerifier firebaseIdTokenVerifier;
     private final SocialSignupTransactionService socialSignupTransactionService;
 
@@ -59,6 +60,8 @@ public class SocialSignupService {
         }
 
         if (request.getProvider() == LoginProvider.KAKAO) {
+            kakaoAccessTokenValidationService.validate(request.getSocialToken());
+
             KakaoUserInfo kakaoUserInfo;
             try {
                 kakaoUserInfo = kakaoUserClient.getUserInfo(request.getSocialToken());

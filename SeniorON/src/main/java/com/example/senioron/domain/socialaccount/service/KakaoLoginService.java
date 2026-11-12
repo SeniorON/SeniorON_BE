@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 public class KakaoLoginService {
 
     private final KakaoUserClient kakaoUserClient;
+    private final KakaoAccessTokenValidationService kakaoAccessTokenValidationService;
     private final KakaoLoginTransactionService kakaoLoginTransactionService;
 
     /**
@@ -20,6 +21,7 @@ public class KakaoLoginService {
      * - 신규 회원이면 추가 회원가입을 위한 정보를 반환합니다.
      */
     public KakaoLoginResponse kakaoLogin(KakaoLoginRequest request) {
+        kakaoAccessTokenValidationService.validate(request.getKakaoAccessToken());
 
         KakaoUserInfo kakaoUserInfo =
                 kakaoUserClient.getUserInfo(request.getKakaoAccessToken());
