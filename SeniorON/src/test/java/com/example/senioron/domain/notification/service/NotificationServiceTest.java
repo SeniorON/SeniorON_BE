@@ -299,6 +299,7 @@ class NotificationServiceTest {
         senior = Senior.builder().seniorId(SENIOR_ID).family(family).registeredBy(child)
                 .parentUser(parent).latitude(37.5665).longitude(126.9780).build();
         given(seniorRepository.findById(SENIOR_ID)).willReturn(Optional.of(senior));
+        childSetting.updateOutingReturnEnabled(false);
         var response = notificationService.updateSetting(
                 CHILD_ID, SENIOR_ID, NotificationSettingType.OUTING_RETURN, true);
         assertThat(response.getEnabled()).isTrue();
@@ -337,11 +338,19 @@ class NotificationServiceTest {
 
     @Test
     void updateSettingChangesOnlyRequesterSetting() {
+        User sub = User.builder().usersId(4L).role(Role.CHILD).build();
+        FamilyMember subMember = FamilyMember.builder()
+                .id(22L).user(sub).family(family).managerType(ManagerType.SUB).build();
+        NotificationSetting subSetting = NotificationSetting.builder()
+                .familyMemberId(22L).familyMember(subMember).build();
+        given(notificationSettingRepository.findById(22L)).willReturn(Optional.of(subSetting));
+
         notificationService.updateSetting(CHILD_ID, SENIOR_ID, NotificationSettingType.INACTIVITY, false);
 
         assertThat(childSetting.getInactivityEnabled()).isFalse();
+        assertThat(subSetting.getInactivityEnabled()).isTrue();
         verify(notificationSettingRepository).findById(CHILD_MEMBER_ID);
-        verify(notificationSettingRepository, org.mockito.Mockito.never()).findById(PARENT_ID);
+        verify(notificationSettingRepository, org.mockito.Mockito.never()).findById(22L);
     }
 
     @Test
