@@ -1,9 +1,11 @@
 package com.example.senioron.domain.notification.entity;
 
 import com.example.senioron.common.entity.BaseEntity;
-import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.family.entity.FamilyMember;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
 
 @Entity
 @Getter
@@ -13,12 +15,13 @@ import lombok.*;
 public class NotificationSetting extends BaseEntity {
 
     @Id
-    private Long userId;
+    private Long familyMemberId;
 
     @MapsId
     @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id")
-    private User user;
+    @JoinColumn(name = "family_member_id")
+    @OnDelete(action = OnDeleteAction.CASCADE)
+    private FamilyMember familyMember;
 
     @Builder.Default
     @Column(nullable = false)

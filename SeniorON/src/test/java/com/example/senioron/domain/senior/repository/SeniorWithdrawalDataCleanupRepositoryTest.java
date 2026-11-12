@@ -6,6 +6,7 @@ import com.example.senioron.domain.device.entity.Device;
 import com.example.senioron.domain.event.entity.Event;
 import com.example.senioron.domain.event.entity.EventType;
 import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.entity.FamilyPhotoSenior;
 import com.example.senioron.domain.family.entity.FamilyPhotoView;
@@ -31,6 +32,7 @@ import com.example.senioron.domain.senior.entity.SeniorReloginRequestStatus;
 import com.example.senioron.domain.user.entity.AccountRecoveryPurpose;
 import com.example.senioron.domain.user.entity.AccountRecoveryVerificationCode;
 import com.example.senioron.domain.user.entity.EmailVerificationRateLimit;
+import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.SignupEmailVerificationCode;
 import com.example.senioron.domain.user.entity.User;
@@ -95,8 +97,12 @@ class SeniorWithdrawalDataCleanupRepositoryTest {
         persist(HomeSetting.builder().user(other).build());
         persist(InactivitySetting.builder().user(target).build());
         persist(InactivitySetting.builder().user(other).build());
-        persist(NotificationSetting.builder().user(target).build());
-        persist(NotificationSetting.builder().user(other).build());
+        FamilyMember targetMember = persist(FamilyMember.builder()
+                .user(registrar).family(targetFamily).managerType(ManagerType.PRIMARY).build());
+        FamilyMember otherMember = persist(FamilyMember.builder()
+                .user(registrar).family(otherFamily).managerType(ManagerType.PRIMARY).build());
+        persist(NotificationSetting.builder().familyMember(targetMember).build());
+        persist(NotificationSetting.builder().familyMember(otherMember).build());
         persist(recoveryCode(target));
         persist(recoveryCode(other));
         persist(signupVerificationCode(target.getEmail()));
@@ -135,7 +141,6 @@ class SeniorWithdrawalDataCleanupRepositoryTest {
         assertTargetDeletedAndOtherKept("Receipt", "user");
         assertTargetDeletedAndOtherKept("HomeSetting", "user");
         assertTargetDeletedAndOtherKept("InactivitySetting", "user");
-        assertTargetDeletedAndOtherKept("NotificationSetting", "user");
         assertTargetDeletedAndOtherKept("AccountRecoveryVerificationCode", "user");
         assertTargetDeletedAndOtherKept("FamilyPhotoView", "parent");
         assertThat(countByEmail("SignupEmailVerificationCode", target.getEmail())).isZero();
@@ -150,6 +155,8 @@ class SeniorWithdrawalDataCleanupRepositoryTest {
         assertThat(countBySenior("SeniorPermissionSetting", otherSenior)).isEqualTo(1);
         assertThat(countBySenior("FamilyPhotoSenior", targetSenior)).isZero();
         assertThat(countBySenior("FamilyPhotoSenior", otherSenior)).isEqualTo(1);
+        assertThat(countNotificationSettings(targetFamily)).isZero();
+        assertThat(countNotificationSettings(otherFamily)).isEqualTo(1);
 
         assertThat(count("FamilyPhoto")).isEqualTo(1);
         assertThat(count("Device")).isEqualTo(2);
@@ -182,6 +189,15 @@ class SeniorWithdrawalDataCleanupRepositoryTest {
                         "SELECT COUNT(entity) FROM " + entityName + " entity WHERE entity.senior = :senior",
                         Long.class)
                 .setParameter("senior", senior)
+                .getSingleResult();
+    }
+
+    private long countNotificationSettings(Family family) {
+        return entityManager.createQuery(
+                        "SELECT COUNT(setting) FROM NotificationSetting setting "
+                                + "WHERE setting.familyMember.family = :family",
+                        Long.class)
+                .setParameter("family", family)
                 .getSingleResult();
     }
 

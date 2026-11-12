@@ -223,20 +223,19 @@ public class NotificationService {
             return notDispatched(event, "FAMILY_NOT_LINKED");
         }
 
-        List<User> receivers = familyMemberRepository
+        List<FamilyMember> receiverMembers = familyMemberRepository
                 .findAllBySeniorIdAndUserRole(senior.getSeniorId(), Role.CHILD)
                 .stream()
-                .map(FamilyMember::getUser)
                 .collect(Collectors.collectingAndThen(
                         Collectors.toMap(
-                                User::getUsersId,
-                                user -> user,
+                                member -> member.getUser().getUsersId(),
+                                member -> member,
                                 (first, ignored) -> first,
                                 java.util.LinkedHashMap::new
                         ),
-                        usersById -> List.copyOf(usersById.values())
+                        membersByUserId -> List.copyOf(membersByUserId.values())
                 ));
-        if (receivers.isEmpty()) {
+        if (receiverMembers.isEmpty()) {
             log.warn("수신 가능한 자녀가 없어 알림 대상이 없습니다. eventType={}, senderId={}",
                     event.getEventType(), sender.getUsersId());
             return notDispatched(event, "NO_CHILD_RECEIVER");
@@ -248,8 +247,8 @@ public class NotificationService {
             return notDispatched(event, "HOME_LOCATION_NOT_REGISTERED");
         }
 
-        // 같은 가족에 부모가 여러 명이어도 실제 이벤트 발신 부모의 설정을 적용한다.
-        if (!isEnabled(senior, type)) {
+        List<User> receivers = findEnabledReceivers(receiverMembers, type);
+        if (receivers.isEmpty()) {
             return notDispatched(event, "SETTING_DISABLED");
         }
 
@@ -442,28 +441,31 @@ public class NotificationService {
         meterRegistry.counter(SOS_DISPATCH_METRIC, TAG_RESULT, result).increment();
     }
 
-    @Transactional(readOnly = true)
-    public boolean isEnabled(Senior senior, NotificationType type) {
+    private List<User> findEnabledReceivers(List<FamilyMember> members, NotificationType type) {
         if (type == NotificationType.SOS) {
-            return true; // SOS 알림은 필수 알림이라 끌 수 없음
+            return members.stream().map(FamilyMember::getUser).toList();
         }
-        if (type == NotificationType.OUTING_RETURN && !hasRegisteredHomeLocation(senior)) {
-            return false;
-        }
-        User parent = senior.getParentUser();
-        if (parent == null) {
-            log.warn("시니어에 연결된 부모 계정이 없어 기본 알림 설정을 적용합니다. seniorId={}",
-                    senior.getSeniorId());
+        Map<Long, NotificationSetting> settingsByMemberId = notificationSettingRepository
+                .findAllById(members.stream().map(FamilyMember::getId).toList())
+                .stream()
+                .collect(Collectors.toMap(NotificationSetting::getFamilyMemberId, setting -> setting));
+        return members.stream()
+                .filter(member -> isEnabled(settingsByMemberId.get(member.getId()), type))
+                .map(FamilyMember::getUser)
+                .toList();
+    }
+
+    private boolean isEnabled(NotificationSetting setting, NotificationType type) {
+        if (setting == null) {
             return true;
         }
-        return notificationSettingRepository.findById(parent.getUsersId())
-                .map(setting -> switch (type) {
-                    case INACTIVITY -> setting.getInactivityEnabled();
-                    case RISK_LINK -> setting.getRiskLinkEnabled();
-                    case OUTING_RETURN -> setting.getOutingReturnEnabled();
-                    default -> throw new BusinessException(ErrorCode.FORBIDDEN);
-                })
-                .orElse(true);
+        return switch (type) {
+            case SOS -> true;
+            case INACTIVITY -> setting.getInactivityEnabled();
+            case RISK_LINK -> setting.getRiskLinkEnabled();
+            case OUTING_RETURN -> setting.getOutingReturnEnabled();
+            default -> throw new BusinessException(ErrorCode.FORBIDDEN);
+        };
     }
 
     private NotificationType resolveType(EventType eventType) {
@@ -504,17 +506,17 @@ public class NotificationService {
     }
 
     // 백필 대응 메소드 (기존 세팅 없을 경우 즉시 생성)
-    private NotificationSetting createDefaultSettingInternal(User user){
+    private NotificationSetting createDefaultSettingInternal(FamilyMember familyMember){
         try{
             NotificationSetting setting = NotificationSetting.builder()
-                    .user(user)
+                    .familyMember(familyMember)
                     .build();
             // save()는 INSERT를 즉시 실행하지 않고 다음 쿼리의 자동 flush 시점까지 미룰 수 있다.
             // 그러면 DB 제약조건 위반(예: 스키마 드리프트로 남은 컬럼의 NOT NULL)이 이 메서드 밖,
             // 즉 이 catch가 못 잡는 시점에 터진다. saveAndFlush로 즉시 실행시켜 여기서 확실히 잡는다.
             return notificationSettingRepository.saveAndFlush(setting);
         } catch(DataIntegrityViolationException e){
-            return notificationSettingRepository.findById(user.getUsersId())
+            return notificationSettingRepository.findById(familyMember.getId())
                     .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_NOT_FOUND));
         }
     }
@@ -523,10 +525,10 @@ public class NotificationService {
     public NotificationHomeListResponse getHomeSettings(Long userId, Long seniorId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
-        Senior senior = resolveManagedSenior(user, seniorId);
-        User parent = resolveManagedSeniorParent(senior);
-        NotificationSetting setting = notificationSettingRepository.findById(parent.getUsersId())
-                .orElseGet(() -> createDefaultSettingInternal(parent));
+        Senior senior = findSenior(seniorId);
+        FamilyMember member = resolveManagedFamilyMember(user, senior);
+        NotificationSetting setting = notificationSettingRepository.findById(member.getId())
+                .orElseGet(() -> createDefaultSettingInternal(member));
 
         // 타입별로 따로 조회하지 않고 한 번에 가져와서 자바에서 타입별 최신 1건만 뽑는다.
         // ORDER BY createdAt DESC라 각 타입에서 먼저 만나는 게 최신이다.
@@ -567,15 +569,15 @@ public class NotificationService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        Senior senior = resolveManagedSenior(user, seniorId);
-        User parent = resolveManagedSeniorParent(senior);
+        Senior senior = findSenior(seniorId);
+        FamilyMember member = resolveManagedFamilyMember(user, senior);
         if (type == NotificationSettingType.OUTING_RETURN
                 && Boolean.TRUE.equals(enabled)
                 && !hasRegisteredHomeLocation(senior)) {
             throw new BusinessException(ErrorCode.SENIOR_HOME_LOCATION_NOT_FOUND);
         }
-        NotificationSetting setting = notificationSettingRepository.findById(parent.getUsersId())
-                .orElseGet(() -> createDefaultSettingInternal(parent));
+        NotificationSetting setting = notificationSettingRepository.findById(member.getId())
+                .orElseGet(() -> createDefaultSettingInternal(member));
 
         switch (type) {
             case INACTIVITY -> setting.updateInactivityEnabled(enabled);
@@ -606,17 +608,21 @@ public class NotificationService {
                 .build();
     }
 
-    private User resolveManagedSeniorParent(Senior senior) {
-        User parent = senior.getParentUser();
-        if (parent == null) {
-            throw new BusinessException(ErrorCode.SENIOR_PARENT_USER_NOT_FOUND);
+    private FamilyMember resolveManagedFamilyMember(User user, Senior senior) {
+        if (senior.getFamily() == null) {
+            throw new BusinessException(ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED);
         }
-        return parent;
+        return familyMemberRepository.findByUserAndFamily(user, senior.getFamily())
+                .orElseThrow(() -> new BusinessException(ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED));
+    }
+
+    private Senior findSenior(Long seniorId) {
+        return seniorRepository.findById(seniorId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SENIOR_NOT_FOUND));
     }
 
     private Senior resolveManagedSenior(User user, Long seniorId) {
-        Senior senior = seniorRepository.findById(seniorId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.SENIOR_NOT_FOUND));
+        Senior senior = findSenior(seniorId);
 
         if (senior.getFamily() == null || !isMemberOfFamily(user, senior.getFamily())) {
             throw new BusinessException(ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED);
