@@ -10,6 +10,7 @@ import com.example.senioron.domain.home.dto.request.HomeButtonSaveRequest;
 import com.example.senioron.domain.home.dto.request.HomeFontSizeUpdateRequest;
 import com.example.senioron.domain.home.dto.request.SeniorProfileUpdateRequest;
 import com.example.senioron.domain.home.dto.response.*;
+import com.example.senioron.domain.home.dto.request.SeniorRelationUpdateRequest;
 import com.example.senioron.domain.device.dto.response.DeviceDetailResponse;
 import com.example.senioron.domain.home.entity.ActionType;
 import com.example.senioron.domain.home.entity.FontSize;
@@ -465,6 +466,43 @@ public class HomeService {
         );
 
         // 담당자별 관계가 반영된 응답 반환
+        return SeniorProfileUpdateResponse.from(senior, currentMember);
+    }
+
+    /**
+     * 로그인한 담당자의 시니어 가족 관계만 수정
+     */
+    @Transactional
+    public SeniorProfileUpdateResponse updateSeniorRelation(
+            SeniorRelationUpdateRequest request
+    ) {
+        User currentUser = getCurrentUser();
+
+        if (currentUser.getRole() != Role.CHILD) {
+            throw new BusinessException(
+                    ErrorCode.CHILD_HOME_ACCESS_DENIED
+            );
+        }
+
+        String resolvedCustomRelation =
+                resolveCustomRelation(
+                        request.relation(),
+                        request.customRelation()
+                );
+
+        Senior senior = getManagedSenior(
+                currentUser,
+                request.seniorId()
+        );
+
+        FamilyMember currentMember =
+                getFamilyMember(currentUser, senior);
+
+        currentMember.updateRelation(
+                request.relation(),
+                resolvedCustomRelation
+        );
+
         return SeniorProfileUpdateResponse.from(senior, currentMember);
     }
 

@@ -130,6 +130,19 @@ public class HomeController {
     }
 
     @Operation(
+            summary = "시니어 가족 관계 수정",
+            description = "로그인한 주담당자 또는 보조담당자의 시니어 가족 관계만 수정"
+    )
+    @PatchMapping("/senior-relation")
+    public Response<SeniorProfileUpdateResponse> updateSeniorRelation(
+            @Valid @RequestBody SeniorRelationUpdateRequest request
+    ) {
+        return Response.ok(
+                homeService.updateSeniorRelation(request)
+        );
+    }
+
+    @Operation(
             summary = "홈 버튼 설정 전체 저장",
             description = "노래 카드와 일반 버튼 선택 및 순서를 한 번에 저장"
     )
