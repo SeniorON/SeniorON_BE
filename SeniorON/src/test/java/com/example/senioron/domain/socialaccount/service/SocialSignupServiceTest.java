@@ -53,6 +53,8 @@ class SocialSignupServiceTest {
     private static final String DEVICE_IDENTIFIER = "device-1";
 
     private final KakaoUserClient kakaoUserClient = mock(KakaoUserClient.class);
+    private final KakaoAccessTokenValidationService kakaoAccessTokenValidationService =
+            mock(KakaoAccessTokenValidationService.class);
     private final FirebaseIdTokenVerifier firebaseIdTokenVerifier = mock(FirebaseIdTokenVerifier.class);
     private final SocialAccountRepository socialAccountRepository = mock(SocialAccountRepository.class);
     private final UserRepository userRepository = mock(UserRepository.class);
@@ -75,6 +77,7 @@ class SocialSignupServiceTest {
         );
         socialSignupService = new SocialSignupService(
                 kakaoUserClient,
+                kakaoAccessTokenValidationService,
                 firebaseIdTokenVerifier,
                 socialSignupTransactionService
         );
@@ -104,6 +107,7 @@ class SocialSignupServiceTest {
         assertThat(response.getName()).isEqualTo(NAME);
         assertThat(response.getRole()).isEqualTo(Role.CHILD);
         assertThat(response.isNewUser()).isFalse();
+        verify(kakaoAccessTokenValidationService).validate(SOCIAL_TOKEN);
         verify(userRepository).saveAndFlush(any(User.class));
         verify(socialAccountRepository).saveAndFlush(any(SocialAccount.class));
         verify(deviceService).registerDevice(any(User.class), isNull());

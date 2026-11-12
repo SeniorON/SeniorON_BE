@@ -53,6 +53,7 @@ management:
       application: senioron
 
 kakao:
+  app-id: ${KAKAO_APP_ID}
   client-id: ${KAKAO_CLIENT_ID}
   client-secret: ${KAKAO_CLIENT_SECRET:}
   redirect-uri: ${KAKAO_REDIRECT_URI}
@@ -61,6 +62,7 @@ kakao:
     token-url: ${KAKAO_TOKEN_URL:https://kauth.kakao.com/oauth/token}
   user:
     info-url: ${KAKAO_USER_INFO_URL:https://kapi.kakao.com/v2/user/me}
+    access-token-info-url: ${KAKAO_ACCESS_TOKEN_INFO_URL:https://kapi.kakao.com/v1/user/access_token_info}
     connect-timeout: ${KAKAO_USER_CONNECT_TIMEOUT:3s}
     read-timeout: ${KAKAO_USER_READ_TIMEOUT:5s}
   local:

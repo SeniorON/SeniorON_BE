@@ -40,8 +40,9 @@ class KakaoLoginServiceTest {
     @Test
     void kakaoLoginFetchesKakaoUserInfoOutsideTransactionService() {
         KakaoUserClient kakaoUserClient = mock(KakaoUserClient.class);
+        KakaoAccessTokenValidationService validationService = mock(KakaoAccessTokenValidationService.class);
         KakaoLoginTransactionService transactionService = mock(KakaoLoginTransactionService.class);
-        KakaoLoginService kakaoLoginService = new KakaoLoginService(kakaoUserClient, transactionService);
+        KakaoLoginService kakaoLoginService = new KakaoLoginService(kakaoUserClient, validationService, transactionService);
         KakaoLoginRequest request = createRequest();
         KakaoUserInfo kakaoUserInfo = createKakaoUserInfo();
         KakaoLoginResponse expected = KakaoLoginResponse.builder()
@@ -55,6 +56,7 @@ class KakaoLoginServiceTest {
         KakaoLoginResponse response = kakaoLoginService.kakaoLogin(request);
 
         assertThat(response).isSameAs(expected);
+        verify(validationService).validate(KAKAO_ACCESS_TOKEN);
         verify(kakaoUserClient).getUserInfo(KAKAO_ACCESS_TOKEN);
         verify(transactionService).login(request, kakaoUserInfo);
     }
@@ -62,8 +64,9 @@ class KakaoLoginServiceTest {
     @Test
     void kakaoLoginDoesNotCallTransactionServiceWhenRequiredKakaoInfoIsMissing() {
         KakaoUserClient kakaoUserClient = mock(KakaoUserClient.class);
+        KakaoAccessTokenValidationService validationService = mock(KakaoAccessTokenValidationService.class);
         KakaoLoginTransactionService transactionService = mock(KakaoLoginTransactionService.class);
-        KakaoLoginService kakaoLoginService = new KakaoLoginService(kakaoUserClient, transactionService);
+        KakaoLoginService kakaoLoginService = new KakaoLoginService(kakaoUserClient, validationService, transactionService);
         KakaoLoginRequest request = createRequest();
 
         given(kakaoUserClient.getUserInfo(KAKAO_ACCESS_TOKEN)).willReturn(new KakaoUserInfo());

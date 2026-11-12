@@ -159,11 +159,13 @@ class KakaoWithdrawalLoginServiceTest {
     private static class Fixture {
         private final KakaoAuthorizationClient authorizationClient = mock(KakaoAuthorizationClient.class);
         private final KakaoUserClient kakaoUserClient = mock(KakaoUserClient.class);
+        private final KakaoAccessTokenValidationService validationService = mock(KakaoAccessTokenValidationService.class);
         private final SocialAccountRepository socialAccountRepository = mock(SocialAccountRepository.class);
         private final JwtUtil jwtUtil = mock(JwtUtil.class);
         private final KakaoWithdrawalLoginService service = new KakaoWithdrawalLoginService(
                 authorizationClient,
                 kakaoUserClient,
+                validationService,
                 socialAccountRepository,
                 jwtUtil
         );
