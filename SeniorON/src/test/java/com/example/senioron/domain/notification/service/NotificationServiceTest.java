@@ -45,6 +45,7 @@ class NotificationServiceTest {
     private static final Long CHILD_ID = 1L;
     private static final Long PARENT_ID = 2L;
     private static final Long SENIOR_ID = 11L;
+    private static final Long CHILD_MEMBER_ID = 21L;
 
     private final NotificationRepository notificationRepository =
             org.mockito.Mockito.mock(NotificationRepository.class);
@@ -67,6 +68,8 @@ class NotificationServiceTest {
     private User child;
     private User parent;
     private Senior senior;
+    private FamilyMember childMember;
+    private NotificationSetting childSetting;
 
     @BeforeEach
     void setUp() {
@@ -102,11 +105,20 @@ class NotificationServiceTest {
 
         given(userRepository.findById(CHILD_ID)).willReturn(Optional.of(child));
         given(seniorRepository.findById(SENIOR_ID)).willReturn(Optional.of(senior));
+        childMember = FamilyMember.builder()
+                .id(CHILD_MEMBER_ID)
+                .user(child)
+                .family(family)
+                .managerType(ManagerType.PRIMARY)
+                .build();
+        childSetting = NotificationSetting.builder()
+                .familyMemberId(CHILD_MEMBER_ID)
+                .familyMember(childMember)
+                .build();
+
         given(familyMemberRepository.existsByUserAndFamily(child, family)).willReturn(true);
-        given(notificationSettingRepository.findById(PARENT_ID))
-                .willReturn(Optional.of(NotificationSetting.builder()
-                        .user(parent)
-                        .build()));
+        given(familyMemberRepository.findByUserAndFamily(child, family)).willReturn(Optional.of(childMember));
+        given(notificationSettingRepository.findById(CHILD_MEMBER_ID)).willReturn(Optional.of(childSetting));
     }
 
     @AfterEach
@@ -249,7 +261,7 @@ class NotificationServiceTest {
 
         assertThat(response.getType()).isEqualTo(NotificationSettingType.INACTIVITY);
         assertThat(response.getEnabled()).isTrue();
-        verify(notificationSettingRepository).findById(PARENT_ID);
+        verify(notificationSettingRepository).findById(CHILD_MEMBER_ID);
         verifyNoInteractions(deviceRepository);
     }
 
@@ -287,10 +299,11 @@ class NotificationServiceTest {
         senior = Senior.builder().seniorId(SENIOR_ID).family(family).registeredBy(child)
                 .parentUser(parent).latitude(37.5665).longitude(126.9780).build();
         given(seniorRepository.findById(SENIOR_ID)).willReturn(Optional.of(senior));
+        childSetting.updateOutingReturnEnabled(false);
         var response = notificationService.updateSetting(
                 CHILD_ID, SENIOR_ID, NotificationSettingType.OUTING_RETURN, true);
         assertThat(response.getEnabled()).isTrue();
-        assertThat(notificationService.isEnabled(senior, NotificationType.OUTING_RETURN)).isTrue();
+        assertThat(childSetting.getOutingReturnEnabled()).isTrue();
     }
 
     @Test
@@ -321,6 +334,79 @@ class NotificationServiceTest {
                 .asInstanceOf(type(BusinessException.class))
                 .extracting(BusinessException::getCode)
                 .isEqualTo(ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED);
+    }
+
+    @Test
+    void updateSettingChangesOnlyRequesterSetting() {
+        User sub = User.builder().usersId(4L).role(Role.CHILD).build();
+        FamilyMember subMember = FamilyMember.builder()
+                .id(22L).user(sub).family(family).managerType(ManagerType.SUB).build();
+        NotificationSetting subSetting = NotificationSetting.builder()
+                .familyMemberId(22L).familyMember(subMember).build();
+        given(notificationSettingRepository.findById(22L)).willReturn(Optional.of(subSetting));
+
+        notificationService.updateSetting(CHILD_ID, SENIOR_ID, NotificationSettingType.INACTIVITY, false);
+
+        assertThat(childSetting.getInactivityEnabled()).isFalse();
+        assertThat(subSetting.getInactivityEnabled()).isTrue();
+        verify(notificationSettingRepository).findById(CHILD_MEMBER_ID);
+        verify(notificationSettingRepository, org.mockito.Mockito.never()).findById(22L);
+    }
+
+    @Test
+    void homeSettingsCreatesDefaultSettingForRequester() {
+        given(notificationSettingRepository.findById(CHILD_MEMBER_ID)).willReturn(Optional.empty());
+        given(notificationSettingRepository.saveAndFlush(org.mockito.ArgumentMatchers.any(NotificationSetting.class)))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        var home = notificationService.getHomeSettings(CHILD_ID, SENIOR_ID);
+
+        assertThat(home.getEnabledCount()).isEqualTo(3);
+        verify(notificationSettingRepository).saveAndFlush(org.mockito.ArgumentMatchers.argThat(
+                setting -> setting.getFamilyMember() == childMember));
+    }
+
+    @Test
+    void eventIsDispatchedOnlyToReceiversWithSettingEnabled() {
+        User sub = User.builder().usersId(4L).role(Role.CHILD).build();
+        FamilyMember subMember = FamilyMember.builder()
+                .id(22L).user(sub).family(family).managerType(ManagerType.SUB).build();
+        childSetting.updateInactivityEnabled(false);
+        given(familyMemberRepository.findAllBySeniorIdAndUserRole(SENIOR_ID, Role.CHILD))
+                .willReturn(List.of(childMember, subMember));
+        given(notificationSettingRepository.findAllById(List.of(CHILD_MEMBER_ID, 22L)))
+                .willReturn(List.of(childSetting));
+        given(deviceRepository.findAllByUserIn(List.of(sub))).willReturn(List.of());
+
+        Event event = Event.builder().eventId(300L).triggeredUser(parent).user(parent)
+                .senior(senior).eventType(EventType.INACTIVITY).build();
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            var result = notificationService.createFormEvent(event);
+
+            assertThat(result.receiverCount()).isEqualTo(1);
+            assertThat(result.targets()).extracting(
+                            com.example.senioron.domain.notification.dto.NotificationDispatchTarget::receiverId)
+                    .containsExactly(4L);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void eventIsNotDispatchedWhenAllReceiversDisabledSetting() {
+        childSetting.updateRiskLinkEnabled(false);
+        given(familyMemberRepository.findAllBySeniorIdAndUserRole(SENIOR_ID, Role.CHILD))
+                .willReturn(List.of(childMember));
+        given(notificationSettingRepository.findAllById(List.of(CHILD_MEMBER_ID)))
+                .willReturn(List.of(childSetting));
+
+        Event event = Event.builder().eventId(301L).triggeredUser(parent).user(parent)
+                .senior(senior).eventType(EventType.RISK_LINK).build();
+        var result = notificationService.createFormEvent(event);
+
+        assertThat(result.reason()).isEqualTo("SETTING_DISABLED");
+        verify(notificationRepository, org.mockito.Mockito.never()).saveAll(org.mockito.ArgumentMatchers.any());
     }
 
     @Test

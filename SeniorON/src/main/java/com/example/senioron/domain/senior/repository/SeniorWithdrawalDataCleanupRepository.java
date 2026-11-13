@@ -41,7 +41,6 @@ public class SeniorWithdrawalDataCleanupRepository {
 
         execute("DELETE FROM HomeSetting setting WHERE setting.user = :parentUser", parentUser);
         execute("DELETE FROM InactivitySetting setting WHERE setting.user = :parentUser", parentUser);
-        execute("DELETE FROM NotificationSetting setting WHERE setting.user = :parentUser", parentUser);
         execute("DELETE FROM AccountRecoveryVerificationCode code WHERE code.user = :parentUser", parentUser);
         execute("DELETE FROM FamilyPhotoView view WHERE view.parent = :parentUser", parentUser);
         deleteEmailVerificationData(parentUser.getEmail());
@@ -49,6 +48,15 @@ public class SeniorWithdrawalDataCleanupRepository {
         if (senior != null) {
             executeSenior("DELETE FROM SeniorReloginRequest request WHERE request.senior = :senior", senior);
             executeSenior("DELETE FROM SeniorPermissionSetting setting WHERE setting.senior = :senior", senior);
+            executeSenior("""
+                    DELETE FROM NotificationSetting setting
+                    WHERE setting.familyMember IN (
+                        SELECT member
+                        FROM FamilyMember member, Senior senior
+                        WHERE senior = :senior
+                          AND member.family = senior.family
+                    )
+                    """, senior);
             executeSenior("DELETE FROM FamilyPhotoSenior mapping WHERE mapping.senior = :senior", senior);
         }
     }
