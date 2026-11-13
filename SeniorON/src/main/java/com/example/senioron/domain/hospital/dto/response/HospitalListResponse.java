@@ -1,3 +1,4 @@
+
 package com.example.senioron.domain.hospital.dto.response;
 
 import com.example.senioron.domain.hospital.entity.HospitalReminderType;
@@ -35,14 +36,14 @@ public class HospitalListResponse {
 
     @Schema(
             description = "진료일",
-            example = "2026-06-22"
+            example = "2026-11-20"
     )
     private LocalDate scheduleDate;
 
     @JsonFormat(pattern = "HH:mm")
     @Schema(
             description = "진료 시간",
-            example = "10:30"
+            example = "14:00"
     )
     private LocalTime scheduleTime;
 
@@ -56,4 +57,12 @@ public class HospitalListResponse {
             example = "DAY_BEFORE"
     )
     private HospitalReminderType reminderType;
+
+    @JsonFormat(pattern = "HH:mm")
+    @Schema(
+            description = "알림 발송 시간",
+            example = "09:00",
+            nullable = true
+    )
+    private LocalTime reminderTime;
 }
