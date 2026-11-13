@@ -1,3 +1,4 @@
+
 package com.example.senioron.domain.hospital.entity;
 
 import com.example.senioron.common.entity.BaseEntity;
@@ -68,21 +69,39 @@ public class Hospital extends BaseEntity {
     @Column(nullable = false)
     private HospitalReminderType reminderType;
 
+    @Column(name = "reminder_time")
+    private LocalTime reminderTime;
+
     @Column(name = "reminder_sent_at")
     private LocalDateTime reminderSentAt;
+
+    public LocalTime getEffectiveReminderTime() {
+        if (reminderType == null
+                || reminderType == HospitalReminderType.NONE) {
+            return null;
+        }
+
+        return reminderTime != null
+                ? reminderTime
+                : scheduleTime;
+    }
 
     public void updateHospital(
             String hospitalName,
             String department,
             LocalDate scheduleDate,
             LocalTime scheduleTime,
-            HospitalReminderType reminderType
+            HospitalReminderType reminderType,
+            LocalTime reminderTime
     ) {
         this.hospitalName = hospitalName;
         this.department = department;
         this.scheduleDate = scheduleDate;
         this.scheduleTime = scheduleTime;
         this.reminderType = reminderType;
+        this.reminderTime = reminderType == HospitalReminderType.NONE
+                ? null
+                : reminderTime;
         this.reminderSentAt = null;
     }
 }

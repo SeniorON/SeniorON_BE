@@ -1,3 +1,4 @@
+
 package com.example.senioron.domain.hospital.scheduler;
 
 import com.example.senioron.domain.device.entity.Device;
@@ -38,16 +39,10 @@ public class HospitalNotificationScheduler {
             "HOSPITAL_NOTIFICATION";
 
     private final HospitalRepository hospitalRepository;
-
-    private final HospitalNotificationCheckpointRepository
-            checkpointRepository;
-
+    private final HospitalNotificationCheckpointRepository checkpointRepository;
     private final DeviceRepository deviceRepository;
-
     private final FcmSender fcmSender;
-
     private final PlatformTransactionManager transactionManager;
-
     private final EntityManager entityManager;
 
     @Scheduled(
@@ -61,9 +56,7 @@ public class HospitalNotificationScheduler {
                         .withNano(0);
 
         executeTransaction(() ->
-                processHospitalNotificationsWithLock(
-                        currentMinute
-                )
+                processHospitalNotificationsWithLock(currentMinute)
         );
     }
 
@@ -77,35 +70,26 @@ public class HospitalNotificationScheduler {
 
         HospitalNotificationCheckpoint checkpoint =
                 checkpointRepository
-                        .findByJobNameForUpdate(
-                                CHECKPOINT_JOB_NAME
-                        )
+                        .findByJobNameForUpdate(CHECKPOINT_JOB_NAME)
                         .orElseThrow(() ->
                                 new IllegalStateException(
                                         "병원 알림 체크포인트를 찾을 수 없습니다."
                                 )
                         );
 
-        NotificationBatch notificationBatch =
-                loadNotificationBatch(
-                        currentMinute,
-                        checkpoint.getLastProcessedAt()
-                );
+        NotificationBatch notificationBatch = loadNotificationBatch(
+                currentMinute,
+                checkpoint.getLastProcessedAt()
+        );
 
-        boolean allSucceeded =
-                sendNotifications(
-                        notificationBatch.notifications(),
-                        currentMinute
-                );
+        boolean allSucceeded = sendNotifications(
+                notificationBatch.notifications(),
+                currentMinute
+        );
 
         if (allSucceeded) {
-            checkpoint.updateLastProcessedAt(
-                    currentMinute
-            );
-
-            checkpointRepository.save(
-                    checkpoint
-            );
+            checkpoint.updateLastProcessedAt(currentMinute);
+            checkpointRepository.save(checkpoint);
         }
     }
 
@@ -114,9 +98,7 @@ public class HospitalNotificationScheduler {
             LocalDateTime savedCheckpoint
     ) {
         LocalDateTime fromInclusive =
-                savedCheckpoint.isAfter(
-                        currentMinute
-                )
+                savedCheckpoint.isAfter(currentMinute)
                         ? currentMinute.minusMinutes(1)
                         : savedCheckpoint;
 
@@ -124,26 +106,23 @@ public class HospitalNotificationScheduler {
                 fromInclusive.toLocalDate();
 
         LocalDate endScheduleDate =
-                currentMinute
-                        .plusDays(1)
-                        .toLocalDate();
+                currentMinute.plusDays(1).toLocalDate();
 
-        List<Hospital> hospitals =
-                hospitalRepository
-                        .findPendingReminderCandidates(
-                                HospitalReminderType.NONE,
-                                startScheduleDate,
-                                endScheduleDate
+        List<Hospital> hospitals = hospitalRepository
+                .findPendingReminderCandidates(
+                        HospitalReminderType.NONE,
+                        startScheduleDate,
+                        endScheduleDate
+                )
+                .stream()
+                .filter(hospital ->
+                        isReminderDueBetween(
+                                hospital,
+                                fromInclusive,
+                                currentMinute
                         )
-                        .stream()
-                        .filter(hospital ->
-                                isReminderDueBetween(
-                                        hospital,
-                                        fromInclusive,
-                                        currentMinute
-                                )
-                        )
-                        .toList();
+                )
+                .toList();
 
         if (hospitals.isEmpty()) {
             return new NotificationBatch(
@@ -156,8 +135,7 @@ public class HospitalNotificationScheduler {
                 new LinkedHashMap<>();
 
         for (Hospital hospital : hospitals) {
-            User parentUser =
-                    hospital.getUser();
+            User parentUser = hospital.getUser();
 
             parentUsersById.putIfAbsent(
                     parentUser.getUsersId(),
@@ -172,14 +150,10 @@ public class HospitalNotificationScheduler {
                         )
                 );
 
-        Map<Long, List<DeviceTarget>>
-                parentDevicesByUserId =
-                groupDevicesByUserId(
-                        parentDevices
-                );
+        Map<Long, List<DeviceTarget>> parentDevicesByUserId =
+                groupDevicesByUserId(parentDevices);
 
-        Map<Long, List<Long>>
-                familyIdsByParentUserId =
+        Map<Long, List<Long>> familyIdsByParentUserId =
                 findFamilyIdsByUserIds(
                         new ArrayList<>(
                                 parentUsersById.keySet()
@@ -193,22 +167,18 @@ public class HospitalNotificationScheduler {
                         .distinct()
                         .toList();
 
-        Map<Long, List<DeviceTarget>>
-                childDevicesByFamilyId =
+        Map<Long, List<DeviceTarget>> childDevicesByFamilyId =
                 findChildDeviceTargetsByFamilyIds(
                         targetFamilyIds
                 );
 
-        List<HospitalReminderNotification>
-                notifications =
+        List<HospitalReminderNotification> notifications =
                 new ArrayList<>();
 
         for (Hospital hospital : hospitals) {
-            User parentUser =
-                    hospital.getUser();
+            User parentUser = hospital.getUser();
 
-            Map<Long, DeviceTarget>
-                    devicesByDeviceId =
+            Map<Long, DeviceTarget> devicesByDeviceId =
                     new LinkedHashMap<>();
 
             for (DeviceTarget device :
@@ -253,9 +223,7 @@ public class HospitalNotificationScheduler {
 
         return new NotificationBatch(
                 fromInclusive,
-                List.copyOf(
-                        notifications
-                )
+                List.copyOf(notifications)
         );
     }
 
@@ -269,44 +237,35 @@ public class HospitalNotificationScheduler {
             return familyIdsByUserId;
         }
 
-        List<Object[]> rows =
-                entityManager.createQuery(
-                                """
-                                SELECT familyMember.user.usersId,
-                                       familyMember.family.familyId
-                                FROM FamilyMember familyMember
-                                WHERE familyMember.user.usersId IN :userIds
-                                """,
-                                Object[].class
-                        )
-                        .setParameter(
-                                "userIds",
-                                userIds
-                        )
-                        .getResultList();
+        List<Object[]> rows = entityManager.createQuery(
+                        """
+                        SELECT familyMember.user.usersId,
+                               familyMember.family.familyId
+                        FROM FamilyMember familyMember
+                        WHERE familyMember.user.usersId IN :userIds
+                        """,
+                        Object[].class
+                )
+                .setParameter("userIds", userIds)
+                .getResultList();
 
         for (Object[] row : rows) {
-            Long userId =
-                    (Long) row[0];
-
-            Long familyId =
-                    (Long) row[1];
+            Long userId = (Long) row[0];
+            Long familyId = (Long) row[1];
 
             familyIdsByUserId
                     .computeIfAbsent(
                             userId,
-                            ignored ->
-                                    new ArrayList<>()
+                            ignored -> new ArrayList<>()
                     )
-                    .add(
-                            familyId
-                    );
+                    .add(familyId);
         }
 
         return familyIdsByUserId;
     }
 
-    private Map<Long, List<DeviceTarget>> findChildDeviceTargetsByFamilyIds(
+    private Map<Long, List<DeviceTarget>>
+    findChildDeviceTargetsByFamilyIds(
             List<Long> familyIds
     ) {
         Map<Long, List<DeviceTarget>> devicesByFamilyId =
@@ -316,41 +275,30 @@ public class HospitalNotificationScheduler {
             return devicesByFamilyId;
         }
 
-        List<Object[]> rows =
-                entityManager.createQuery(
-                                """
-                                SELECT DISTINCT familyMember.family.familyId,
-                                                device
-                                FROM Device device
-                                JOIN device.user childUser
-                                JOIN childUser.familyMembers familyMember
-                                WHERE familyMember.family.familyId IN :familyIds
-                                AND childUser.role = :role
-                                """,
-                                Object[].class
-                        )
-                        .setParameter(
-                                "familyIds",
-                                familyIds
-                        )
-                        .setParameter(
-                                "role",
-                                Role.CHILD
-                        )
-                        .getResultList();
+        List<Object[]> rows = entityManager.createQuery(
+                        """
+                        SELECT DISTINCT familyMember.family.familyId,
+                                        device
+                        FROM Device device
+                        JOIN device.user childUser
+                        JOIN childUser.familyMembers familyMember
+                        WHERE familyMember.family.familyId IN :familyIds
+                          AND childUser.role = :role
+                        """,
+                        Object[].class
+                )
+                .setParameter("familyIds", familyIds)
+                .setParameter("role", Role.CHILD)
+                .getResultList();
 
         for (Object[] row : rows) {
-            Long familyId =
-                    (Long) row[0];
-
-            Device device =
-                    (Device) row[1];
+            Long familyId = (Long) row[0];
+            Device device = (Device) row[1];
 
             devicesByFamilyId
                     .computeIfAbsent(
                             familyId,
-                            ignored ->
-                                    new ArrayList<>()
+                            ignored -> new ArrayList<>()
                     )
                     .add(
                             new DeviceTarget(
@@ -367,17 +315,15 @@ public class HospitalNotificationScheduler {
             Hospital hospital,
             List<DeviceTarget> devices
     ) {
-        String hospitalName =
-                getSafeValue(
-                        hospital.getHospitalName(),
-                        "병원"
-                );
+        String hospitalName = getSafeValue(
+                hospital.getHospitalName(),
+                "병원"
+        );
 
-        String department =
-                getSafeValue(
-                        hospital.getDepartment(),
-                        "진료"
-                );
+        String department = getSafeValue(
+                hospital.getDepartment(),
+                "진료"
+        );
 
         String dayText =
                 hospital.getReminderType()
@@ -385,8 +331,7 @@ public class HospitalNotificationScheduler {
                         ? "내일"
                         : "오늘";
 
-        String title =
-                "병원 진료 일정 알림";
+        String title = "병원 진료 일정 알림";
 
         String body =
                 dayText
@@ -396,42 +341,32 @@ public class HospitalNotificationScheduler {
                         + department
                         + " 일정이 있어요.";
 
-        Map<String, String> data =
-                Map.of(
-                        "type",
-                        "HOSPITAL_REMINDER",
-                        "title",
-                        title,
-                        "body",
-                        body,
-                        "hospitalId",
-                        hospital.getHospital_id()
-                                .toString(),
-                        "hospitalName",
-                        hospitalName,
-                        "department",
-                        department,
-                        "scheduleDate",
-                        hospital.getScheduleDate()
-                                .toString(),
-                        "scheduleTime",
-                        hospital.getScheduleTime()
-                                .toString(),
-                        "reminderType",
-                        hospital.getReminderType()
-                                .name()
-                );
+        Map<String, String> data = Map.of(
+                "type", "HOSPITAL_REMINDER",
+                "title", title,
+                "body", body,
+                "hospitalId",
+                hospital.getHospital_id().toString(),
+                "hospitalName", hospitalName,
+                "department", department,
+                "scheduleDate",
+                hospital.getScheduleDate().toString(),
+                "scheduleTime",
+                hospital.getScheduleTime().toString(),
+                "reminderType",
+                hospital.getReminderType().name(),
+                "reminderTime",
+                hospital.getEffectiveReminderTime().toString()
+        );
 
         return new HospitalReminderNotification(
                 hospital.getHospital_id(),
-                hospital.getUser()
-                        .getUsersId(),
+                hospital.getUser().getUsersId(),
                 hospital.getScheduleDate(),
                 hospital.getScheduleTime(),
                 hospital.getReminderType(),
-                List.copyOf(
-                        devices
-                ),
+                hospital.getEffectiveReminderTime(),
+                List.copyOf(devices),
                 data
         );
     }
@@ -440,8 +375,7 @@ public class HospitalNotificationScheduler {
             List<HospitalReminderNotification> notifications,
             LocalDateTime processedAt
     ) {
-        boolean allSucceeded =
-                true;
+        boolean allSucceeded = true;
 
         for (HospitalReminderNotification notification
                 : notifications) {
@@ -449,13 +383,10 @@ public class HospitalNotificationScheduler {
             int failureCount = 0;
             int skippedCount = 0;
 
-            for (DeviceTarget device
-                    : notification.devices()) {
-                String deviceToken =
-                        device.deviceToken();
+            for (DeviceTarget device : notification.devices()) {
+                String deviceToken = device.deviceToken();
 
-                if (deviceToken == null
-                        || deviceToken.isBlank()) {
+                if (deviceToken == null || deviceToken.isBlank()) {
                     skippedCount++;
                     continue;
                 }
@@ -521,14 +452,14 @@ public class HospitalNotificationScheduler {
             HospitalReminderNotification notification,
             LocalDateTime sentAt
     ) {
-        int updatedCount =
-                hospitalRepository.markReminderSentAt(
-                        notification.hospitalId(),
-                        notification.scheduleDate(),
-                        notification.scheduleTime(),
-                        notification.reminderType(),
-                        sentAt
-                );
+        int updatedCount = hospitalRepository.markReminderSentAt(
+                notification.hospitalId(),
+                notification.scheduleDate(),
+                notification.scheduleTime(),
+                notification.reminderType(),
+                notification.reminderTime(),
+                sentAt
+        );
 
         if (updatedCount != 1) {
             throw new IllegalStateException(
@@ -544,20 +475,14 @@ public class HospitalNotificationScheduler {
             LocalDateTime fromInclusive,
             LocalDateTime toInclusive
     ) {
-        LocalDateTime reminderAt =
-                calculateReminderAt(
-                        hospital
-                );
+        LocalDateTime reminderAt = calculateReminderAt(hospital);
 
         if (reminderAt == null) {
             return false;
         }
 
-        return !reminderAt.isBefore(
-                fromInclusive
-        ) && !reminderAt.isAfter(
-                toInclusive
-        );
+        return !reminderAt.isBefore(fromInclusive)
+                && !reminderAt.isAfter(toInclusive);
     }
 
     private LocalDateTime calculateReminderAt(
@@ -573,38 +498,33 @@ public class HospitalNotificationScheduler {
 
         if (hospital.getReminderType()
                 == HospitalReminderType.DAY_BEFORE) {
-            reminderDate =
-                    hospital.getScheduleDate()
-                            .minusDays(1);
+            reminderDate = hospital.getScheduleDate().minusDays(1);
         } else {
-            reminderDate =
-                    hospital.getScheduleDate();
+            reminderDate = hospital.getScheduleDate();
         }
+
+        LocalTime reminderTime =
+                hospital.getEffectiveReminderTime();
 
         return LocalDateTime.of(
                 reminderDate,
-                hospital.getScheduleTime()
+                reminderTime
         );
     }
 
-    private Map<Long, List<DeviceTarget>>
-    groupDevicesByUserId(
+    private Map<Long, List<DeviceTarget>> groupDevicesByUserId(
             List<Device> devices
     ) {
-        Map<Long, List<DeviceTarget>>
-                devicesByUserId =
+        Map<Long, List<DeviceTarget>> devicesByUserId =
                 new LinkedHashMap<>();
 
         for (Device device : devices) {
-            Long userId =
-                    device.getUser()
-                            .getUsersId();
+            Long userId = device.getUser().getUsersId();
 
             devicesByUserId
                     .computeIfAbsent(
                             userId,
-                            ignored ->
-                                    new ArrayList<>()
+                            ignored -> new ArrayList<>()
                     )
                     .add(
                             new DeviceTarget(
@@ -617,13 +537,9 @@ public class HospitalNotificationScheduler {
         return devicesByUserId;
     }
 
-    private void executeTransaction(
-            Runnable action
-    ) {
+    private void executeTransaction(Runnable action) {
         TransactionTemplate transactionTemplate =
-                new TransactionTemplate(
-                        transactionManager
-                );
+                new TransactionTemplate(transactionManager);
 
         transactionTemplate.executeWithoutResult(
                 status -> action.run()
@@ -634,8 +550,7 @@ public class HospitalNotificationScheduler {
             String value,
             String fallback
     ) {
-        if (value == null
-                || value.isBlank()) {
+        if (value == null || value.isBlank()) {
             return fallback;
         }
 
@@ -654,6 +569,7 @@ public class HospitalNotificationScheduler {
             LocalDate scheduleDate,
             LocalTime scheduleTime,
             HospitalReminderType reminderType,
+            LocalTime reminderTime,
             List<DeviceTarget> devices,
             Map<String, String> data
     ) {

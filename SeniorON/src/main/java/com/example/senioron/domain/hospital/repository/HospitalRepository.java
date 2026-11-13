@@ -1,3 +1,4 @@
+
 package com.example.senioron.domain.hospital.repository;
 
 import com.example.senioron.domain.hospital.entity.Hospital;
@@ -44,15 +45,9 @@ public interface HospitalRepository
             ORDER BY h.scheduleDate ASC
             """)
     List<LocalDate> findUpcomingScheduleDates(
-            @Param("user")
-            User user,
-
-            @Param("today")
-            LocalDate today,
-
-            @Param("currentTime")
-            LocalTime currentTime,
-
+            @Param("user") User user,
+            @Param("today") LocalDate today,
+            @Param("currentTime") LocalTime currentTime,
             Pageable pageable
     );
 
@@ -73,24 +68,13 @@ public interface HospitalRepository
                      h.hospital_id ASC
             """)
     List<Hospital> findUpcomingHospitalsByDates(
-            @Param("user")
-            User user,
-
-            @Param("scheduleDates")
-            List<LocalDate> scheduleDates,
-
-            @Param("today")
-            LocalDate today,
-
-            @Param("currentTime")
-            LocalTime currentTime
+            @Param("user") User user,
+            @Param("scheduleDates") List<LocalDate> scheduleDates,
+            @Param("today") LocalDate today,
+            @Param("currentTime") LocalTime currentTime
     );
 
-    @EntityGraph(
-            attributePaths = {
-                    "user"
-            }
-    )
+    @EntityGraph(attributePaths = {"user"})
     @Query("""
             SELECT h
             FROM Hospital h
@@ -103,14 +87,9 @@ public interface HospitalRepository
                      h.hospital_id ASC
             """)
     List<Hospital> findPendingReminderCandidates(
-            @Param("noneType")
-            HospitalReminderType noneType,
-
-            @Param("startScheduleDate")
-            LocalDate startScheduleDate,
-
-            @Param("endScheduleDate")
-            LocalDate endScheduleDate
+            @Param("noneType") HospitalReminderType noneType,
+            @Param("startScheduleDate") LocalDate startScheduleDate,
+            @Param("endScheduleDate") LocalDate endScheduleDate
     );
 
     @Modifying(
@@ -125,21 +104,14 @@ public interface HospitalRepository
               AND h.scheduleDate = :scheduleDate
               AND h.scheduleTime = :scheduleTime
               AND h.reminderType = :reminderType
+              AND COALESCE(h.reminderTime, h.scheduleTime) = :reminderTime
             """)
     int markReminderSentAt(
-            @Param("hospitalId")
-            Long hospitalId,
-
-            @Param("scheduleDate")
-            LocalDate scheduleDate,
-
-            @Param("scheduleTime")
-            LocalTime scheduleTime,
-
-            @Param("reminderType")
-            HospitalReminderType reminderType,
-
-            @Param("sentAt")
-            LocalDateTime sentAt
+            @Param("hospitalId") Long hospitalId,
+            @Param("scheduleDate") LocalDate scheduleDate,
+            @Param("scheduleTime") LocalTime scheduleTime,
+            @Param("reminderType") HospitalReminderType reminderType,
+            @Param("reminderTime") LocalTime reminderTime,
+            @Param("sentAt") LocalDateTime sentAt
     );
 }
