@@ -129,7 +129,8 @@ public class FamilyPhotoController {
         ));
     }
 
-    @Operation(summary = "가족 사진 신고", description = "가족 사진을 신고 사유와 함께 신고합니다. " + "hide가 true이면 신고한 사용자에게 해당 사진이 더 이상 보이지 않습니다.")
+    @Operation(summary = "가족 사진 신고", description = "숨기지 않은 사진은 반복 신고할 수 있으며 신고마다 별도 이력으로 저장합니다. "
+            + "hide가 true이면 신고한 사용자에게 해당 사진이 더 이상 보이지 않고, 이후 해당 사진 재신고는 409로 응답합니다.")
     @PostMapping(value = "/{familyPhotoId}/reports", consumes = MediaType.APPLICATION_JSON_VALUE)
     public Response<Void> reportPhoto(
             @AuthenticationPrincipal User user,
@@ -140,7 +141,8 @@ public class FamilyPhotoController {
         return Response.ok();
     }
 
-    @Operation(summary = "가족 사진 게시자 신고", description = "사진을 올린 게시자를 신고 사유와 함께 신고합니다. " + "hide가 true이면 신고한 사용자에게 해당 게시자가 올린 사진이 모두 보이지 않습니다.")
+    @Operation(summary = "가족 사진 게시자 신고", description = "숨기지 않은 게시자는 반복 신고할 수 있으며 신고마다 별도 이력으로 저장합니다. "
+            + "hide가 true이면 신고한 사용자에게 해당 게시자가 올린 사진이 모두 보이지 않고, 이후 해당 게시자 재신고는 409로 응답합니다.")
     @PostMapping(value = "/{familyPhotoId}/uploader-reports", consumes = MediaType.APPLICATION_JSON_VALUE)
     public Response<Void> reportUploader(
             @AuthenticationPrincipal User user,

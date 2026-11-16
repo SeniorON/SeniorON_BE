@@ -30,8 +30,9 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -214,18 +215,17 @@ class FamilyPhotoReportServiceTest {
         verify(familyPhotoReportRepository, never()).saveAndFlush(any());
     }
 
-    @Test
-    void rejectsDuplicateReport() {
-        given(familyPhotoRepository.findAccessibleForReportByFamilyPhotoIdAndUser(40L, reporter))
-                .willReturn(Optional.of(photo));
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void rejectsReportOnAlreadyHiddenPhoto(boolean hide) {
         given(familyPhotoReportRepository
-                .existsByFamilyPhoto_FamilyPhotoIdAndReporter_UsersId(40L, 10L))
+                .existsByFamilyPhoto_FamilyPhotoIdAndReporter_UsersIdAndHiddenTrue(40L, 10L))
                 .willReturn(true);
 
         assertThatThrownBy(() -> familyPhotoReportService.reportPhoto(
                 reporter,
                 40L,
-                request(PhotoReportReason.ABUSE, null, false)
+                request(PhotoReportReason.ABUSE, null, hide)
         ))
                 .isInstanceOf(BusinessException.class)
                 .asInstanceOf(type(BusinessException.class))
@@ -233,44 +233,8 @@ class FamilyPhotoReportServiceTest {
                 .isEqualTo(ErrorCode.FAMILY_PHOTO_ALREADY_REPORTED);
 
         verify(familyPhotoReportRepository, never()).saveAndFlush(any());
-    }
-
-    @Test
-    void rejectsRepeatedReportOnHiddenPhotoAsDuplicate() {
-        // 숨김 신고한 사진은 접근 조회에서 제외되지만 404가 아니라 중복 신고로 응답한다.
-        given(familyPhotoReportRepository
-                .existsByFamilyPhoto_FamilyPhotoIdAndReporter_UsersId(40L, 10L))
-                .willReturn(true);
-        given(familyPhotoRepository.findAccessibleForReportByFamilyPhotoIdAndUser(40L, reporter))
-                .willReturn(Optional.empty());
-
-        assertThatThrownBy(() -> familyPhotoReportService.reportPhoto(
-                reporter,
-                40L,
-                request(PhotoReportReason.ABUSE, null, true)
-        ))
-                .isInstanceOf(BusinessException.class)
-                .asInstanceOf(type(BusinessException.class))
-                .extracting(BusinessException::getCode)
-                .isEqualTo(ErrorCode.FAMILY_PHOTO_ALREADY_REPORTED);
-    }
-
-    @Test
-    void convertsConcurrentDuplicateInsertToAlreadyReported() {
-        given(familyPhotoRepository.findAccessibleForReportByFamilyPhotoIdAndUser(40L, reporter))
-                .willReturn(Optional.of(photo));
-        given(familyPhotoReportRepository.saveAndFlush(any()))
-                .willThrow(new DataIntegrityViolationException("uk_family_photo_report_photo_reporter"));
-
-        assertThatThrownBy(() -> familyPhotoReportService.reportPhoto(
-                reporter,
-                40L,
-                request(PhotoReportReason.ABUSE, null, true)
-        ))
-                .isInstanceOf(BusinessException.class)
-                .asInstanceOf(type(BusinessException.class))
-                .extracting(BusinessException::getCode)
-                .isEqualTo(ErrorCode.FAMILY_PHOTO_ALREADY_REPORTED);
+        verify(familyPhotoRepository, never())
+                .findAccessibleForReportByFamilyPhotoIdAndUser(any(), any());
     }
 
     private FamilyPhotoReportRequest request(

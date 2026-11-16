@@ -15,7 +15,6 @@ import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,7 +38,7 @@ public class FamilyUserReportService {
                 .findById(principal.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        // 숨김 필터가 없는 조회라서, 이미 숨긴 게시자의 사진도 조회돼 중복 신고(409)로 응답할 수 있다.
+        // 숨김 필터 없이 조회한 뒤, 이미 숨긴 게시자인지 별도로 확인한다.
         FamilyPhoto photo = familyPhotoRepository
                 .findAccessibleForReportByFamilyPhotoIdAndUser(
                         familyPhotoId,
@@ -56,7 +55,8 @@ public class FamilyUserReportService {
             throw new BusinessException(ErrorCode.FAMILY_USER_REPORT_SELF);
         }
 
-        if (familyUserReportRepository.existsByReportedUser_UsersIdAndReporter_UsersId(
+        // 숨기지 않은 신고는 다른 사진에서 같은 게시자를 신고해도 반복 접수한다.
+        if (familyUserReportRepository.existsByReportedUser_UsersIdAndReporter_UsersIdAndHiddenTrue(
                 uploader.getUsersId(),
                 currentUser.getUsersId()
         )) {
@@ -77,11 +77,7 @@ public class FamilyUserReportService {
                 .status(PhotoReportStatus.PENDING)
                 .build();
 
-        try {
-            familyUserReportRepository.saveAndFlush(report);
-        } catch (DataIntegrityViolationException e) {
-            throw new BusinessException(ErrorCode.FAMILY_USER_ALREADY_REPORTED);
-        }
+        familyUserReportRepository.saveAndFlush(report);
     }
 
     // 사용자는 여러 가족에 속할 수 있어, 관리자 상세의 시니어 코드·역할 기준이 될 시니어를 정한다.
