@@ -10,6 +10,7 @@ import com.example.senioron.domain.socialaccount.entity.SocialAccount;
 import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.entity.UserStatus;
+import com.example.senioron.domain.user.entity.RefreshToken;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.domain.user.service.RefreshTokenService;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
@@ -117,8 +118,14 @@ public class SocialSignupTransactionService {
                 "[JWT] refresh token save start deviceIdentifierPresent={}",
                 !isBlank(request.getDeviceIdentifier())
         );
+        RefreshToken loginSession;
         try {
-            refreshTokenService.saveOrRotate(socialAccount.getUser(), request.getDeviceIdentifier(), refreshToken);
+            loginSession = refreshTokenService.saveOrRotate(
+                    socialAccount.getUser(),
+                    request.getDeviceIdentifier(),
+                    refreshToken,
+                    request.isKeepLoggedIn()
+            );
             log.info("[JWT] refresh token save complete saveOrRotateSuccess=true");
         } catch (RuntimeException e) {
             log.warn(
@@ -134,7 +141,10 @@ public class SocialSignupTransactionService {
         log.info("[JWT] access token creation start");
         String accessToken;
         try {
-            accessToken = jwtUtil.createAccessToken(socialAccount.getUser());
+            accessToken = jwtUtil.createAccessToken(
+                    socialAccount.getUser(),
+                    loginSession.getSessionId()
+            );
             log.info("[JWT] access token creation complete");
         } catch (RuntimeException e) {
             log.warn(

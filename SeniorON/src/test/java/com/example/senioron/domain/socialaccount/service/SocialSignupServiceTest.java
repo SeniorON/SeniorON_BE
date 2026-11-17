@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
@@ -23,6 +25,7 @@ import com.example.senioron.domain.socialaccount.entity.SocialAccount;
 import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.entity.Role;
+import com.example.senioron.domain.user.entity.RefreshToken;
 import com.example.senioron.domain.user.entity.UserStatus;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.domain.user.service.RefreshTokenService;
@@ -82,8 +85,13 @@ class SocialSignupServiceTest {
                 socialSignupTransactionService
         );
 
-        given(jwtUtil.createAccessToken(any(User.class))).willReturn(ACCESS_TOKEN);
+        given(jwtUtil.createAccessToken(any(User.class), anyString())).willReturn(ACCESS_TOKEN);
         given(jwtUtil.createRefreshToken(any(User.class))).willReturn(REFRESH_TOKEN);
+        given(refreshTokenService.saveOrRotate(any(User.class), any(), eq(REFRESH_TOKEN), anyBoolean()))
+                .willAnswer(invocation -> RefreshToken.builder()
+                        .user(invocation.getArgument(0))
+                        .sessionId("social-signup-session")
+                        .build());
         given(userRepository.saveAndFlush(any(User.class))).willAnswer(invocation -> {
             User user = invocation.getArgument(0);
             ReflectionTestUtils.setField(user, "usersId", 1L);
@@ -112,7 +120,7 @@ class SocialSignupServiceTest {
         verify(socialAccountRepository).saveAndFlush(any(SocialAccount.class));
         verify(deviceService).registerDevice(any(User.class), isNull());
         verify(deviceService, never()).updateFcmToken(any(User.class), any(), any());
-        verify(refreshTokenService).saveOrRotate(any(User.class), isNull(), eq(REFRESH_TOKEN));
+        verify(refreshTokenService).saveOrRotate(any(User.class), isNull(), eq(REFRESH_TOKEN), eq(false));
     }
 
     @Test
@@ -135,7 +143,7 @@ class SocialSignupServiceTest {
         verify(socialAccountRepository).saveAndFlush(any(SocialAccount.class));
         verify(deviceService).registerDevice(any(User.class), isNull());
         verify(deviceService, never()).updateFcmToken(any(User.class), any(), any());
-        verify(refreshTokenService).saveOrRotate(any(User.class), isNull(), eq(REFRESH_TOKEN));
+        verify(refreshTokenService).saveOrRotate(any(User.class), isNull(), eq(REFRESH_TOKEN), eq(false));
     }
 
     @Test
@@ -152,7 +160,7 @@ class SocialSignupServiceTest {
         assertThat(response.getRefreshToken()).isEqualTo(REFRESH_TOKEN);
         verify(deviceService).registerDevice(any(User.class), eq(DEVICE_IDENTIFIER));
         verify(deviceService).updateFcmToken(any(User.class), eq(FCM_TOKEN), eq(DEVICE_IDENTIFIER));
-        verify(refreshTokenService).saveOrRotate(any(User.class), eq(DEVICE_IDENTIFIER), eq(REFRESH_TOKEN));
+        verify(refreshTokenService).saveOrRotate(any(User.class), eq(DEVICE_IDENTIFIER), eq(REFRESH_TOKEN), eq(false));
     }
 
     @Test

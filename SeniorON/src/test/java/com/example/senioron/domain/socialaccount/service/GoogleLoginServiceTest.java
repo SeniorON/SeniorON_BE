@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
@@ -17,6 +18,7 @@ import com.example.senioron.domain.socialaccount.entity.LoginProvider;
 import com.example.senioron.domain.socialaccount.entity.SocialAccount;
 import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
 import com.example.senioron.domain.user.entity.Role;
+import com.example.senioron.domain.user.entity.RefreshToken;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.domain.user.service.RefreshTokenService;
@@ -62,6 +64,12 @@ class GoogleLoginServiceTest {
                 firebaseIdTokenVerifier,
                 googleLoginTransactionService
         );
+        given(refreshTokenService.saveOrRotate(any(), any(), any(), anyBoolean()))
+                .willAnswer(invocation -> RefreshToken.builder()
+                        .user(invocation.getArgument(0))
+                        .sessionId("google-session")
+                        .build());
+        given(jwtUtil.createAccessToken(any(User.class), anyString())).willReturn(ACCESS_TOKEN);
     }
 
     @Test
@@ -93,7 +101,6 @@ class GoogleLoginServiceTest {
                 .willReturn(new VerifiedFirebaseUser(PROVIDER_ID, EMAIL, NAME, true));
         given(socialAccountRepository.findByProviderAndProviderId(LoginProvider.GOOGLE, PROVIDER_ID))
                 .willReturn(Optional.of(socialAccount));
-        given(jwtUtil.createAccessToken(user)).willReturn(ACCESS_TOKEN);
         given(jwtUtil.createRefreshToken(user)).willReturn(REFRESH_TOKEN);
 
         GoogleLoginResponse response = googleLoginService.googleLogin(createRequest());
@@ -104,7 +111,7 @@ class GoogleLoginServiceTest {
         assertThat(response.getName()).isEqualTo(NAME);
         assertThat(response.getRole()).isEqualTo(Role.CHILD);
         assertThat(response.isNewUser()).isFalse();
-        verify(refreshTokenService).saveOrRotate(user, null, REFRESH_TOKEN);
+        verify(refreshTokenService).saveOrRotate(user, null, REFRESH_TOKEN, false);
         verify(userRepository, never()).findByEmail(any());
     }
 
@@ -126,7 +133,7 @@ class GoogleLoginServiceTest {
         verify(userRepository, never()).findByEmail(any());
         verify(jwtUtil, never()).createAccessToken(any());
         verify(jwtUtil, never()).createRefreshToken(any());
-        verify(refreshTokenService, never()).saveOrRotate(any(), any(), any());
+        verify(refreshTokenService, never()).saveOrRotate(any(), any(), any(), anyBoolean());
         verify(deviceService, never()).registerDevice(any(), any());
         verify(deviceService, never()).updateFcmToken(any(), any(), any());
     }
@@ -155,14 +162,13 @@ class GoogleLoginServiceTest {
                 .willReturn(new VerifiedFirebaseUser(PROVIDER_ID, EMAIL, NAME));
         given(socialAccountRepository.findByProviderAndProviderId(LoginProvider.GOOGLE, PROVIDER_ID))
                 .willReturn(Optional.of(socialAccount));
-        given(jwtUtil.createAccessToken(user)).willReturn(ACCESS_TOKEN);
         given(jwtUtil.createRefreshToken(user)).willReturn(REFRESH_TOKEN);
 
         googleLoginService.googleLogin(createRequest(FCM_TOKEN, DEVICE_IDENTIFIER));
 
         verify(deviceService).registerDevice(user, DEVICE_IDENTIFIER);
         verify(deviceService).updateFcmToken(user, FCM_TOKEN, DEVICE_IDENTIFIER);
-        verify(refreshTokenService).saveOrRotate(user, DEVICE_IDENTIFIER, REFRESH_TOKEN);
+        verify(refreshTokenService).saveOrRotate(user, DEVICE_IDENTIFIER, REFRESH_TOKEN, false);
     }
 
     @Test
@@ -173,14 +179,13 @@ class GoogleLoginServiceTest {
                 .willReturn(new VerifiedFirebaseUser(PROVIDER_ID, EMAIL, NAME));
         given(socialAccountRepository.findByProviderAndProviderId(LoginProvider.GOOGLE, PROVIDER_ID))
                 .willReturn(Optional.of(socialAccount));
-        given(jwtUtil.createAccessToken(user)).willReturn(ACCESS_TOKEN);
         given(jwtUtil.createRefreshToken(user)).willReturn(REFRESH_TOKEN);
 
         googleLoginService.googleLogin(createRequest(null, DEVICE_IDENTIFIER));
 
         verify(deviceService).registerDevice(user, DEVICE_IDENTIFIER);
         verify(deviceService, never()).updateFcmToken(any(), any(), any());
-        verify(refreshTokenService).saveOrRotate(user, DEVICE_IDENTIFIER, REFRESH_TOKEN);
+        verify(refreshTokenService).saveOrRotate(user, DEVICE_IDENTIFIER, REFRESH_TOKEN, false);
     }
 
     @Test

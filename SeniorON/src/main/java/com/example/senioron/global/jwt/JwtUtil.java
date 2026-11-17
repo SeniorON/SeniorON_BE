@@ -20,6 +20,7 @@ import java.util.UUID;
 public class JwtUtil {
 
     private static final String TOKEN_TYPE_CLAIM = "tokenType";
+    private static final String SESSION_ID_CLAIM = "sessionId";
     private static final String ACCESS_TOKEN_TYPE = "access";
     private static final String REFRESH_TOKEN_TYPE = "refresh";
     private static final String ADMIN_ACCESS_TOKEN_TYPE = "admin_access";
@@ -53,18 +54,26 @@ public class JwtUtil {
     }
 
     public String createAccessToken(User user) {
+        return createAccessToken(user, null);
+    }
+
+    public String createAccessToken(User user, String sessionId) {
         Date now = new Date();
         Date expiration = new Date(now.getTime() + accessTokenExpiration);
 
-        return Jwts.builder()
+        var builder = Jwts.builder()
                 .subject(String.valueOf(user.getUsersId()))
                 .claim("loginId", user.getLoginId())
                 .claim("name", user.getName())
                 .claim(TOKEN_TYPE_CLAIM, ACCESS_TOKEN_TYPE)
                 .issuedAt(now)
-                .expiration(expiration)
-                .signWith(secretKey)
-                .compact();
+                .expiration(expiration);
+
+        if (sessionId != null && !sessionId.isBlank()) {
+            builder.claim(SESSION_ID_CLAIM, sessionId);
+        }
+
+        return builder.signWith(secretKey).compact();
     }
 
     public String createRefreshToken(User user) {
@@ -142,6 +151,10 @@ public class JwtUtil {
 
     public boolean isRefreshToken(Claims claims) {
         return REFRESH_TOKEN_TYPE.equals(claims.get(TOKEN_TYPE_CLAIM, String.class));
+    }
+
+    public String getSessionId(Claims claims) {
+        return claims.get(SESSION_ID_CLAIM, String.class);
     }
 
     public LocalDateTime getRefreshTokenExpiresAt() {

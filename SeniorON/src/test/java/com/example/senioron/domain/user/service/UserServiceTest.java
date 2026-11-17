@@ -51,6 +51,10 @@ import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.jwt.JwtUtil;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -92,12 +96,15 @@ class UserServiceTest {
             "12345678901234567890123456789012", 3600000L, 1209600000L,
             "admin-test-secret-key-123456789012", 1800000L, 86400000L
     );
-    private final RefreshTokenService refreshTokenService = new RefreshTokenService(refreshTokenRepository, jwtUtil);
+    private MutableClock clock;
+    private RefreshTokenService refreshTokenService;
 
     private UserService userService;
 
     @BeforeEach
     void setUp() {
+        clock = new MutableClock(Instant.now());
+        refreshTokenService = new RefreshTokenService(refreshTokenRepository, jwtUtil, clock);
         userService = new UserService(
                 userRepository,
                 refreshTokenRepository,
@@ -287,6 +294,93 @@ class UserServiceTest {
         assertThat(response.getRefreshToken()).isNotEqualTo(loginResponse.getRefreshToken());
         assertThat(savedRefreshToken.isRevoked()).isFalse();
         assertThat(savedRefreshToken.getTokenHash()).isNotEqualTo(previousTokenHash);
+    }
+
+    @Test
+    void nonPersistentSessionRefreshesWhenItWasActiveWithinOneHour() {
+        User user = createUser(1L);
+        given(userRepository.findByLoginId("testId")).willReturn(Optional.of(user));
+        given(refreshTokenRepository.findByUserAndDeviceIdentifier(user, DEVICE_IDENTIFIER))
+                .willReturn(Optional.empty());
+
+        UserLoginResponse loginResponse = userService.login(createLoginRequest(null, DEVICE_IDENTIFIER));
+        RefreshToken savedRefreshToken = captureSavedRefreshToken();
+        given(refreshTokenRepository.findByTokenHash(savedRefreshToken.getTokenHash()))
+                .willReturn(Optional.of(savedRefreshToken));
+        clock.advance(Duration.ofMinutes(59));
+
+        TokenRefreshResponse response = userService.refreshToken(
+                createTokenRefreshRequest(loginResponse.getRefreshToken(), DEVICE_IDENTIFIER));
+
+        assertThat(response.getAccessToken()).isNotBlank();
+        assertThat(response.getRefreshToken()).isNotBlank();
+        assertThat(savedRefreshToken.isRevoked()).isFalse();
+        assertThat(savedRefreshToken.getLastActiveAt()).isEqualTo(clock.now());
+    }
+
+    @Test
+    void nonPersistentSessionCannotRefreshAfterOneHourOfInactivity() {
+        User user = createUser(1L);
+        given(userRepository.findByLoginId("testId")).willReturn(Optional.of(user));
+        given(refreshTokenRepository.findByUserAndDeviceIdentifier(user, DEVICE_IDENTIFIER))
+                .willReturn(Optional.empty());
+
+        UserLoginResponse loginResponse = userService.login(createLoginRequest(null, DEVICE_IDENTIFIER));
+        RefreshToken savedRefreshToken = captureSavedRefreshToken();
+        given(refreshTokenRepository.findByTokenHash(savedRefreshToken.getTokenHash()))
+                .willReturn(Optional.of(savedRefreshToken));
+        clock.advance(Duration.ofHours(1));
+
+        assertThatThrownBy(() -> userService.refreshToken(
+                createTokenRefreshRequest(loginResponse.getRefreshToken(), DEVICE_IDENTIFIER)))
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.EXPIRED_IDLE_SESSION);
+        assertThat(savedRefreshToken.isRevoked()).isTrue();
+    }
+
+    @Test
+    void persistentSessionCanRefreshAfterOneHourOfInactivity() {
+        User user = createUser(1L);
+        given(userRepository.findByLoginId("testId")).willReturn(Optional.of(user));
+        given(refreshTokenRepository.findByUserAndDeviceIdentifier(user, DEVICE_IDENTIFIER))
+                .willReturn(Optional.empty());
+
+        UserLoginResponse loginResponse = userService.login(
+                createLoginRequest(null, DEVICE_IDENTIFIER, true));
+        RefreshToken savedRefreshToken = captureSavedRefreshToken();
+        given(refreshTokenRepository.findByTokenHash(savedRefreshToken.getTokenHash()))
+                .willReturn(Optional.of(savedRefreshToken));
+        clock.advance(Duration.ofHours(2));
+
+        TokenRefreshResponse response = userService.refreshToken(
+                createTokenRefreshRequest(loginResponse.getRefreshToken(), DEVICE_IDENTIFIER));
+
+        assertThat(response.getAccessToken()).isNotBlank();
+        assertThat(savedRefreshToken.isKeepLoggedIn()).isTrue();
+        assertThat(savedRefreshToken.isRevoked()).isFalse();
+    }
+
+    @Test
+    void rotatedRefreshTokenCannotBeReused() {
+        User user = createUser(1L);
+        given(userRepository.findByLoginId("testId")).willReturn(Optional.of(user));
+        given(refreshTokenRepository.findByUserAndDeviceIdentifier(user, DEVICE_IDENTIFIER))
+                .willReturn(Optional.empty());
+
+        UserLoginResponse loginResponse = userService.login(createLoginRequest(null, DEVICE_IDENTIFIER));
+        RefreshToken savedRefreshToken = captureSavedRefreshToken();
+        String originalHash = savedRefreshToken.getTokenHash();
+        given(refreshTokenRepository.findByTokenHash(originalHash))
+                .willReturn(Optional.of(savedRefreshToken));
+
+        userService.refreshToken(createTokenRefreshRequest(loginResponse.getRefreshToken(), DEVICE_IDENTIFIER));
+
+        assertThatThrownBy(() -> userService.refreshToken(
+                createTokenRefreshRequest(loginResponse.getRefreshToken(), DEVICE_IDENTIFIER)))
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.INVALID_REFRESH_TOKEN);
     }
 
     @Test
@@ -1218,12 +1312,52 @@ class UserServiceTest {
     }
 
     private UserLoginRequest createLoginRequest(String fcmToken, String deviceIdentifier) {
+        return createLoginRequest(fcmToken, deviceIdentifier, false);
+    }
+
+    private UserLoginRequest createLoginRequest(
+            String fcmToken,
+            String deviceIdentifier,
+            boolean keepLoggedIn
+    ) {
         UserLoginRequest request = new UserLoginRequest();
         ReflectionTestUtils.setField(request, "loginId", "testId");
         ReflectionTestUtils.setField(request, "password", "password123!");
         ReflectionTestUtils.setField(request, "fcmToken", fcmToken);
         ReflectionTestUtils.setField(request, "deviceIdentifier", deviceIdentifier);
+        ReflectionTestUtils.setField(request, "keepLoggedIn", keepLoggedIn);
         return request;
+    }
+
+    private static final class MutableClock extends Clock {
+        private Instant instant;
+
+        private MutableClock(Instant instant) {
+            this.instant = instant;
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneId.systemDefault();
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return instant;
+        }
+
+        private void advance(Duration duration) {
+            instant = instant.plus(duration);
+        }
+
+        private LocalDateTime now() {
+            return LocalDateTime.now(this);
+        }
     }
 
     private TokenRefreshRequest createTokenRefreshRequest(String refreshToken) {

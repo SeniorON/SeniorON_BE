@@ -3,6 +3,7 @@ package com.example.senioron.global.jwt;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.domain.user.service.RefreshTokenService;
 import com.example.senioron.domain.admin.repository.AdminRepository;
 import com.example.senioron.global.config.SecurityErrorResponseWriter;
 import jakarta.servlet.FilterChain;
@@ -20,6 +21,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 
 class JwtAuthenticationFilterTest {
 
@@ -92,6 +94,34 @@ class JwtAuthenticationFilterTest {
         assertThat(authentication.getPrincipal()).isSameAs(user);
         verify(jwtUtil, times(1)).parseClaims(token);
         verify(filterChain).doFilter(request, response);
+    }
+
+    @Test
+    void rejectsAccessTokenWhenItsDeviceSessionIsIdleExpired() throws Exception {
+        JwtUtil jwtUtil = jwtUtil();
+        RefreshTokenService refreshTokenService = mock(RefreshTokenService.class);
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(
+                jwtUtil,
+                userRepository,
+                adminRepository,
+                securityErrorResponseWriter,
+                refreshTokenService
+        );
+        User user = createUser();
+        String token = jwtUtil.createAccessToken(user, "idle-session");
+        given(userRepository.findById(user.getUsersId())).willReturn(Optional.of(user));
+        given(refreshTokenService.authenticateAndRecordActivity(user, "idle-session"))
+                .willReturn(false);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/protected");
+        request.addHeader("Authorization", "Bearer " + token);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain filterChain = mock(FilterChain.class);
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        verify(filterChain, never()).doFilter(request, response);
     }
 
     @Test

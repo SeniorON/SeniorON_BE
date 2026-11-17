@@ -7,6 +7,8 @@ public record SeniorReloginReactivateRequest(
         String deviceIdentifier,
 
         @NotBlank
-        String deviceAuthToken
+        String deviceAuthToken,
+
+        boolean keepLoggedIn
 ) {
 }

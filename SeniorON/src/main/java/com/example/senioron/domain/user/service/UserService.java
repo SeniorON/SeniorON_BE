@@ -246,9 +246,14 @@ public class UserService {
             deviceService.updateFcmToken(user, request.getFcmToken(), request.getDeviceIdentifier());
         }
 
-        String accessToken = jwtUtil.createAccessToken(user);
         String refreshToken = jwtUtil.createRefreshToken(user);
-        refreshTokenService.saveOrRotate(user, request.getDeviceIdentifier(), refreshToken);
+        RefreshToken loginSession = refreshTokenService.saveOrRotate(
+                user,
+                request.getDeviceIdentifier(),
+                refreshToken,
+                request.isKeepLoggedIn()
+        );
+        String accessToken = jwtUtil.createAccessToken(user, loginSession.getSessionId());
 
         return UserLoginResponse.builder()
                 .usersId(user.getUsersId())
@@ -339,7 +344,8 @@ public class UserService {
         RefreshToken savedRefreshToken = refreshTokenRepository.findByTokenHash(tokenHash)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN));
 
-        if (!Objects.equals(savedRefreshToken.getUser().getUsersId(), usersId)) {
+        if (!Objects.equals(savedRefreshToken.getTokenHash(), tokenHash)
+                || !Objects.equals(savedRefreshToken.getUser().getUsersId(), usersId)) {
             throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
         }
 
@@ -347,8 +353,13 @@ public class UserService {
             throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
         }
 
-        if (savedRefreshToken.isExpired(LocalDateTime.now())) {
+        if (refreshTokenService.isExpired(savedRefreshToken)) {
             throw new BusinessException(ErrorCode.EXPIRED_REFRESH_TOKEN);
+        }
+
+        if (refreshTokenService.isIdleExpired(savedRefreshToken)) {
+            savedRefreshToken.revoke();
+            throw new BusinessException(ErrorCode.EXPIRED_IDLE_SESSION);
         }
 
         if (!Objects.equals(savedRefreshToken.getDeviceIdentifier(), request.getDeviceIdentifier())) {
@@ -358,9 +369,9 @@ public class UserService {
         User user = savedRefreshToken.getUser();
         validateActiveUser(user);
 
-        String newAccessToken = jwtUtil.createAccessToken(user);
         String newRefreshToken = jwtUtil.createRefreshToken(user);
-        savedRefreshToken.rotate(refreshTokenService.hashToken(newRefreshToken), jwtUtil.getRefreshTokenExpiresAt());
+        refreshTokenService.rotateAfterRefresh(savedRefreshToken, newRefreshToken);
+        String newAccessToken = jwtUtil.createAccessToken(user, savedRefreshToken.getSessionId());
 
         return TokenRefreshResponse.builder()
                 .accessToken(newAccessToken)

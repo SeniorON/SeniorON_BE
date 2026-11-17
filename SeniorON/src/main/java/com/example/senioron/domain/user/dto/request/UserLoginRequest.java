@@ -17,4 +17,6 @@ public class UserLoginRequest {
     private String fcmToken;
 
     private String deviceIdentifier;
+
+    private boolean keepLoggedIn;
 }

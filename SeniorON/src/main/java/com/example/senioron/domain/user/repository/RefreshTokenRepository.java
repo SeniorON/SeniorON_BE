@@ -10,6 +10,8 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
 
     Optional<RefreshToken> findByTokenHash(String tokenHash);
 
+    Optional<RefreshToken> findBySessionId(String sessionId);
+
     Optional<RefreshToken> findByUserAndDeviceIdentifier(User user, String deviceIdentifier);
 
     long deleteByExpiresAtBefore(LocalDateTime now);

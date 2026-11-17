@@ -51,9 +51,14 @@ public class GoogleLoginTransactionService {
                 registerDevice(user, request.getDeviceIdentifier());
         updateFcmTokenIfPresent(user, request.getFcmToken(), request.getDeviceIdentifier());
 
-        String accessToken = jwtUtil.createAccessToken(user);
         String refreshToken = jwtUtil.createRefreshToken(user);
-        refreshTokenService.saveOrRotate(user, request.getDeviceIdentifier(), refreshToken);
+        var loginSession = refreshTokenService.saveOrRotate(
+                user,
+                request.getDeviceIdentifier(),
+                refreshToken,
+                request.isKeepLoggedIn()
+        );
+        String accessToken = jwtUtil.createAccessToken(user, loginSession.getSessionId());
 
         return GoogleLoginResponse.builder()
                 .accessToken(accessToken)
