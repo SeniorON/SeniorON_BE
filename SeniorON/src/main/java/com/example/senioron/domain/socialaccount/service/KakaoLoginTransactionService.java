@@ -47,12 +47,17 @@ public class KakaoLoginTransactionService {
                 throw new BusinessException(ErrorCode.WITHDRAWN_USER);
             }
 
-            String accessToken = jwtUtil.createAccessToken(user);
             String refreshToken = jwtUtil.createRefreshToken(user);
             DeviceCredentialIssueResult deviceCredentialIssueResult =
                     registerDevice(user, request.getDeviceIdentifier());
             updateFcmTokenIfPresent(user, request.getFcmToken(), request.getDeviceIdentifier());
-            refreshTokenService.saveOrRotate(user, request.getDeviceIdentifier(), refreshToken);
+            var loginSession = refreshTokenService.saveOrRotate(
+                    user,
+                    request.getDeviceIdentifier(),
+                    refreshToken,
+                    request.isKeepLoggedIn()
+            );
+            String accessToken = jwtUtil.createAccessToken(user, loginSession.getSessionId());
 
             return KakaoLoginResponse.builder()
                     .accessToken(accessToken)

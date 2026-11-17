@@ -3,6 +3,8 @@ package com.example.senioron.domain.socialaccount.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
@@ -18,6 +20,7 @@ import com.example.senioron.domain.socialaccount.entity.LoginProvider;
 import com.example.senioron.domain.socialaccount.entity.SocialAccount;
 import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
 import com.example.senioron.domain.user.entity.Role;
+import com.example.senioron.domain.user.entity.RefreshToken;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.domain.user.service.RefreshTokenService;
@@ -101,7 +104,12 @@ class KakaoLoginServiceTest {
 
         given(socialAccountRepository.findByProviderAndProviderId(LoginProvider.KAKAO, KAKAO_PROVIDER_ID))
                 .willReturn(Optional.of(socialAccount));
-        given(jwtUtil.createAccessToken(user)).willReturn(ACCESS_TOKEN);
+        given(refreshTokenService.saveOrRotate(any(), any(), any(), anyBoolean()))
+                .willAnswer(invocation -> RefreshToken.builder()
+                        .user(invocation.getArgument(0))
+                        .sessionId("kakao-session")
+                        .build());
+        given(jwtUtil.createAccessToken(any(User.class), anyString())).willReturn(ACCESS_TOKEN);
         given(jwtUtil.createRefreshToken(user)).willReturn(REFRESH_TOKEN);
 
         KakaoLoginResponse response = transactionService.login(
@@ -117,7 +125,7 @@ class KakaoLoginServiceTest {
         assertThat(response.isNewUser()).isFalse();
         verify(deviceService).registerDevice(user, DEVICE_IDENTIFIER);
         verify(deviceService).updateFcmToken(user, FCM_TOKEN, DEVICE_IDENTIFIER);
-        verify(refreshTokenService).saveOrRotate(user, DEVICE_IDENTIFIER, REFRESH_TOKEN);
+        verify(refreshTokenService).saveOrRotate(user, DEVICE_IDENTIFIER, REFRESH_TOKEN, false);
         verify(userRepository, never()).findByEmail(any());
     }
 
@@ -144,14 +152,19 @@ class KakaoLoginServiceTest {
 
         given(socialAccountRepository.findByProviderAndProviderId(LoginProvider.KAKAO, KAKAO_PROVIDER_ID))
                 .willReturn(Optional.of(socialAccount));
-        given(jwtUtil.createAccessToken(user)).willReturn(ACCESS_TOKEN);
+        given(refreshTokenService.saveOrRotate(any(), any(), any(), anyBoolean()))
+                .willAnswer(invocation -> RefreshToken.builder()
+                        .user(invocation.getArgument(0))
+                        .sessionId("kakao-session")
+                        .build());
+        given(jwtUtil.createAccessToken(any(User.class), anyString())).willReturn(ACCESS_TOKEN);
         given(jwtUtil.createRefreshToken(user)).willReturn(REFRESH_TOKEN);
 
         transactionService.login(request, createKakaoUserInfo());
 
         verify(deviceService).registerDevice(user, DEVICE_IDENTIFIER);
         verify(deviceService, never()).updateFcmToken(any(), any(), any());
-        verify(refreshTokenService).saveOrRotate(user, DEVICE_IDENTIFIER, REFRESH_TOKEN);
+        verify(refreshTokenService).saveOrRotate(user, DEVICE_IDENTIFIER, REFRESH_TOKEN, false);
     }
 
     @Test

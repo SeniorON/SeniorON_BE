@@ -103,9 +103,14 @@ public class SeniorReloginRequestService {
         User parentUser = reloginRequest.getSenior().getParentUser();
         validateActiveUser(parentUser);
 
-        String accessToken = jwtUtil.createAccessToken(parentUser);
         String refreshToken = jwtUtil.createRefreshToken(parentUser);
-        refreshTokenService.saveOrRotate(parentUser, request.deviceIdentifier(), refreshToken);
+        var loginSession = refreshTokenService.saveOrRotate(
+                parentUser,
+                request.deviceIdentifier(),
+                refreshToken,
+                request.keepLoggedIn()
+        );
+        String accessToken = jwtUtil.createAccessToken(parentUser, loginSession.getSessionId());
         reloginRequest.use();
 
         return TokenRefreshResponse.builder()

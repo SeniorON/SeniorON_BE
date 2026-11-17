@@ -576,7 +576,7 @@ class SeniorReloginRequestServiceTest {
     }
 
     private SeniorReloginReactivateRequest reactivateRequest(String deviceIdentifier, String deviceAuthToken) {
-        return new SeniorReloginReactivateRequest(deviceIdentifier, deviceAuthToken);
+        return new SeniorReloginReactivateRequest(deviceIdentifier, deviceAuthToken, false);
     }
 
     private SeniorDeviceFixture saveSeniorDeviceFixture(String deviceIdentifier) {

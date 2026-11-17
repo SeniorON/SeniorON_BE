@@ -14,4 +14,6 @@ public class KakaoLoginRequest {
     private String fcmToken;
 
     private String deviceIdentifier;
+
+    private boolean keepLoggedIn;
 }

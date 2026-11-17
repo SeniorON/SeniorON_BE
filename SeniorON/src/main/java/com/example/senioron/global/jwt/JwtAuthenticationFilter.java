@@ -6,16 +6,17 @@ import com.example.senioron.domain.admin.entity.AdminRole;
 import com.example.senioron.domain.admin.repository.AdminRepository;
 import com.example.senioron.domain.user.entity.UserStatus;
 import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.domain.user.service.RefreshTokenService;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.config.SecurityErrorResponseWriter;
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
-import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -29,7 +30,6 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     public static final String JWT_AUTHENTICATION_TIME_ATTRIBUTE = "jwtAuthenticationTimeMs";
@@ -72,6 +72,31 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final UserRepository userRepository;
     private final AdminRepository adminRepository;
     private final SecurityErrorResponseWriter securityErrorResponseWriter;
+    private final RefreshTokenService refreshTokenService;
+
+    public JwtAuthenticationFilter(
+            JwtUtil jwtUtil,
+            UserRepository userRepository,
+            AdminRepository adminRepository,
+            SecurityErrorResponseWriter securityErrorResponseWriter
+    ) {
+        this(jwtUtil, userRepository, adminRepository, securityErrorResponseWriter, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public JwtAuthenticationFilter(
+            JwtUtil jwtUtil,
+            UserRepository userRepository,
+            AdminRepository adminRepository,
+            SecurityErrorResponseWriter securityErrorResponseWriter,
+            RefreshTokenService refreshTokenService
+    ) {
+        this.jwtUtil = jwtUtil;
+        this.userRepository = userRepository;
+        this.adminRepository = adminRepository;
+        this.securityErrorResponseWriter = securityErrorResponseWriter;
+        this.refreshTokenService = refreshTokenService;
+    }
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
@@ -123,6 +148,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                             elapsedMillis(dbStart), path);
 
                     if (user != null && user.getStatus() == UserStatus.ACTIVE) {
+                        String sessionId = jwtUtil.getSessionId(claims);
+                        if (sessionId != null && !sessionId.isBlank()
+                                && (refreshTokenService == null
+                                || !refreshTokenService.authenticateAndRecordActivity(user, sessionId))) {
+                            throw new JwtException("Login session is expired or invalid.");
+                        }
                         UsernamePasswordAuthenticationToken authentication =
                                 new UsernamePasswordAuthenticationToken(
                                         user,
@@ -134,6 +165,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     }
                 }
             }
+        } catch (ExpiredJwtException e) {
+            request.setAttribute(
+                    JWT_AUTHENTICATION_TIME_ATTRIBUTE,
+                    elapsedMillis(jwtAuthenticationStart)
+            );
+            request.setAttribute(CONTROLLER_SERVICE_AFTER_JWT_TIME_ATTRIBUTE, 0L);
+            SecurityContextHolder.clearContext();
+            securityErrorResponseWriter.write(
+                    response,
+                    isExpiredAccessToken(path, e)
+                            ? ErrorCode.EXPIRED_ACCESS_TOKEN
+                            : ErrorCode.UNAUTHORIZED
+            );
+            return;
         } catch (JwtException | IllegalArgumentException e) {
             request.setAttribute(
                     JWT_AUTHENTICATION_TIME_ATTRIBUTE,
@@ -188,6 +233,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         return null;
+    }
+
+    private boolean isExpiredAccessToken(String path, ExpiredJwtException exception) {
+        if (path.startsWith("/api/admin/")) {
+            return jwtUtil.isAdminAccessToken(exception.getClaims());
+        }
+
+        return jwtUtil.isAccessToken(exception.getClaims());
     }
 
     private long elapsedMillis(long startNanos) {
