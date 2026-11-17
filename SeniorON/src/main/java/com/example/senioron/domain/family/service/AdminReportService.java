@@ -20,6 +20,7 @@ import com.example.senioron.domain.family.repository.FamilyUserReportRepository;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.entity.UserStatus;
 import com.example.senioron.domain.user.util.UserNameMasker;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
@@ -110,7 +111,7 @@ public class AdminReportService {
                 : adminReportQueryRepository.countReportsOnUser(uploader.getUsersId());
 
         AdminPhotoReportDetailResponse.Photo photo = new AdminPhotoReportDetailResponse.Photo(
-                s3Service.getFileUrl(report.getImageKey()),
+                reportImageUrlOf(uploader, report.getImageKey()),
                 report.getFamilyPhoto() == null,
                 uploader == null ? null : uploader.getUsersId(),
                 uploader == null ? WITHDRAWN_NAME : uploader.getName(),
@@ -184,7 +185,7 @@ public class AdminReportService {
         AdminUserReportDetailResponse.ReportedPhoto reportedPhoto =
                 new AdminUserReportDetailResponse.ReportedPhoto(
                         reportPhoto == null ? null : reportPhoto.getFamilyPhotoId(),
-                        s3Service.getFileUrl(report.getImageKey()),
+                        reportImageUrlOf(reportedUser, report.getImageKey()),
                         reportPhoto == null
                 );
 
@@ -381,6 +382,13 @@ public class AdminReportService {
         } catch (IllegalArgumentException exception) {
             throw new BusinessException(ErrorCode.BAD_REQUEST);
         }
+    }
+
+    private String reportImageUrlOf(User uploader, String imageKey) {
+        if (uploader == null || uploader.getStatus() == UserStatus.WITHDRAWN) {
+            return null;
+        }
+        return s3Service.getFileUrl(imageKey);
     }
 
     // 검색어의 %와 _도 일반 문자로 찾도록 쿼리의 ESCAPE 문자(!)로 이스케이프한다.

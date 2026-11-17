@@ -2,6 +2,7 @@ package com.example.senioron.domain.family.repository;
 
 import com.example.senioron.domain.family.entity.FamilyUserReport;
 import com.example.senioron.domain.family.entity.PhotoReportStatus;
+import com.example.senioron.domain.user.entity.User;
 import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
@@ -13,6 +14,14 @@ import org.springframework.data.repository.query.Param;
 
 public interface FamilyUserReportRepository
         extends JpaRepository<FamilyUserReport, Long> {
+
+    @Query("""
+        SELECT report.imageKey
+        FROM FamilyUserReport report
+        WHERE report.reportedUser = :user
+        ORDER BY report.id ASC
+        """)
+    List<String> findImageKeysByReportedUser(@Param("user") User user);
 
     boolean existsByReportedUser_UsersIdAndReporter_UsersIdAndHiddenTrue(
             Long reportedUserId,
