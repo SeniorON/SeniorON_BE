@@ -2,6 +2,7 @@ package com.example.senioron.domain.family.repository;
 
 import com.example.senioron.domain.family.entity.FamilyPhotoReport;
 import com.example.senioron.domain.family.entity.PhotoReportStatus;
+import com.example.senioron.domain.user.entity.User;
 import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
@@ -30,6 +31,14 @@ public interface FamilyPhotoReportRepository
     Optional<FamilyPhotoReport> findDetailById(Long id);
 
     long countByImageKey(String imageKey);
+
+    @Query("""
+        SELECT report.imageKey
+        FROM FamilyPhotoReport report
+        WHERE report.reportedUser = :user
+        ORDER BY report.id ASC
+        """)
+    List<String> findImageKeysByReportedUser(@Param("user") User user);
 
     // 엔티티를 영속성 컨텍스트에 올리지 않도록 ID만 잠금 조회한다.
     @Lock(LockModeType.PESSIMISTIC_READ)

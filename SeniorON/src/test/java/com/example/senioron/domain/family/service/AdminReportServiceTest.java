@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 import com.example.senioron.domain.family.dto.response.AdminPhotoReportDetailResponse;
 import com.example.senioron.domain.family.dto.response.AdminReportListItemResponse;
@@ -394,6 +396,8 @@ class AdminReportServiceTest {
         AdminPhotoReportDetailResponse detail = service.getPhotoReportDetail(reportId);
 
         assertThat(detail.photo().uploaderName()).isEqualTo("탈퇴회원");
+        assertThat(detail.photo().imageUrl()).isNull();
+        verify(s3Service, never()).getFileUrl("a.jpg");
         assertThat(detail.photo().reportedUserId()).isNull();
         assertThat(detail.photo().uploadedAt()).isNull();
         assertThat(detail.cumulative().reportedUserReportCount()).isZero();
@@ -722,6 +726,36 @@ class AdminReportServiceTest {
                 .asInstanceOf(type(BusinessException.class))
                 .extracting(BusinessException::getCode)
                 .isEqualTo(ErrorCode.ADMIN_REPORT_NOT_FOUND);
+    }
+
+    @Test
+    void 탈퇴한_게시자의_사진신고는_원본_URL을_발급하지_않는다() {
+        User withdrawn = saveUser("탈퇴회원", UserStatus.WITHDRAWN);
+        Long reportId = savePhotoReportWithContext(
+                null, "withdrawn-photo.jpg", reporter, withdrawn, null, day(1), day(2), false
+        );
+        entityManager.clear();
+
+        AdminPhotoReportDetailResponse detail = service.getPhotoReportDetail(reportId);
+
+        assertThat(detail.photo().imageUrl()).isNull();
+        assertThat(detail.photo().deleted()).isTrue();
+        verify(s3Service, never()).getFileUrl("withdrawn-photo.jpg");
+    }
+
+    @Test
+    void 탈퇴한_게시자의_게시자신고는_근거사진_URL을_발급하지_않는다() {
+        User withdrawn = saveUser("탈퇴회원", UserStatus.WITHDRAWN);
+        Long reportId = saveUserReport(
+                null, "withdrawn-user-photo.jpg", reporter, withdrawn, day(1)
+        );
+        entityManager.clear();
+
+        AdminUserReportDetailResponse detail = service.getUserReportDetail(reportId);
+
+        assertThat(detail.reportedPhoto().imageUrl()).isNull();
+        assertThat(detail.reportedPhoto().deleted()).isTrue();
+        verify(s3Service, never()).getFileUrl("withdrawn-user-photo.jpg");
     }
 
     private LocalDateTime day(int day) {

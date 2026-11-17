@@ -9,10 +9,13 @@ import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.Delete;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
+import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
@@ -23,6 +26,8 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -32,6 +37,8 @@ import java.util.UUID;
 public class S3Service {
 
     private static final long MAX_FILE_SIZE = 10 * 1024 * 1024;
+    // S3 DeleteObjects API의 요청당 키 개수 제한. 호출자가 이 크기로 배치를 구성한다.
+    private static final int MAX_DELETE_OBJECT_KEYS = 1000;
     private static final Duration PRESIGNED_UPLOAD_DURATION = Duration.ofMinutes(5);
 
     private static final Map<String, String> IMAGE_EXTENSIONS = Map.of(
@@ -94,6 +101,31 @@ public class S3Service {
                 .build();
 
         s3Client.deleteObject(request);
+    }
+
+    // HTTP 200이어도 개별 키 삭제가 실패할 수 있으므로 실패 키와 사유를 반환한다.
+    public Map<String, String> deleteObjects(List<String> imageKeys) {
+        if (imageKeys.size() > MAX_DELETE_OBJECT_KEYS) {
+            throw new IllegalArgumentException("S3 일괄 삭제는 한 번에 1000개 키까지 가능합니다.");
+        }
+        if (imageKeys.isEmpty()) {
+            return Map.of();
+        }
+        // null/blank 키 정리는 큐 등록 시 S3DeletionService.enqueue에서 수행한다.
+        List<ObjectIdentifier> objects = imageKeys.stream()
+                .map(key -> ObjectIdentifier.builder().key(key).build()).toList();
+        DeleteObjectsRequest request = DeleteObjectsRequest.builder()
+                .bucket(bucket)
+                .delete(Delete.builder().objects(objects).quiet(true).build())
+                .overrideConfiguration(config -> config
+                        .apiCallTimeout(Duration.ofSeconds(30))
+                        .apiCallAttemptTimeout(Duration.ofSeconds(10)))
+                .build();
+        Map<String, String> failures = new LinkedHashMap<>();
+        s3Client.deleteObjects(request).errors().forEach(error ->
+                failures.put(error.key(), error.code() + ": " + error.message())
+        );
+        return Map.copyOf(failures);
     }
 
     public String getFileUrl(String imageKey) {

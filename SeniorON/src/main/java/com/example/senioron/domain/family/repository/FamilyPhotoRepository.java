@@ -17,6 +17,15 @@ import java.util.Optional;
 
 public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> {
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+        SELECT fp
+        FROM FamilyPhoto fp
+        WHERE fp.user = :user
+        ORDER BY fp.familyPhotoId ASC
+        """)
+    List<FamilyPhoto> findAllByUploaderForUpdate(@Param("user") User user);
+
     // 첫 페이지 조회 메서드
     @EntityGraph(attributePaths = "user")
     @Query("""

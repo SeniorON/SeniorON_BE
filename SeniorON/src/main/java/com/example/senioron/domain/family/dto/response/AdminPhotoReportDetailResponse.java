@@ -31,7 +31,7 @@ public record AdminPhotoReportDetailResponse(
     @Schema(description = "신고된 게시물")
     public record Photo(
 
-            @Schema(description = "원본 사진 URL (미리보기·원본 크게 보기)")
+            @Schema(description = "원본 사진 URL (미리보기·원본 크게 보기). 게시자가 없거나 탈퇴했으면 null", nullable = true)
             String imageUrl,
 
             @Schema(description = "게시자가 사진을 삭제했는지 여부", example = "false")

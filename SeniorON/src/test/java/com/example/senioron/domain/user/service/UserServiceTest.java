@@ -18,6 +18,7 @@ import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
+import com.example.senioron.domain.family.service.FamilyPhotoWithdrawalService;
 import com.example.senioron.domain.inactivity.service.InactivitySettingService;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
@@ -81,6 +82,8 @@ class UserServiceTest {
     private final SeniorRepository seniorRepository = mock(SeniorRepository.class);
     private final SeniorWithdrawalService seniorWithdrawalService = mock(SeniorWithdrawalService.class);
     private final FamilyMemberRepository familyMemberRepository = mock(FamilyMemberRepository.class);
+    private final FamilyPhotoWithdrawalService familyPhotoWithdrawalService =
+            mock(FamilyPhotoWithdrawalService.class);
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
     private final EmailVerificationRateLimitService emailVerificationRateLimitService =
@@ -110,7 +113,8 @@ class UserServiceTest {
                 mock(InactivitySettingService.class),
                 deviceService,
                 eventPublisher,
-                emailVerificationRateLimitService
+                emailVerificationRateLimitService,
+                familyPhotoWithdrawalService
         );
     }
 
@@ -362,6 +366,7 @@ class UserServiceTest {
         verify(socialAccountRepository).deleteAllByUser(user);
         verify(familyMemberRepository).deleteAllByUser(user);
         verify(seniorWithdrawalService, never()).withdrawParent(any(User.class));
+        verify(familyPhotoWithdrawalService).deleteUploadedPhotos(user);
     }
 
     @Test
@@ -374,6 +379,7 @@ class UserServiceTest {
         userService.withdraw(user, createWithdrawalRequest(UserService.WITHDRAWAL_CONFIRMATION));
 
         verify(seniorWithdrawalService).withdrawParent(user);
+        verify(familyPhotoWithdrawalService).deleteUploadedPhotos(user);
         verify(refreshTokenRepository).deleteAllByUser(user);
         verify(deviceRepository).deleteAllByUser(user);
         verify(socialAccountRepository).deleteAllByUser(user);
@@ -418,6 +424,7 @@ class UserServiceTest {
         verify(socialAccountRepository, never()).deleteAllByUser(any(User.class));
         verify(familyMemberRepository, never()).deleteAllByUser(any(User.class));
         verify(seniorWithdrawalService, never()).withdrawParent(any(User.class));
+        verify(familyPhotoWithdrawalService, never()).deleteUploadedPhotos(any(User.class));
     }
 
     @Test
@@ -449,6 +456,7 @@ class UserServiceTest {
         verify(deviceRepository, never()).deleteAllByUser(any(User.class));
         verify(socialAccountRepository, never()).deleteAllByUser(any(User.class));
         verify(familyMemberRepository, never()).deleteAllByUser(any(User.class));
+        verify(familyPhotoWithdrawalService, never()).deleteUploadedPhotos(any(User.class));
     }
 
     @Test

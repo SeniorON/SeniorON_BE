@@ -12,6 +12,7 @@ import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
+import com.example.senioron.domain.family.service.FamilyPhotoWithdrawalService;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.service.SeniorWithdrawalService;
 import com.example.senioron.domain.user.entity.RefreshToken;
@@ -71,6 +72,7 @@ public class UserService {
     private final DeviceService deviceService;
     private final ApplicationEventPublisher eventPublisher;
     private final EmailVerificationRateLimitService emailVerificationRateLimitService;
+    private final FamilyPhotoWithdrawalService familyPhotoWithdrawalService;
 
     // 아이디 중복 확인 서비스
     public LoginIdCheckResponse checkLoginId(String loginId) {
@@ -391,6 +393,8 @@ public class UserService {
         if (hasPrimaryMembership) {
             throw new BusinessException(ErrorCode.PRIMARY_USER_CANNOT_WITHDRAW);
         }
+
+        familyPhotoWithdrawalService.deleteUploadedPhotos(user);
 
         if (user.getRole() == Role.PARENT) {
             seniorWithdrawalService.withdrawParent(user);

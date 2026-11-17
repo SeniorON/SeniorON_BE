@@ -71,7 +71,7 @@ public record AdminUserReportDetailResponse(
             @Schema(description = "사진 ID. 사진이 삭제됐으면 null", example = "40", nullable = true)
             Long familyPhotoId,
 
-            @Schema(description = "신고 당시 저장된 원본 키로 발급한 사진 URL")
+            @Schema(description = "신고 당시 저장된 원본 키로 발급한 사진 URL. 게시자가 없거나 탈퇴했으면 null", nullable = true)
             String imageUrl,
 
             @Schema(description = "사진 레코드 삭제 여부 (원본 파일의 존재 여부와는 별개)", example = "false")

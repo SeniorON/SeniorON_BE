@@ -5,11 +5,16 @@ import com.example.senioron.domain.family.entity.FamilyPhotoView;
 import com.example.senioron.domain.user.entity.User;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface FamilyPhotoViewRepository
         extends JpaRepository<FamilyPhotoView, Long> {
+
+    @Modifying(flushAutomatically = true)
+    @Query("DELETE FROM FamilyPhotoView view WHERE view.familyPhoto = :familyPhoto")
+    void deleteAllByFamilyPhoto(@Param("familyPhoto") FamilyPhoto familyPhoto);
 
     boolean existsByFamilyPhoto_FamilyPhotoIdAndParent_UsersId(
             Long familyPhotoId,
