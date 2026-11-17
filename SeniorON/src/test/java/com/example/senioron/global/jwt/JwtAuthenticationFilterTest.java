@@ -125,6 +125,96 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
+    void returnsDedicatedCodeWhenAccessTokenIsExpired() throws Exception {
+        JwtUtil expiredTokenJwtUtil = new JwtUtil(
+                JWT_SECRET, -1L, 1209600000L,
+                "admin-test-secret-key-123456789012", 1800000L, 86400000L
+        );
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(
+                expiredTokenJwtUtil,
+                userRepository,
+                adminRepository,
+                securityErrorResponseWriter
+        );
+        String expiredToken = expiredTokenJwtUtil.createAccessToken(createUser());
+
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/protected");
+        request.addHeader("Authorization", "Bearer " + expiredToken);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain filterChain = mock(FilterChain.class);
+
+        filter.doFilterInternal(request, response, filterChain);
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("\"code\":\"USER401_7\"");
+        assertThat(response.getContentAsString()).contains("Access Token이 만료되었습니다.");
+        verify(filterChain, never()).doFilter(request, response);
+    }
+
+    @Test
+    void returnsCommonUnauthorizedForForgedAccessToken() throws Exception {
+        JwtUtil jwtUtil = jwtUtil();
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(
+                jwtUtil,
+                userRepository,
+                adminRepository,
+                securityErrorResponseWriter
+        );
+        String forgedToken = jwtUtil.createAccessToken(createUser()) + "forged";
+
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/protected");
+        request.addHeader("Authorization", "Bearer " + forgedToken);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilterInternal(request, response, mock(FilterChain.class));
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("\"code\":\"COMMON401\"");
+    }
+
+    @Test
+    void returnsCommonUnauthorizedForMalformedAccessToken() throws Exception {
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(
+                jwtUtil(),
+                userRepository,
+                adminRepository,
+                securityErrorResponseWriter
+        );
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/protected");
+        request.addHeader("Authorization", "Bearer malformed-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilterInternal(request, response, mock(FilterChain.class));
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("\"code\":\"COMMON401\"");
+    }
+
+    @Test
+    void returnsCommonUnauthorizedWhenExpiredRefreshTokenIsUsedAsAccessToken() throws Exception {
+        JwtUtil expiredRefreshTokenJwtUtil = new JwtUtil(
+                JWT_SECRET, 3600000L, -1L,
+                "admin-test-secret-key-123456789012", 1800000L, 86400000L
+        );
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(
+                expiredRefreshTokenJwtUtil,
+                userRepository,
+                adminRepository,
+                securityErrorResponseWriter
+        );
+        String expiredRefreshToken = expiredRefreshTokenJwtUtil.createRefreshToken(createUser());
+
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/protected");
+        request.addHeader("Authorization", "Bearer " + expiredRefreshToken);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilterInternal(request, response, mock(FilterChain.class));
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("\"code\":\"COMMON401\"");
+    }
+
+    @Test
     void skipsOnlySeniorReloginRequestCreatePostWithoutToken() throws Exception {
         JwtUtil jwtUtil = spy(jwtUtil());
         JwtAuthenticationFilter filter = new JwtAuthenticationFilter(

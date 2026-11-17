@@ -10,6 +10,7 @@ import com.example.senioron.domain.user.service.RefreshTokenService;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.config.SecurityErrorResponseWriter;
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -164,6 +165,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     }
                 }
             }
+        } catch (ExpiredJwtException e) {
+            request.setAttribute(
+                    JWT_AUTHENTICATION_TIME_ATTRIBUTE,
+                    elapsedMillis(jwtAuthenticationStart)
+            );
+            request.setAttribute(CONTROLLER_SERVICE_AFTER_JWT_TIME_ATTRIBUTE, 0L);
+            SecurityContextHolder.clearContext();
+            securityErrorResponseWriter.write(
+                    response,
+                    isExpiredAccessToken(path, e)
+                            ? ErrorCode.EXPIRED_ACCESS_TOKEN
+                            : ErrorCode.UNAUTHORIZED
+            );
+            return;
         } catch (JwtException | IllegalArgumentException e) {
             request.setAttribute(
                     JWT_AUTHENTICATION_TIME_ATTRIBUTE,
@@ -218,6 +233,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         return null;
+    }
+
+    private boolean isExpiredAccessToken(String path, ExpiredJwtException exception) {
+        if (path.startsWith("/api/admin/")) {
+            return jwtUtil.isAdminAccessToken(exception.getClaims());
+        }
+
+        return jwtUtil.isAccessToken(exception.getClaims());
     }
 
     private long elapsedMillis(long startNanos) {
