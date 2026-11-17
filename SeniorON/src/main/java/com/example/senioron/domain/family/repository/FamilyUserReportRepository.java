@@ -14,7 +14,7 @@ import org.springframework.data.repository.query.Param;
 public interface FamilyUserReportRepository
         extends JpaRepository<FamilyUserReport, Long> {
 
-    boolean existsByReportedUser_UsersIdAndReporter_UsersId(
+    boolean existsByReportedUser_UsersIdAndReporter_UsersIdAndHiddenTrue(
             Long reportedUserId,
             Long reporterUserId
     );

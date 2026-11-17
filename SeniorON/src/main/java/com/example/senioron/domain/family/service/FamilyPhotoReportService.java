@@ -15,7 +15,6 @@ import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,8 +38,8 @@ public class FamilyPhotoReportService {
                 .findById(principal.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        // 숨김 신고한 사진은 접근 조회에서 제외되므로 중복 신고를 먼저 확인한다.
-        if (familyPhotoReportRepository.existsByFamilyPhoto_FamilyPhotoIdAndReporter_UsersId(
+        // 숨기지 않은 신고는 반복 접수하고, 이미 숨긴 사진만 재신고를 차단한다.
+        if (familyPhotoReportRepository.existsByFamilyPhoto_FamilyPhotoIdAndReporter_UsersIdAndHiddenTrue(
                 familyPhotoId,
                 currentUser.getUsersId()
         )) {
@@ -74,11 +73,7 @@ public class FamilyPhotoReportService {
                 .status(PhotoReportStatus.PENDING)
                 .build();
 
-        try {
-            familyPhotoReportRepository.saveAndFlush(report);
-        } catch (DataIntegrityViolationException e) {
-            throw new BusinessException(ErrorCode.FAMILY_PHOTO_ALREADY_REPORTED);
-        }
+        familyPhotoReportRepository.saveAndFlush(report);
     }
 
     // 사진이 여러 시니어에게 공유될 수 있어, 관리자 상세의 시니어 코드·역할 기준이 될 시니어를 정한다.

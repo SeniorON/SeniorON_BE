@@ -28,8 +28,9 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 
 class FamilyUserReportServiceTest {
@@ -225,18 +226,19 @@ class FamilyUserReportServiceTest {
         verify(familyUserReportRepository, never()).saveAndFlush(any());
     }
 
-    @Test
-    void rejectsDuplicateReportOnSameUploader() {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void rejectsReportOnAlreadyHiddenUploader(boolean hide) {
         given(familyPhotoRepository.findAccessibleForReportByFamilyPhotoIdAndUser(40L, reporter))
                 .willReturn(Optional.of(photo));
         given(familyUserReportRepository
-                .existsByReportedUser_UsersIdAndReporter_UsersId(20L, 10L))
+                .existsByReportedUser_UsersIdAndReporter_UsersIdAndHiddenTrue(20L, 10L))
                 .willReturn(true);
 
         assertThatThrownBy(() -> familyUserReportService.reportUploader(
                 reporter,
                 40L,
-                request(PhotoReportReason.ABUSE, null, true)
+                request(PhotoReportReason.ABUSE, null, hide)
         ))
                 .isInstanceOf(BusinessException.class)
                 .asInstanceOf(type(BusinessException.class))
@@ -244,24 +246,6 @@ class FamilyUserReportServiceTest {
                 .isEqualTo(ErrorCode.FAMILY_USER_ALREADY_REPORTED);
 
         verify(familyUserReportRepository, never()).saveAndFlush(any());
-    }
-
-    @Test
-    void convertsConcurrentDuplicateInsertToAlreadyReported() {
-        given(familyPhotoRepository.findAccessibleForReportByFamilyPhotoIdAndUser(40L, reporter))
-                .willReturn(Optional.of(photo));
-        given(familyUserReportRepository.saveAndFlush(any()))
-                .willThrow(new DataIntegrityViolationException("uk_family_user_report_reported_reporter"));
-
-        assertThatThrownBy(() -> familyUserReportService.reportUploader(
-                reporter,
-                40L,
-                request(PhotoReportReason.ABUSE, null, true)
-        ))
-                .isInstanceOf(BusinessException.class)
-                .asInstanceOf(type(BusinessException.class))
-                .extracting(BusinessException::getCode)
-                .isEqualTo(ErrorCode.FAMILY_USER_ALREADY_REPORTED);
     }
 
     private FamilyUserReportRequest request(

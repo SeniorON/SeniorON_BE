@@ -15,7 +15,6 @@ import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDateTime;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -28,16 +27,11 @@ import org.hibernate.annotations.OnDeleteAction;
 @Entity
 @Table(
         name = "family_photo_report",
-        uniqueConstraints = {
-                @UniqueConstraint(
-                        name = "uk_family_photo_report_photo_reporter",
-                        columnNames = {
-                                "family_photo_id",
-                                "reporter_user_id"
-                        }
-                )
-        },
         indexes = {
+                @Index(
+                        name = "idx_family_photo_report_photo_reporter",
+                        columnList = "family_photo_id, reporter_user_id"
+                ),
                 @Index(
                         name = "idx_family_photo_report_reporter_hidden_photo",
                         columnList = "reporter_user_id, hidden, family_photo_id"
