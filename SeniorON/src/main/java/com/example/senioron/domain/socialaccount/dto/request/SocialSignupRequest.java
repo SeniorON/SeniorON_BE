@@ -41,6 +41,4 @@ public class SocialSignupRequest {
     private String fcmToken;
 
     private String deviceIdentifier;
-
-    private boolean keepLoggedIn;
 }

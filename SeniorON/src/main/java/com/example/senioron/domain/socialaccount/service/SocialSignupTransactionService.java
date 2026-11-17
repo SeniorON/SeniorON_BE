@@ -124,7 +124,7 @@ public class SocialSignupTransactionService {
                     socialAccount.getUser(),
                     request.getDeviceIdentifier(),
                     refreshToken,
-                    request.isKeepLoggedIn()
+                    false
             );
             log.info("[JWT] refresh token save complete saveOrRotateSuccess=true");
         } catch (RuntimeException e) {
