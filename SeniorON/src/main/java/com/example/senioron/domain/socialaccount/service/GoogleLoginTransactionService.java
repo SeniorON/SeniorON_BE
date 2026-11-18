@@ -55,8 +55,7 @@ public class GoogleLoginTransactionService {
         var loginSession = refreshTokenService.saveOrRotate(
                 user,
                 request.getDeviceIdentifier(),
-                refreshToken,
-                request.isKeepLoggedIn()
+                refreshToken
         );
         String accessToken = jwtUtil.createAccessToken(user, loginSession.getSessionId());
 

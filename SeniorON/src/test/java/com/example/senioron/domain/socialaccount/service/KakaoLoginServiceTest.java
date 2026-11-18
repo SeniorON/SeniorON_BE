@@ -104,7 +104,7 @@ class KakaoLoginServiceTest {
 
         given(socialAccountRepository.findByProviderAndProviderId(LoginProvider.KAKAO, KAKAO_PROVIDER_ID))
                 .willReturn(Optional.of(socialAccount));
-        given(refreshTokenService.saveOrRotate(any(), any(), any(), anyBoolean()))
+        given(refreshTokenService.saveOrRotate(any(), any(), any()))
                 .willAnswer(invocation -> RefreshToken.builder()
                         .user(invocation.getArgument(0))
                         .sessionId("kakao-session")
@@ -125,7 +125,7 @@ class KakaoLoginServiceTest {
         assertThat(response.isNewUser()).isFalse();
         verify(deviceService).registerDevice(user, DEVICE_IDENTIFIER);
         verify(deviceService).updateFcmToken(user, FCM_TOKEN, DEVICE_IDENTIFIER);
-        verify(refreshTokenService).saveOrRotate(user, DEVICE_IDENTIFIER, REFRESH_TOKEN, false);
+        verify(refreshTokenService).saveOrRotate(user, DEVICE_IDENTIFIER, REFRESH_TOKEN);
         verify(userRepository, never()).findByEmail(any());
     }
 
@@ -152,7 +152,7 @@ class KakaoLoginServiceTest {
 
         given(socialAccountRepository.findByProviderAndProviderId(LoginProvider.KAKAO, KAKAO_PROVIDER_ID))
                 .willReturn(Optional.of(socialAccount));
-        given(refreshTokenService.saveOrRotate(any(), any(), any(), anyBoolean()))
+        given(refreshTokenService.saveOrRotate(any(), any(), any()))
                 .willAnswer(invocation -> RefreshToken.builder()
                         .user(invocation.getArgument(0))
                         .sessionId("kakao-session")
@@ -164,7 +164,7 @@ class KakaoLoginServiceTest {
 
         verify(deviceService).registerDevice(user, DEVICE_IDENTIFIER);
         verify(deviceService, never()).updateFcmToken(any(), any(), any());
-        verify(refreshTokenService).saveOrRotate(user, DEVICE_IDENTIFIER, REFRESH_TOKEN, false);
+        verify(refreshTokenService).saveOrRotate(user, DEVICE_IDENTIFIER, REFRESH_TOKEN);
     }
 
     @Test

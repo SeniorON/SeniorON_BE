@@ -64,7 +64,7 @@ class GoogleLoginServiceTest {
                 firebaseIdTokenVerifier,
                 googleLoginTransactionService
         );
-        given(refreshTokenService.saveOrRotate(any(), any(), any(), anyBoolean()))
+        given(refreshTokenService.saveOrRotate(any(), any(), any()))
                 .willAnswer(invocation -> RefreshToken.builder()
                         .user(invocation.getArgument(0))
                         .sessionId("google-session")
@@ -111,7 +111,7 @@ class GoogleLoginServiceTest {
         assertThat(response.getName()).isEqualTo(NAME);
         assertThat(response.getRole()).isEqualTo(Role.CHILD);
         assertThat(response.isNewUser()).isFalse();
-        verify(refreshTokenService).saveOrRotate(user, null, REFRESH_TOKEN, false);
+        verify(refreshTokenService).saveOrRotate(user, null, REFRESH_TOKEN);
         verify(userRepository, never()).findByEmail(any());
     }
 
@@ -133,7 +133,7 @@ class GoogleLoginServiceTest {
         verify(userRepository, never()).findByEmail(any());
         verify(jwtUtil, never()).createAccessToken(any());
         verify(jwtUtil, never()).createRefreshToken(any());
-        verify(refreshTokenService, never()).saveOrRotate(any(), any(), any(), anyBoolean());
+        verify(refreshTokenService, never()).saveOrRotate(any(), any(), any());
         verify(deviceService, never()).registerDevice(any(), any());
         verify(deviceService, never()).updateFcmToken(any(), any(), any());
     }
@@ -168,7 +168,7 @@ class GoogleLoginServiceTest {
 
         verify(deviceService).registerDevice(user, DEVICE_IDENTIFIER);
         verify(deviceService).updateFcmToken(user, FCM_TOKEN, DEVICE_IDENTIFIER);
-        verify(refreshTokenService).saveOrRotate(user, DEVICE_IDENTIFIER, REFRESH_TOKEN, false);
+        verify(refreshTokenService).saveOrRotate(user, DEVICE_IDENTIFIER, REFRESH_TOKEN);
     }
 
     @Test
@@ -185,7 +185,7 @@ class GoogleLoginServiceTest {
 
         verify(deviceService).registerDevice(user, DEVICE_IDENTIFIER);
         verify(deviceService, never()).updateFcmToken(any(), any(), any());
-        verify(refreshTokenService).saveOrRotate(user, DEVICE_IDENTIFIER, REFRESH_TOKEN, false);
+        verify(refreshTokenService).saveOrRotate(user, DEVICE_IDENTIFIER, REFRESH_TOKEN);
     }
 
     @Test
