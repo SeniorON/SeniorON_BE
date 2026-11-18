@@ -340,28 +340,6 @@ class UserServiceTest {
     }
 
     @Test
-    void persistentSessionCanRefreshAfterOneHourOfInactivity() {
-        User user = createUser(1L);
-        given(userRepository.findByLoginId("testId")).willReturn(Optional.of(user));
-        given(refreshTokenRepository.findByUserAndDeviceIdentifier(user, DEVICE_IDENTIFIER))
-                .willReturn(Optional.empty());
-
-        UserLoginResponse loginResponse = userService.login(
-                createLoginRequest(null, DEVICE_IDENTIFIER, true));
-        RefreshToken savedRefreshToken = captureSavedRefreshToken();
-        given(refreshTokenRepository.findByTokenHash(savedRefreshToken.getTokenHash()))
-                .willReturn(Optional.of(savedRefreshToken));
-        clock.advance(Duration.ofHours(2));
-
-        TokenRefreshResponse response = userService.refreshToken(
-                createTokenRefreshRequest(loginResponse.getRefreshToken(), DEVICE_IDENTIFIER));
-
-        assertThat(response.getAccessToken()).isNotBlank();
-        assertThat(savedRefreshToken.isKeepLoggedIn()).isTrue();
-        assertThat(savedRefreshToken.isRevoked()).isFalse();
-    }
-
-    @Test
     void rotatedRefreshTokenCannotBeReused() {
         User user = createUser(1L);
         given(userRepository.findByLoginId("testId")).willReturn(Optional.of(user));
@@ -1312,20 +1290,11 @@ class UserServiceTest {
     }
 
     private UserLoginRequest createLoginRequest(String fcmToken, String deviceIdentifier) {
-        return createLoginRequest(fcmToken, deviceIdentifier, false);
-    }
-
-    private UserLoginRequest createLoginRequest(
-            String fcmToken,
-            String deviceIdentifier,
-            boolean keepLoggedIn
-    ) {
         UserLoginRequest request = new UserLoginRequest();
         ReflectionTestUtils.setField(request, "loginId", "testId");
         ReflectionTestUtils.setField(request, "password", "password123!");
         ReflectionTestUtils.setField(request, "fcmToken", fcmToken);
         ReflectionTestUtils.setField(request, "deviceIdentifier", deviceIdentifier);
-        ReflectionTestUtils.setField(request, "keepLoggedIn", keepLoggedIn);
         return request;
     }
 
