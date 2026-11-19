@@ -76,7 +76,7 @@ class FamilyPhotoReportServiceTest {
                 .imageKey("family/photo.jpg")
                 .build();
 
-        given(userRepository.findById(10L)).willReturn(Optional.of(reporter));
+        given(userRepository.findByIdForUpdate(10L)).willReturn(Optional.of(reporter));
     }
 
     @Test
@@ -219,8 +219,8 @@ class FamilyPhotoReportServiceTest {
     @ValueSource(booleans = {false, true})
     void rejectsReportOnAlreadyHiddenPhoto(boolean hide) {
         given(familyPhotoReportRepository
-                .existsByFamilyPhoto_FamilyPhotoIdAndReporter_UsersIdAndHiddenTrue(40L, 10L))
-                .willReturn(true);
+                .findByFamilyPhoto_FamilyPhotoIdAndReporter_UsersId(40L, 10L))
+                .willReturn(Optional.of(FamilyPhotoReport.builder().hidden(true).build()));
 
         assertThatThrownBy(() -> familyPhotoReportService.reportPhoto(
                 reporter,

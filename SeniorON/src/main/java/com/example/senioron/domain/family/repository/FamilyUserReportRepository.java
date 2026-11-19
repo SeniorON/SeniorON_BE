@@ -28,6 +28,11 @@ public interface FamilyUserReportRepository
             Long reporterUserId
     );
 
+    Optional<FamilyUserReport> findByReportedUser_UsersIdAndReporter_UsersId(
+            Long reportedUserId,
+            Long reporterUserId
+    );
+
     // 관리자 상세 조회: 화면에 필요한 연관 엔티티를 한 번에 조회한다.
     @EntityGraph(attributePaths = {
             "reporter",

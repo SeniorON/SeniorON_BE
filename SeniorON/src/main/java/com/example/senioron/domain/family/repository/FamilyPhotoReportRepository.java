@@ -20,6 +20,11 @@ public interface FamilyPhotoReportRepository
             Long reporterUserId
     );
 
+    Optional<FamilyPhotoReport> findByFamilyPhoto_FamilyPhotoIdAndReporter_UsersId(
+            Long familyPhotoId,
+            Long reporterUserId
+    );
+
     // 관리자 상세 조회: 화면에 필요한 연관 엔티티를 한 번에 조회한다.
     @EntityGraph(attributePaths = {
             "reporter",

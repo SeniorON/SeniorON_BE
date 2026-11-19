@@ -2,6 +2,7 @@ package com.example.senioron.domain.family.service;
 
 import com.example.senioron.domain.family.dto.request.FamilyUserReportRequest;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
+import com.example.senioron.domain.family.entity.FamilyReportOutcome;
 import com.example.senioron.domain.family.entity.FamilyUserReport;
 import com.example.senioron.domain.family.entity.PhotoReportStatus;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
@@ -29,13 +30,14 @@ public class FamilyUserReportService {
     private final UserRepository userRepository;
 
     @Transactional
-    public void reportUploader(
+    public FamilyReportOutcome reportUploader(
             User principal,
             Long familyPhotoId,
             FamilyUserReportRequest request
     ) {
+        // 같은 신고자의 최초 저장과 기존 신고 조회가 겹치지 않도록 한다.
         User currentUser = userRepository
-                .findById(principal.getUsersId())
+                .findByIdForUpdate(principal.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         // 숨김 필터 없이 조회한 뒤, 이미 숨긴 게시자인지 별도로 확인한다.
@@ -55,15 +57,22 @@ public class FamilyUserReportService {
             throw new BusinessException(ErrorCode.FAMILY_USER_REPORT_SELF);
         }
 
-        // 숨기지 않은 신고는 다른 사진에서 같은 게시자를 신고해도 반복 접수한다.
-        if (familyUserReportRepository.existsByReportedUser_UsersIdAndReporter_UsersIdAndHiddenTrue(
-                uploader.getUsersId(),
-                currentUser.getUsersId()
-        )) {
+        FamilyUserReport existingReport = familyUserReportRepository
+                .findByReportedUser_UsersIdAndReporter_UsersId(uploader.getUsersId(), currentUser.getUsersId())
+                .orElse(null);
+        if (existingReport != null && existingReport.isHidden()) {
             throw new BusinessException(ErrorCode.FAMILY_USER_ALREADY_REPORTED);
         }
 
         Senior contextSenior = resolveContextSenior(photo, currentUser, request.getSeniorId());
+
+        if (existingReport != null) {
+            if (request.getHide()) {
+                existingReport.hide();
+                return FamilyReportOutcome.ALREADY_REPORTED_AND_HIDDEN;
+            }
+            return FamilyReportOutcome.ALREADY_REPORTED;
+        }
 
         FamilyUserReport report = FamilyUserReport.builder()
                 .reporter(currentUser)
@@ -78,6 +87,7 @@ public class FamilyUserReportService {
                 .build();
 
         familyUserReportRepository.saveAndFlush(report);
+        return FamilyReportOutcome.CREATED;
     }
 
     // 사용자는 여러 가족에 속할 수 있어, 관리자 상세의 시니어 코드·역할 기준이 될 시니어를 정한다.
