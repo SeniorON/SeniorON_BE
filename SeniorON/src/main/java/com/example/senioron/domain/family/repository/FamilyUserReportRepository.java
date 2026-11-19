@@ -23,11 +23,6 @@ public interface FamilyUserReportRepository
         """)
     List<String> findImageKeysByReportedUser(@Param("user") User user);
 
-    boolean existsByReportedUser_UsersIdAndReporter_UsersIdAndHiddenTrue(
-            Long reportedUserId,
-            Long reporterUserId
-    );
-
     Optional<FamilyUserReport> findByReportedUser_UsersIdAndReporter_UsersId(
             Long reportedUserId,
             Long reporterUserId
