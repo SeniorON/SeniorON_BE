@@ -179,7 +179,7 @@ class FamilyPhotoWithdrawalIntegrationTest {
         FamilyPhotoReport retainedPhotoReport = photoReports.save(
                 photoReport(null, retainedPhoto, other, owner));
         FamilyUserReport retainedUserReport = userReports.save(
-                userReport(null, retainedUser, other, owner));
+                userReport(null, retainedUser, parent, owner));
         entityManager.flush();
         entityManager.clear();
         return new Fixture(owner.getUsersId(), photo.getFamilyPhotoId(),

@@ -129,27 +129,37 @@ public class FamilyPhotoController {
         ));
     }
 
-    @Operation(summary = "가족 사진 신고", description = "숨기지 않은 사진은 반복 신고할 수 있으며 신고마다 별도 이력으로 저장합니다. "
-            + "hide가 true이면 신고한 사용자에게 해당 사진이 더 이상 보이지 않고, 이후 해당 사진 재신고는 409로 응답합니다.")
+    @Operation(summary = "가족 사진 신고", description = "신고자별로 같은 사진의 최초 신고만 저장합니다. "
+            + "숨기지 않은 사진을 다시 신고하면 중복 신고를 안내하고, hide가 true이면 해당 사진을 숨깁니다. "
+            + "이미 숨긴 사진은 409로 응답합니다.")
     @PostMapping(value = "/{familyPhotoId}/reports", consumes = MediaType.APPLICATION_JSON_VALUE)
     public Response<Void> reportPhoto(
             @AuthenticationPrincipal User user,
             @PathVariable("familyPhotoId") Long familyPhotoId,
             @Valid @RequestBody FamilyPhotoReportRequest request
     ) {
-        familyPhotoReportService.reportPhoto(user, familyPhotoId, request);
-        return Response.ok();
+        ResultCode resultCode = switch (familyPhotoReportService.reportPhoto(user, familyPhotoId, request)) {
+            case CREATED -> ResultCode.OK;
+            case ALREADY_REPORTED -> ResultCode.FAMILY_PHOTO_ALREADY_REPORTED;
+            case ALREADY_REPORTED_AND_HIDDEN -> ResultCode.FAMILY_PHOTO_REPORTED_AND_HIDDEN;
+        };
+        return Response.ok(resultCode, null);
     }
 
-    @Operation(summary = "가족 사진 게시자 신고", description = "숨기지 않은 게시자는 반복 신고할 수 있으며 신고마다 별도 이력으로 저장합니다. "
-            + "hide가 true이면 신고한 사용자에게 해당 게시자가 올린 사진이 모두 보이지 않고, 이후 해당 게시자 재신고는 409로 응답합니다.")
+    @Operation(summary = "가족 사진 게시자 신고", description = "신고자별로 같은 게시자의 최초 신고만 저장합니다. "
+            + "숨기지 않은 게시자를 다시 신고하면 중복 신고를 안내하고, hide가 true이면 해당 게시자의 사진을 모두 숨깁니다. "
+            + "이미 숨긴 게시자는 409로 응답합니다.")
     @PostMapping(value = "/{familyPhotoId}/uploader-reports", consumes = MediaType.APPLICATION_JSON_VALUE)
     public Response<Void> reportUploader(
             @AuthenticationPrincipal User user,
             @PathVariable("familyPhotoId") Long familyPhotoId,
             @Valid @RequestBody FamilyUserReportRequest request
     ) {
-        familyUserReportService.reportUploader(user, familyPhotoId, request);
-        return Response.ok();
+        ResultCode resultCode = switch (familyUserReportService.reportUploader(user, familyPhotoId, request)) {
+            case CREATED -> ResultCode.OK;
+            case ALREADY_REPORTED -> ResultCode.FAMILY_UPLOADER_ALREADY_REPORTED;
+            case ALREADY_REPORTED_AND_HIDDEN -> ResultCode.FAMILY_UPLOADER_REPORTED_AND_HIDDEN;
+        };
+        return Response.ok(resultCode, null);
     }
 }

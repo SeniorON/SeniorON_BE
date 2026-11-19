@@ -3,6 +3,7 @@ package com.example.senioron.domain.family.service;
 import com.example.senioron.domain.family.dto.request.FamilyPhotoReportRequest;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
 import com.example.senioron.domain.family.entity.FamilyPhotoReport;
+import com.example.senioron.domain.family.entity.FamilyReportOutcome;
 import com.example.senioron.domain.family.entity.PhotoReportStatus;
 import com.example.senioron.domain.family.repository.FamilyPhotoReportRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
@@ -29,20 +30,20 @@ public class FamilyPhotoReportService {
     private final UserRepository userRepository;
 
     @Transactional
-    public void reportPhoto(
+    public FamilyReportOutcome reportPhoto(
             User principal,
             Long familyPhotoId,
             FamilyPhotoReportRequest request
     ) {
+        // 같은 신고자의 최초 저장과 기존 신고 조회가 겹치지 않도록 한다.
         User currentUser = userRepository
-                .findById(principal.getUsersId())
+                .findByIdForUpdate(principal.getUsersId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        // 숨기지 않은 신고는 반복 접수하고, 이미 숨긴 사진만 재신고를 차단한다.
-        if (familyPhotoReportRepository.existsByFamilyPhoto_FamilyPhotoIdAndReporter_UsersIdAndHiddenTrue(
-                familyPhotoId,
-                currentUser.getUsersId()
-        )) {
+        FamilyPhotoReport existingReport = familyPhotoReportRepository
+                .findByFamilyPhoto_FamilyPhotoIdAndReporter_UsersId(familyPhotoId, currentUser.getUsersId())
+                .orElse(null);
+        if (existingReport != null && existingReport.isHidden()) {
             throw new BusinessException(ErrorCode.FAMILY_PHOTO_ALREADY_REPORTED);
         }
 
@@ -60,6 +61,14 @@ public class FamilyPhotoReportService {
 
         Senior contextSenior = resolveContextSenior(photo, currentUser, request.getSeniorId());
 
+        if (existingReport != null) {
+            if (request.getHide()) {
+                existingReport.hide();
+                return FamilyReportOutcome.ALREADY_REPORTED_AND_HIDDEN;
+            }
+            return FamilyReportOutcome.ALREADY_REPORTED;
+        }
+
         FamilyPhotoReport report = FamilyPhotoReport.builder()
                 .familyPhoto(photo)
                 .reporter(currentUser)
@@ -74,6 +83,7 @@ public class FamilyPhotoReportService {
                 .build();
 
         familyPhotoReportRepository.saveAndFlush(report);
+        return FamilyReportOutcome.CREATED;
     }
 
     // 사진이 여러 시니어에게 공유될 수 있어, 관리자 상세의 시니어 코드·역할 기준이 될 시니어를 정한다.

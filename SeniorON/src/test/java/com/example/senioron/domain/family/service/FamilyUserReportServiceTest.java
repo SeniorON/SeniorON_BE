@@ -73,7 +73,7 @@ class FamilyUserReportServiceTest {
                 .imageKey("family/photo.jpg")
                 .build();
 
-        given(userRepository.findById(10L)).willReturn(Optional.of(reporter));
+        given(userRepository.findByIdForUpdate(10L)).willReturn(Optional.of(reporter));
     }
 
     @Test
@@ -232,8 +232,8 @@ class FamilyUserReportServiceTest {
         given(familyPhotoRepository.findAccessibleForReportByFamilyPhotoIdAndUser(40L, reporter))
                 .willReturn(Optional.of(photo));
         given(familyUserReportRepository
-                .existsByReportedUser_UsersIdAndReporter_UsersIdAndHiddenTrue(20L, 10L))
-                .willReturn(true);
+                .findByReportedUser_UsersIdAndReporter_UsersId(20L, 10L))
+                .willReturn(Optional.of(FamilyUserReport.builder().hidden(true).build()));
 
         assertThatThrownBy(() -> familyUserReportService.reportUploader(
                 reporter,

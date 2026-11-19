@@ -15,7 +15,7 @@ import org.springframework.data.repository.query.Param;
 public interface FamilyPhotoReportRepository
         extends JpaRepository<FamilyPhotoReport, Long> {
 
-    boolean existsByFamilyPhoto_FamilyPhotoIdAndReporter_UsersIdAndHiddenTrue(
+    Optional<FamilyPhotoReport> findByFamilyPhoto_FamilyPhotoIdAndReporter_UsersId(
             Long familyPhotoId,
             Long reporterUserId
     );

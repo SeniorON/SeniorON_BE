@@ -8,6 +8,7 @@ import com.example.senioron.domain.family.dto.response.FamilyPhotoItemResponse;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.entity.FamilyPhotoSenior;
+import com.example.senioron.domain.family.entity.FamilyReportOutcome;
 import com.example.senioron.domain.family.dto.request.FamilyPhotoReportRequest;
 import com.example.senioron.domain.family.entity.PhotoReportReason;
 import com.example.senioron.domain.family.repository.FamilyPhotoReportRepository;
@@ -458,6 +459,57 @@ class FamilyPhotoUploadAuthorizationIntegrationTest {
         assertThat(savedSeniorIds(photoId)).isEmpty();
         verify(storage).delete(imageKey);
         verify(storage).delete(thumbnailKey);
+    }
+
+    @Test
+    void concurrentPhotoReportsFromSameReporterCreateOneReport() throws Exception {
+        Long photoId = upload(fixture.uploader(), false).getFamilyPhotoId();
+        User reporter = fixture.primaryA();
+        FamilyPhotoReportRequest firstRequest = new FamilyPhotoReportRequest();
+        firstRequest.setReason(PhotoReportReason.ETC);
+        firstRequest.setHide(false);
+        FamilyPhotoReportRequest repeatRequest = new FamilyPhotoReportRequest();
+        repeatRequest.setReason(PhotoReportReason.ABUSE);
+        repeatRequest.setHide(true);
+
+        CountDownLatch firstReportSaved = new CountDownLatch(1);
+        CountDownLatch releaseCommit = new CountDownLatch(1);
+        CountDownLatch repeatStarted = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> firstReport = executor.submit(() -> transaction().executeWithoutResult(status -> {
+                assertThat(reportService.reportPhoto(reporter, photoId, firstRequest))
+                        .isEqualTo(FamilyReportOutcome.CREATED);
+                firstReportSaved.countDown();
+                await(releaseCommit);
+            }));
+            if (!firstReportSaved.await(5, TimeUnit.SECONDS)) {
+                firstReport.get(1, TimeUnit.SECONDS);
+                fail("The first report did not reach the commit pause point");
+            }
+
+            Future<FamilyReportOutcome> repeatReport = executor.submit(() -> {
+                repeatStarted.countDown();
+                return reportService.reportPhoto(reporter, photoId, repeatRequest);
+            });
+            assertThat(repeatStarted.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThatThrownBy(() -> repeatReport.get(250, TimeUnit.MILLISECONDS))
+                    .isInstanceOf(TimeoutException.class);
+
+            releaseCommit.countDown();
+            firstReport.get(5, TimeUnit.SECONDS);
+            assertThat(repeatReport.get(5, TimeUnit.SECONDS))
+                    .isEqualTo(FamilyReportOutcome.ALREADY_REPORTED_AND_HIDDEN);
+            assertThat(reports.countByImageKey(imageKey)).isEqualTo(1);
+            assertThat(reports.findByFamilyPhoto_FamilyPhotoIdAndReporter_UsersId(photoId, reporter.getUsersId()))
+                    .hasValueSatisfying(report -> {
+                        assertThat(report.getReason()).isEqualTo(PhotoReportReason.ETC);
+                        assertThat(report.isHidden()).isTrue();
+                    });
+        } finally {
+            releaseCommit.countDown();
+            executor.shutdownNow();
+        }
     }
 
     @Test

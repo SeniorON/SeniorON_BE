@@ -9,11 +9,11 @@ import com.example.senioron.domain.family.dto.request.FamilyUserReportRequest;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.entity.FamilyPhoto;
-import com.example.senioron.domain.family.entity.FamilyPhotoReport;
 import com.example.senioron.domain.family.entity.FamilyPhotoSenior;
-import com.example.senioron.domain.family.entity.FamilyUserReport;
+import com.example.senioron.domain.family.entity.FamilyReportOutcome;
 import com.example.senioron.domain.family.entity.PhotoReportReason;
 import com.example.senioron.domain.family.entity.PhotoReportStatus;
+import com.example.senioron.domain.family.repository.AdminReportQueryRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoReportRepository;
 import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
 import com.example.senioron.domain.family.repository.FamilyUserReportRepository;
@@ -34,7 +34,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 
 @DataJpaTest(showSql = false)
 @Import({FamilyPhotoReportService.class, FamilyUserReportService.class})
@@ -46,6 +45,7 @@ class FamilyReportIntegrationTest {
     @Autowired private FamilyPhotoReportRepository photoReports;
     @Autowired private FamilyUserReportRepository userReports;
     @Autowired private FamilyPhotoRepository photos;
+    @Autowired private AdminReportQueryRepository adminReports;
 
     private User reporter;
     private User otherReporter;
@@ -79,23 +79,29 @@ class FamilyReportIntegrationTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
-    void savesRepeatedPhotoReportsAndHidesOnlyWhenRequested(boolean hide) {
-        photoReportService.reportPhoto(reporter, firstPhoto.getFamilyPhotoId(), photoRequest(false));
-        photoReportService.reportPhoto(reporter, firstPhoto.getFamilyPhotoId(), photoRequest(false));
-        photoReportService.reportPhoto(reporter, firstPhoto.getFamilyPhotoId(), photoRequest(hide));
+    void keepsFirstPhotoReportAndAppliesHideOnlyWhenRequested(boolean hide) {
+        assertThat(photoReportService.reportPhoto(reporter, firstPhoto.getFamilyPhotoId(), photoRequest(false)))
+                .isEqualTo(FamilyReportOutcome.CREATED);
+        assertThat(photoReportService.reportPhoto(reporter, firstPhoto.getFamilyPhotoId(), photoRequest(false)))
+                .isEqualTo(FamilyReportOutcome.ALREADY_REPORTED);
+        FamilyPhotoReportRequest repeatRequest = photoRequest(hide);
+        repeatRequest.setReason(PhotoReportReason.ABUSE);
+        repeatRequest.setDetail("두 번째 신고");
+
+        assertThat(photoReportService.reportPhoto(reporter, firstPhoto.getFamilyPhotoId(), repeatRequest))
+                .isEqualTo(hide ? FamilyReportOutcome.ALREADY_REPORTED_AND_HIDDEN
+                        : FamilyReportOutcome.ALREADY_REPORTED);
+        entityManager.flush();
         entityManager.clear();
 
-        List<FamilyPhotoReport> reports = photoReports.findAll(Sort.by("id"));
-        assertThat(reports).hasSize(3);
-        assertThat(reports).extracting(FamilyPhotoReport::getId).doesNotHaveDuplicates();
-        assertThat(reports).extracting(FamilyPhotoReport::isHidden).containsExactly(false, false, hide);
-        assertThat(reports).allSatisfy(report -> {
+        assertThat(photoReports.findAll()).singleElement().satisfies(report -> {
             assertThat(report.getFamilyPhoto().getFamilyPhotoId()).isEqualTo(firstPhoto.getFamilyPhotoId());
             assertThat(report.getReporter().getUsersId()).isEqualTo(reporter.getUsersId());
+            assertThat(report.getReason()).isEqualTo(PhotoReportReason.ETC);
+            assertThat(report.getDetail()).isNull();
             assertThat(report.getStatus()).isEqualTo(PhotoReportStatus.PENDING);
+            assertThat(report.isHidden()).isEqualTo(hide);
         });
-        assertThat(photoReports.existsByFamilyPhoto_FamilyPhotoIdAndReporter_UsersIdAndHiddenTrue(
-                firstPhoto.getFamilyPhotoId(), reporter.getUsersId())).isEqualTo(hide);
         assertThat(visiblePhotoIds(reporter)).contains(secondPhoto.getFamilyPhotoId());
         assertThat(visiblePhotoIds(reporter).contains(firstPhoto.getFamilyPhotoId())).isEqualTo(!hide);
         assertThat(visiblePhotoIds(otherReporter))
@@ -104,24 +110,30 @@ class FamilyReportIntegrationTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
-    void savesRepeatedUploaderReportsAcrossPhotosAndHidesOnlyWhenRequested(boolean hide) {
-        userReportService.reportUploader(reporter, firstPhoto.getFamilyPhotoId(), userRequest(false));
-        userReportService.reportUploader(reporter, firstPhoto.getFamilyPhotoId(), userRequest(false));
-        userReportService.reportUploader(reporter, secondPhoto.getFamilyPhotoId(), userRequest(hide));
+    void keepsFirstUploaderReportAcrossPhotosAndAppliesHideOnlyWhenRequested(boolean hide) {
+        assertThat(userReportService.reportUploader(reporter, firstPhoto.getFamilyPhotoId(), userRequest(false)))
+                .isEqualTo(FamilyReportOutcome.CREATED);
+        assertThat(userReportService.reportUploader(reporter, firstPhoto.getFamilyPhotoId(), userRequest(false)))
+                .isEqualTo(FamilyReportOutcome.ALREADY_REPORTED);
+        FamilyUserReportRequest repeatRequest = userRequest(hide);
+        repeatRequest.setReason(PhotoReportReason.ABUSE);
+        repeatRequest.setDetail("두 번째 신고");
+
+        assertThat(userReportService.reportUploader(reporter, secondPhoto.getFamilyPhotoId(), repeatRequest))
+                .isEqualTo(hide ? FamilyReportOutcome.ALREADY_REPORTED_AND_HIDDEN
+                        : FamilyReportOutcome.ALREADY_REPORTED);
+        entityManager.flush();
         entityManager.clear();
 
-        List<FamilyUserReport> reports = userReports.findAll(Sort.by("id"));
-        assertThat(reports).hasSize(3);
-        assertThat(reports).extracting(FamilyUserReport::getId).doesNotHaveDuplicates();
-        assertThat(reports).extracting(FamilyUserReport::isHidden).containsExactly(false, false, hide);
-        assertThat(reports).allSatisfy(report -> {
+        assertThat(userReports.findAll()).singleElement().satisfies(report -> {
             assertThat(report.getReportedUser().getUsersId()).isEqualTo(uploader.getUsersId());
+            assertThat(report.getFamilyPhoto().getFamilyPhotoId()).isEqualTo(firstPhoto.getFamilyPhotoId());
             assertThat(report.getReporter().getUsersId()).isEqualTo(reporter.getUsersId());
+            assertThat(report.getReason()).isEqualTo(PhotoReportReason.ETC);
+            assertThat(report.getDetail()).isNull();
             assertThat(report.getStatus()).isEqualTo(PhotoReportStatus.PENDING);
+            assertThat(report.isHidden()).isEqualTo(hide);
         });
-        assertThat(reports.get(2).getFamilyPhoto().getFamilyPhotoId()).isEqualTo(secondPhoto.getFamilyPhotoId());
-        assertThat(userReports.existsByReportedUser_UsersIdAndReporter_UsersIdAndHiddenTrue(
-                uploader.getUsersId(), reporter.getUsersId())).isEqualTo(hide);
         if (hide) {
             assertThat(visiblePhotoIds(reporter)).isEmpty();
         } else {
@@ -172,8 +184,9 @@ class FamilyReportIntegrationTest {
         photoReportService.reportPhoto(reporter, firstPhoto.getFamilyPhotoId(), photoRequest(false));
         userReportService.reportUploader(reporter, firstPhoto.getFamilyPhotoId(), userRequest(false));
 
-        assertThat(photoReports.count()).isEqualTo(2);
-        assertThat(userReports.count()).isEqualTo(2);
+        assertThat(photoReports.count()).isEqualTo(1);
+        assertThat(userReports.count()).isEqualTo(1);
+        assertThat(adminReports.countReportsOnUser(uploader.getUsersId())).isEqualTo(2);
         assertThat(visiblePhotoIds(reporter))
                 .containsExactlyInAnyOrder(firstPhoto.getFamilyPhotoId(), secondPhoto.getFamilyPhotoId());
     }
