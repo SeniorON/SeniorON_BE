@@ -260,8 +260,12 @@ class SeniorWithdrawalServiceIntegrationTest {
         service.withdrawParent(parent);
         entityManager.clear();
 
-        assertThat(familyRepository.findById(firstFamily.getFamilyId())).isPresent();
-        assertThat(familyRepository.findById(secondFamily.getFamilyId())).isPresent();
+        assertThat(familyRepository.findById(firstFamily.getFamilyId())).isEmpty();
+        assertThat(familyRepository.findById(secondFamily.getFamilyId())).isEmpty();
+        assertThat(familyMemberRepository.findAll())
+                .filteredOn(member -> member.getFamily().getFamilyId().equals(firstFamily.getFamilyId())
+                        || member.getFamily().getFamilyId().equals(secondFamily.getFamilyId()))
+                .isEmpty();
         assertThat(noticeRepository.findAll())
                 .filteredOn(notice -> notice.getSeniorId() == null)
                 .extracting(SeniorWithdrawalNotice::getFamilyId)

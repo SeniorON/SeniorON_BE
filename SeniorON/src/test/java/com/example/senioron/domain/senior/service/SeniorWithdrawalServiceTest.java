@@ -220,9 +220,18 @@ class SeniorWithdrawalServiceTest {
                 .containsExactly(20L, 21L);
 
         verify(cleanupRepository).deleteParentDependentData(parent, null);
-        verify(familyMemberRepository, never()).deleteAll(any());
+        verify(familyMemberRepository).deleteAll(List.of(
+                parentMember,
+                primaryMember,
+                subMember,
+                inactiveSubMember,
+                unmanagedChildMember,
+                otherParentMember
+        ));
+        verify(familyMemberRepository).flush();
         verify(seniorRepository, never()).delete(any());
-        verify(familyRepository, never()).delete(any());
+        verify(familyRepository).delete(family);
+        verify(familyRepository).flush();
     }
 
     @Test

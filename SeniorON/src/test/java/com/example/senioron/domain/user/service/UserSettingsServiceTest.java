@@ -98,6 +98,7 @@ class UserSettingsServiceTest {
                 org.mockito.Mockito.mock(com.example.senioron.domain.device.repository.DeviceRepository.class),
                 org.mockito.Mockito.mock(com.example.senioron.domain.senior.service.SeniorWithdrawalService.class),
                 org.mockito.Mockito.mock(com.example.senioron.domain.family.repository.FamilyMemberRepository.class),
+                org.mockito.Mockito.mock(com.example.senioron.domain.family.repository.FamilyRepository.class),
                 passwordEncoder,
                 jwtUtil,
                 org.mockito.Mockito.mock(InactivitySettingService.class),

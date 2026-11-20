@@ -81,18 +81,29 @@ public class SeniorWithdrawalService {
         Senior senior = optionalSenior.orElse(null);
         cleanupRepository.deleteParentDependentData(parentUser, senior);
 
+        List<FamilyMember> familyMembers = withdrawalFamilies.stream()
+                .flatMap(withdrawalFamily -> withdrawalFamily.familyMembers().stream())
+                .toList();
+        if (senior != null || !familyMembers.isEmpty()) {
+            familyMemberRepository.deleteAll(familyMembers);
+            familyMemberRepository.flush();
+        }
+
         if (senior != null) {
             WithdrawalFamily seniorFamily = withdrawalFamilies.stream()
                     .filter(withdrawalFamily -> withdrawalFamily.senior() != null)
                     .findFirst()
                     .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND));
 
-            familyMemberRepository.deleteAll(seniorFamily.familyMembers());
-            familyMemberRepository.flush();
             seniorFamily.family().unlinkSenior();
             seniorRepository.delete(senior);
             seniorRepository.flush();
-            familyRepository.delete(seniorFamily.family());
+        }
+
+        for (WithdrawalFamily withdrawalFamily : withdrawalFamilies) {
+            familyRepository.delete(withdrawalFamily.family());
+        }
+        if (!withdrawalFamilies.isEmpty()) {
             familyRepository.flush();
         }
 

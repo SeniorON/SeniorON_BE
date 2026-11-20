@@ -18,6 +18,7 @@ import com.example.senioron.domain.device.service.DeviceService;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
+import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.family.service.FamilyPhotoWithdrawalService;
 import com.example.senioron.domain.inactivity.service.InactivitySettingService;
 import com.example.senioron.domain.senior.entity.Senior;
@@ -29,6 +30,7 @@ import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeS
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeVerifyRequest;
 import com.example.senioron.domain.user.dto.request.TokenRefreshRequest;
 import com.example.senioron.domain.user.dto.request.UserLoginRequest;
+import com.example.senioron.domain.user.dto.request.UserRoleUpdateRequest;
 import com.example.senioron.domain.user.dto.request.UserSignUpRequest;
 import com.example.senioron.domain.user.dto.request.UserWithdrawalRequest;
 import com.example.senioron.domain.user.dto.response.OnboardingStatusResponse;
@@ -86,6 +88,7 @@ class UserServiceTest {
     private final SeniorRepository seniorRepository = mock(SeniorRepository.class);
     private final SeniorWithdrawalService seniorWithdrawalService = mock(SeniorWithdrawalService.class);
     private final FamilyMemberRepository familyMemberRepository = mock(FamilyMemberRepository.class);
+    private final FamilyRepository familyRepository = mock(FamilyRepository.class);
     private final FamilyPhotoWithdrawalService familyPhotoWithdrawalService =
             mock(FamilyPhotoWithdrawalService.class);
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
@@ -115,6 +118,7 @@ class UserServiceTest {
                 deviceRepository,
                 seniorWithdrawalService,
                 familyMemberRepository,
+                familyRepository,
                 passwordEncoder,
                 jwtUtil,
                 mock(InactivitySettingService.class),
@@ -265,6 +269,34 @@ class UserServiceTest {
         verify(deviceService).registerDevice(user, DEVICE_IDENTIFIER);
         verify(deviceService, never()).updateFcmToken(eq(user), anyString(), eq(DEVICE_IDENTIFIER));
         verify(refreshTokenRepository).saveAndFlush(any(RefreshToken.class));
+    }
+
+    @Test
+    void changingRoleToParentIsRejectedWhenAnotherParentBelongsToTheSameFamily() {
+        Family family = createFamily(1L);
+        User child = createChild(1L, family, ManagerType.SUB);
+        User existingParent = createUser(2L);
+        FamilyMember childMember = createFamilyMember(10L, child, family, ManagerType.SUB);
+        FamilyMember parentMember = createFamilyMember(11L, existingParent, family, ManagerType.NONE);
+        UserRoleUpdateRequest request = new UserRoleUpdateRequest();
+        ReflectionTestUtils.setField(request, "role", Role.PARENT);
+
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(child));
+        given(userRepository.findById(1L)).willReturn(Optional.of(child));
+        given(familyMemberRepository.findAllByUserWithFamilyAndSeniorOrderByIdAsc(child))
+                .willReturn(List.of(childMember));
+        given(familyMemberRepository.findAllByUser(child)).willReturn(List.of(childMember));
+        given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
+        given(familyMemberRepository.findAllByFamilyOrderByIdAsc(family))
+                .willReturn(List.of(childMember, parentMember));
+
+        assertThatThrownBy(() -> userService.updateRole(child, request))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.FAMILY_PARENT_ALREADY_EXISTS);
+
+        assertThat(child.getRole()).isEqualTo(Role.CHILD);
     }
 
     @Test

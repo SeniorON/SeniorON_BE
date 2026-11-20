@@ -329,6 +329,48 @@ class FamilyServiceTest {
     }
 
     @Test
+    void joinFamilyRejectsSecondParentEvenBeforeSeniorProfileIsRegistered() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .seniorCode("ABCD-1234")
+                .build();
+        User joiningParent = User.builder()
+                .usersId(2L)
+                .name("가입 부모")
+                .role(Role.PARENT)
+                .build();
+        User existingParent = User.builder()
+                .usersId(3L)
+                .name("기존 부모")
+                .role(Role.PARENT)
+                .build();
+        FamilyMember existingParentMember = FamilyMember.builder()
+                .id(10L)
+                .user(existingParent)
+                .family(family)
+                .managerType(ManagerType.NONE)
+                .build();
+
+        given(userRepository.findById(2L)).willReturn(Optional.of(joiningParent));
+        given(familyRepository.findBySeniorCodeForUpdate("ABCD-1234"))
+                .willReturn(Optional.of(family));
+        given(familyMemberRepository.findAllByFamilyOrderByIdAsc(family))
+                .willReturn(List.of(existingParentMember));
+
+        assertThatThrownBy(() -> familyService.joinFamily(
+                joiningParent,
+                createJoinRequest("ABCD-1234")
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.FAMILY_PARENT_ALREADY_EXISTS);
+
+        verify(familyMemberRepository, never()).save(any());
+        verify(deviceService, never()).reconnectDevice(joiningParent);
+    }
+
+    @Test
     void joinFamilyDoesNotRecordConnectionForDuplicateParentMembership() {
         Family family = Family.builder()
                 .familyId(1L)

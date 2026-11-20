@@ -117,6 +117,7 @@ public class FamilyService {
         if (user.getRole() == Role.CHILD) {
             managerType = ManagerType.SUB;
         } else if (user.getRole() == Role.PARENT) {
+            validateNoOtherParentMember(user, family);
             managerType = ManagerType.NONE;
 
             deviceService.reconnectDevice(user);
@@ -157,6 +158,20 @@ public class FamilyService {
                 .familyId(family.getFamilyId())
                 .seniorCode(family.getSeniorCode())
                 .build();
+    }
+
+    private void validateNoOtherParentMember(User joiningUser, Family family) {
+        boolean hasOtherParent = familyMemberRepository
+                .findAllByFamilyOrderByIdAsc(family)
+                .stream()
+                .anyMatch(member -> member.getUser().getRole() == Role.PARENT
+                        && !Objects.equals(
+                                member.getUser().getUsersId(),
+                                joiningUser.getUsersId()
+                        ));
+        if (hasOtherParent) {
+            throw new BusinessException(ErrorCode.FAMILY_PARENT_ALREADY_EXISTS);
+        }
     }
 
     // 가족 구성원 조회 메소드
