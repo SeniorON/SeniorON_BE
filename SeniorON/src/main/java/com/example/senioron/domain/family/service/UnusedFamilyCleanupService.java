@@ -53,6 +53,26 @@ public class UnusedFamilyCleanupService {
         }
     }
 
+    /**
+     * 주담당자 회원 탈퇴 시, 현재 연결된 구성원이 전혀 없는 Family를 삭제한다.
+     * 과거 연결 이력(firstSeniorConnectedAt)은 현재 연결 상태가 아니므로 판단에 사용하지 않는다.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void cleanupAfterPrimaryWithdrawal(Family family) {
+        List<Senior> lockedSeniors = seniorRepository
+                .findAllByFamilyOrderBySeniorIdAscForUpdate(family);
+        if (familyMemberRepository.existsByFamily(family) || !lockedSeniors.isEmpty()) {
+            throw cleanupBlocked();
+        }
+
+        try {
+            familyRepository.delete(family);
+            familyRepository.flush();
+        } catch (DataIntegrityViolationException exception) {
+            throw cleanupBlocked();
+        }
+    }
+
     private void validateCleanupConditions(
             Family family,
             List<Senior> lockedSeniors

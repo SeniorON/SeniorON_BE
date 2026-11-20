@@ -19,6 +19,7 @@ import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
+import com.example.senioron.domain.family.service.FamilyConnectionService;
 import com.example.senioron.domain.family.service.FamilyPhotoWithdrawalService;
 import com.example.senioron.domain.inactivity.service.InactivitySettingService;
 import com.example.senioron.domain.senior.entity.Senior;
@@ -89,6 +90,7 @@ class UserServiceTest {
     private final SeniorWithdrawalService seniorWithdrawalService = mock(SeniorWithdrawalService.class);
     private final FamilyMemberRepository familyMemberRepository = mock(FamilyMemberRepository.class);
     private final FamilyRepository familyRepository = mock(FamilyRepository.class);
+    private final FamilyConnectionService familyConnectionService = mock(FamilyConnectionService.class);
     private final FamilyPhotoWithdrawalService familyPhotoWithdrawalService =
             mock(FamilyPhotoWithdrawalService.class);
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
@@ -119,6 +121,7 @@ class UserServiceTest {
                 seniorWithdrawalService,
                 familyMemberRepository,
                 familyRepository,
+                familyConnectionService,
                 passwordEncoder,
                 jwtUtil,
                 mock(InactivitySettingService.class),
@@ -525,7 +528,7 @@ class UserServiceTest {
     }
 
     @Test
-    void primaryUserCannotWithdrawAndDataIsUnchanged() {
+    void primaryWithdrawalBlockedByTransferRequirementDoesNotDeleteData() {
         User user = createWithdrawalUser(null);
         Family family = createFamily(1L);
         FamilyMember primaryMember = createFamilyMember(
@@ -535,13 +538,16 @@ class UserServiceTest {
                 ManagerType.PRIMARY
         );
         given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(user));
-        given(familyMemberRepository.findAllByUser(user)).willReturn(List.of(primaryMember));
+        org.mockito.Mockito.doThrow(new BusinessException(
+                        ErrorCode.PRIMARY_WITHDRAWAL_REQUIRES_TRANSFER))
+                .when(familyConnectionService)
+                .withdrawPrimaryMemberships(user);
 
         assertThatThrownBy(() -> userService.withdraw(user, createWithdrawalRequest(UserService.WITHDRAWAL_CONFIRMATION)))
                 .isInstanceOf(BusinessException.class)
                 .asInstanceOf(type(BusinessException.class))
                 .extracting(BusinessException::getCode)
-                .isEqualTo(ErrorCode.PRIMARY_USER_CANNOT_WITHDRAW);
+                .isEqualTo(ErrorCode.PRIMARY_WITHDRAWAL_REQUIRES_TRANSFER);
 
         assertThat(user.getStatus()).isEqualTo(UserStatus.ACTIVE);
         assertThat(user.getWithdrawnAt()).isNull();
@@ -554,48 +560,7 @@ class UserServiceTest {
         verify(socialAccountRepository, never()).deleteAllByUser(any(User.class));
         verify(familyMemberRepository, never()).deleteAllByUser(any(User.class));
         verify(familyPhotoWithdrawalService, never()).deleteUploadedPhotos(any(User.class));
-    }
-
-    @Test
-    void primaryThenSubUserCannotWithdrawRegardlessOfTransientManagerType() {
-        User user = createWithdrawalUser(ManagerType.SUB);
-        Family firstFamily = createFamily(1L);
-        Family secondFamily = createFamily(2L);
-        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(user));
-        given(familyMemberRepository.findAllByUser(user)).willReturn(List.of(
-                createFamilyMember(1L, user, firstFamily, ManagerType.PRIMARY),
-                createFamilyMember(2L, user, secondFamily, ManagerType.SUB)
-        ));
-
-        assertPrimaryUserCannotWithdraw(user);
-    }
-
-    @Test
-    void subThenPrimaryUserCannotWithdraw() {
-        User user = createWithdrawalUser(null);
-        Family firstFamily = createFamily(1L);
-        Family secondFamily = createFamily(2L);
-        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(user));
-        given(familyMemberRepository.findAllByUser(user)).willReturn(List.of(
-                createFamilyMember(1L, user, firstFamily, ManagerType.SUB),
-                createFamilyMember(2L, user, secondFamily, ManagerType.PRIMARY)
-        ));
-
-        assertPrimaryUserCannotWithdraw(user);
-    }
-
-    @Test
-    void userWhoIsPrimaryInMultipleFamiliesCannotWithdraw() {
-        User user = createWithdrawalUser(null);
-        Family firstFamily = createFamily(1L);
-        Family secondFamily = createFamily(2L);
-        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(user));
-        given(familyMemberRepository.findAllByUser(user)).willReturn(List.of(
-                createFamilyMember(1L, user, firstFamily, ManagerType.PRIMARY),
-                createFamilyMember(2L, user, secondFamily, ManagerType.PRIMARY)
-        ));
-
-        assertPrimaryUserCannotWithdraw(user);
+        verify(familyConnectionService).withdrawPrimaryMemberships(user);
     }
 
     @Test
@@ -1369,24 +1334,6 @@ class UserServiceTest {
         UserWithdrawalRequest request = new UserWithdrawalRequest();
         ReflectionTestUtils.setField(request, "confirmation", confirmation);
         return request;
-    }
-
-    private void assertPrimaryUserCannotWithdraw(User user) {
-        assertThatThrownBy(() -> userService.withdraw(
-                user,
-                createWithdrawalRequest(UserService.WITHDRAWAL_CONFIRMATION)
-        ))
-                .isInstanceOf(BusinessException.class)
-                .asInstanceOf(type(BusinessException.class))
-                .extracting(BusinessException::getCode)
-                .isEqualTo(ErrorCode.PRIMARY_USER_CANNOT_WITHDRAW);
-
-        assertThat(user.getStatus()).isEqualTo(UserStatus.ACTIVE);
-        assertThat(user.getWithdrawnAt()).isNull();
-        verify(refreshTokenRepository, never()).deleteAllByUser(any(User.class));
-        verify(deviceRepository, never()).deleteAllByUser(any(User.class));
-        verify(socialAccountRepository, never()).deleteAllByUser(any(User.class));
-        verify(familyMemberRepository, never()).deleteAllByUser(any(User.class));
     }
 
     private User createWithdrawalUser(ManagerType managerType) {

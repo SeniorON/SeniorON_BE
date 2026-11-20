@@ -10,6 +10,7 @@ import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.entity.UserStatus;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
@@ -62,6 +63,68 @@ public class FamilyConnectionService {
         }
 
         return new FamilyConnectionDisconnectResponse(familyId, false);
+    }
+
+    @Transactional
+    public void withdrawPrimaryMemberships(User user) {
+        List<PrimaryWithdrawalTarget> targets = familyMemberRepository
+                .findAllByUserOrderByIdAsc(user)
+                .stream()
+                .filter(member -> member.getManagerType() == ManagerType.PRIMARY)
+                .map(member -> lockPrimaryWithdrawalTarget(user, member.getFamily().getFamilyId()))
+                .toList();
+
+        // 모든 Family를 먼저 검증해 한 곳이라도 탈퇴 불가하면 삭제를 시작하지 않는다.
+        targets.forEach(this::validatePrimaryWithdrawal);
+
+        for (PrimaryWithdrawalTarget target : targets) {
+            List<FamilyMember> membersToRemove = target.familyMembers().stream()
+                    .filter(member -> member.getUser().getStatus() != UserStatus.ACTIVE
+                            || Objects.equals(member.getId(), target.primaryMember().getId()))
+                    .toList();
+            familyMemberRepository.deleteAll(membersToRemove);
+            familyMemberRepository.flush();
+            unusedFamilyCleanupService.cleanupAfterPrimaryWithdrawal(target.family());
+        }
+    }
+
+    private PrimaryWithdrawalTarget lockPrimaryWithdrawalTarget(User user, Long familyId) {
+        Family family = familyRepository.findByIdForUpdate(familyId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND));
+        FamilyMember primaryMember = familyMemberRepository
+                .findByUserAndFamilyForUpdate(user, family)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_MEMBER_NOT_FOUND));
+        List<FamilyMember> familyMembers = familyMemberRepository
+                .findAllByFamilyOrderByIdAsc(family);
+        return new PrimaryWithdrawalTarget(family, primaryMember, familyMembers);
+    }
+
+    private void validatePrimaryWithdrawal(PrimaryWithdrawalTarget target) {
+        boolean hasOtherActiveChild = target.familyMembers().stream()
+                .filter(member -> !Objects.equals(member.getId(), target.primaryMember().getId()))
+                .anyMatch(member -> member.getUser().getStatus() == UserStatus.ACTIVE
+                        && member.getUser().getRole() == Role.CHILD);
+        if (hasOtherActiveChild) {
+            throw new BusinessException(ErrorCode.PRIMARY_WITHDRAWAL_REQUIRES_TRANSFER);
+        }
+
+        boolean hasOtherActiveMember = target.familyMembers().stream()
+                .filter(member -> !Objects.equals(member.getId(), target.primaryMember().getId()))
+                .anyMatch(member -> member.getUser().getStatus() == UserStatus.ACTIVE);
+        if (hasOtherActiveMember) {
+            throw new BusinessException(ErrorCode.PRIMARY_WITHDRAWAL_SENIOR_REMAINS);
+        }
+
+        if (!seniorRepository.findAllByFamilyOrderBySeniorIdAscForUpdate(target.family()).isEmpty()) {
+            throw new BusinessException(ErrorCode.PRIMARY_WITHDRAWAL_SENIOR_REMAINS);
+        }
+    }
+
+    private record PrimaryWithdrawalTarget(
+            Family family,
+            FamilyMember primaryMember,
+            List<FamilyMember> familyMembers
+    ) {
     }
 
     private void validateDisconnectRole(

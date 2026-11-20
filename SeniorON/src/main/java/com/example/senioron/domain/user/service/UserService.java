@@ -13,6 +13,7 @@ import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
+import com.example.senioron.domain.family.service.FamilyConnectionService;
 import com.example.senioron.domain.family.service.FamilyPhotoWithdrawalService;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.service.SeniorWithdrawalService;
@@ -68,6 +69,7 @@ public class UserService {
     private final SeniorWithdrawalService seniorWithdrawalService;
     private final FamilyMemberRepository familyMemberRepository;
     private final FamilyRepository familyRepository;
+    private final FamilyConnectionService familyConnectionService;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final InactivitySettingService inactivitySettingService;
@@ -391,15 +393,7 @@ public class UserService {
             throw new BusinessException(ErrorCode.INVALID_WITHDRAWAL_CONFIRMATION);
         }
 
-        boolean hasPrimaryMembership = familyMemberRepository.findAllByUser(user)
-                .stream()
-                .anyMatch(familyMember ->
-                        familyMember.getManagerType() == ManagerType.PRIMARY
-                );
-
-        if (hasPrimaryMembership) {
-            throw new BusinessException(ErrorCode.PRIMARY_USER_CANNOT_WITHDRAW);
-        }
+        familyConnectionService.withdrawPrimaryMemberships(user);
 
         familyPhotoWithdrawalService.deleteUploadedPhotos(user);
 
