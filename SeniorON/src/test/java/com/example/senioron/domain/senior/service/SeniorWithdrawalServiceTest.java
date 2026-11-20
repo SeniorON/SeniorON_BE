@@ -147,17 +147,82 @@ class SeniorWithdrawalServiceTest {
     }
 
     @Test
-    void parentWithoutSeniorStillCleansParentDependentData() {
+    void parentWithoutSeniorNotifiesOnlyActivePrimaryAndSubGuardians() {
         User parent = user(10L, Role.PARENT, UserStatus.ACTIVE);
+        Family family = Family.builder().familyId(1L).seniorCode("ABCD-EFGH").build();
+        User primary = user(20L, Role.CHILD, UserStatus.ACTIVE);
+        User sub = user(21L, Role.CHILD, UserStatus.ACTIVE);
+        User inactiveSub = user(22L, Role.CHILD, UserStatus.WITHDRAWN);
+        User unmanagedChild = user(23L, Role.CHILD, UserStatus.ACTIVE);
+        User otherParent = user(24L, Role.PARENT, UserStatus.ACTIVE);
+        FamilyMember parentMember = member(1L, parent, family, ManagerType.NONE, null, null);
+        FamilyMember primaryMember = member(2L, primary, family, ManagerType.PRIMARY,
+                SeniorRelation.MOTHER, null);
+        FamilyMember subMember = member(3L, sub, family, ManagerType.SUB,
+                SeniorRelation.OTHER, "이모");
+        FamilyMember inactiveSubMember = member(4L, inactiveSub, family, ManagerType.SUB,
+                SeniorRelation.FATHER, null);
+        FamilyMember unmanagedChildMember = member(5L, unmanagedChild, family, ManagerType.NONE,
+                SeniorRelation.FATHER, null);
+        FamilyMember otherParentMember = member(6L, otherParent, family, ManagerType.PRIMARY,
+                null, null);
+        Device primaryDevice = Device.builder()
+                .user(primary).deviceIdentifier("primary-device").deviceToken("primary-token").build();
+        Device subDevice = Device.builder()
+                .user(sub).deviceIdentifier("sub-device").deviceToken("sub-token").build();
+
         given(seniorRepository.findByParentUserForUpdate(parent)).willReturn(Optional.empty());
+        given(familyMemberRepository.findAllByUserOrderByIdAsc(parent))
+                .willReturn(List.of(parentMember));
+        given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
+        given(familyMemberRepository.findAllByFamilyOrderByIdAsc(family)).willReturn(List.of(
+                parentMember,
+                primaryMember,
+                subMember,
+                inactiveSubMember,
+                unmanagedChildMember,
+                otherParentMember
+        ));
+        given(noticeRepository.saveAndFlush(any(SeniorWithdrawalNotice.class)))
+                .willAnswer(invocation -> {
+                    SeniorWithdrawalNotice notice = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(notice, "seniorWithdrawalNoticeId", 500L);
+                    return notice;
+                });
+        given(deviceRepository.findAllByUserIn(List.of(primary, sub)))
+                .willReturn(List.of(primaryDevice, subDevice));
 
         service.withdrawParent(parent);
 
+        ArgumentCaptor<SeniorWithdrawalNotice> noticeCaptor =
+                ArgumentCaptor.forClass(SeniorWithdrawalNotice.class);
+        verify(noticeRepository).saveAndFlush(noticeCaptor.capture());
+        assertThat(noticeCaptor.getValue().getSeniorId()).isNull();
+        assertThat(noticeCaptor.getValue().getFamilyId()).isEqualTo(1L);
+        assertThat(noticeCaptor.getValue().getSeniorName()).isEqualTo("사용자10");
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Iterable<SeniorWithdrawalNoticeRecipient>> recipientsCaptor =
+                ArgumentCaptor.forClass(Iterable.class);
+        verify(recipientRepository).saveAllAndFlush(recipientsCaptor.capture());
+        List<SeniorWithdrawalNoticeRecipient> recipients = new java.util.ArrayList<>();
+        recipientsCaptor.getValue().forEach(recipients::add);
+        assertThat(recipients)
+                .extracting(recipient -> recipient.getRecipientUser().getUsersId())
+                .containsExactly(20L, 21L);
+
+        ArgumentCaptor<SeniorWithdrawalNoticeCreatedEvent> eventCaptor =
+                ArgumentCaptor.forClass(SeniorWithdrawalNoticeCreatedEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().seniorId()).isNull();
+        assertThat(eventCaptor.getValue().targets())
+                .extracting(SeniorWithdrawalNoticeCreatedEvent.PushTarget::recipientUserId)
+                .containsExactly(20L, 21L);
+
         verify(cleanupRepository).deleteParentDependentData(parent, null);
-        verify(noticeRepository, never()).saveAndFlush(any());
-        verify(recipientRepository, never()).saveAllAndFlush(any());
-        verify(eventPublisher, never()).publishEvent(any());
+        verify(familyMemberRepository, never()).deleteAll(any());
         verify(seniorRepository, never()).delete(any());
+        verify(familyRepository, never()).delete(any());
     }
 
     @Test

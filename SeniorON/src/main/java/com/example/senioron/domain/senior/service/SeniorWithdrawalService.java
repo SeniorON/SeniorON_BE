@@ -23,9 +23,11 @@ import com.example.senioron.global.apiPayload.exception.BusinessException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -54,39 +56,76 @@ public class SeniorWithdrawalService {
     @Transactional(propagation = Propagation.MANDATORY)
     public void withdrawParent(User parentUser) {
         Optional<Senior> optionalSenior = seniorRepository.findByParentUserForUpdate(parentUser);
-
-        if (optionalSenior.isEmpty()) {
-            cleanupRepository.deleteParentDependentData(parentUser, null);
-            return;
+        LocalDateTime withdrawnAt = LocalDateTime.now();
+        List<WithdrawalFamily> withdrawalFamilies = findWithdrawalFamilies(
+                parentUser,
+                optionalSenior.orElse(null)
+        );
+        List<SeniorWithdrawalNoticeCreatedEvent> events = new ArrayList<>();
+        for (WithdrawalFamily withdrawalFamily : withdrawalFamilies) {
+            List<FamilyMember> guardianMembers = findActiveGuardians(
+                    withdrawalFamily.familyMembers()
+            );
+            SeniorWithdrawalNoticeCreatedEvent event = createNoticeEvent(
+                    withdrawalFamily.senior(),
+                    withdrawalFamily.family(),
+                    guardianMembers,
+                    parentUser.getName(),
+                    withdrawnAt
+            );
+            if (event != null) {
+                events.add(event);
+            }
         }
 
-        Senior senior = optionalSenior.get();
-        Family family = familyRepository.findByIdForUpdate(senior.getFamily().getFamilyId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND));
-        LocalDateTime withdrawnAt = LocalDateTime.now();
-        List<FamilyMember> familyMembers = familyMemberRepository
-                .findAllByFamilyOrderByIdAsc(family);
-        List<FamilyMember> guardianMembers = findActiveGuardians(familyMembers);
-        SeniorWithdrawalNoticeCreatedEvent event = createNoticeEvent(
-                senior,
-                family,
-                guardianMembers,
-                withdrawnAt
-        );
-
+        Senior senior = optionalSenior.orElse(null);
         cleanupRepository.deleteParentDependentData(parentUser, senior);
 
-        familyMemberRepository.deleteAll(familyMembers);
-        familyMemberRepository.flush();
-        family.unlinkSenior();
-        seniorRepository.delete(senior);
-        seniorRepository.flush();
-        familyRepository.delete(family);
-        familyRepository.flush();
+        if (senior != null) {
+            WithdrawalFamily seniorFamily = withdrawalFamilies.stream()
+                    .filter(withdrawalFamily -> withdrawalFamily.senior() != null)
+                    .findFirst()
+                    .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND));
 
-        if (event != null) {
+            familyMemberRepository.deleteAll(seniorFamily.familyMembers());
+            familyMemberRepository.flush();
+            seniorFamily.family().unlinkSenior();
+            seniorRepository.delete(senior);
+            seniorRepository.flush();
+            familyRepository.delete(seniorFamily.family());
+            familyRepository.flush();
+        }
+
+        for (SeniorWithdrawalNoticeCreatedEvent event : events) {
             eventPublisher.publishEvent(event);
         }
+    }
+
+    private List<WithdrawalFamily> findWithdrawalFamilies(User parentUser, Senior senior) {
+        Set<Long> familyIds = new LinkedHashSet<>();
+        if (senior != null) {
+            familyIds.add(senior.getFamily().getFamilyId());
+        }
+
+        List<FamilyMember> parentMemberships = Optional.ofNullable(
+                familyMemberRepository.findAllByUserOrderByIdAsc(parentUser)
+        ).orElseGet(List::of);
+        parentMemberships.stream()
+                .map(FamilyMember::getFamily)
+                .map(Family::getFamilyId)
+                .forEach(familyIds::add);
+
+        return familyIds.stream()
+                .map(familyId -> familyRepository.findByIdForUpdate(familyId)
+                        .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND)))
+                .map(family -> new WithdrawalFamily(
+                        family,
+                        senior != null && senior.getFamily().getFamilyId().equals(family.getFamilyId())
+                                ? senior
+                                : null,
+                        familyMemberRepository.findAllByFamilyOrderByIdAsc(family)
+                ))
+                .toList();
     }
 
     private List<FamilyMember> findActiveGuardians(List<FamilyMember> familyMembers) {
@@ -108,16 +147,17 @@ public class SeniorWithdrawalService {
             Senior senior,
             Family family,
             List<FamilyMember> guardianMembers,
+            String parentName,
             LocalDateTime withdrawnAt
     ) {
-        if (noticeRepository.findBySeniorId(senior.getSeniorId()).isPresent()) {
+        if (senior != null && noticeRepository.findBySeniorId(senior.getSeniorId()).isPresent()) {
             return null;
         }
 
         SeniorWithdrawalNotice notice = SeniorWithdrawalNotice.builder()
-                .seniorId(senior.getSeniorId())
+                .seniorId(senior == null ? null : senior.getSeniorId())
                 .familyId(family.getFamilyId())
-                .seniorName(senior.getName())
+                .seniorName(senior == null ? parentName : senior.getName())
                 .withdrawnAt(withdrawnAt)
                 .expiresAt(withdrawnAt.plusDays(retentionDays))
                 .completedAt(guardianMembers.isEmpty() ? withdrawnAt : null)
@@ -149,11 +189,18 @@ public class SeniorWithdrawalService {
 
         return new SeniorWithdrawalNoticeCreatedEvent(
                 savedNotice.getSeniorWithdrawalNoticeId(),
-                senior.getSeniorId(),
+                senior == null ? null : senior.getSeniorId(),
                 family.getFamilyId(),
-                senior.getName(),
+                senior == null ? parentName : senior.getName(),
                 targets
         );
+    }
+
+    private record WithdrawalFamily(
+            Family family,
+            Senior senior,
+            List<FamilyMember> familyMembers
+    ) {
     }
 
     private Map<Long, List<String>> loadTokensByUserId(List<User> guardians) {

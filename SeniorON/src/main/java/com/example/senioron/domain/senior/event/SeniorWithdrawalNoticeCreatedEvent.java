@@ -11,6 +11,9 @@ public record SeniorWithdrawalNoticeCreatedEvent(
 ) {
 
     public SeniorWithdrawalNoticeCreatedEvent {
+        if (withdrawalNoticeId == null || familyId == null) {
+            throw new IllegalArgumentException("탈퇴 알림에는 noticeId와 familyId가 필요합니다.");
+        }
         targets = List.copyOf(targets);
     }
 

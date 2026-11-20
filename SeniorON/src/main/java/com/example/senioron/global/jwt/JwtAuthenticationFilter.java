@@ -151,7 +151,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         String sessionId = jwtUtil.getSessionId(claims);
                         if (sessionId != null && !sessionId.isBlank()
                                 && (refreshTokenService == null
-                                || !refreshTokenService.authenticateAndRecordActivity(user, sessionId))) {
+                                || !refreshTokenService.isValidSession(user, sessionId))) {
                             throw new JwtException("Login session is expired or invalid.");
                         }
                         UsernamePasswordAuthenticationToken authentication =

@@ -297,7 +297,7 @@ class UserServiceTest {
     }
 
     @Test
-    void nonPersistentSessionRefreshesWhenItWasActiveWithinOneHour() {
+    void refreshTokenSucceedsAfterMoreThanOneHourWithoutActivity() {
         User user = createUser(1L);
         given(userRepository.findByLoginId("testId")).willReturn(Optional.of(user));
         given(refreshTokenRepository.findByUserAndDeviceIdentifier(user, DEVICE_IDENTIFIER))
@@ -307,7 +307,7 @@ class UserServiceTest {
         RefreshToken savedRefreshToken = captureSavedRefreshToken();
         given(refreshTokenRepository.findByTokenHash(savedRefreshToken.getTokenHash()))
                 .willReturn(Optional.of(savedRefreshToken));
-        clock.advance(Duration.ofMinutes(59));
+        clock.advance(Duration.ofHours(2));
 
         TokenRefreshResponse response = userService.refreshToken(
                 createTokenRefreshRequest(loginResponse.getRefreshToken(), DEVICE_IDENTIFIER));
@@ -315,28 +315,6 @@ class UserServiceTest {
         assertThat(response.getAccessToken()).isNotBlank();
         assertThat(response.getRefreshToken()).isNotBlank();
         assertThat(savedRefreshToken.isRevoked()).isFalse();
-        assertThat(savedRefreshToken.getLastActiveAt()).isEqualTo(clock.now());
-    }
-
-    @Test
-    void nonPersistentSessionCannotRefreshAfterOneHourOfInactivity() {
-        User user = createUser(1L);
-        given(userRepository.findByLoginId("testId")).willReturn(Optional.of(user));
-        given(refreshTokenRepository.findByUserAndDeviceIdentifier(user, DEVICE_IDENTIFIER))
-                .willReturn(Optional.empty());
-
-        UserLoginResponse loginResponse = userService.login(createLoginRequest(null, DEVICE_IDENTIFIER));
-        RefreshToken savedRefreshToken = captureSavedRefreshToken();
-        given(refreshTokenRepository.findByTokenHash(savedRefreshToken.getTokenHash()))
-                .willReturn(Optional.of(savedRefreshToken));
-        clock.advance(Duration.ofHours(1));
-
-        assertThatThrownBy(() -> userService.refreshToken(
-                createTokenRefreshRequest(loginResponse.getRefreshToken(), DEVICE_IDENTIFIER)))
-                .asInstanceOf(type(BusinessException.class))
-                .extracting(BusinessException::getCode)
-                .isEqualTo(ErrorCode.EXPIRED_IDLE_SESSION);
-        assertThat(savedRefreshToken.isRevoked()).isTrue();
     }
 
     @Test
@@ -375,6 +353,21 @@ class UserServiceTest {
                 .asInstanceOf(type(BusinessException.class))
                 .extracting(BusinessException::getCode)
                 .isEqualTo(ErrorCode.INVALID_REFRESH_TOKEN);
+    }
+
+    @Test
+    void refreshTokenFailsWhenRefreshTokenIsExpired() {
+        User user = createUser(1L);
+        String refreshToken = jwtUtil.createRefreshToken(user);
+        RefreshToken savedRefreshToken = createRefreshToken(user, "device-1", refreshToken);
+        ReflectionTestUtils.setField(savedRefreshToken, "expiresAt", clock.now().minusSeconds(1));
+        given(refreshTokenRepository.findByTokenHash(savedRefreshToken.getTokenHash()))
+                .willReturn(Optional.of(savedRefreshToken));
+
+        assertThatThrownBy(() -> userService.refreshToken(createTokenRefreshRequest(refreshToken, "device-1")))
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.EXPIRED_REFRESH_TOKEN);
     }
 
     @Test

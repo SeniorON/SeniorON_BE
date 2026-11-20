@@ -123,8 +123,7 @@ public class SocialSignupTransactionService {
             loginSession = refreshTokenService.saveOrRotate(
                     socialAccount.getUser(),
                     request.getDeviceIdentifier(),
-                    refreshToken,
-                    false
+                    refreshToken
             );
             log.info("[JWT] refresh token save complete saveOrRotateSuccess=true");
         } catch (RuntimeException e) {

@@ -53,7 +53,7 @@ public class SeniorWithdrawalNotice extends BaseEntity {
      * 탈퇴 후 Senior/Family가 삭제되거나 재구성되어도 원래 식별자를 보존하기 위한
      * 스냅샷 값이다. 의도적으로 FK를 두지 않는다.
      */
-    @Column(name = "senior_id", nullable = false)
+    @Column(name = "senior_id")
     private Long seniorId;
 
     @Column(name = "family_id", nullable = false)

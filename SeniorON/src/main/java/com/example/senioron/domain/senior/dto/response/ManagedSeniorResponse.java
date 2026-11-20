@@ -45,7 +45,7 @@ public record ManagedSeniorResponse(
                 notice.getSeniorName(),
                 recipient.getRelation(),
                 recipient.getCustomRelation(),
-                true,
+                notice.getSeniorId() != null,
                 true,
                 notice.getSeniorWithdrawalNoticeId()
         );

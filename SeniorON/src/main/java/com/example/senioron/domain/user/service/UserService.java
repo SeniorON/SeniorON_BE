@@ -356,11 +356,6 @@ public class UserService {
             throw new BusinessException(ErrorCode.EXPIRED_REFRESH_TOKEN);
         }
 
-        if (refreshTokenService.isIdleExpired(savedRefreshToken)) {
-            savedRefreshToken.revoke();
-            throw new BusinessException(ErrorCode.EXPIRED_IDLE_SESSION);
-        }
-
         if (!Objects.equals(savedRefreshToken.getDeviceIdentifier(), request.getDeviceIdentifier())) {
             throw new BusinessException(ErrorCode.REFRESH_TOKEN_DEVICE_MISMATCH);
         }

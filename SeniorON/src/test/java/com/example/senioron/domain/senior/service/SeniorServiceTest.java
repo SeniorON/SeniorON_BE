@@ -170,6 +170,41 @@ class SeniorServiceTest {
     }
 
     @Test
+    void profilelessWithdrawalNoticeIsReturnedWithoutSeniorId() {
+        User user = createChild(1L, null, ManagerType.PRIMARY);
+        SeniorWithdrawalNotice notice = SeniorWithdrawalNotice.builder()
+                .seniorWithdrawalNoticeId(51L)
+                .familyId(2L)
+                .seniorName("프로필 없는 부모")
+                .withdrawnAt(LocalDateTime.now().minusDays(1))
+                .expiresAt(LocalDateTime.now().plusDays(29))
+                .build();
+        SeniorWithdrawalNoticeRecipient recipient = SeniorWithdrawalNoticeRecipient.builder()
+                .notice(notice)
+                .recipientUser(user)
+                .relation(SeniorRelation.MOTHER)
+                .build();
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(familyMemberRepository.findManagedSeniorResponsesByUserId(1L)).willReturn(List.of());
+        given(withdrawalRecipientRepository.findUnacknowledgedAndUnexpiredByRecipientUserId(
+                org.mockito.ArgumentMatchers.eq(1L), any())).willReturn(List.of(recipient));
+
+        var response = seniorService.getManagedSeniors(user);
+
+        assertThat(response).containsExactly(new ManagedSeniorResponse(
+                2L,
+                null,
+                "프로필 없는 부모",
+                SeniorRelation.MOTHER,
+                null,
+                false,
+                true,
+                51L
+        ));
+    }
+
+    @Test
     void getFamilySeniorsReturnsFamilySenior() {
         Family family = Family.builder().familyId(1L).build();
         User user = createChild(1L, family, ManagerType.PRIMARY);

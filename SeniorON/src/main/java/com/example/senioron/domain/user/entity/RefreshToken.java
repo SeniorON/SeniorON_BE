@@ -61,41 +61,24 @@ public class RefreshToken extends BaseEntity {
     @Column(name = "expires_at", nullable = false)
     private LocalDateTime expiresAt;
 
-    @Column(name = "keep_logged_in", nullable = false)
-    @Builder.Default
-    private boolean keepLoggedIn = false;
-
-    @Column(name = "last_active_at", nullable = false)
-    @Builder.Default
-    private LocalDateTime lastActiveAt = LocalDateTime.now();
-
     @Column(nullable = false)
     @Builder.Default
     private boolean revoked = false;
 
     public void startNewSession(
             String tokenHash,
-            LocalDateTime expiresAt,
-            boolean keepLoggedIn,
-            LocalDateTime now
+            LocalDateTime expiresAt
     ) {
         this.sessionId = UUID.randomUUID().toString();
         this.tokenHash = tokenHash;
         this.expiresAt = expiresAt;
-        this.keepLoggedIn = keepLoggedIn;
-        this.lastActiveAt = now;
         this.revoked = false;
     }
 
-    public void rotate(String tokenHash, LocalDateTime expiresAt, LocalDateTime now) {
+    public void rotate(String tokenHash, LocalDateTime expiresAt) {
         this.tokenHash = tokenHash;
         this.expiresAt = expiresAt;
-        this.lastActiveAt = now;
         this.revoked = false;
-    }
-
-    public void updateLastActiveAt(LocalDateTime now) {
-        this.lastActiveAt = now;
     }
 
     public void revoke() {
@@ -106,8 +89,4 @@ public class RefreshToken extends BaseEntity {
         return expiresAt.isBefore(now) || expiresAt.isEqual(now);
     }
 
-    public boolean isIdleExpired(LocalDateTime now, long idleTimeoutSeconds) {
-        return !keepLoggedIn
-                && !lastActiveAt.plusSeconds(idleTimeoutSeconds).isAfter(now);
-    }
 }

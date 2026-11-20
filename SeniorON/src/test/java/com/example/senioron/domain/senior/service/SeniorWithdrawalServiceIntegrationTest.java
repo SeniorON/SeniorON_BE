@@ -221,6 +221,60 @@ class SeniorWithdrawalServiceIntegrationTest {
         assertThat(notice.getCompletedAt()).isNotNull();
     }
 
+    @Test
+    void profilelessParentCreatesNoticesForEveryFamilyMembership() {
+        User parent = userRepository.save(user("profileless-parent", Role.PARENT));
+        User firstPrimary = userRepository.save(user("first-primary", Role.CHILD));
+        User firstSub = userRepository.save(user("first-sub", Role.CHILD));
+        User secondPrimary = userRepository.save(user("second-primary", Role.CHILD));
+        Family firstFamily = familyRepository.save(Family.builder().seniorCode("FIRST-01").build());
+        Family secondFamily = familyRepository.save(Family.builder().seniorCode("SECOND-01").build());
+
+        familyMemberRepository.save(FamilyMember.builder()
+                .user(parent).family(firstFamily).managerType(ManagerType.NONE).build());
+        familyMemberRepository.save(FamilyMember.builder()
+                .user(firstPrimary).family(firstFamily).managerType(ManagerType.PRIMARY)
+                .relation(SeniorRelation.MOTHER).build());
+        familyMemberRepository.save(FamilyMember.builder()
+                .user(firstSub).family(firstFamily).managerType(ManagerType.SUB)
+                .relation(SeniorRelation.OTHER).customRelation("이모").build());
+        familyMemberRepository.save(FamilyMember.builder()
+                .user(parent).family(secondFamily).managerType(ManagerType.NONE).build());
+        familyMemberRepository.save(FamilyMember.builder()
+                .user(secondPrimary).family(secondFamily).managerType(ManagerType.PRIMARY)
+                .relation(SeniorRelation.FATHER).build());
+        User inactive = userRepository.save(User.builder()
+                .loginId("inactive-sub")
+                .email("inactive-sub@example.com")
+                .password("encoded")
+                .name("inactive-sub")
+                .role(Role.CHILD)
+                .status(UserStatus.WITHDRAWN)
+                .build());
+        familyMemberRepository.save(FamilyMember.builder()
+                .user(inactive).family(secondFamily).managerType(ManagerType.SUB)
+                .relation(SeniorRelation.FATHER).build());
+        entityManager.flush();
+        entityManager.clear();
+
+        service.withdrawParent(parent);
+        entityManager.clear();
+
+        assertThat(familyRepository.findById(firstFamily.getFamilyId())).isPresent();
+        assertThat(familyRepository.findById(secondFamily.getFamilyId())).isPresent();
+        assertThat(noticeRepository.findAll())
+                .filteredOn(notice -> notice.getSeniorId() == null)
+                .extracting(SeniorWithdrawalNotice::getFamilyId)
+                .containsExactlyInAnyOrder(firstFamily.getFamilyId(), secondFamily.getFamilyId());
+        assertThat(recipientRepository.findAll())
+                .extracting(recipient -> recipient.getRecipientUser().getUsersId())
+                .containsExactlyInAnyOrder(
+                        firstPrimary.getUsersId(),
+                        firstSub.getUsersId(),
+                        secondPrimary.getUsersId()
+                );
+    }
+
     private User user(String loginId, Role role) {
         return User.builder()
                 .loginId(loginId)
