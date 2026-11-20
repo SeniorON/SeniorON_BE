@@ -107,8 +107,7 @@ public class SeniorReloginRequestService {
         var loginSession = refreshTokenService.saveOrRotate(
                 parentUser,
                 request.deviceIdentifier(),
-                refreshToken,
-                request.keepLoggedIn()
+                refreshToken
         );
         String accessToken = jwtUtil.createAccessToken(parentUser, loginSession.getSessionId());
         reloginRequest.use();

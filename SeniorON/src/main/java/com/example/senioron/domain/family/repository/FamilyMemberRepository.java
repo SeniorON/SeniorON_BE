@@ -77,6 +77,9 @@ public interface FamilyMemberRepository extends JpaRepository<FamilyMember, Long
 
     List<FamilyMember> findAllByUser(User user);
 
+    @EntityGraph(attributePaths = {"family"})
+    List<FamilyMember> findAllByUserOrderByIdAsc(User user);
+
     @Query("""
             SELECT fm
             FROM FamilyMember fm

@@ -151,6 +151,109 @@ class FamilyConnectionServiceIntegrationTest {
     }
 
     @Test
+    void primaryWithdrawalDeletesFamilyWhenOnlyPrimaryCurrentlyRemainsDespiteSeniorHistory() {
+        Family family = familyRepository.saveAndFlush(Family.builder()
+                .seniorCode("WITHDRAW-HISTORY")
+                .firstSeniorConnectedAt(LocalDateTime.of(2026, 11, 1, 10, 0))
+                .build());
+        User primary = saveUser("withdraw-history-primary");
+        FamilyMember primaryMember = saveMember(primary, family, ManagerType.PRIMARY);
+
+        service.withdrawPrimaryMemberships(primary);
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(familyMemberRepository.findById(primaryMember.getId())).isEmpty();
+        assertThat(familyRepository.findById(family.getFamilyId())).isEmpty();
+        assertThat(userRepository.findById(primary.getUsersId())).isPresent();
+    }
+
+    @Test
+    void primaryWithdrawalDeletesFamilyAfterDisconnectedSubIsNoLongerCurrentMember() {
+        Family family = saveFamily("WITHDRAW-DISCONNECTED-SUB");
+        User primary = saveUser("withdraw-disconnected-primary");
+        User sub = saveUser("withdraw-disconnected-sub");
+        saveMember(primary, family, ManagerType.PRIMARY);
+        FamilyMember disconnectedSub = saveMember(sub, family, ManagerType.SUB);
+        familyMemberRepository.delete(disconnectedSub);
+        familyMemberRepository.flush();
+
+        service.withdrawPrimaryMemberships(primary);
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(familyRepository.findById(family.getFamilyId())).isEmpty();
+        assertThat(userRepository.findById(primary.getUsersId())).isPresent();
+        assertThat(userRepository.findById(sub.getUsersId())).isPresent();
+    }
+
+    @Test
+    void primaryWithdrawalRequiresTransferWhenActiveSubCurrentlyRemains() {
+        Family family = saveFamily("WITHDRAW-TRANSFER");
+        User primary = saveUser("withdraw-transfer-primary");
+        User sub = saveUser("withdraw-transfer-sub");
+        FamilyMember primaryMember = saveMember(primary, family, ManagerType.PRIMARY);
+        FamilyMember subMember = saveMember(sub, family, ManagerType.SUB);
+
+        assertThatThrownBy(() -> service.withdrawPrimaryMemberships(primary))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.PRIMARY_WITHDRAWAL_REQUIRES_TRANSFER);
+
+        assertThat(familyRepository.findById(family.getFamilyId())).isPresent();
+        assertThat(familyMemberRepository.findById(primaryMember.getId())).isPresent();
+        assertThat(familyMemberRepository.findById(subMember.getId())).isPresent();
+    }
+
+    @Test
+    void primaryWithdrawalRejectsProfilelessParentAndKeepsFamilyData() {
+        Family family = saveFamily("WITHDRAW-PROFILELESS-PARENT");
+        User primary = saveUser("withdraw-profileless-primary");
+        User parent = userRepository.saveAndFlush(User.builder()
+                .loginId("withdraw-profileless-parent")
+                .name("withdraw-profileless-parent")
+                .role(Role.PARENT)
+                .build());
+        FamilyMember primaryMember = saveMember(primary, family, ManagerType.PRIMARY);
+        FamilyMember parentMember = saveMember(parent, family, ManagerType.NONE);
+
+        assertThatThrownBy(() -> service.withdrawPrimaryMemberships(primary))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.PRIMARY_WITHDRAWAL_SENIOR_REMAINS);
+
+        assertThat(familyRepository.findById(family.getFamilyId())).isPresent();
+        assertThat(familyMemberRepository.findById(primaryMember.getId())).isPresent();
+        assertThat(familyMemberRepository.findById(parentMember.getId())).isPresent();
+    }
+
+    @Test
+    void primaryWithdrawalRejectsWhenOnlySeniorProfileRemains() {
+        Family family = saveFamily("WITHDRAW-SENIOR");
+        User primary = saveUser("withdraw-senior-primary");
+        FamilyMember primaryMember = saveMember(primary, family, ManagerType.PRIMARY);
+        Senior senior = seniorRepository.saveAndFlush(Senior.builder()
+                .name("연결된 시니어")
+                .birth(LocalDate.of(1950, 1, 1))
+                .phoneNumber("01012345678")
+                .family(family)
+                .registeredBy(primary)
+                .build());
+
+        assertThatThrownBy(() -> service.withdrawPrimaryMemberships(primary))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.PRIMARY_WITHDRAWAL_SENIOR_REMAINS);
+
+        assertThat(familyRepository.findById(family.getFamilyId())).isPresent();
+        assertThat(familyMemberRepository.findById(primaryMember.getId())).isPresent();
+        assertThat(seniorRepository.findById(senior.getSeniorId())).isPresent();
+    }
+
+    @Test
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     void usageDataCleanupFailureRollsBackMembershipDeletion() {
         Family family = saveFamily("ROLLBACK");

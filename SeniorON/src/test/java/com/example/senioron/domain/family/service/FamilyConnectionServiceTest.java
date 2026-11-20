@@ -20,6 +20,7 @@ import com.example.senioron.domain.senior.repository.SeniorRepository;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.entity.UserStatus;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
@@ -249,6 +250,141 @@ class FamilyConnectionServiceTest {
                 .isEqualTo(ErrorCode.FAMILY_NOT_FOUND);
 
         verifyNoInteractions(familyMemberRepository, seniorRepository);
+        verifyNoInteractions(unusedFamilyCleanupService);
+    }
+
+    @Test
+    void primaryWithdrawalDeletesFamilyWhenPrimaryIsTheOnlyCurrentMemberDespitePastHistory() {
+        Fixture fixture = stubPrimaryWithdrawalTarget(
+                LocalDateTime.of(2026, 11, 1, 10, 0)
+        );
+
+        service.withdrawPrimaryMemberships(fixture.user());
+
+        verify(familyMemberRepository).deleteAll(List.of(fixture.member()));
+        verify(familyMemberRepository).flush();
+        verify(unusedFamilyCleanupService).cleanupAfterPrimaryWithdrawal(fixture.family());
+    }
+
+    @Test
+    void primaryWithdrawalRequiresTransferWhenAnotherActiveChildRemains() {
+        Fixture fixture = stubPrimaryWithdrawalTarget(null);
+        FamilyMember otherChild = member(2L, user(2L, Role.CHILD), fixture.family(), ManagerType.SUB);
+        given(familyMemberRepository.findAllByFamilyOrderByIdAsc(fixture.family()))
+                .willReturn(List.of(fixture.member(), otherChild));
+
+        assertPrimaryWithdrawalError(
+                fixture.user(),
+                ErrorCode.PRIMARY_WITHDRAWAL_REQUIRES_TRANSFER
+        );
+    }
+
+    @Test
+    void primaryWithdrawalIgnoresAndRemovesWithdrawnMemberFromCurrentMembership() {
+        Fixture fixture = stubPrimaryWithdrawalTarget(null);
+        User withdrawnChild = User.builder()
+                .usersId(2L)
+                .name("탈퇴 자녀")
+                .role(Role.CHILD)
+                .status(UserStatus.WITHDRAWN)
+                .build();
+        FamilyMember withdrawnMember = member(
+                2L,
+                withdrawnChild,
+                fixture.family(),
+                ManagerType.SUB
+        );
+        given(familyMemberRepository.findAllByFamilyOrderByIdAsc(fixture.family()))
+                .willReturn(List.of(fixture.member(), withdrawnMember));
+
+        service.withdrawPrimaryMemberships(fixture.user());
+
+        verify(familyMemberRepository)
+                .deleteAll(List.of(fixture.member(), withdrawnMember));
+        verify(unusedFamilyCleanupService).cleanupAfterPrimaryWithdrawal(fixture.family());
+    }
+
+    @Test
+    void primaryWithdrawalIsRejectedWhenOnlyAnActiveParentMemberRemains() {
+        Fixture fixture = stubPrimaryWithdrawalTarget(null);
+        FamilyMember parentMember = member(
+                2L,
+                user(2L, Role.PARENT),
+                fixture.family(),
+                ManagerType.NONE
+        );
+        given(familyMemberRepository.findAllByFamilyOrderByIdAsc(fixture.family()))
+                .willReturn(List.of(fixture.member(), parentMember));
+
+        assertPrimaryWithdrawalError(
+                fixture.user(),
+                ErrorCode.PRIMARY_WITHDRAWAL_SENIOR_REMAINS
+        );
+    }
+
+    @Test
+    void primaryWithdrawalIsRejectedWhenSeniorProfileRemainsWithoutOtherChild() {
+        Fixture fixture = stubPrimaryWithdrawalTarget(null);
+        Senior senior = Senior.builder().seniorId(10L).family(fixture.family()).build();
+        given(seniorRepository.findAllByFamilyOrderBySeniorIdAscForUpdate(fixture.family()))
+                .willReturn(List.of(senior));
+
+        assertPrimaryWithdrawalError(
+                fixture.user(),
+                ErrorCode.PRIMARY_WITHDRAWAL_SENIOR_REMAINS
+        );
+    }
+
+    @Test
+    void primaryWithdrawalValidatesEveryFamilyBeforeDeletingAnyMembership() {
+        Family firstFamily = family(null);
+        Family secondFamily = Family.builder().familyId(11L).seniorCode("EFGH-5678").build();
+        User primary = user(1L, Role.CHILD);
+        FamilyMember firstPrimary = member(1L, primary, firstFamily, ManagerType.PRIMARY);
+        FamilyMember secondPrimary = member(2L, primary, secondFamily, ManagerType.PRIMARY);
+        FamilyMember secondSub = member(3L, user(2L, Role.CHILD), secondFamily, ManagerType.SUB);
+
+        given(familyMemberRepository.findAllByUserOrderByIdAsc(primary))
+                .willReturn(List.of(firstPrimary, secondPrimary));
+        given(familyRepository.findByIdForUpdate(10L)).willReturn(Optional.of(firstFamily));
+        given(familyRepository.findByIdForUpdate(11L)).willReturn(Optional.of(secondFamily));
+        given(familyMemberRepository.findByUserAndFamilyForUpdate(primary, firstFamily))
+                .willReturn(Optional.of(firstPrimary));
+        given(familyMemberRepository.findByUserAndFamilyForUpdate(primary, secondFamily))
+                .willReturn(Optional.of(secondPrimary));
+        given(familyMemberRepository.findAllByFamilyOrderByIdAsc(firstFamily))
+                .willReturn(List.of(firstPrimary));
+        given(familyMemberRepository.findAllByFamilyOrderByIdAsc(secondFamily))
+                .willReturn(List.of(secondPrimary, secondSub));
+        given(seniorRepository.findAllByFamilyOrderBySeniorIdAscForUpdate(firstFamily))
+                .willReturn(List.of());
+
+        assertPrimaryWithdrawalError(primary, ErrorCode.PRIMARY_WITHDRAWAL_REQUIRES_TRANSFER);
+    }
+
+    private Fixture stubPrimaryWithdrawalTarget(LocalDateTime firstSeniorConnectedAt) {
+        Family family = family(firstSeniorConnectedAt);
+        User user = user(1L, Role.CHILD);
+        FamilyMember primary = member(1L, user, family, ManagerType.PRIMARY);
+        given(familyMemberRepository.findAllByUserOrderByIdAsc(user)).willReturn(List.of(primary));
+        given(familyRepository.findByIdForUpdate(family.getFamilyId()))
+                .willReturn(Optional.of(family));
+        given(familyMemberRepository.findByUserAndFamilyForUpdate(user, family))
+                .willReturn(Optional.of(primary));
+        given(familyMemberRepository.findAllByFamilyOrderByIdAsc(family))
+                .willReturn(List.of(primary));
+        given(seniorRepository.findAllByFamilyOrderBySeniorIdAscForUpdate(family))
+                .willReturn(List.of());
+        return new Fixture(family, user, primary);
+    }
+
+    private void assertPrimaryWithdrawalError(User user, ErrorCode errorCode) {
+        assertThatThrownBy(() -> service.withdrawPrimaryMemberships(user))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(errorCode);
+        verify(familyMemberRepository, never()).deleteAll(org.mockito.ArgumentMatchers.any());
         verifyNoInteractions(unusedFamilyCleanupService);
     }
 

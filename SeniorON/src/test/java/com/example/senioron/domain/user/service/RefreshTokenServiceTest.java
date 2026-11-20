@@ -56,58 +56,42 @@ class RefreshTokenServiceTest {
     }
 
     @Test
-    void recordsActivityForActiveNonPersistentSession() {
+    void acceptsValidSessionAfterMoreThanOneHourWithoutActivity() {
         User user = createUser();
-        RefreshToken refreshToken = refreshToken(user, "session-1", false, clock.now().minusMinutes(2));
+        RefreshToken refreshToken = refreshToken(user, "session-1", clock.now().plusDays(14));
         given(refreshTokenRepository.findBySessionId("session-1"))
                 .willReturn(Optional.of(refreshToken));
+        clock.advance(Duration.ofHours(2));
 
-        assertThat(refreshTokenService.authenticateAndRecordActivity(user, "session-1")).isTrue();
-        assertThat(refreshToken.getLastActiveAt()).isEqualTo(clock.now());
+        assertThat(refreshTokenService.isValidSession(user, "session-1")).isTrue();
     }
 
     @Test
-    void expiresOnlyIdleSessionWhenSameUserHasMultipleDeviceSessions() {
+    void rejectsRevokedOrExpiredSession() {
         User user = createUser();
-        RefreshToken activeDevice = refreshToken(user, "active-device", false, clock.now().minusMinutes(10));
-        RefreshToken idleDevice = refreshToken(user, "idle-device", false, clock.now().minusHours(1));
-        given(refreshTokenRepository.findBySessionId("active-device"))
-                .willReturn(Optional.of(activeDevice));
-        given(refreshTokenRepository.findBySessionId("idle-device"))
-                .willReturn(Optional.of(idleDevice));
+        RefreshToken revokedSession = refreshToken(user, "revoked-session", clock.now().plusDays(14));
+        RefreshToken expiredSession = refreshToken(user, "expired-session", clock.now().minusSeconds(1));
+        revokedSession.revoke();
+        given(refreshTokenRepository.findBySessionId("revoked-session"))
+                .willReturn(Optional.of(revokedSession));
+        given(refreshTokenRepository.findBySessionId("expired-session"))
+                .willReturn(Optional.of(expiredSession));
 
-        assertThat(refreshTokenService.authenticateAndRecordActivity(user, "active-device")).isTrue();
-        assertThat(refreshTokenService.authenticateAndRecordActivity(user, "idle-device")).isFalse();
-        assertThat(activeDevice.isRevoked()).isFalse();
-        assertThat(idleDevice.isRevoked()).isTrue();
-        verify(refreshTokenRepository).saveAndFlush(idleDevice);
-    }
-
-    @Test
-    void persistentSessionDoesNotExpireAfterOneHourOfInactivity() {
-        User user = createUser();
-        RefreshToken refreshToken = refreshToken(user, "persistent-session", true, clock.now().minusHours(2));
-        given(refreshTokenRepository.findBySessionId("persistent-session"))
-                .willReturn(Optional.of(refreshToken));
-
-        assertThat(refreshTokenService.authenticateAndRecordActivity(user, "persistent-session")).isTrue();
-        assertThat(refreshToken.isRevoked()).isFalse();
+        assertThat(refreshTokenService.isValidSession(user, "revoked-session")).isFalse();
+        assertThat(refreshTokenService.isValidSession(user, "expired-session")).isFalse();
     }
 
     private RefreshToken refreshToken(
             User user,
             String sessionId,
-            boolean keepLoggedIn,
-            LocalDateTime lastActiveAt
+            LocalDateTime expiresAt
     ) {
         return RefreshToken.builder()
                 .user(user)
                 .deviceIdentifier(sessionId)
                 .sessionId(sessionId)
                 .tokenHash(refreshTokenService.hashToken("token-" + sessionId))
-                .expiresAt(clock.now().plusDays(14))
-                .keepLoggedIn(keepLoggedIn)
-                .lastActiveAt(lastActiveAt)
+                .expiresAt(expiresAt)
                 .build();
     }
 
@@ -135,6 +119,10 @@ class RefreshTokenServiceTest {
 
         private LocalDateTime now() {
             return LocalDateTime.now(this);
+        }
+
+        private void advance(Duration duration) {
+            instant = instant.plus(duration);
         }
     }
 

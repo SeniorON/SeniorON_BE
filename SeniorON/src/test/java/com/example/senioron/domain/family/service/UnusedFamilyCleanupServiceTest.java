@@ -157,6 +157,33 @@ class UnusedFamilyCleanupServiceTest {
         verify(familyRepository, never()).delete(family);
     }
 
+    @Test
+    void primaryWithdrawalCleanupDeletesFamilyDespitePastConnectionHistory() {
+        Family family = family(LocalDateTime.of(2026, 11, 1, 10, 0));
+        given(seniorRepository.findAllByFamilyOrderBySeniorIdAscForUpdate(family))
+                .willReturn(List.of());
+
+        service.cleanupAfterPrimaryWithdrawal(family);
+
+        verify(familyRepository).delete(family);
+        verify(familyRepository).flush();
+    }
+
+    @Test
+    void primaryWithdrawalCleanupRejectsRemainingSenior() {
+        Family family = family(null);
+        given(seniorRepository.findAllByFamilyOrderBySeniorIdAscForUpdate(family))
+                .willReturn(List.of(senior(family, null)));
+
+        assertThatThrownBy(() -> service.cleanupAfterPrimaryWithdrawal(family))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.UNUSED_FAMILY_CLEANUP_BLOCKED);
+
+        verify(familyRepository, never()).delete(family);
+    }
+
     private void assertCleanupBlocked(Family family, List<Senior> seniors) {
         assertThatThrownBy(() -> service.cleanup(family, seniors))
                 .isInstanceOf(BusinessException.class)

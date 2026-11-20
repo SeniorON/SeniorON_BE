@@ -2,6 +2,7 @@ package com.example.senioron.domain.senior.service;
 
 import com.example.senioron.domain.event.util.FcmSender;
 import com.example.senioron.domain.senior.event.SeniorWithdrawalNoticeCreatedEvent;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,14 +22,15 @@ public class SeniorWithdrawalPushService {
     public void send(SeniorWithdrawalNoticeCreatedEvent event) {
         String body = event.seniorName()
                 + "님이 시니어온 서비스를 탈퇴하셨습니다. 앱에서 탈퇴 안내를 확인해 주세요.";
-        Map<String, String> data = Map.of(
-                "type", "SENIOR_WITHDRAWAL",
-                "title", TITLE,
-                "body", body,
-                "withdrawalNoticeId", event.withdrawalNoticeId().toString(),
-                "seniorId", event.seniorId().toString(),
-                "familyId", event.familyId().toString()
-        );
+        Map<String, String> data = new LinkedHashMap<>();
+        data.put("type", "SENIOR_WITHDRAWAL");
+        data.put("title", TITLE);
+        data.put("body", body);
+        data.put("withdrawalNoticeId", event.withdrawalNoticeId().toString());
+        if (event.seniorId() != null) {
+            data.put("seniorId", event.seniorId().toString());
+        }
+        data.put("familyId", event.familyId().toString());
 
         int successCount = 0;
         int failureCount = 0;

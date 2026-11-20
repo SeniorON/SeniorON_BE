@@ -114,6 +114,37 @@ class SeniorWithdrawalPushIntegrationTest {
         verify(fcmSender).sendData("good-token", payload());
     }
 
+    @Test
+    void profilelessParentWithdrawalOmitsSeniorIdWithoutChangingNotificationType() throws Exception {
+        CountDownLatch sent = new CountDownLatch(1);
+        given(fcmSender.sendData(anyString(), anyMap())).willAnswer(invocation -> {
+            sent.countDown();
+            return true;
+        });
+        SeniorWithdrawalNoticeCreatedEvent event = new SeniorWithdrawalNoticeCreatedEvent(
+                16L,
+                null,
+                2L,
+                "프로필 없는 부모",
+                List.of(new SeniorWithdrawalNoticeCreatedEvent.PushTarget(
+                        20L,
+                        List.of("child-token")
+                ))
+        );
+
+        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
+                eventPublisher.publishEvent(event));
+
+        assertThat(sent.await(5, TimeUnit.SECONDS)).isTrue();
+        verify(fcmSender).sendData("child-token", Map.of(
+                "type", "SENIOR_WITHDRAWAL",
+                "title", "시니어 탈퇴 안내",
+                "body", "프로필 없는 부모님이 시니어온 서비스를 탈퇴하셨습니다. 앱에서 탈퇴 안내를 확인해 주세요.",
+                "withdrawalNoticeId", "16",
+                "familyId", "2"
+        ));
+    }
+
     private SeniorWithdrawalNoticeCreatedEvent event(List<String> tokens) {
         return new SeniorWithdrawalNoticeCreatedEvent(
                 15L,

@@ -12,6 +12,8 @@ import com.example.senioron.domain.device.repository.DeviceRepository;
 import com.example.senioron.domain.family.entity.Family;
 import com.example.senioron.domain.family.entity.FamilyMember;
 import com.example.senioron.domain.family.repository.FamilyMemberRepository;
+import com.example.senioron.domain.family.repository.FamilyRepository;
+import com.example.senioron.domain.family.service.FamilyConnectionService;
 import com.example.senioron.domain.family.service.FamilyPhotoWithdrawalService;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.service.SeniorWithdrawalService;
@@ -66,6 +68,8 @@ public class UserService {
     private final DeviceRepository deviceRepository;
     private final SeniorWithdrawalService seniorWithdrawalService;
     private final FamilyMemberRepository familyMemberRepository;
+    private final FamilyRepository familyRepository;
+    private final FamilyConnectionService familyConnectionService;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final InactivitySettingService inactivitySettingService;
@@ -356,11 +360,6 @@ public class UserService {
             throw new BusinessException(ErrorCode.EXPIRED_REFRESH_TOKEN);
         }
 
-        if (refreshTokenService.isIdleExpired(savedRefreshToken)) {
-            savedRefreshToken.revoke();
-            throw new BusinessException(ErrorCode.EXPIRED_IDLE_SESSION);
-        }
-
         if (!Objects.equals(savedRefreshToken.getDeviceIdentifier(), request.getDeviceIdentifier())) {
             throw new BusinessException(ErrorCode.REFRESH_TOKEN_DEVICE_MISMATCH);
         }
@@ -394,15 +393,7 @@ public class UserService {
             throw new BusinessException(ErrorCode.INVALID_WITHDRAWAL_CONFIRMATION);
         }
 
-        boolean hasPrimaryMembership = familyMemberRepository.findAllByUser(user)
-                .stream()
-                .anyMatch(familyMember ->
-                        familyMember.getManagerType() == ManagerType.PRIMARY
-                );
-
-        if (hasPrimaryMembership) {
-            throw new BusinessException(ErrorCode.PRIMARY_USER_CANNOT_WITHDRAW);
-        }
+        familyConnectionService.withdrawPrimaryMemberships(user);
 
         familyPhotoWithdrawalService.deleteUploadedPhotos(user);
 
@@ -446,6 +437,9 @@ public class UserService {
                 );
             }
 
+            if (requestedRole == Role.PARENT) {
+                validateNoOtherParentMembership(user);
+            }
             user.updateRole(requestedRole);
         }
 
@@ -454,6 +448,21 @@ public class UserService {
                 .name(user.getName())
                 .role(user.getRole())
                 .build();
+    }
+
+    private void validateNoOtherParentMembership(User user) {
+        boolean hasOtherParent = familyMemberRepository.findAllByUser(user).stream()
+                .map(FamilyMember::getFamily)
+                .map(family -> familyRepository.findByIdForUpdate(family.getFamilyId())
+                        .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND)))
+                .flatMap(lockedFamily -> familyMemberRepository
+                        .findAllByFamilyOrderByIdAsc(lockedFamily)
+                        .stream())
+                .anyMatch(member -> member.getUser().getRole() == Role.PARENT
+                        && !Objects.equals(member.getUser().getUsersId(), user.getUsersId()));
+        if (hasOtherParent) {
+            throw new BusinessException(ErrorCode.FAMILY_PARENT_ALREADY_EXISTS);
+        }
     }
 
 

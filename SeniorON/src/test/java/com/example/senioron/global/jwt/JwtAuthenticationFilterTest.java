@@ -97,7 +97,7 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
-    void rejectsAccessTokenWhenItsDeviceSessionIsIdleExpired() throws Exception {
+    void rejectsAccessTokenWhenItsDeviceSessionIsInvalid() throws Exception {
         JwtUtil jwtUtil = jwtUtil();
         RefreshTokenService refreshTokenService = mock(RefreshTokenService.class);
         JwtAuthenticationFilter filter = new JwtAuthenticationFilter(
@@ -110,7 +110,7 @@ class JwtAuthenticationFilterTest {
         User user = createUser();
         String token = jwtUtil.createAccessToken(user, "idle-session");
         given(userRepository.findById(user.getUsersId())).willReturn(Optional.of(user));
-        given(refreshTokenService.authenticateAndRecordActivity(user, "idle-session"))
+        given(refreshTokenService.isValidSession(user, "idle-session"))
                 .willReturn(false);
 
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/protected");

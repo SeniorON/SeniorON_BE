@@ -46,9 +46,10 @@ public enum ErrorCode implements BaseCode {
     INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "USER401_2", "Refresh Token이 유효하지 않습니다."),
     EXPIRED_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "USER401_3", "Refresh Token이 만료되었습니다."),
     REFRESH_TOKEN_DEVICE_MISMATCH(HttpStatus.UNAUTHORIZED, "USER401_4", "Refresh Token의 기기 정보가 일치하지 않습니다."),
-    EXPIRED_IDLE_SESSION(HttpStatus.UNAUTHORIZED, "USER401_6", "1시간 동안 활동이 없어 로그인 세션이 만료되었습니다."),
     EXPIRED_ACCESS_TOKEN(HttpStatus.UNAUTHORIZED, "USER401_7", "Access Token이 만료되었습니다."),
     PRIMARY_USER_CANNOT_WITHDRAW(HttpStatus.FORBIDDEN, "USER403_1", "주 자녀는 탈퇴할 수 없습니다. 다른 사람에게 권한을 양도한 후 탈퇴해주세요."),
+    PRIMARY_WITHDRAWAL_REQUIRES_TRANSFER(HttpStatus.CONFLICT, "USER409_7", "다른 담당자에게 주담당자 권한을 양도한 후 탈퇴할 수 있습니다."),
+    PRIMARY_WITHDRAWAL_SENIOR_REMAINS(HttpStatus.CONFLICT, "USER409_8", "연결된 시니어가 있어 탈퇴할 수 없어요."),
     INVALID_WITHDRAWAL_CONFIRMATION(HttpStatus.BAD_REQUEST, "USER400_13", "회원 탈퇴 확인 문구가 일치하지 않습니다."),
     WITHDRAWN_USER(HttpStatus.UNAUTHORIZED, "USER401_5", "탈퇴한 회원입니다."),
     SOCIAL_ACCOUNT_ALREADY_EXISTS(HttpStatus.CONFLICT, "USER409_4", "이미 가입된 소셜 계정입니다."),
@@ -158,6 +159,7 @@ public enum ErrorCode implements BaseCode {
     PRIMARY_CONNECTION_DISCONNECT_GUARDIAN_EXISTS(HttpStatus.CONFLICT, "FAMILY409_1", "다른 보호자가 남아 있어 주 담당자 연결을 해제할 수 없습니다."),
     PRIMARY_CONNECTION_DISCONNECT_PARENT_EXISTS(HttpStatus.CONFLICT, "FAMILY409_2", "연결된 시니어 계정이 있어 주 담당자 연결을 해제할 수 없습니다."),
     UNUSED_FAMILY_CLEANUP_BLOCKED(HttpStatus.CONFLICT, "FAMILY409_3", "사용 중인 연관 데이터가 있어 가족 연결을 해제할 수 없습니다."),
+    FAMILY_PARENT_ALREADY_EXISTS(HttpStatus.CONFLICT, "FAMILY409_4", "이미 부모 계정이 참여한 가족입니다."),
 
     // Photo Error
     UNSUPPORTED_IMAGE_TYPE(HttpStatus.BAD_REQUEST,"IMAGE400_1", "JPG, PNG, WEBP 형식의 이미지만 업로드할 수 있습니다."),
