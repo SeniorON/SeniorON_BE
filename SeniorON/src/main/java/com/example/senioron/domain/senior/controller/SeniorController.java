@@ -5,6 +5,7 @@ import com.example.senioron.domain.senior.dto.response.ManagedSeniorResponse;
 import com.example.senioron.domain.senior.dto.response.ParentSeniorProfileResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorCreateResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorFamilyResponse;
+import com.example.senioron.domain.senior.dto.response.SeniorMedicationConsentResponse;
 import com.example.senioron.domain.senior.service.SeniorService;
 import com.example.senioron.domain.user.entity.User;
 import com.example.senioron.global.apiPayload.response.Response;
@@ -56,6 +57,20 @@ public class SeniorController {
     ) {
         return Response.ok(
                 seniorService.getParentSeniorProfile(user)
+        );
+    }
+
+    @Operation(
+            summary = "시니어 복약 정보 동의 여부 조회",
+            description = "같은 가족에 속한 구성원이 시니어 본인 계정의 연결 및 복약 정보 동의 상태를 조회합니다."
+    )
+    @GetMapping("/{seniorId}/medication-consent")
+    public Response<SeniorMedicationConsentResponse> getMedicationConsent(
+            @AuthenticationPrincipal User user,
+            @PathVariable Long seniorId
+    ) {
+        return Response.ok(
+                seniorService.getMedicationConsent(user, seniorId)
         );
     }
 
