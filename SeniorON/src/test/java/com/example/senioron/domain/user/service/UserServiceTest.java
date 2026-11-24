@@ -30,11 +30,13 @@ import com.example.senioron.domain.socialaccount.repository.SocialAccountReposit
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeSendRequest;
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeVerifyRequest;
 import com.example.senioron.domain.user.dto.request.TokenRefreshRequest;
+import com.example.senioron.domain.user.dto.request.MedicationConsentUpdateRequest;
 import com.example.senioron.domain.user.dto.request.UserLoginRequest;
 import com.example.senioron.domain.user.dto.request.UserRoleUpdateRequest;
 import com.example.senioron.domain.user.dto.request.UserSignUpRequest;
 import com.example.senioron.domain.user.dto.request.UserWithdrawalRequest;
 import com.example.senioron.domain.user.dto.response.OnboardingStatusResponse;
+import com.example.senioron.domain.user.dto.response.MedicationConsentResponse;
 import com.example.senioron.domain.user.dto.response.SignupEmailVerificationCodeVerifyResponse;
 import com.example.senioron.domain.user.dto.response.TokenRefreshResponse;
 import com.example.senioron.domain.user.dto.response.UserLoginResponse;
@@ -162,6 +164,60 @@ class UserServiceTest {
         assertThat(savedUser.getFamilyInfoProvisionAgreed()).isTrue();
         assertThat(response.getRole()).isEqualTo(Role.CHILD);
         verify(signupEmailVerificationCodeRepository).delete(savedCode);
+    }
+
+    @Test
+    void signUpAllowsOmittedMedicationConsentForBackwardCompatibility() {
+        UserSignUpRequest request = createSignUpRequest(Role.CHILD);
+        ReflectionTestUtils.setField(request, "agreeHealthInfo", null);
+        SignupEmailVerificationCode savedCode = createVerifiedSignupEmailVerificationCode();
+        given(userRepository.existsByLoginId("testId")).willReturn(false);
+        given(userRepository.existsByEmail(EMAIL)).willReturn(false);
+        given(signupEmailVerificationCodeRepository.findByEmail(EMAIL)).willReturn(Optional.of(savedCode));
+        given(userRepository.save(any(User.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        userService.signUp(request);
+
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(userCaptor.capture());
+        assertThat(userCaptor.getValue().getHealthInfoAgreed()).isNull();
+    }
+
+    @Test
+    void getsMedicationConsentForAuthenticatedUser() {
+        User principal = User.builder().usersId(1L).build();
+        User user = User.builder().usersId(1L).healthInfoAgreed(true).build();
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+        MedicationConsentResponse response = userService.getMedicationConsent(principal);
+
+        assertThat(response.isMedicationConsent()).isTrue();
+    }
+
+    @Test
+    void treatsMissingMedicationConsentAsFalseWhenRetrieving() {
+        User principal = User.builder().usersId(1L).build();
+        User user = User.builder().usersId(1L).healthInfoAgreed(null).build();
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+        MedicationConsentResponse response = userService.getMedicationConsent(principal);
+
+        assertThat(response.isMedicationConsent()).isFalse();
+    }
+
+    @Test
+    void updatesMedicationConsentFromTrueToFalse() {
+        assertMedicationConsentUpdated(true, false);
+    }
+
+    @Test
+    void updatesMedicationConsentFromFalseToTrue() {
+        assertMedicationConsentUpdated(false, true);
+    }
+
+    @Test
+    void allowsUpdatingMedicationConsentToTheSameValue() {
+        assertMedicationConsentUpdated(false, false);
     }
 
     @Test
@@ -1354,6 +1410,26 @@ class UserServiceTest {
 
     private UserLoginRequest createLoginRequest() {
         return createLoginRequest(null, null);
+    }
+
+    private void assertMedicationConsentUpdated(Boolean currentValue, Boolean requestedValue) {
+        User principal = User.builder().usersId(1L).build();
+        User user = User.builder().usersId(1L).healthInfoAgreed(currentValue).build();
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(user));
+
+        MedicationConsentResponse response = userService.updateMedicationConsent(
+                principal,
+                createMedicationConsentUpdateRequest(requestedValue)
+        );
+
+        assertThat(response.isMedicationConsent()).isEqualTo(requestedValue);
+        assertThat(user.getHealthInfoAgreed()).isEqualTo(requestedValue);
+    }
+
+    private MedicationConsentUpdateRequest createMedicationConsentUpdateRequest(Boolean medicationConsent) {
+        MedicationConsentUpdateRequest request = new MedicationConsentUpdateRequest();
+        ReflectionTestUtils.setField(request, "medicationConsent", medicationConsent);
+        return request;
     }
 
     private UserRoleUpdateRequest createRoleUpdateRequest(Role role, Boolean agreeLocationInfo) {

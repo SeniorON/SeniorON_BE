@@ -143,6 +143,7 @@ class SocialSignupServiceTest {
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         verify(userRepository, atLeastOnce()).saveAndFlush(userCaptor.capture());
         assertThat(userCaptor.getValue().getRole()).isEqualTo(Role.CHILD);
+        assertThat(userCaptor.getValue().getHealthInfoAgreed()).isFalse();
         verify(socialAccountRepository).saveAndFlush(any(SocialAccount.class));
         verify(deviceService).registerDevice(any(User.class), isNull());
         verify(deviceService, never()).updateFcmToken(any(User.class), any(), any());
