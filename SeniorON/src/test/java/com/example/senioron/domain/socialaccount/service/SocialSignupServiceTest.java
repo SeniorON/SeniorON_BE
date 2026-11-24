@@ -115,7 +115,11 @@ class SocialSignupServiceTest {
         assertThat(response.getRole()).isEqualTo(Role.CHILD);
         assertThat(response.isNewUser()).isFalse();
         verify(kakaoAccessTokenValidationService).validate(SOCIAL_TOKEN);
-        verify(userRepository).saveAndFlush(any(User.class));
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).saveAndFlush(userCaptor.capture());
+        assertThat(userCaptor.getValue().getHealthInfoAgreed()).isFalse();
+        assertThat(userCaptor.getValue().getLocationInfoAgreed()).isFalse();
+        assertThat(userCaptor.getValue().getFamilyInfoProvisionAgreed()).isTrue();
         verify(socialAccountRepository).saveAndFlush(any(SocialAccount.class));
         verify(deviceService).registerDevice(any(User.class), isNull());
         verify(deviceService, never()).updateFcmToken(any(User.class), any(), any());
@@ -403,6 +407,9 @@ class SocialSignupServiceTest {
         ReflectionTestUtils.setField(request, "privacyPolicyAgreed", privacyPolicyAgreed);
         ReflectionTestUtils.setField(request, "ageOver14Agreed", ageOver14Agreed);
         ReflectionTestUtils.setField(request, "marketingAgreed", false);
+        ReflectionTestUtils.setField(request, "agreeHealthInfo", false);
+        ReflectionTestUtils.setField(request, "agreeLocationInfo", false);
+        ReflectionTestUtils.setField(request, "agreeFamilyInfoProvision", true);
         ReflectionTestUtils.setField(request, "fcmToken", fcmToken);
         ReflectionTestUtils.setField(request, "deviceIdentifier", deviceIdentifier);
         return request;

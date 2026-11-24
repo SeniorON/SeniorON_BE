@@ -76,8 +76,21 @@ public class User extends BaseEntity {
     @Column(name = "marketing_agreed")
     private Boolean marketingAgreed;
 
+    @Column(name = "health_info_agreed")
+    private Boolean healthInfoAgreed;
+
+    @Column(name = "location_info_agreed")
+    private Boolean locationInfoAgreed;
+
+    @Column(name = "family_info_provision_agreed")
+    private Boolean familyInfoProvisionAgreed;
+
     public void updateRole(Role role) {
         this.role = role;
+    }
+
+    public void updateLocationInfoAgreement(Boolean locationInfoAgreed) {
+        this.locationInfoAgreed = locationInfoAgreed;
     }
 
     public void updateFamily(Family family) {

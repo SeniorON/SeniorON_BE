@@ -109,7 +109,8 @@ class SocialAccountControllerTest {
                                   "serviceTermsAgreed": true,
                                   "privacyPolicyAgreed": true,
                                   "ageOver14Agreed": true,
-                                  "marketingAgreed": true
+                                  "marketingAgreed": true,
+                                  "agreeFamilyInfoProvision": true
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
@@ -177,7 +178,10 @@ class SocialAccountControllerTest {
                   "serviceTermsAgreed": true,
                   "privacyPolicyAgreed": true,
                   "ageOver14Agreed": true,
-                  "marketingAgreed": true
+                  "marketingAgreed": true,
+                  "agreeHealthInfo": false,
+                  "agreeLocationInfo": false,
+                  "agreeFamilyInfoProvision": true
                 }
                 """;
     }

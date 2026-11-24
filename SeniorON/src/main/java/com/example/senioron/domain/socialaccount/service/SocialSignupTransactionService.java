@@ -13,6 +13,7 @@ import com.example.senioron.domain.user.entity.UserStatus;
 import com.example.senioron.domain.user.entity.RefreshToken;
 import com.example.senioron.domain.user.repository.UserRepository;
 import com.example.senioron.domain.user.service.RefreshTokenService;
+import com.example.senioron.domain.user.service.SignupTermsAgreementValidator;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import com.example.senioron.global.jwt.JwtUtil;
@@ -177,11 +178,14 @@ public class SocialSignupTransactionService {
             throw new BusinessException(ErrorCode.UNDER_AGE_14);
         }
 
-        if (!Boolean.TRUE.equals(request.getServiceTermsAgreed())
-                || !Boolean.TRUE.equals(request.getPrivacyPolicyAgreed())
-                || !Boolean.TRUE.equals(request.getAgeOver14Agreed())) {
-            throw new BusinessException(ErrorCode.REQUIRED_TERMS_NOT_AGREED);
-        }
+        SignupTermsAgreementValidator.validate(
+                request.getRole(),
+                request.getServiceTermsAgreed(),
+                request.getPrivacyPolicyAgreed(),
+                request.getAgeOver14Agreed(),
+                request.getAgreeLocationInfo(),
+                request.getAgreeFamilyInfoProvision()
+        );
     }
 
     private User createUser(SocialSignupRequest request, String socialEmail) {
@@ -214,6 +218,9 @@ public class SocialSignupTransactionService {
                             .privacyPolicyAgreed(request.getPrivacyPolicyAgreed())
                             .ageOver14Agreed(request.getAgeOver14Agreed())
                             .marketingAgreed(request.getMarketingAgreed())
+                            .healthInfoAgreed(request.getAgreeHealthInfo())
+                            .locationInfoAgreed(request.getAgreeLocationInfo())
+                            .familyInfoProvisionAgreed(request.getAgreeFamilyInfoProvision())
                             .build()
             );
             log.info("[USER_SAVE] after save success=true");
