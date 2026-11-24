@@ -27,9 +27,18 @@ public final class SignupTermsAgreementValidator {
                 && Boolean.TRUE.equals(privacyPolicyAgreed)
                 && Boolean.TRUE.equals(ageOver14Agreed)
                 && Boolean.TRUE.equals(familyInfoProvisionAgreed);
-        boolean parentLocationAgreed = role != Role.PARENT || Boolean.TRUE.equals(locationInfoAgreed);
 
-        if (!requiredTermsAgreed || !parentLocationAgreed) {
+        if (!requiredTermsAgreed) {
+            throw new BusinessException(ErrorCode.REQUIRED_TERMS_NOT_AGREED);
+        }
+
+        if (role == Role.PARENT) {
+            validateParentLocationInfo(locationInfoAgreed);
+        }
+    }
+
+    public static void validateParentLocationInfo(Boolean locationInfoAgreed) {
+        if (!Boolean.TRUE.equals(locationInfoAgreed)) {
             throw new BusinessException(ErrorCode.REQUIRED_TERMS_NOT_AGREED);
         }
     }

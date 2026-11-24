@@ -11,4 +11,9 @@ public class UserRoleUpdateRequest {
 
     @NotNull
     private Role role;
+
+    /**
+     * CHILD에서 PARENT로 변경할 때만 필수입니다.
+     */
+    private Boolean agreeLocationInfo;
 }

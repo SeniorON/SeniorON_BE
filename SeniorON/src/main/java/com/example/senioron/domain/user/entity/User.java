@@ -89,6 +89,10 @@ public class User extends BaseEntity {
         this.role = role;
     }
 
+    public void updateLocationInfoAgreement(Boolean locationInfoAgreed) {
+        this.locationInfoAgreed = locationInfoAgreed;
+    }
+
     public void updateFamily(Family family) {
         this.family = family;
     }

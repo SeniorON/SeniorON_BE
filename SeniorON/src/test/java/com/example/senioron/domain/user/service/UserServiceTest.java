@@ -38,6 +38,7 @@ import com.example.senioron.domain.user.dto.response.OnboardingStatusResponse;
 import com.example.senioron.domain.user.dto.response.SignupEmailVerificationCodeVerifyResponse;
 import com.example.senioron.domain.user.dto.response.TokenRefreshResponse;
 import com.example.senioron.domain.user.dto.response.UserLoginResponse;
+import com.example.senioron.domain.user.dto.response.UserRoleUpdateResponse;
 import com.example.senioron.domain.user.dto.response.UserSignUpResponse;
 import com.example.senioron.domain.user.entity.ManagerType;
 import com.example.senioron.domain.user.entity.RefreshToken;
@@ -290,6 +291,7 @@ class UserServiceTest {
         FamilyMember parentMember = createFamilyMember(11L, existingParent, family, ManagerType.NONE);
         UserRoleUpdateRequest request = new UserRoleUpdateRequest();
         ReflectionTestUtils.setField(request, "role", Role.PARENT);
+        ReflectionTestUtils.setField(request, "agreeLocationInfo", true);
 
         given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(child));
         given(userRepository.findById(1L)).willReturn(Optional.of(child));
@@ -307,6 +309,71 @@ class UserServiceTest {
                 .isEqualTo(ErrorCode.FAMILY_PARENT_ALREADY_EXISTS);
 
         assertThat(child.getRole()).isEqualTo(Role.CHILD);
+    }
+
+    @Test
+    void changingRoleFromChildToParentRejectsFalseLocationAgreement() {
+        User child = createChild(1L, null, ManagerType.NONE);
+        UserRoleUpdateRequest request = createRoleUpdateRequest(Role.PARENT, false);
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(child));
+        given(userRepository.findById(1L)).willReturn(Optional.of(child));
+        given(familyMemberRepository.findAllByUserWithFamilyAndSeniorOrderByIdAsc(child)).willReturn(List.of());
+
+        assertThatThrownBy(() -> userService.updateRole(child, request))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.REQUIRED_TERMS_NOT_AGREED);
+
+        assertThat(child.getRole()).isEqualTo(Role.CHILD);
+        assertThat(child.getLocationInfoAgreed()).isNull();
+    }
+
+    @Test
+    void changingRoleFromChildToParentRejectsMissingLocationAgreement() {
+        User child = createChild(1L, null, ManagerType.NONE);
+        UserRoleUpdateRequest request = createRoleUpdateRequest(Role.PARENT, null);
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(child));
+        given(userRepository.findById(1L)).willReturn(Optional.of(child));
+        given(familyMemberRepository.findAllByUserWithFamilyAndSeniorOrderByIdAsc(child)).willReturn(List.of());
+
+        assertThatThrownBy(() -> userService.updateRole(child, request))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.REQUIRED_TERMS_NOT_AGREED);
+
+        assertThat(child.getRole()).isEqualTo(Role.CHILD);
+    }
+
+    @Test
+    void changingRoleFromChildToParentStoresConfirmedLocationAgreement() {
+        User child = createChild(1L, null, ManagerType.NONE);
+        UserRoleUpdateRequest request = createRoleUpdateRequest(Role.PARENT, true);
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(child));
+        given(userRepository.findById(1L)).willReturn(Optional.of(child));
+        given(familyMemberRepository.findAllByUserWithFamilyAndSeniorOrderByIdAsc(child)).willReturn(List.of());
+        given(familyMemberRepository.findAllByUser(child)).willReturn(List.of());
+
+        UserRoleUpdateResponse response = userService.updateRole(child, request);
+
+        assertThat(response.getRole()).isEqualTo(Role.PARENT);
+        assertThat(child.getRole()).isEqualTo(Role.PARENT);
+        assertThat(child.getLocationInfoAgreed()).isTrue();
+    }
+
+    @Test
+    void changingRoleFromParentToChildDoesNotRequireLocationAgreement() {
+        User parent = createUser(1L);
+        UserRoleUpdateRequest request = createRoleUpdateRequest(Role.CHILD, null);
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(parent));
+        given(userRepository.findById(1L)).willReturn(Optional.of(parent));
+        given(familyMemberRepository.findAllByUserWithFamilyAndSeniorOrderByIdAsc(parent)).willReturn(List.of());
+
+        UserRoleUpdateResponse response = userService.updateRole(parent, request);
+
+        assertThat(response.getRole()).isEqualTo(Role.CHILD);
+        assertThat(parent.getRole()).isEqualTo(Role.CHILD);
     }
 
     @Test
@@ -1287,6 +1354,13 @@ class UserServiceTest {
 
     private UserLoginRequest createLoginRequest() {
         return createLoginRequest(null, null);
+    }
+
+    private UserRoleUpdateRequest createRoleUpdateRequest(Role role, Boolean agreeLocationInfo) {
+        UserRoleUpdateRequest request = new UserRoleUpdateRequest();
+        ReflectionTestUtils.setField(request, "role", role);
+        ReflectionTestUtils.setField(request, "agreeLocationInfo", agreeLocationInfo);
+        return request;
     }
 
     private UserLoginRequest createLoginRequest(String fcmToken, String deviceIdentifier) {

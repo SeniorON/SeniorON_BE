@@ -453,8 +453,10 @@ public class UserService {
                 );
             }
 
-            if (requestedRole == Role.PARENT) {
+            if (user.getRole() == Role.CHILD && requestedRole == Role.PARENT) {
+                SignupTermsAgreementValidator.validateParentLocationInfo(request.getAgreeLocationInfo());
                 validateNoOtherParentMembership(user);
+                user.updateLocationInfoAgreement(request.getAgreeLocationInfo());
             }
             user.updateRole(requestedRole);
         }
