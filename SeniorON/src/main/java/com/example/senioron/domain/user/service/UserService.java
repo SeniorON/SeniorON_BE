@@ -3,6 +3,7 @@ package com.example.senioron.domain.user.service;
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeSendRequest;
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeVerifyRequest;
 import com.example.senioron.domain.user.dto.request.TokenRefreshRequest;
+import com.example.senioron.domain.user.dto.request.MedicationConsentUpdateRequest;
 import com.example.senioron.domain.user.dto.request.UserLoginRequest;
 import com.example.senioron.domain.user.dto.request.UserRoleUpdateRequest;
 import com.example.senioron.domain.user.dto.request.UserSignUpRequest;
@@ -316,6 +317,49 @@ public class UserService {
                 .onboardingCompleted(onboardingCompleted)
                 .families(families)
                 .build();
+    }
+
+    @Transactional(readOnly = true)
+    public MedicationConsentResponse getMedicationConsent(User principal) {
+        User user = findAuthenticatedUser(principal);
+
+        return MedicationConsentResponse.builder()
+                .medicationConsent(Boolean.TRUE.equals(user.getHealthInfoAgreed()))
+                .build();
+    }
+
+    public MedicationConsentResponse updateMedicationConsent(
+            User principal,
+            MedicationConsentUpdateRequest request
+    ) {
+        if (request == null || request.getMedicationConsent() == null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST);
+        }
+
+        User user = findAuthenticatedUserForUpdate(principal);
+        user.updateHealthInfoAgreement(request.getMedicationConsent());
+
+        return MedicationConsentResponse.builder()
+                .medicationConsent(user.getHealthInfoAgreed())
+                .build();
+    }
+
+    private User findAuthenticatedUser(User principal) {
+        if (principal == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
+        }
+
+        return userRepository.findById(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+    }
+
+    private User findAuthenticatedUserForUpdate(User principal) {
+        if (principal == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
+        }
+
+        return userRepository.findByIdForUpdate(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
     }
 
     private OnboardingStatusResponse.FamilyStatus toOnboardingFamilyStatus(

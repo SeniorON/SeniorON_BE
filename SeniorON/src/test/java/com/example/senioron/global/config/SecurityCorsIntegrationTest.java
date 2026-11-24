@@ -13,6 +13,7 @@ import org.springframework.web.context.WebApplicationContext;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -67,6 +68,19 @@ class SecurityCorsIntegrationTest {
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, VITE_ORIGIN));
 
         mvc.perform(get("/api/users/me/onboarding-status").header(HttpHeaders.ORIGIN, NEXT_ORIGIN))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("COMMON401"))
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, NEXT_ORIGIN));
+
+        mvc.perform(get("/api/users/me/medication-consent").header(HttpHeaders.ORIGIN, NEXT_ORIGIN))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("COMMON401"))
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, NEXT_ORIGIN));
+
+        mvc.perform(patch("/api/users/me/medication-consent")
+                        .header(HttpHeaders.ORIGIN, NEXT_ORIGIN)
+                        .contentType("application/json")
+                        .content("{\"medicationConsent\":false}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("COMMON401"))
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, NEXT_ORIGIN));

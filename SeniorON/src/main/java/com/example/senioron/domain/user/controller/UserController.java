@@ -3,6 +3,7 @@ package com.example.senioron.domain.user.controller;
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeSendRequest;
 import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeVerifyRequest;
 import com.example.senioron.domain.user.dto.request.TokenRefreshRequest;
+import com.example.senioron.domain.user.dto.request.MedicationConsentUpdateRequest;
 import com.example.senioron.domain.user.dto.request.UserLoginRequest;
 import com.example.senioron.domain.user.dto.request.UserLogoutRequest;
 import com.example.senioron.domain.user.dto.request.UserRoleUpdateRequest;
@@ -101,6 +102,23 @@ public class UserController {
             @AuthenticationPrincipal User user
     ) {
         return Response.ok(userService.getOnboardingStatus(user));
+    }
+
+    @Operation(summary = "복약 정보 동의 여부 조회", description = "현재 로그인한 사용자의 복약 정보 동의 여부를 조회합니다.")
+    @GetMapping("/me/medication-consent")
+    public Response<MedicationConsentResponse> getMedicationConsent(
+            @AuthenticationPrincipal User user
+    ) {
+        return Response.ok(userService.getMedicationConsent(user));
+    }
+
+    @Operation(summary = "복약 정보 동의 여부 수정", description = "현재 로그인한 사용자의 복약 정보 동의 여부를 수정합니다.")
+    @PatchMapping("/me/medication-consent")
+    public Response<MedicationConsentResponse> updateMedicationConsent(
+            @AuthenticationPrincipal User user,
+            @Valid @RequestBody MedicationConsentUpdateRequest request
+    ) {
+        return Response.ok(userService.updateMedicationConsent(user, request));
     }
 
     @Operation(summary = "역할 선택/변경", description = "현재 로그인한 사용자의 역할을 선택하거나 변경합니다.")
