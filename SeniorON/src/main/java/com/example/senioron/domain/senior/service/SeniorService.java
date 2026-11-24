@@ -6,9 +6,11 @@ import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.senior.dto.request.SeniorCreateRequest;
 import com.example.senioron.domain.senior.dto.response.ManagedSeniorResponse;
+import com.example.senioron.domain.senior.dto.response.MedicationConsentConnectionStatus;
 import com.example.senioron.domain.senior.dto.response.ParentSeniorProfileResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorCreateResponse;
 import com.example.senioron.domain.senior.dto.response.SeniorFamilyResponse;
+import com.example.senioron.domain.senior.dto.response.SeniorMedicationConsentResponse;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
 import com.example.senioron.domain.senior.repository.SeniorRepository;
@@ -120,6 +122,41 @@ public class SeniorService {
         Senior senior = seniorRepository.findByParentUser(user)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SENIOR_NOT_FOUND));
         return ParentSeniorProfileResponse.from(senior);
+    }
+
+    public SeniorMedicationConsentResponse getMedicationConsent(
+            User principal,
+            Long seniorId
+    ) {
+        if (principal == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
+        }
+
+        User currentUser = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        Senior senior = seniorRepository.findById(seniorId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SENIOR_NOT_FOUND));
+
+        if (senior.getFamily() == null
+                || !familyMemberRepository.existsByUserAndFamily(
+                currentUser,
+                senior.getFamily()
+        )) {
+            throw new BusinessException(ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED);
+        }
+
+        User parentUser = senior.getParentUser();
+        if (parentUser == null) {
+            return SeniorMedicationConsentResponse.builder()
+                    .connectionStatus(MedicationConsentConnectionStatus.NOT_CONNECTED)
+                    .medicationConsent(null)
+                    .build();
+        }
+
+        return SeniorMedicationConsentResponse.builder()
+                .connectionStatus(MedicationConsentConnectionStatus.CONNECTED)
+                .medicationConsent(parentUser.getHealthInfoAgreed())
+                .build();
     }
 
     /**

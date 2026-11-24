@@ -15,6 +15,7 @@ import com.example.senioron.domain.family.repository.FamilyMemberRepository;
 import com.example.senioron.domain.family.repository.FamilyRepository;
 import com.example.senioron.domain.senior.dto.request.SeniorCreateRequest;
 import com.example.senioron.domain.senior.dto.response.ManagedSeniorResponse;
+import com.example.senioron.domain.senior.dto.response.MedicationConsentConnectionStatus;
 import com.example.senioron.domain.senior.entity.Senior;
 import com.example.senioron.domain.senior.entity.SeniorRelation;
 import com.example.senioron.domain.senior.entity.SeniorWithdrawalNotice;
@@ -275,6 +276,124 @@ class SeniorServiceTest {
 
         assertThat(response.seniorId()).isEqualTo(20L);
         verifyNoInteractions(familyMemberRepository);
+    }
+
+    @Test
+    void getMedicationConsentReturnsConnectedAndRawTrueConsentForSameFamilyMember() {
+        Family family = Family.builder().familyId(1L).build();
+        User requester = createChild(1L, family, ManagerType.SUB);
+        User parent = User.builder()
+                .usersId(2L)
+                .name("시니어 본인")
+                .role(Role.PARENT)
+                .healthInfoAgreed(true)
+                .build();
+        Senior senior = createSenior(10L, family, requester);
+        senior.linkParentUser(parent);
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(requester));
+        given(seniorRepository.findById(10L)).willReturn(Optional.of(senior));
+        given(familyMemberRepository.existsByUserAndFamily(requester, family)).willReturn(true);
+
+        var response = seniorService.getMedicationConsent(requester, 10L);
+
+        assertThat(response.getConnectionStatus())
+                .isEqualTo(MedicationConsentConnectionStatus.CONNECTED);
+        assertThat(response.getMedicationConsent()).isTrue();
+    }
+
+    @Test
+    void getMedicationConsentAllowsConnectedSeniorParentAsFamilyMember() {
+        Family family = Family.builder().familyId(1L).build();
+        User parent = User.builder()
+                .usersId(2L)
+                .name("시니어 본인")
+                .role(Role.PARENT)
+                .healthInfoAgreed(false)
+                .build();
+        Senior senior = createSenior(10L, family, parent);
+        senior.linkParentUser(parent);
+
+        given(userRepository.findById(2L)).willReturn(Optional.of(parent));
+        given(seniorRepository.findById(10L)).willReturn(Optional.of(senior));
+        given(familyMemberRepository.existsByUserAndFamily(parent, family)).willReturn(true);
+
+        var response = seniorService.getMedicationConsent(parent, 10L);
+
+        assertThat(response.getConnectionStatus())
+                .isEqualTo(MedicationConsentConnectionStatus.CONNECTED);
+        assertThat(response.getMedicationConsent()).isFalse();
+    }
+
+    @Test
+    void getMedicationConsentPreservesNullForConnectedUserWithoutConsentValue() {
+        Family family = Family.builder().familyId(1L).build();
+        User requester = createChild(1L, family, ManagerType.PRIMARY);
+        User parent = User.builder()
+                .usersId(2L)
+                .name("시니어 본인")
+                .role(Role.PARENT)
+                .healthInfoAgreed(null)
+                .build();
+        Senior senior = createSenior(10L, family, requester);
+        senior.linkParentUser(parent);
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(requester));
+        given(seniorRepository.findById(10L)).willReturn(Optional.of(senior));
+        given(familyMemberRepository.existsByUserAndFamily(requester, family)).willReturn(true);
+
+        var response = seniorService.getMedicationConsent(requester, 10L);
+
+        assertThat(response.getConnectionStatus())
+                .isEqualTo(MedicationConsentConnectionStatus.CONNECTED);
+        assertThat(response.getMedicationConsent()).isNull();
+    }
+
+    @Test
+    void getMedicationConsentReturnsNotConnectedWhenSeniorProfileHasNoParentUser() {
+        Family family = Family.builder().familyId(1L).build();
+        User requester = createChild(1L, family, ManagerType.PRIMARY);
+        Senior senior = createSenior(10L, family, requester);
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(requester));
+        given(seniorRepository.findById(10L)).willReturn(Optional.of(senior));
+        given(familyMemberRepository.existsByUserAndFamily(requester, family)).willReturn(true);
+
+        var response = seniorService.getMedicationConsent(requester, 10L);
+
+        assertThat(response.getConnectionStatus())
+                .isEqualTo(MedicationConsentConnectionStatus.NOT_CONNECTED);
+        assertThat(response.getMedicationConsent()).isNull();
+    }
+
+    @Test
+    void getMedicationConsentRejectsUserOutsideSeniorFamily() {
+        Family family = Family.builder().familyId(1L).build();
+        User requester = createChild(1L, null, ManagerType.PRIMARY);
+        Senior senior = createSenior(10L, family, requester);
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(requester));
+        given(seniorRepository.findById(10L)).willReturn(Optional.of(senior));
+        given(familyMemberRepository.existsByUserAndFamily(requester, family)).willReturn(false);
+
+        assertThatThrownBy(() -> seniorService.getMedicationConsent(requester, 10L))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED);
+    }
+
+    @Test
+    void getMedicationConsentThrowsWhenSeniorDoesNotExist() {
+        User requester = createChild(1L, null, ManagerType.PRIMARY);
+        given(userRepository.findById(1L)).willReturn(Optional.of(requester));
+        given(seniorRepository.findById(10L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> seniorService.getMedicationConsent(requester, 10L))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_NOT_FOUND);
     }
 
     @Test
