@@ -90,6 +90,15 @@ public class UserService {
 
     // 최종 회원가입 서비스
     public UserSignUpResponse signUp(UserSignUpRequest request) {
+        SignupTermsAgreementValidator.validate(
+                request.getRole(),
+                request.getAgreeServiceTerms(),
+                request.getAgreePrivacyPolicy(),
+                request.getAgreeAgeOver14(),
+                request.getAgreeLocationInfo(),
+                request.getAgreeFamilyInfoProvision()
+        );
+
         if (userRepository.existsByLoginId(request.getLoginId())) {
             throw new BusinessException(ErrorCode.DUPLICATE_LOGIN_ID);
         }
@@ -113,6 +122,13 @@ public class UserService {
                 .birth(request.getBirth())
                 .role(request.getRole())
                 .status(UserStatus.ACTIVE)
+                .serviceTermsAgreed(request.getAgreeServiceTerms())
+                .privacyPolicyAgreed(request.getAgreePrivacyPolicy())
+                .ageOver14Agreed(request.getAgreeAgeOver14())
+                .marketingAgreed(request.getAgreeMarketing())
+                .healthInfoAgreed(request.getAgreeHealthInfo())
+                .locationInfoAgreed(request.getAgreeLocationInfo())
+                .familyInfoProvisionAgreed(request.getAgreeFamilyInfoProvision())
                 .build();
 
         User savedUser = userRepository.save(user);

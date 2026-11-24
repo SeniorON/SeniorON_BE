@@ -38,6 +38,16 @@ public class SocialSignupRequest {
     @NotNull(message = "마케팅 정보 수신 동의 여부를 입력해 주세요.")
     private Boolean marketingAgreed;
 
+    /**
+     * 회원가입에서는 선택 동의이며, 복약·병원 정보 최초 등록 시 별도 동의를 대체하지 않습니다.
+     */
+    private Boolean agreeHealthInfo;
+
+    private Boolean agreeLocationInfo;
+
+    @NotNull(message = "가족 구성원 개인정보 제공 동의 여부를 입력해 주세요.")
+    private Boolean agreeFamilyInfoProvision;
+
     private String fcmToken;
 
     private String deviceIdentifier;

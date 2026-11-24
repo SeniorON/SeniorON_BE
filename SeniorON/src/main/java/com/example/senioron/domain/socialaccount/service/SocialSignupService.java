@@ -5,6 +5,7 @@ import com.example.senioron.domain.socialaccount.dto.kakao.response.KakaoUserInf
 import com.example.senioron.domain.socialaccount.dto.request.SocialSignupRequest;
 import com.example.senioron.domain.socialaccount.dto.response.SocialSignupResponse;
 import com.example.senioron.domain.socialaccount.entity.LoginProvider;
+import com.example.senioron.domain.user.entity.Role;
 import com.example.senioron.global.apiPayload.code.ErrorCode;
 import com.example.senioron.global.apiPayload.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
@@ -33,7 +34,9 @@ public class SocialSignupService {
                 request.getBirth() != null,
                 Boolean.TRUE.equals(request.getServiceTermsAgreed())
                         && Boolean.TRUE.equals(request.getPrivacyPolicyAgreed())
-                        && Boolean.TRUE.equals(request.getAgeOver14Agreed()),
+                        && Boolean.TRUE.equals(request.getAgeOver14Agreed())
+                        && Boolean.TRUE.equals(request.getAgreeFamilyInfoProvision())
+                        && (request.getRole() != Role.PARENT || Boolean.TRUE.equals(request.getAgreeLocationInfo())),
                 request.getMarketingAgreed() != null,
                 !isBlank(request.getFcmToken()),
                 !isBlank(request.getDeviceIdentifier())

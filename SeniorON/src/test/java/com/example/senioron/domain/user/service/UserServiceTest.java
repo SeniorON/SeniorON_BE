@@ -152,6 +152,13 @@ class UserServiceTest {
         User savedUser = userCaptor.getValue();
 
         assertThat(savedUser.getRole()).isEqualTo(Role.CHILD);
+        assertThat(savedUser.getServiceTermsAgreed()).isTrue();
+        assertThat(savedUser.getPrivacyPolicyAgreed()).isTrue();
+        assertThat(savedUser.getAgeOver14Agreed()).isTrue();
+        assertThat(savedUser.getMarketingAgreed()).isFalse();
+        assertThat(savedUser.getHealthInfoAgreed()).isFalse();
+        assertThat(savedUser.getLocationInfoAgreed()).isFalse();
+        assertThat(savedUser.getFamilyInfoProvisionAgreed()).isTrue();
         assertThat(response.getRole()).isEqualTo(Role.CHILD);
         verify(signupEmailVerificationCodeRepository).delete(savedCode);
     }
@@ -1272,6 +1279,9 @@ class UserServiceTest {
         ReflectionTestUtils.setField(request, "agreePrivacyPolicy", true);
         ReflectionTestUtils.setField(request, "agreeAgeOver14", true);
         ReflectionTestUtils.setField(request, "agreeMarketing", false);
+        ReflectionTestUtils.setField(request, "agreeHealthInfo", false);
+        ReflectionTestUtils.setField(request, "agreeLocationInfo", false);
+        ReflectionTestUtils.setField(request, "agreeFamilyInfoProvision", true);
         return request;
     }
 
