@@ -4,10 +4,13 @@ on:
   workflow_run:
     workflows:
       - Docker Image
-    branches:
-      - main
     types:
       - completed
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: '배포할 이미지 태그 (full SHA)'
+        required: true
 
 concurrency:
   group: senioron-production-deploy
@@ -16,7 +19,9 @@ concurrency:
 jobs:
   deploy:
     permissions: {}
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    # main 브랜치의 이미지 빌드가 성공한 경우에만 배포한다.
+    # (workflow_run.branches 필터는 의도대로 동작하지 않아 job 조건으로 검사)
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
 
     steps:
@@ -32,7 +37,7 @@ jobs:
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USER: ${{ secrets.EC2_USER }}
-          IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+          IMAGE_TAG: ${{ github.event.inputs.image_tag || github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
 
