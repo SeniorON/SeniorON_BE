@@ -1,0 +1,227 @@
+package com.example.senioron.global.apiPayload.code;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import org.springframework.http.HttpStatus;
+
+@Getter
+@AllArgsConstructor
+public enum ErrorCode implements BaseCode {
+
+    // Common Error
+    INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "COMMON500", "서버 에러입니다. 관리자에게 문의하세요."),
+    BAD_REQUEST(HttpStatus.BAD_REQUEST, "COMMON400", "잘못된 요청입니다."),
+    UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "COMMON401", "인증이 필요합니다."),
+    FORBIDDEN(HttpStatus.FORBIDDEN, "COMMON403", "금지된 요청입니다."),
+    NOT_FOUND(HttpStatus.NOT_FOUND, "COMMON404", "찾을 수 없는 요청입니다."),
+    INVALID_DATE_FORMAT(HttpStatus.BAD_REQUEST,"COMMON400_1","날짜 형식이 올바르지 않습니다. yyyy-MM-dd 형식으로 입력해 주세요."),
+    PAYLOAD_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "COMMON413", "업로드 파일 크기가 허용 범위를 초과했습니다."),
+
+    // User Error
+    USER_NOT_FOUND(HttpStatus.NOT_FOUND, "USER404", "사용자를 찾을 수 없습니다."),
+    DUPLICATE_EMAIL(HttpStatus.CONFLICT, "USER409", "중복된 이메일입니다."),
+    USER_NOT_AUTHENTICATED(HttpStatus.UNAUTHORIZED, "USER401", "로그인 하지 않았습니다."),
+    DUPLICATE_LOGIN_ID(HttpStatus.CONFLICT, "USER409_1", "이미 사용 중인 아이디입니다."),
+    PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, "USER400_1", "비밀번호가 일치하지 않습니다."),
+    INVALID_PASSWORD(HttpStatus.BAD_REQUEST, "USER400_2", "비밀번호가 올바르지 않습니다."),
+    INVALID_PASSWORD_RESET_VERIFICATION_CODE(HttpStatus.BAD_REQUEST, "USER400_3", "인증번호가 올바르지 않거나 만료되었습니다."),
+    NAME_NOT_CHANGED(HttpStatus.BAD_REQUEST, "USER400_4", "현재 사용 중인 이름과 동일해요"),
+    CURRENT_PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, "USER400_5", "현재 비밀번호가 일치하지 않아요"),
+    NEW_PASSWORD_CONFIRMATION_MISMATCH(HttpStatus.BAD_REQUEST, "USER400_6", "새 비밀번호가 일치하지 않아요"),
+    SAME_AS_CURRENT_PASSWORD(HttpStatus.BAD_REQUEST, "USER400_7", "현재 사용 중인 비밀번호와 동일해요"),
+    PROFILE_IMAGE_REQUIRED(HttpStatus.BAD_REQUEST, "USER400_8", "프로필 이미지를 선택해 주세요"),
+    UNSUPPORTED_PROFILE_IMAGE_TYPE(HttpStatus.BAD_REQUEST, "USER400_9", "지원하지 않는 이미지 형식이에요"),
+    PROFILE_IMAGE_SIZE_EXCEEDED(HttpStatus.BAD_REQUEST, "USER400_10", "프로필 이미지 크기가 너무 커요"),
+    PROFILE_IMAGE_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "USER500_1", "프로필 이미지 업로드에 실패했어요"),
+    LOGIN_ID_NOT_FOUND(HttpStatus.NOT_FOUND, "USER404_1", "일치하는 아이디를 찾지 못했어요"),
+    ACCOUNT_RECOVERY_USER_NOT_FOUND(HttpStatus.NOT_FOUND, "USER404_2", "일치하는 계정을 찾지 못했어요"),
+    SIGNUP_EMAIL_VERIFICATION_CODE_NOT_FOUND(HttpStatus.NOT_FOUND, "USER404_3", "회원가입 이메일 인증 요청 이력이 없습니다."),
+    INVALID_SIGNUP_EMAIL_VERIFICATION_CODE(HttpStatus.BAD_REQUEST, "USER400_11", "회원가입 이메일 인증 코드가 올바르지 않습니다."),
+    EXPIRED_SIGNUP_EMAIL_VERIFICATION_CODE(HttpStatus.BAD_REQUEST, "USER400_12", "회원가입 이메일 인증 코드가 만료되었습니다."),
+    SIGNUP_EMAIL_NOT_VERIFIED(HttpStatus.BAD_REQUEST, "USER400_18", "회원가입 이메일 인증이 완료되지 않았습니다."),
+    SIGNUP_EMAIL_ALREADY_VERIFIED(HttpStatus.CONFLICT, "USER409_2", "이미 인증이 완료된 이메일입니다."),
+    INVALID_FIREBASE_ID_TOKEN(HttpStatus.UNAUTHORIZED, "USER401_1", "Firebase ID 토큰이 유효하지 않습니다."),
+    FIREBASE_AUTH_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "USER503_1", "Firebase 인증을 사용할 수 없습니다."),
+    GOOGLE_LOGIN_CONFLICT(HttpStatus.CONFLICT, "USER409_3", "구글 로그인 처리 중 계정 충돌이 발생했습니다."),
+    INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "USER401_2", "Refresh Token이 유효하지 않습니다."),
+    EXPIRED_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "USER401_3", "Refresh Token이 만료되었습니다."),
+    REFRESH_TOKEN_DEVICE_MISMATCH(HttpStatus.UNAUTHORIZED, "USER401_4", "Refresh Token의 기기 정보가 일치하지 않습니다."),
+    EXPIRED_ACCESS_TOKEN(HttpStatus.UNAUTHORIZED, "USER401_7", "Access Token이 만료되었습니다."),
+    PRIMARY_USER_CANNOT_WITHDRAW(HttpStatus.FORBIDDEN, "USER403_1", "주 자녀는 탈퇴할 수 없습니다. 다른 사람에게 권한을 양도한 후 탈퇴해주세요."),
+    PRIMARY_WITHDRAWAL_REQUIRES_TRANSFER(HttpStatus.CONFLICT, "USER409_7", "다른 담당자에게 주담당자 권한을 양도한 후 탈퇴할 수 있습니다."),
+    PRIMARY_WITHDRAWAL_SENIOR_REMAINS(HttpStatus.CONFLICT, "USER409_8", "연결된 시니어가 있어 탈퇴할 수 없어요."),
+    INVALID_WITHDRAWAL_CONFIRMATION(HttpStatus.BAD_REQUEST, "USER400_13", "회원 탈퇴 확인 문구가 일치하지 않습니다."),
+    WITHDRAWN_USER(HttpStatus.UNAUTHORIZED, "USER401_5", "탈퇴한 회원입니다."),
+    SOCIAL_ACCOUNT_ALREADY_EXISTS(HttpStatus.CONFLICT, "USER409_4", "이미 가입된 소셜 계정입니다."),
+    SOCIAL_EMAIL_ALREADY_EXISTS(HttpStatus.CONFLICT, "USER409_5", "이미 해당 이메일로 가입된 소셜 계정이 있습니다. 기존 소셜 계정으로 로그인해 주세요."),
+    GENERAL_ACCOUNT_EMAIL_EXISTS(HttpStatus.CONFLICT, "USER409_6", "이미 해당 이메일로 가입된 일반 계정이 있습니다. 이메일과 비밀번호로 로그인해 주세요."),
+    REQUIRED_TERMS_NOT_AGREED(HttpStatus.BAD_REQUEST, "USER400_14", "필수 약관에 동의해야 합니다."),
+    UNDER_AGE_14(HttpStatus.BAD_REQUEST, "USER400_15", "만 14세 이상만 가입할 수 있습니다."),
+    INVALID_BIRTH_DATE(HttpStatus.BAD_REQUEST, "USER400_16", "생년월일이 올바르지 않습니다."),
+    INVALID_SOCIAL_TOKEN(HttpStatus.BAD_REQUEST, "USER400_17", "유효하지 않거나 만료된 소셜 토큰입니다."),
+    ROLE_CHANGE_AFTER_ONBOARDING_FORBIDDEN(HttpStatus.FORBIDDEN, "USER403_2", "온보딩 이후에는 역할을 변경할 수 없습니다."),
+
+    // Admin Error
+    ADMIN_NOT_FOUND(HttpStatus.NOT_FOUND, "ADMIN404", "관리자를 찾을 수 없습니다."),
+    INVALID_ADMIN_CREDENTIAL(HttpStatus.UNAUTHORIZED, "ADMIN401", "이메일 또는 비밀번호를 다시 확인해 주세요."),
+    INVALID_ADMIN_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "ADMIN401_1", "관리자 Refresh Token이 유효하지 않습니다."),
+    ADMIN_NOT_ACTIVE(HttpStatus.FORBIDDEN, "ADMIN403", "활성화된 관리자 계정이 아닙니다."),
+    DUPLICATE_ADMIN_EMAIL(HttpStatus.CONFLICT, "ADMIN409", "이미 등록된 운영자 이메일입니다."),
+    ADMIN_STATUS_CONFLICT(HttpStatus.CONFLICT, "ADMIN409_1", "현재 관리자 상태에서는 처리할 수 없습니다."),
+    LAST_SUPER_ADMIN(HttpStatus.CONFLICT, "ADMIN409_2", "활성 최고관리자는 최소 1명 있어야 합니다."),
+    INVALID_INVITATION_TOKEN(HttpStatus.BAD_REQUEST, "ADMIN400", "사용할 수 없는 링크예요."),
+    INVALID_ADMIN_PASSWORD(HttpStatus.BAD_REQUEST, "ADMIN400_1", "비밀번호는 영문·숫자 포함 8자 이상이어야 합니다."),
+    CANNOT_MODIFY_SELF(HttpStatus.BAD_REQUEST, "ADMIN400_2", "본인 계정은 변경할 수 없습니다."),
+    INVALID_CURRENT_ADMIN_PASSWORD(HttpStatus.BAD_REQUEST, "ADMIN400_3", "현재 비밀번호가 일치하지 않습니다."),
+    ADMIN_REPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "ADMIN404_1", "신고를 찾을 수 없습니다."),
+
+    // Email Error
+    EMAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "EMAIL500", "이메일 발송에 실패했습니다."),
+    EMAIL_VERIFICATION_COOLDOWN(HttpStatus.TOO_MANY_REQUESTS, "EMAIL429_1", "이메일 인증 코드는 60초에 한 번만 발송할 수 있습니다."),
+    EMAIL_VERIFICATION_RATE_LIMIT(HttpStatus.TOO_MANY_REQUESTS, "EMAIL429_2", "10분 동안 이메일 인증 코드 발송 횟수를 초과했습니다."),
+    EMAIL_VERIFICATION_DAILY_LIMIT(HttpStatus.TOO_MANY_REQUESTS, "EMAIL429_3", "오늘 이메일 인증 코드 발송 횟수를 초과했습니다."),
+    EMAIL_VERIFICATION_IP_RATE_LIMIT(HttpStatus.TOO_MANY_REQUESTS, "EMAIL429_4", "현재 IP에서 이메일 인증 코드 발송 횟수를 초과했습니다."),
+
+    // Device Error
+    SENIOR_DEVICE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "DEVICE_403", "시니어 기기 정보 갱신 권한이 없습니다."),
+    DEVICE_LOCATION_NOT_FOUND(HttpStatus.NOT_FOUND, "DEVICE_LOCATION_NOT_FOUND", "시니어의 위치 정보가 없습니다."),
+    SENIOR_HOME_LOCATION_NOT_FOUND(HttpStatus.NOT_FOUND, "SENIOR_HOME_LOCATION_NOT_FOUND", "등록된 집 위치 정보가 없습니다."),
+    INVALID_DEVICE_CREDENTIAL(HttpStatus.UNAUTHORIZED, "DEVICE401", "기기 인증 정보가 유효하지 않습니다."),
+
+    // Home Error
+    HOME_BUTTON_NOT_FOUND(HttpStatus.NOT_FOUND, "HOME404", "버튼을 찾을 수 없습니다."),
+    BUTTON_OPTION_NOT_FOUND(HttpStatus.NOT_FOUND, "HOME4001", "존재하지 않는 버튼 옵션입니다."),
+    HOME_BUTTON_ALREADY_EXISTS(HttpStatus.CONFLICT, "HOME4002", "이미 추가된 홈 버튼입니다."),
+    INVALID_HOME_BUTTON_REQUEST(HttpStatus.BAD_REQUEST, "HOME_4002", "현재 홈 버튼 전체를 요청해야 합니다."),
+    DUPLICATE_HOME_BUTTON_ID(HttpStatus.BAD_REQUEST, "HOME_4003", "중복된 홈 버튼이 있습니다."),
+    DUPLICATE_HOME_BUTTON_ORDER(HttpStatus.BAD_REQUEST, "HOME_4004", "중복된 홈 버튼 순서가 있습니다."),
+    INVALID_HOME_BUTTON_ORDER(HttpStatus.BAD_REQUEST, "HOME_4005", "홈 버튼 순서는 1부터 연속되어야 합니다."),
+    HOME_SETTING_ACCESS_DENIED(HttpStatus.FORBIDDEN, "HOME403", "주 담당 자녀만 홈 설정을 수정할 수 있습니다."),
+    SENIOR_HOME_ACCESS_DENIED(HttpStatus.FORBIDDEN, "HOME404", "부모 역할의 사용자만 부모님 홈을 조회할 수 있습니다."),
+    CHILD_HOME_ACCESS_DENIED(HttpStatus.FORBIDDEN, "HOME405", "자녀 역할의 사용자만 자녀 홈을 조회할 수 있습니다."),
+    FAMILY_NOT_CONNECTED(HttpStatus.BAD_REQUEST, "HOME406", "연결된 가족이 없습니다."),
+    PRIMARY_MANAGER_NOT_FOUND(HttpStatus.NOT_FOUND, "HOME407", "가족의 주 담당자를 찾을 수 없습니다."),
+    SENIOR_NOT_FOUND(HttpStatus.NOT_FOUND, "SENIOR404", "등록된 시니어 정보를 찾을 수 없습니다."),
+    HOME_BUTTON_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "HOME_4008", "노래 카드 선택 여부에 따른 홈 버튼 최대 개수를 초과했습니다."),
+    HOME_BUTTON_NAME_TOO_LONG(HttpStatus.BAD_REQUEST, "HOME_4012", "버튼 이름은 6자 이하여야 합니다."),
+    HOME_BUTTON_MINIMUM_NOT_MET(HttpStatus.BAD_REQUEST, "HOME4009", "홈 버튼은 최소 8개 이상이어야 합니다."),
+    REQUIRED_HOME_BUTTON_MISSING(HttpStatus.BAD_REQUEST, "HOME_4011", "설정, 복약, 사진, 긴급알림 버튼은 반드시 포함되어야 합니다."),
+
+    // Senior Error
+    CUSTOM_RELATION_REQUIRED(HttpStatus.BAD_REQUEST, "SENIOR4001", "직접 작성 관계를 입력해 주세요."),
+    SENIOR_ALREADY_EXISTS(HttpStatus.CONFLICT, "SENIOR409", "이미 등록된 시니어 정보가 있습니다."),
+    SENIOR_PARENT_LINK_PARENT_ONLY(HttpStatus.FORBIDDEN, "SENIOR403_1", "부모 계정만 시니어 본인 프로필을 연결할 수 있습니다."),
+    SENIOR_NOT_IN_USER_FAMILY(HttpStatus.FORBIDDEN, "SENIOR403_2", "현재 가족에 등록된 시니어가 아닙니다."),
+    SENIOR_ALREADY_LINKED_TO_PARENT(HttpStatus.CONFLICT, "SENIOR409_1", "이미 다른 부모 계정과 연결된 시니어입니다."),
+    PARENT_USER_ALREADY_LINKED_TO_SENIOR(HttpStatus.CONFLICT, "SENIOR409_2", "이미 다른 시니어 프로필과 연결된 부모 계정입니다."),
+    USER_SENIOR_ALREADY_EXISTS(HttpStatus.CONFLICT, "SENIOR409_3", "이미 선택한 시니어입니다."),
+    SENIOR_MANAGEMENT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "SENIOR403_3", "선택한 시니어의 관리 권한이 없습니다."),
+    SENIOR_PARENT_USER_NOT_FOUND(HttpStatus.NOT_FOUND, "SENIOR404_1", "선택한 시니어와 연결된 부모 계정을 찾을 수 없습니다."),
+    SENIOR_RELOGIN_REQUEST_PARENT_ONLY(HttpStatus.FORBIDDEN, "SENIOR403_4", "시니어 본인 계정으로 등록된 기기만 재로그인 요청을 생성할 수 있습니다."),
+    SENIOR_RELOGIN_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "SENIOR404_2", "재로그인 요청을 찾을 수 없습니다."),
+    SENIOR_RELOGIN_REQUEST_ACCESS_DENIED(HttpStatus.FORBIDDEN, "SENIOR403_5", "해당 재로그인 요청을 승인할 권한이 없습니다."),
+    SENIOR_CREATE_CHILD_ONLY(HttpStatus.FORBIDDEN, "SENIOR403_6", "시니어 프로필 등록은 자녀 계정만 할 수 있습니다."),
+    SENIOR_RELOGIN_REQUEST_NOT_PENDING(HttpStatus.CONFLICT, "SENIOR409_4", "승인 가능한 대기 상태의 재로그인 요청이 아닙니다."),
+    SENIOR_RELOGIN_REQUEST_EXPIRED(HttpStatus.BAD_REQUEST, "SENIOR4002", "재로그인 요청이 만료되었습니다."),
+    SENIOR_RELOGIN_REQUEST_DEVICE_MISMATCH(HttpStatus.CONFLICT, "SENIOR409_5", "재로그인 요청의 기기 정보가 시니어와 일치하지 않습니다."),
+    SENIOR_RELOGIN_REQUEST_NOT_APPROVED(HttpStatus.CONFLICT, "SENIOR409_6", "재활성화 가능한 승인 상태의 재로그인 요청이 아닙니다."),
+    SENIOR_WITHDRAWAL_NOTICE_CHILD_ONLY(HttpStatus.FORBIDDEN, "SENIOR403_7", "자녀 계정만 시니어 탈퇴 알림을 처리할 수 있습니다."),
+    SENIOR_WITHDRAWAL_NOTICE_NOT_FOUND(HttpStatus.NOT_FOUND, "SENIOR404_3", "시니어 탈퇴 알림을 찾을 수 없습니다."),
+    SENIOR_WITHDRAWAL_NOTICE_ACCESS_DENIED(HttpStatus.FORBIDDEN, "SENIOR403_8", "해당 시니어 탈퇴 알림의 수신자가 아닙니다."),
+    SENIOR_WITHDRAWAL_NOTICE_EXPIRED(HttpStatus.BAD_REQUEST, "SENIOR4003", "만료된 시니어 탈퇴 알림입니다."),
+    SENIOR_PERMISSION_SETTING_PARENT_ONLY(HttpStatus.FORBIDDEN, "SENIOR_PERMISSION403", "부모 계정만 시니어 권한 설정을 변경할 수 있습니다."),
+    SENIOR_PERMISSION_SETTING_UPDATE_EMPTY(HttpStatus.BAD_REQUEST, "SENIOR_PERMISSION400", "변경할 권한 설정을 하나 이상 입력해 주세요."),
+
+    // Family Error
+    FAMILY_NOT_FOUND(HttpStatus.NOT_FOUND, "FAMILY404", "가족 정보를 찾을 수 없습니다."),
+    SENIOR_CODE_NOT_FOUND(HttpStatus.NOT_FOUND, "FAMILY404_2", "시니어 코드를 찾을 수 없습니다."),
+    INVALID_SENIOR_CODE(HttpStatus.BAD_REQUEST, "FAMILY400", "유효하지 않은 시니어 코드입니다."),
+    FAMILY_MEMBER_REMOVE_FORBIDDEN(HttpStatus.FORBIDDEN, "FAMILY403", "가족 구성원을 제외할 권한이 없습니다."),
+    SENIOR_CODE_CREATE_PARENT_FORBIDDEN(HttpStatus.FORBIDDEN, "FAMILY403_1", "부모 계정은 시니어 코드를 생성할 수 없습니다."),
+    FAMILY_CONNECTION_DISCONNECT_FORBIDDEN(HttpStatus.FORBIDDEN, "FAMILY403_2", "현재 역할로는 가족 연결을 해제할 수 없습니다."),
+    FAMILY_MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "FAMILY404_1", "해당 가족 구성원을 찾을 수 없습니다."),
+    CANNOT_REMOVE_SELF(HttpStatus.BAD_REQUEST, "FAMILY400_1", "주 담당자는 자기 자신을 가족에서 제외할 수 없습니다."),
+    CANNOT_REMOVE_SENIOR_PARENT(HttpStatus.BAD_REQUEST, "FAMILY400_4", "시니어 본인 계정은 가족에서 제외할 수 없습니다."),
+    CANNOT_CHANGE_PRIMARY_TO_SELF(HttpStatus.BAD_REQUEST, "FAMILY400_2", "본인은 주 담당자 변경 대상으로 선택할 수 없습니다."),
+    FAMILY_PHOTO_NOT_FOUND(HttpStatus.NOT_FOUND, "FAMILY_PHOTO404", "가족 사진을 찾을 수 없습니다."),
+    FAMILY_PHOTO_DELETE_FORBIDDEN(HttpStatus.FORBIDDEN, "FAMILY_PHOTO403", "해당 가족 사진을 삭제할 권한이 없습니다."),
+    FAMILY_PHOTO_UPLOAD_NOT_FOUND(HttpStatus.NOT_FOUND, "FAMILY_PHOTO404_1", "업로드된 사진 파일을 찾을 수 없습니다."),
+    FAMILY_PHOTO_UPLOAD_FORBIDDEN(HttpStatus.FORBIDDEN, "FAMILY_PHOTO403_1", "해당 사진 업로드를 완료할 권한이 없습니다."),
+    FAMILY_PHOTO_SIZE_EXCEEDED(HttpStatus.BAD_REQUEST, "FAMILY_PHOTO400_1", "사진 크기는 10MB 이하여야 합니다."),
+    FAMILY_PHOTO_INVALID_IMAGE(HttpStatus.BAD_REQUEST, "FAMILY_PHOTO400_2", "해독 가능한 JPG, PNG, WEBP 사진을 업로드해 주세요."),
+    FAMILY_PHOTO_ALREADY_REGISTERED(HttpStatus.CONFLICT, "FAMILY_PHOTO409", "이미 등록 완료된 사진입니다."),
+    FAMILY_PHOTO_ALREADY_REPORTED(HttpStatus.CONFLICT, "FAMILY_PHOTO409_1", "이미 숨긴 사진입니다."),
+    FAMILY_PHOTO_REPORT_OWN_PHOTO(HttpStatus.BAD_REQUEST, "FAMILY_PHOTO400_3", "본인이 올린 사진은 신고할 수 없습니다."),
+    FAMILY_USER_ALREADY_REPORTED(HttpStatus.CONFLICT, "FAMILY_PHOTO409_2", "이미 숨긴 게시자입니다."),
+    FAMILY_USER_REPORT_SELF(HttpStatus.BAD_REQUEST, "FAMILY_PHOTO400_4", "본인은 신고할 수 없습니다."),
+    PRIMARY_MANAGER_MUST_BE_CHILD(HttpStatus.BAD_REQUEST, "FAMILY400_3", "주 담당자는 자녀 계정만 지정할 수 있습니다."),
+    PRIMARY_CONNECTION_DISCONNECT_HISTORY_EXISTS(HttpStatus.CONFLICT, "FAMILY409", "시니어 연결 이력이 있는 가족의 주 담당자는 연결을 해제할 수 없습니다."),
+    PRIMARY_CONNECTION_DISCONNECT_GUARDIAN_EXISTS(HttpStatus.CONFLICT, "FAMILY409_1", "다른 보호자가 남아 있어 주 담당자 연결을 해제할 수 없습니다."),
+    PRIMARY_CONNECTION_DISCONNECT_PARENT_EXISTS(HttpStatus.CONFLICT, "FAMILY409_2", "연결된 시니어 계정이 있어 주 담당자 연결을 해제할 수 없습니다."),
+    UNUSED_FAMILY_CLEANUP_BLOCKED(HttpStatus.CONFLICT, "FAMILY409_3", "사용 중인 연관 데이터가 있어 가족 연결을 해제할 수 없습니다."),
+    FAMILY_PARENT_ALREADY_EXISTS(HttpStatus.CONFLICT, "FAMILY409_4", "이미 부모 계정이 참여한 가족입니다."),
+
+    // Photo Error
+    UNSUPPORTED_IMAGE_TYPE(HttpStatus.BAD_REQUEST,"IMAGE400_1", "JPG, PNG, WEBP 형식의 이미지만 업로드할 수 있습니다."),
+
+    // Inquiry Error
+    INQUIRY_TITLE_REQUIRED(HttpStatus.BAD_REQUEST, "INQUIRY400_1", "문의 제목을 입력해주세요."),
+    INQUIRY_CONTENT_REQUIRED(HttpStatus.BAD_REQUEST, "INQUIRY400_2", "문의글 내용을 입력해주세요."),
+    INQUIRY_IMAGE_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "INQUIRY400_3", "문의 이미지는 최대 5장까지 첨부할 수 있습니다."),
+    INQUIRY_NOT_FOUND(HttpStatus.NOT_FOUND, "INQUIRY404", "문의글을 찾을 수 없습니다."),
+    INQUIRY_ANSWER_NOT_FOUND(HttpStatus.NOT_FOUND, "INQUIRY404_1", "답변을 찾을 수 없습니다."),
+
+    // Medication Error
+    MEDICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "MED404", "복약 정보를 찾을 수 없습니다."),
+
+    // Health Error
+    HEALTH_RECORD_NOT_FOUND(HttpStatus.NOT_FOUND, "HEALTH404", "건강 기록을 찾을 수 없습니다."),
+
+    // Hospital Error
+    HOSPITAL_SCHEDULE_NOT_FOUND(HttpStatus.NOT_FOUND, "HOSPITAL404", "병원 일정을 찾을 수 없습니다."),
+
+    // Device Error
+    DEVICE_NOT_FOUND(HttpStatus.NOT_FOUND, "DEVICE404", "기기를 찾을 수 없습니다."),
+    PARENT_DEVICE_OFFLINE(HttpStatus.BAD_REQUEST, "DEVICE400", "부모님 기기가 오프라인 상태라 설정을 변경할 수 없습니다."),
+    DEVICE_IDENTIFIER_REQUIRED(HttpStatus.BAD_REQUEST, "DEVICE400_1", "기기 식별자(deviceIdentifier)가 필요합니다."),
+    DEVICE_NOT_CONNECTED(HttpStatus.NOT_FOUND, "DEVICE405", "연결된 기기가 없습니다."),
+    DEVICE_DISCONNECT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "DEVICE403", "시니어 연결을 해제할 권한이 없습니다."),
+    
+    // Receipt Error
+    RECEIPT_NOT_FOUND(HttpStatus.NOT_FOUND, "RECEIPT404", "영수증을 찾을 수 없습니다."),
+    
+    // Inactivity Error
+    INACTIVITY_SETTING_NOT_FOUND(HttpStatus.NOT_FOUND, "INACTIVITY404", "비활동 감지 설정을 찾을 수 없습니다."),
+    INACTIVITY_SETTING_PARENT_ONLY(HttpStatus.FORBIDDEN, "INACTIVITY403", "부모 계정만 자신의 무활동 감지 설정을 조회할 수 있습니다."),
+
+    // Event Error
+    EVENT_PARENT_ONLY(HttpStatus.FORBIDDEN, "EVENT403_1", "부모 계정만 이벤트를 생성할 수 있습니다."),
+    EVENT_SENIOR_ACCESS_DENIED(HttpStatus.FORBIDDEN, "EVENT403_2", "이벤트 대상 시니어의 가족 구성원이 아닙니다."),
+    EVENT_NOT_FOUND(HttpStatus.NOT_FOUND, "EVENT404", "이벤트를 찾을 수 없습니다."),
+    EVENT_ACCESS_DENIED(HttpStatus.FORBIDDEN, "EVENT403", "같은 가족만 이벤트 상세를 조회할 수 있습니다."),
+
+    // Notification Error
+    NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "NOTI404", "알림을 찾을 수 없습니다."),
+    NOTIFICATION_CHILD_ONLY(HttpStatus.FORBIDDEN, "NOTI403", "자녀 계정만 이용할 수 있습니다."),
+    NOTIFICATION_ACCESS_DENIED(HttpStatus.FORBIDDEN, "NOTI403_1", "본인이 받은 알림만 처리할 수 있습니다."),
+    NOTIFICATION_SIZE_OUT_OF_RANGE(HttpStatus.BAD_REQUEST, "NOTI400", "조회 개수는 1~50 사이여야 합니다.");
+
+    private final HttpStatus status;
+    private final String code;
+    private final String message;
+
+    @Override
+    public HttpStatus getStatus() {
+        return status;
+    }
+
+    @Override
+    public String getCode() {
+        return code;
+    }
+
+    @Override
+    public String getMessage() {
+        return message;
+    }
+}

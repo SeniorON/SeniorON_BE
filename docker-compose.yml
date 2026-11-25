@@ -1,0 +1,283 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
+services:
+
+  nginx:
+    image: nginx:latest
+    logging: *default-logging
+    restart: unless-stopped
+
+    ports:
+      - "80:80"
+      - "443:443"
+
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - /etc/letsencrypt:/etc/letsencrypt
+      - /etc/nginx/.htpasswd:/etc/nginx/.htpasswd:ro
+
+    depends_on:
+      grafana:
+        condition: service_healthy
+
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:latest
+    logging: *default-logging
+    restart: unless-stopped
+
+    expose:
+      - "9113"
+
+    depends_on:
+      - nginx
+
+    command:
+      - "-nginx.scrape-uri=http://nginx:8081/nginx_status"
+
+  app-blue:
+    image: jsh424/senioron:${IMAGE_TAG:-latest}
+    logging: *default-logging
+    expose:
+      - "8080"
+
+    env_file:
+      - .env
+
+    mem_limit: 768m
+    environment:
+      JAVA_TOOL_OPTIONS: "-Djava.net.preferIPv4Stack=true -Xms256m -Xmx384m -XX:+UseG1GC"
+      SPRING_PROFILES_ACTIVE: prod
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION}
+      S3_BUCKET: ${S3_BUCKET}
+      FIREBASE_SERVICE_ACCOUNT_PATH: file:/run/secrets/firebase-adminsdk.json
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/senioron-tts-cloud.json
+
+    volumes:
+      - /home/ubuntu/senioron-8c2e1-firebase-adminsdk-fbsvc-ba018605fb.json:/run/secrets/firebase-adminsdk.json:ro
+      - /home/ubuntu/senioron-tts-cloud.json:/run/secrets/senioron-tts-cloud.json:ro
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://localhost:8080/actuator/health/readiness | grep -q '\"status\":\"UP\"'"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+    restart: unless-stopped
+
+
+  app-green:
+    image: jsh424/senioron:${IMAGE_TAG:-latest}
+    logging: *default-logging
+    expose:
+      - "8080"
+
+    env_file:
+      - .env
+
+    mem_limit: 768m
+    environment:
+      JAVA_TOOL_OPTIONS: "-Djava.net.preferIPv4Stack=true -Xms256m -Xmx384m -XX:+UseG1GC"
+      SPRING_PROFILES_ACTIVE: prod
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION}
+      S3_BUCKET: ${S3_BUCKET}
+      FIREBASE_SERVICE_ACCOUNT_PATH: file:/run/secrets/firebase-adminsdk.json
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/senioron-tts-cloud.json
+
+    volumes:
+      - /home/ubuntu/senioron-8c2e1-firebase-adminsdk-fbsvc-ba018605fb.json:/run/secrets/firebase-adminsdk.json:ro
+      - /home/ubuntu/senioron-tts-cloud.json:/run/secrets/senioron-tts-cloud.json:ro
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://localhost:8080/actuator/health/readiness | grep -q '\"status\":\"UP\"'"
+        ]
+
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+    restart: unless-stopped
+
+
+  prometheus:
+    image: prom/prometheus:latest
+    logging: *default-logging
+    restart: unless-stopped
+    mem_limit: 256m
+
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=3d"
+
+    expose:
+      - "9090"
+
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+
+  # [메모리 절약] k6 부하 테스트 전용 DB (운영 배포 시 비활성화)
+  # influxdb:
+  #   image: influxdb:1.8
+  #   restart: unless-stopped
+  #
+  #   expose:
+  #     - "8086"
+  #
+  #   environment:
+  #     INFLUXDB_DB: k6
+  #     INFLUXDB_HTTP_AUTH_ENABLED: "false"
+  #
+  #   volumes:
+  #     - influxdb-data:/var/lib/influxdb
+
+  grafana:
+    image: grafana/grafana:latest
+    logging: *default-logging
+    restart: unless-stopped
+
+    networks:
+      default:
+        aliases:
+          - grafana
+
+    expose:
+      - "3000"
+
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+    mem_limit: 256m
+
+    environment:
+      GF_SERVER_ROOT_URL: https://senioron.site/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      # 공개 회원가입/익명 접근 차단
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/dashboards:/etc/grafana/dashboards
+
+    depends_on:
+      prometheus:
+        condition: service_started
+
+  # [메모리 절약] 로그 수집 스택 비활성화 (약 350MB+ 절약)
+  # loki:
+  #   image: grafana/loki:2.9.8
+  #   command: -config.file=/etc/loki/config.yml
+  #
+  #   networks:
+  #     default:
+  #       aliases:
+  #         - loki
+  #
+  #   expose:
+  #     - "3100"
+  #
+  #   volumes:
+  #     - ./monitoring/loki/config.yml:/etc/loki/config.yml
+  #
+  # promtail:
+  #   image: grafana/promtail:2.9.8
+  #
+  #   command: -config.file=/etc/promtail/config.yml
+  #
+  #   volumes:
+  #     - ./monitoring/promtail/config.yml:/etc/promtail/config.yml
+  #     - /var/lib/docker/containers:/var/lib/docker/containers:ro
+  #     - /var/run/docker.sock:/var/run/docker.sock
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    logging: *default-logging
+    restart: unless-stopped
+    mem_limit: 64m
+
+    expose:
+      - "9100"
+
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+
+  # [메모리 절약] cAdvisor 컨테이너 리소스 모니터링 비활성화 (약 200MB+ 절약)
+  # cadvisor:
+  #   image: gcr.io/cadvisor/cadvisor:v0.47.0
+  #   restart: unless-stopped
+  #
+  #   privileged: true
+  #
+  #   expose:
+  #     - "8080"
+  #
+  #   command:
+  #     - "--housekeeping_interval=30s"
+  #     - "--docker_only=true"
+  #
+  #   volumes:
+  #     - /:/rootfs:ro
+  #     - /var/run:/var/run:ro
+  #     - /sys:/sys:ro
+  #     - /var/lib/docker/:/var/lib/docker:ro
+  #     - /dev/disk/:/dev/disk:ro
+
+  mysqld-exporter:
+    image: prom/mysqld-exporter:latest
+    logging: *default-logging
+    restart: unless-stopped
+    mem_limit: 64m
+
+    expose:
+      - "9104"
+
+    env_file:
+      - .env
+
+    environment:
+      MYSQLD_EXPORTER_PASSWORD: ${DB_PASSWORD}
+
+    command:
+      - "--mysqld.address=${DB_HOST}:3306"
+      - "--mysqld.username=${DB_USERNAME}"
+      - "--config.my-cnf=/etc/mysqld-exporter/.my.cnf"
+
+    volumes:
+      - ./monitoring/mysqld-exporter:/etc/mysqld-exporter:ro
+
+volumes:
+  grafana-data:
+  # influxdb-data:

@@ -1,0 +1,69 @@
+package com.example.senioron.domain.user.repository;
+
+import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.user.entity.Role;
+import com.example.senioron.domain.user.entity.User;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.List;
+import java.util.Optional;
+
+public interface UserRepository extends JpaRepository<User, Long> {
+
+    @Query("""
+            SELECT COUNT(u)
+            FROM User u
+            JOIN u.familyMembers fm
+            WHERE fm.family = :family
+            """)
+    long countByFamily(@Param("family") Family family);
+
+    boolean existsByLoginId(String loginId);
+
+    boolean existsByEmail(String email);
+
+    Optional<User> findByEmail(String email);
+
+    Optional<User> findByLoginId(String loginId);
+
+    Optional<User> findByNameAndEmail(String name, String email);
+
+    Optional<User> findByNameAndLoginId(String name, String loginId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT u FROM User u WHERE u.usersId = :usersId")
+    Optional<User> findByIdForUpdate(@Param("usersId") Long usersId);
+
+    @Query("""
+            SELECT u
+            FROM User u
+            JOIN u.familyMembers fm
+            WHERE fm.family = :family
+            ORDER BY u.usersId ASC
+            """)
+    List<User> findAllByFamily(@Param("family") Family family);
+
+    @Query("""
+            SELECT u
+            FROM User u
+            JOIN u.familyMembers fm
+            WHERE fm.family = :family
+              AND u.usersId != :excludeUserId
+              AND u.role = :role
+            ORDER BY u.usersId ASC
+            """)
+    List<User> findByFamilyAndUsersIdNotAndRole(
+            @Param("family")Family family,
+            @Param("excludeUserId")Long excludeUserId,
+            @Param("role")Role role);
+
+
+    @EntityGraph(attributePaths = {"familyMembers", "familyMembers.family"})
+    @Query("SELECT u FROM User u WHERE u.usersId = :usersId")
+    Optional<User> findByIdWithFamily(@Param("usersId") Long usersId);
+}

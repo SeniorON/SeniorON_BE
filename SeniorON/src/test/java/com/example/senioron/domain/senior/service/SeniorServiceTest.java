@@ -1,0 +1,707 @@
+package com.example.senioron.domain.senior.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.InstanceOfAssertFactories.type;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+
+import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyMember;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
+import com.example.senioron.domain.family.repository.FamilyRepository;
+import com.example.senioron.domain.senior.dto.request.SeniorCreateRequest;
+import com.example.senioron.domain.senior.dto.response.ManagedSeniorResponse;
+import com.example.senioron.domain.senior.dto.response.MedicationConsentConnectionStatus;
+import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.senior.entity.SeniorRelation;
+import com.example.senioron.domain.senior.entity.SeniorWithdrawalNotice;
+import com.example.senioron.domain.senior.entity.SeniorWithdrawalNoticeRecipient;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
+import com.example.senioron.domain.senior.repository.SeniorWithdrawalNoticeRecipientRepository;
+import com.example.senioron.domain.user.entity.ManagerType;
+import com.example.senioron.domain.user.entity.Role;
+import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.global.apiPayload.code.ErrorCode;
+import com.example.senioron.global.apiPayload.exception.BusinessException;
+import java.sql.SQLException;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.dao.DataIntegrityViolationException;
+
+class SeniorServiceTest {
+
+    private final SeniorRepository seniorRepository =
+            org.mockito.Mockito.mock(SeniorRepository.class);
+    private final UserRepository userRepository =
+            org.mockito.Mockito.mock(UserRepository.class);
+    private final FamilyRepository familyRepository =
+            org.mockito.Mockito.mock(FamilyRepository.class);
+    private final FamilyMemberRepository familyMemberRepository =
+            org.mockito.Mockito.mock(FamilyMemberRepository.class);
+    private final SeniorWithdrawalNoticeRecipientRepository withdrawalRecipientRepository =
+            org.mockito.Mockito.mock(SeniorWithdrawalNoticeRecipientRepository.class);
+
+    private SeniorService seniorService;
+
+    @BeforeEach
+    void setUp() {
+        seniorService = new SeniorService(
+                seniorRepository,
+                userRepository,
+                familyRepository,
+                familyMemberRepository,
+                withdrawalRecipientRepository
+        );
+        given(withdrawalRecipientRepository
+                .findUnacknowledgedAndUnexpiredByRecipientUserId(any(), any()))
+                .willReturn(List.of());
+    }
+
+    @Test
+    void getManagedSeniorsReturnsSeniorsThroughFamilyMembers() {
+        Family family = Family.builder().familyId(1L).build();
+        User user = createChild(1L, family, ManagerType.PRIMARY);
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(familyMemberRepository.findManagedSeniorResponsesByUserId(1L))
+                .willReturn(List.of(new ManagedSeniorResponse(
+                        1L,
+                        10L,
+                        "김영희",
+                        SeniorRelation.MOTHER,
+                        null,
+                        true
+                )));
+
+        var response = seniorService.getManagedSeniors(user);
+
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).familyId()).isEqualTo(1L);
+        assertThat(response.get(0).seniorId()).isEqualTo(10L);
+        assertThat(response.get(0).seniorName()).isEqualTo("김영희");
+        assertThat(response.get(0).relation()).isEqualTo(SeniorRelation.MOTHER);
+        assertThat(response.get(0).customRelation()).isNull();
+        assertThat(response.get(0).seniorProfileCompleted()).isTrue();
+        assertThat(response.get(0).withdrawn()).isFalse();
+        assertThat(response.get(0).withdrawalNoticeId()).isNull();
+        verify(familyMemberRepository).findManagedSeniorResponsesByUserId(1L);
+        verify(seniorRepository, never()).findFirstByFamilyOrderBySeniorIdAsc(any());
+    }
+
+    @Test
+    void getManagedSeniorsRejectsUnauthenticatedUser() {
+        assertThatThrownBy(() -> seniorService.getManagedSeniors(null))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.USER_NOT_AUTHENTICATED);
+    }
+
+    @Test
+    void getManagedSeniorsReturnsEmptyWhenUserHasNoFamily() {
+        User user = createChild(1L, null, ManagerType.NONE);
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(familyMemberRepository.findManagedSeniorResponsesByUserId(1L))
+                .willReturn(List.of());
+
+        var response = seniorService.getManagedSeniors(user);
+
+        assertThat(response).isEmpty();
+    }
+
+    @Test
+    void getManagedSeniorsMergesWithdrawalSnapshotAndRemovesEmptyPlaceholder() {
+        Family family = Family.builder().familyId(1L).build();
+        User user = createChild(1L, family, ManagerType.PRIMARY);
+        ManagedSeniorResponse normal = new ManagedSeniorResponse(
+                1L, 10L, "정상 시니어", SeniorRelation.FATHER, null, true);
+        ManagedSeniorResponse emptyPlaceholder = new ManagedSeniorResponse(
+                2L, null, null, SeniorRelation.MOTHER, null, false);
+        SeniorWithdrawalNotice notice = SeniorWithdrawalNotice.builder()
+                .seniorWithdrawalNoticeId(50L)
+                .seniorId(20L)
+                .familyId(2L)
+                .seniorName("탈퇴 시니어")
+                .withdrawnAt(LocalDateTime.now().minusDays(1))
+                .expiresAt(LocalDateTime.now().plusDays(29))
+                .build();
+        SeniorWithdrawalNoticeRecipient recipient =
+                SeniorWithdrawalNoticeRecipient.builder()
+                        .notice(notice)
+                        .recipientUser(user)
+                        .relation(SeniorRelation.MOTHER)
+                        .build();
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(familyMemberRepository.findManagedSeniorResponsesByUserId(1L))
+                .willReturn(List.of(normal, emptyPlaceholder));
+        given(withdrawalRecipientRepository
+                .findUnacknowledgedAndUnexpiredByRecipientUserId(
+                        org.mockito.ArgumentMatchers.eq(1L),
+                        any()
+                ))
+                .willReturn(List.of(recipient));
+
+        var response = seniorService.getManagedSeniors(user);
+
+        assertThat(response).containsExactly(
+                normal,
+                new ManagedSeniorResponse(
+                        2L,
+                        20L,
+                        "탈퇴 시니어",
+                        SeniorRelation.MOTHER,
+                        null,
+                        true,
+                        true,
+                        50L
+                )
+        );
+    }
+
+    @Test
+    void profilelessWithdrawalNoticeIsReturnedWithoutSeniorId() {
+        User user = createChild(1L, null, ManagerType.PRIMARY);
+        SeniorWithdrawalNotice notice = SeniorWithdrawalNotice.builder()
+                .seniorWithdrawalNoticeId(51L)
+                .familyId(2L)
+                .seniorName("프로필 없는 부모")
+                .withdrawnAt(LocalDateTime.now().minusDays(1))
+                .expiresAt(LocalDateTime.now().plusDays(29))
+                .build();
+        SeniorWithdrawalNoticeRecipient recipient = SeniorWithdrawalNoticeRecipient.builder()
+                .notice(notice)
+                .recipientUser(user)
+                .relation(SeniorRelation.MOTHER)
+                .build();
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(familyMemberRepository.findManagedSeniorResponsesByUserId(1L)).willReturn(List.of());
+        given(withdrawalRecipientRepository.findUnacknowledgedAndUnexpiredByRecipientUserId(
+                org.mockito.ArgumentMatchers.eq(1L), any())).willReturn(List.of(recipient));
+
+        var response = seniorService.getManagedSeniors(user);
+
+        assertThat(response).containsExactly(new ManagedSeniorResponse(
+                2L,
+                null,
+                "프로필 없는 부모",
+                SeniorRelation.MOTHER,
+                null,
+                false,
+                true,
+                51L
+        ));
+    }
+
+    @Test
+    void getFamilySeniorsReturnsFamilySenior() {
+        Family family = Family.builder().familyId(1L).build();
+        User user = createChild(1L, family, ManagerType.PRIMARY);
+        Senior senior = createSenior(10L, family, user);
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(familyRepository.findById(1L)).willReturn(Optional.of(family));
+        given(familyMemberRepository.existsByUserAndFamily(user, family)).willReturn(true);
+        given(seniorRepository.findAllByFamilyOrderBySeniorIdAsc(family))
+                .willReturn(java.util.List.of(senior));
+
+        var response = seniorService.getFamilySeniors(user, 1L);
+
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).seniorId()).isEqualTo(10L);
+    }
+
+    @Test
+    void getFamilySeniorsRejectsUserOutsideRequestedFamily() {
+        Family family = Family.builder().familyId(1L).build();
+        User user = createChild(1L, null, ManagerType.PRIMARY);
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(familyRepository.findById(1L)).willReturn(Optional.of(family));
+        given(familyMemberRepository.existsByUserAndFamily(user, family)).willReturn(false);
+
+        assertThatThrownBy(() -> seniorService.getFamilySeniors(user, 1L))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.FORBIDDEN);
+    }
+
+    @Test
+    void getParentSeniorProfileReturnsLinkedSeniorId() {
+        User parent = createParent(1L, null);
+        Senior senior = Senior.builder()
+                .seniorId(10L)
+                .parentUser(parent)
+                .build();
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(parent));
+        given(seniorRepository.findByParentUser(parent)).willReturn(Optional.of(senior));
+
+        var response = seniorService.getParentSeniorProfile(parent);
+
+        assertThat(response.seniorId()).isEqualTo(10L);
+        verify(seniorRepository).findByParentUser(parent);
+    }
+
+    @Test
+    void getParentSeniorProfileUsesParentUserInsteadOfFamilyMembership() {
+        Family firstFamily = Family.builder().familyId(1L).build();
+        Family linkedFamily = Family.builder().familyId(2L).build();
+        User parent = createParent(1L, firstFamily);
+        addFamilyMember(parent, firstFamily, ManagerType.NONE);
+        addFamilyMember(parent, linkedFamily, ManagerType.NONE);
+        Senior linkedSenior = Senior.builder()
+                .seniorId(20L)
+                .family(linkedFamily)
+                .parentUser(parent)
+                .build();
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(parent));
+        given(seniorRepository.findByParentUser(parent))
+                .willReturn(Optional.of(linkedSenior));
+
+        var response = seniorService.getParentSeniorProfile(parent);
+
+        assertThat(response.seniorId()).isEqualTo(20L);
+        verifyNoInteractions(familyMemberRepository);
+    }
+
+    @Test
+    void getMedicationConsentReturnsConnectedAndRawTrueConsentForSameFamilyMember() {
+        Family family = Family.builder().familyId(1L).build();
+        User requester = createChild(1L, family, ManagerType.SUB);
+        User parent = User.builder()
+                .usersId(2L)
+                .name("시니어 본인")
+                .role(Role.PARENT)
+                .healthInfoAgreed(true)
+                .build();
+        Senior senior = createSenior(10L, family, requester);
+        senior.linkParentUser(parent);
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(requester));
+        given(seniorRepository.findById(10L)).willReturn(Optional.of(senior));
+        given(familyMemberRepository.existsByUserAndFamily(requester, family)).willReturn(true);
+
+        var response = seniorService.getMedicationConsent(requester, 10L);
+
+        assertThat(response.getConnectionStatus())
+                .isEqualTo(MedicationConsentConnectionStatus.CONNECTED);
+        assertThat(response.getMedicationConsent()).isTrue();
+    }
+
+    @Test
+    void getMedicationConsentAllowsConnectedSeniorParentAsFamilyMember() {
+        Family family = Family.builder().familyId(1L).build();
+        User parent = User.builder()
+                .usersId(2L)
+                .name("시니어 본인")
+                .role(Role.PARENT)
+                .healthInfoAgreed(false)
+                .build();
+        Senior senior = createSenior(10L, family, parent);
+        senior.linkParentUser(parent);
+
+        given(userRepository.findById(2L)).willReturn(Optional.of(parent));
+        given(seniorRepository.findById(10L)).willReturn(Optional.of(senior));
+        given(familyMemberRepository.existsByUserAndFamily(parent, family)).willReturn(true);
+
+        var response = seniorService.getMedicationConsent(parent, 10L);
+
+        assertThat(response.getConnectionStatus())
+                .isEqualTo(MedicationConsentConnectionStatus.CONNECTED);
+        assertThat(response.getMedicationConsent()).isFalse();
+    }
+
+    @Test
+    void getMedicationConsentPreservesNullForConnectedUserWithoutConsentValue() {
+        Family family = Family.builder().familyId(1L).build();
+        User requester = createChild(1L, family, ManagerType.PRIMARY);
+        User parent = User.builder()
+                .usersId(2L)
+                .name("시니어 본인")
+                .role(Role.PARENT)
+                .healthInfoAgreed(null)
+                .build();
+        Senior senior = createSenior(10L, family, requester);
+        senior.linkParentUser(parent);
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(requester));
+        given(seniorRepository.findById(10L)).willReturn(Optional.of(senior));
+        given(familyMemberRepository.existsByUserAndFamily(requester, family)).willReturn(true);
+
+        var response = seniorService.getMedicationConsent(requester, 10L);
+
+        assertThat(response.getConnectionStatus())
+                .isEqualTo(MedicationConsentConnectionStatus.CONNECTED);
+        assertThat(response.getMedicationConsent()).isNull();
+    }
+
+    @Test
+    void getMedicationConsentReturnsNotConnectedWhenSeniorProfileHasNoParentUser() {
+        Family family = Family.builder().familyId(1L).build();
+        User requester = createChild(1L, family, ManagerType.PRIMARY);
+        Senior senior = createSenior(10L, family, requester);
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(requester));
+        given(seniorRepository.findById(10L)).willReturn(Optional.of(senior));
+        given(familyMemberRepository.existsByUserAndFamily(requester, family)).willReturn(true);
+
+        var response = seniorService.getMedicationConsent(requester, 10L);
+
+        assertThat(response.getConnectionStatus())
+                .isEqualTo(MedicationConsentConnectionStatus.NOT_CONNECTED);
+        assertThat(response.getMedicationConsent()).isNull();
+    }
+
+    @Test
+    void getMedicationConsentRejectsUserOutsideSeniorFamily() {
+        Family family = Family.builder().familyId(1L).build();
+        User requester = createChild(1L, null, ManagerType.PRIMARY);
+        Senior senior = createSenior(10L, family, requester);
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(requester));
+        given(seniorRepository.findById(10L)).willReturn(Optional.of(senior));
+        given(familyMemberRepository.existsByUserAndFamily(requester, family)).willReturn(false);
+
+        assertThatThrownBy(() -> seniorService.getMedicationConsent(requester, 10L))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED);
+    }
+
+    @Test
+    void getMedicationConsentThrowsWhenSeniorDoesNotExist() {
+        User requester = createChild(1L, null, ManagerType.PRIMARY);
+        given(userRepository.findById(1L)).willReturn(Optional.of(requester));
+        given(seniorRepository.findById(10L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> seniorService.getMedicationConsent(requester, 10L))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_NOT_FOUND);
+    }
+
+    @Test
+    void getParentSeniorProfileRejectsParentWithoutLinkedSenior() {
+        User parent = createParent(1L, null);
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(parent));
+        given(seniorRepository.findByParentUser(parent)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> seniorService.getParentSeniorProfile(parent))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_NOT_FOUND);
+    }
+
+    @Test
+    void getParentSeniorProfileRejectsChildUser() {
+        User child = createChild(1L, null, ManagerType.PRIMARY);
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(child));
+
+        assertThatThrownBy(() -> seniorService.getParentSeniorProfile(child))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_PARENT_LINK_PARENT_ONLY);
+        verify(seniorRepository, never()).findByParentUser(child);
+    }
+
+    @Test
+    void getParentSeniorProfileReturnsOnlyCurrentParentsSenior() {
+        User currentParent = createParent(1L, null);
+        User otherParent = createParent(2L, null);
+        Senior otherSenior = Senior.builder()
+                .seniorId(30L)
+                .parentUser(otherParent)
+                .build();
+        Senior currentSenior = Senior.builder()
+                .seniorId(40L)
+                .parentUser(currentParent)
+                .build();
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(currentParent));
+        given(seniorRepository.findByParentUser(currentParent))
+                .willReturn(Optional.of(currentSenior));
+
+        var response = seniorService.getParentSeniorProfile(currentParent);
+
+        assertThat(response.seniorId()).isEqualTo(40L);
+        assertThat(response.seniorId()).isNotEqualTo(otherSenior.getSeniorId());
+        verify(seniorRepository).findByParentUser(currentParent);
+        verify(seniorRepository, never()).findByParentUser(otherParent);
+    }
+
+    @Test
+    void createSeniorCreatesFamilySenior() {
+        Family family = Family.builder().familyId(1L).build();
+        User user = createChild(1L, family, ManagerType.PRIMARY);
+        Senior savedSenior = createSenior(10L, family, user);
+        FamilyMember registeringMember = FamilyMember.builder()
+                .user(user)
+                .family(family)
+                .managerType(ManagerType.PRIMARY)
+                .build();
+
+        given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
+        given(familyMemberRepository.existsByUserAndFamily(user, family)).willReturn(true);
+        given(familyMemberRepository.findByUserAndFamily(user, family))
+                .willReturn(Optional.of(registeringMember));
+        given(seniorRepository.saveAndFlush(any(Senior.class))).willReturn(savedSenior);
+
+        var response = seniorService.createSenior(
+                user,
+                createRequest(SeniorRelation.FATHER, null)
+        );
+
+        assertThat(response.seniorId()).isEqualTo(10L);
+        assertThat(response.relation()).isEqualTo(SeniorRelation.FATHER);
+        assertThat(response.customRelation()).isNull();
+        assertThat(registeringMember.getRelation()).isEqualTo(SeniorRelation.FATHER);
+        assertThat(registeringMember.getCustomRelation()).isNull();
+
+        ArgumentCaptor<Senior> seniorCaptor = ArgumentCaptor.forClass(Senior.class);
+        verify(seniorRepository).saveAndFlush(seniorCaptor.capture());
+        assertThat(seniorCaptor.getValue().getRelation()).isNull();
+        assertThat(seniorCaptor.getValue().getCustomRelation()).isNull();
+    }
+
+    @Test
+    void createSeniorStoresCustomRelationOnlyInRegisteringFamilyMember() {
+        Family family = Family.builder().familyId(1L).build();
+        User user = createChild(1L, family, ManagerType.PRIMARY);
+        Senior savedSenior = createSenior(10L, family, user);
+        FamilyMember registeringMember = FamilyMember.builder()
+                .user(user)
+                .family(family)
+                .managerType(ManagerType.PRIMARY)
+                .build();
+
+        given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
+        given(familyMemberRepository.existsByUserAndFamily(user, family)).willReturn(true);
+        given(familyMemberRepository.findByUserAndFamily(user, family))
+                .willReturn(Optional.of(registeringMember));
+        given(seniorRepository.saveAndFlush(any(Senior.class))).willReturn(savedSenior);
+
+        var response = seniorService.createSenior(
+                user,
+                createRequest(SeniorRelation.OTHER, "  친할머니  ")
+        );
+
+        assertThat(response.relation()).isEqualTo(SeniorRelation.OTHER);
+        assertThat(response.customRelation()).isEqualTo("친할머니");
+        assertThat(registeringMember.getRelation()).isEqualTo(SeniorRelation.OTHER);
+        assertThat(registeringMember.getCustomRelation()).isEqualTo("친할머니");
+
+        ArgumentCaptor<Senior> seniorCaptor = ArgumentCaptor.forClass(Senior.class);
+        verify(seniorRepository).saveAndFlush(seniorCaptor.capture());
+        assertThat(seniorCaptor.getValue().getRelation()).isNull();
+        assertThat(seniorCaptor.getValue().getCustomRelation()).isNull();
+    }
+
+    @Test
+    void createSeniorLinksExistingParentMember() {
+        Family family = Family.builder().familyId(1L).build();
+        User child = createChild(1L, family, ManagerType.PRIMARY);
+        User parent = createParent(2L, family);
+
+        given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
+        given(familyMemberRepository.existsByUserAndFamily(child, family)).willReturn(true);
+        given(familyMemberRepository.findByUserAndFamily(child, family))
+                .willReturn(Optional.of(
+                        FamilyMember.builder()
+                                .user(child)
+                                .family(family)
+                                .managerType(ManagerType.PRIMARY)
+                                .build()
+                ));
+        given(familyMemberRepository.findByFamilyAndUserIdNotAndUserRole(
+                family,
+                1L,
+                Role.PARENT
+        )).willReturn(java.util.List.of(
+                FamilyMember.builder()
+                        .user(parent)
+                        .family(family)
+                        .managerType(ManagerType.NONE)
+                        .build()
+        ));
+        given(seniorRepository.existsByParentUser(parent)).willReturn(false);
+        given(seniorRepository.saveAndFlush(any(Senior.class)))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        seniorService.createSenior(
+                child,
+                createRequest(SeniorRelation.MOTHER, null)
+        );
+
+        ArgumentCaptor<Senior> seniorCaptor = ArgumentCaptor.forClass(Senior.class);
+        verify(seniorRepository).saveAndFlush(seniorCaptor.capture());
+        assertThat(seniorCaptor.getValue().getParentUser()).isEqualTo(parent);
+    }
+
+    @Test
+    void createSeniorRejectsParentUser() {
+        Family family = Family.builder().familyId(1L).build();
+        User parent = createParent(2L, family);
+
+        assertThatThrownBy(() -> seniorService.createSenior(
+                parent,
+                createRequest(SeniorRelation.MOTHER, null)
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_CREATE_CHILD_ONLY);
+        verify(familyRepository, never()).findByIdForUpdate(1L);
+        verify(seniorRepository, never()).saveAndFlush(any(Senior.class));
+    }
+
+    @Test
+    void createSeniorConvertsMariaDbDuplicateViolationToSeniorAlreadyExists() {
+        Family family = Family.builder().familyId(1L).build();
+        User user = createChild(1L, family, ManagerType.PRIMARY);
+
+        given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
+        given(familyMemberRepository.existsByUserAndFamily(user, family)).willReturn(true);
+        given(familyMemberRepository.findByUserAndFamily(user, family))
+                .willReturn(Optional.of(
+                        FamilyMember.builder()
+                                .user(user)
+                                .family(family)
+                                .managerType(ManagerType.PRIMARY)
+                                .build()
+        ));
+        given(seniorRepository.saveAndFlush(any(Senior.class)))
+                .willThrow(new DataIntegrityViolationException(
+                        "duplicate family senior",
+                        new SQLException("duplicate family senior", "23000", 1062)
+                ));
+
+        assertThatThrownBy(() -> seniorService.createSenior(
+                user,
+                createRequest(SeniorRelation.MOTHER, null)
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SENIOR_ALREADY_EXISTS);
+    }
+
+    @Test
+    void createSeniorDoesNotConvertNonDuplicateIntegrityViolationToAlreadyExists() {
+        Family family = Family.builder().familyId(1L).build();
+        User user = createChild(1L, family, ManagerType.PRIMARY);
+
+        given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
+        given(familyMemberRepository.existsByUserAndFamily(user, family)).willReturn(true);
+        given(familyMemberRepository.findByUserAndFamily(user, family))
+                .willReturn(Optional.of(FamilyMember.builder()
+                        .user(user)
+                        .family(family)
+                        .managerType(ManagerType.PRIMARY)
+                        .build()));
+        DataIntegrityViolationException integrityViolation =
+                new DataIntegrityViolationException("relation cannot be null");
+        given(seniorRepository.saveAndFlush(any(Senior.class)))
+                .willThrow(integrityViolation);
+
+        assertThatThrownBy(() -> seniorService.createSenior(
+                user,
+                createRequest(SeniorRelation.MOTHER, null)
+        )).isSameAs(integrityViolation);
+    }
+
+    private SeniorCreateRequest createRequest(
+            SeniorRelation relation,
+            String customRelation
+    ) {
+        return new SeniorCreateRequest(
+                1L,
+                "김영희",
+                relation,
+                customRelation,
+                LocalDate.of(1950, 1, 1),
+                "010-1234-5678",
+                "서울시",
+                "101호",
+                37.5665,
+                126.9780
+        );
+    }
+
+    private Senior createSenior(
+            Long seniorId,
+            Family family,
+            User registeredBy
+    ) {
+        return Senior.builder()
+                .seniorId(seniorId)
+                .name("김영희")
+                .relation(SeniorRelation.MOTHER)
+                .birth(LocalDate.of(1950, 1, 1))
+                .phoneNumber("01012345678")
+                .address("서울시")
+                .detailAddress("101호")
+                .latitude(37.5665)
+                .longitude(126.9780)
+                .family(family)
+                .registeredBy(registeredBy)
+                .build();
+    }
+
+    private User createChild(
+            Long usersId,
+            Family family,
+            ManagerType managerType
+    ) {
+        return User.builder()
+                .usersId(usersId)
+                .name("자녀")
+                .role(Role.CHILD)
+                .managerType(managerType)
+                .family(family)
+                .build();
+    }
+
+    private User createParent(Long usersId, Family family) {
+        return User.builder()
+                .usersId(usersId)
+                .name("부모")
+                .role(Role.PARENT)
+                .managerType(ManagerType.NONE)
+                .family(family)
+                .build();
+    }
+
+    private void addFamilyMember(
+            User user,
+            Family family,
+            ManagerType managerType
+    ) {
+        user.getFamilyMembers().add(
+                FamilyMember.builder()
+                        .user(user)
+                        .family(family)
+                        .managerType(managerType)
+                        .build()
+        );
+    }
+}

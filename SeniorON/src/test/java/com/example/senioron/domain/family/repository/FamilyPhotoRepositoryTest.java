@@ -1,0 +1,647 @@
+package com.example.senioron.domain.family.repository;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyMember;
+import com.example.senioron.domain.family.entity.FamilyPhoto;
+import com.example.senioron.domain.family.entity.FamilyPhotoReport;
+import com.example.senioron.domain.family.entity.FamilyPhotoSenior;
+import com.example.senioron.domain.family.entity.FamilyUserReport;
+import com.example.senioron.domain.family.entity.PhotoReportReason;
+import com.example.senioron.domain.family.entity.PhotoReportStatus;
+import com.example.senioron.domain.family.service.FamilyPhotoPermissionService;
+import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.senior.entity.SeniorRelation;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
+import com.example.senioron.domain.user.entity.ManagerType;
+import com.example.senioron.domain.user.entity.Role;
+import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.repository.UserRepository;
+import jakarta.persistence.EntityManager;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.data.domain.PageRequest;
+
+@DataJpaTest
+class FamilyPhotoRepositoryTest {
+
+    @Autowired
+    private FamilyPhotoRepository familyPhotoRepository;
+
+    @Autowired
+    private FamilyPhotoViewRepository familyPhotoViewRepository;
+
+    @Autowired
+    private FamilyRepository familyRepository;
+
+    @Autowired
+    private FamilyMemberRepository familyMemberRepository;
+
+    @Autowired
+    private FamilyPhotoSeniorRepository familyPhotoSeniorRepository;
+
+    @Autowired
+    private SeniorRepository seniorRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private FamilyPhotoReportRepository familyPhotoReportRepository;
+
+    @Autowired
+    private FamilyUserReportRepository familyUserReportRepository;
+
+    @Autowired
+    private EntityManager entityManager;
+
+    @Test
+    void findsPhotoSharedToSeniorOfUserFamily() {
+        User currentUser = saveUser("current-user");
+        User uploader = saveUser("uploader");
+        Senior mother = saveSenior("MOTHER-001", uploader);
+        Senior father = saveSenior("FATHER-001", uploader);
+        saveFamilyMember(currentUser, mother.getFamily());
+
+        FamilyPhoto photo = savePhoto(uploader, "shared-photo.jpg", mother, father);
+
+        assertThat(familyPhotoRepository.findAccessibleByFamilyPhotoIdAndUser(
+                photo.getFamilyPhotoId(),
+                currentUser
+        )).contains(photo);
+        assertThat(familyPhotoRepository.findAccessibleByFamilyPhotoIdAndFamily(
+                photo.getFamilyPhotoId(),
+                mother.getFamily()
+        )).contains(photo);
+    }
+
+    @Test
+    void doesNotFindPhotoSharedOnlyToAnotherSenior() {
+        User currentUser = saveUser("current-user");
+        User uploader = saveUser("uploader");
+        Senior mother = saveSenior("MOTHER-002", uploader);
+        Senior father = saveSenior("FATHER-002", uploader);
+        saveFamilyMember(currentUser, mother.getFamily());
+        saveFamilyMember(uploader, mother.getFamily());
+
+        // 같은 담당자가 올렸어도 공유하지 않은 시니어에게는 보이지 않는다.
+        FamilyPhoto photo = savePhoto(uploader, "father-only-photo.jpg", father);
+
+        assertThat(familyPhotoRepository.findAccessibleByFamilyPhotoIdAndUser(
+                photo.getFamilyPhotoId(),
+                currentUser
+        )).isEmpty();
+        assertThat(familyPhotoRepository.findAccessibleByFamilyPhotoIdAndFamily(
+                photo.getFamilyPhotoId(),
+                mother.getFamily()
+        )).isEmpty();
+        assertThat(familyPhotoRepository.findAllAccessibleByFamily(
+                mother.getFamily(),
+                currentUser,
+                PageRequest.of(0, 10)
+        )).isEmpty();
+        assertThat(familyPhotoRepository.countAccessibleByFamily(mother.getFamily(), currentUser))
+                .isZero();
+    }
+
+    @Test
+    void findsPhotosSharedToSelectedSeniorWithoutDuplicates() {
+        User firstUploader = saveUser("first-uploader");
+        User secondUploader = saveUser("second-uploader");
+        Senior mother = saveSenior("MOTHER-003", firstUploader);
+        Senior father = saveSenior("FATHER-003", firstUploader);
+
+        FamilyPhoto older = savePhoto(firstUploader, "older-photo.jpg", mother, father);
+        FamilyPhoto newer = savePhoto(secondUploader, "newer-photo.jpg", mother);
+        savePhoto(secondUploader, "father-only-photo.jpg", father);
+
+        assertThat(familyPhotoRepository.findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
+                mother.getFamily(),
+                firstUploader,
+                PageRequest.of(0, 4)
+        )).containsExactly(newer, older);
+        assertThat(familyPhotoRepository.findAllAccessibleByFamily(
+                mother.getFamily(),
+                firstUploader,
+                PageRequest.of(0, 1)
+        )).containsExactly(newer);
+        assertThat(familyPhotoRepository.findNextAccessiblePageByFamily(
+                mother.getFamily(),
+                firstUploader,
+                LocalDateTime.now().plusMinutes(1),
+                Long.MAX_VALUE,
+                PageRequest.of(0, 10)
+        )).containsExactly(newer, older);
+        assertThat(familyPhotoRepository.countAccessibleByFamily(mother.getFamily(), firstUploader))
+                .isEqualTo(2L);
+    }
+
+    @Test
+    void filtersSharedPhotosByUploader() {
+        User firstUploader = saveUser("first-uploader");
+        User secondUploader = saveUser("second-uploader");
+        Senior mother = saveSenior("MOTHER-004", firstUploader);
+
+        FamilyPhoto firstPhoto = savePhoto(firstUploader, "first-uploader-photo.jpg", mother);
+        savePhoto(secondUploader, "second-uploader-photo.jpg", mother);
+
+        assertThat(familyPhotoRepository.findAllAccessibleByFamilyAndUploader(
+                mother.getFamily(),
+                firstUploader,
+                firstUploader,
+                PageRequest.of(0, 10)
+        )).containsExactly(firstPhoto);
+        assertThat(familyPhotoRepository.countAccessibleByFamilyAndUploader(
+                mother.getFamily(),
+                firstUploader,
+                firstUploader
+        )).isEqualTo(1L);
+    }
+
+    @Test
+    void countsAlbumsByUploaderForPhotosSharedToSenior() {
+        User parent = saveUser("album-parent", Role.PARENT);
+        User uploader = saveUser("album-uploader");
+        Senior mother = saveSenior("MOTHER-005", uploader);
+        Senior father = saveSenior("FATHER-005", uploader);
+
+        FamilyPhoto photo = savePhoto(uploader, "album-photo.jpg", mother, father);
+        savePhoto(uploader, "father-only-album-photo.jpg", father);
+
+        assertThat(familyPhotoRepository.findLatestPhotosByUploader(
+                mother.getFamily(),
+                Role.CHILD,
+                parent
+        )).containsExactly(photo);
+        assertThat(familyPhotoRepository.countAlbumPhotosByUploader(
+                mother.getFamily(),
+                Role.CHILD,
+                LocalDateTime.now().minusDays(1),
+                parent
+        )).singleElement().satisfies(count -> {
+            assertThat(count.getUploaderUserId())
+                    .isEqualTo(uploader.getUsersId());
+            assertThat(count.getPhotoCount()).isEqualTo(1L);
+            assertThat(count.getNewPhotoCount()).isEqualTo(1L);
+        });
+
+        familyPhotoViewRepository.saveIfAbsent(photo, parent);
+        familyPhotoViewRepository.flush();
+
+        assertThat(familyPhotoRepository.countAlbumPhotosByUploader(
+                mother.getFamily(),
+                Role.CHILD,
+                LocalDateTime.now().minusDays(1),
+                parent
+        )).singleElement().satisfies(count -> {
+            assertThat(count.getPhotoCount()).isEqualTo(1L);
+            assertThat(count.getNewPhotoCount()).isZero();
+        });
+    }
+
+    @Test
+    void hidesReportedPhotoOnlyFromReporter() {
+        User reporter = saveUser("hide-reporter", Role.PARENT);
+        User otherMember = saveUser("hide-other-member");
+        User uploader = saveUser("hide-uploader");
+        Senior mother = saveSenior("MOTHER-007", uploader);
+        saveFamilyMember(reporter, mother.getFamily());
+        saveFamilyMember(otherMember, mother.getFamily());
+
+        FamilyPhoto visible = savePhoto(uploader, "hide-visible.jpg", mother);
+        FamilyPhoto hidden = savePhoto(uploader, "hide-hidden.jpg", mother);
+        saveReport(hidden, reporter, true);
+
+        // 신고자에게는 숨긴 사진이 목록·개수·단건 조회 어디에도 나오지 않는다.
+        assertThat(familyPhotoRepository.findAllAccessibleByFamily(
+                mother.getFamily(),
+                reporter,
+                PageRequest.of(0, 10)
+        )).containsExactly(visible);
+        assertThat(familyPhotoRepository.findNextAccessiblePageByFamily(
+                mother.getFamily(),
+                reporter,
+                LocalDateTime.now().plusMinutes(1),
+                Long.MAX_VALUE,
+                PageRequest.of(0, 10)
+        )).containsExactly(visible);
+        assertThat(familyPhotoRepository.findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
+                mother.getFamily(),
+                reporter,
+                PageRequest.of(0, 4)
+        )).containsExactly(visible);
+        assertThat(familyPhotoRepository.findAllAccessibleByFamilyAndUploader(
+                mother.getFamily(),
+                uploader,
+                reporter,
+                PageRequest.of(0, 10)
+        )).containsExactly(visible);
+        assertThat(familyPhotoRepository.countAccessibleByFamily(mother.getFamily(), reporter))
+                .isEqualTo(1L);
+        assertThat(familyPhotoRepository.countAccessibleByFamilyAndUploader(
+                mother.getFamily(),
+                uploader,
+                reporter
+        )).isEqualTo(1L);
+        assertThat(familyPhotoRepository.findAccessibleByFamilyPhotoIdAndUser(
+                hidden.getFamilyPhotoId(),
+                reporter
+        )).isEmpty();
+
+        // 다른 가족 구성원에게는 그대로 보인다.
+        assertThat(familyPhotoRepository.findAllAccessibleByFamily(
+                mother.getFamily(),
+                otherMember,
+                PageRequest.of(0, 10)
+        )).containsExactly(hidden, visible);
+        assertThat(familyPhotoRepository.countAccessibleByFamily(mother.getFamily(), otherMember))
+                .isEqualTo(2L);
+        assertThat(familyPhotoRepository.findAccessibleByFamilyPhotoIdAndUser(
+                hidden.getFamilyPhotoId(),
+                otherMember
+        )).contains(hidden);
+    }
+
+    @Test
+    void keepsShowingReportedPhotoWhenNotHidden() {
+        User reporter = saveUser("no-hide-reporter");
+        User uploader = saveUser("no-hide-uploader");
+        Senior mother = saveSenior("MOTHER-008", uploader);
+        saveFamilyMember(reporter, mother.getFamily());
+
+        FamilyPhoto photo = savePhoto(uploader, "no-hide-photo.jpg", mother);
+        saveReport(photo, reporter, false);
+
+        assertThat(familyPhotoRepository.findAllAccessibleByFamily(
+                mother.getFamily(),
+                reporter,
+                PageRequest.of(0, 10)
+        )).containsExactly(photo);
+        assertThat(familyPhotoRepository.findAccessibleByFamilyPhotoIdAndUser(
+                photo.getFamilyPhotoId(),
+                reporter
+        )).contains(photo);
+    }
+
+    @Test
+    void usesNextPhotoAsAlbumCoverWhenLatestPhotoIsHidden() {
+        User parent = saveUser("cover-parent", Role.PARENT);
+        User uploader = saveUser("cover-uploader");
+        Senior mother = saveSenior("MOTHER-009", uploader);
+
+        FamilyPhoto older = savePhoto(uploader, "cover-older.jpg", mother);
+        FamilyPhoto latest = savePhoto(uploader, "cover-latest.jpg", mother);
+        saveReport(latest, parent, true);
+
+        // 최신 사진을 숨겨도 자녀 앨범이 사라지지 않고 그다음 사진이 대표 사진이 된다.
+        assertThat(familyPhotoRepository.findLatestPhotosByUploader(
+                mother.getFamily(),
+                Role.CHILD,
+                parent
+        )).containsExactly(older);
+        assertThat(familyPhotoRepository.countAlbumPhotosByUploader(
+                mother.getFamily(),
+                Role.CHILD,
+                LocalDateTime.now().minusDays(1),
+                parent
+        )).singleElement().satisfies(count -> {
+            assertThat(count.getPhotoCount()).isEqualTo(1L);
+            assertThat(count.getNewPhotoCount()).isEqualTo(1L);
+        });
+    }
+
+    @Test
+    void keepsReportAfterPhotoIsDeleted() {
+        User reporter = saveUser("retain-reporter");
+        User uploader = saveUser("retain-uploader");
+        Senior mother = saveSenior("MOTHER-010", uploader);
+
+        FamilyPhoto photo = savePhoto(uploader, "retain-photo.jpg", mother);
+        FamilyPhotoReport report = saveReport(photo, reporter, true);
+
+        entityManager.clear();
+        familyPhotoSeniorRepository.deleteAllByFamilyPhoto(photo);
+        familyPhotoRepository.deleteById(photo.getFamilyPhotoId());
+        familyPhotoRepository.flush();
+        entityManager.clear();
+
+        assertThat(familyPhotoReportRepository.findById(report.getId()))
+                .hasValueSatisfying(saved -> {
+                    assertThat(saved.getFamilyPhoto()).isNull();
+                    assertThat(saved.getImageKey()).isEqualTo("retain-photo.jpg");
+                    assertThat(saved.getReportedUser().getUsersId())
+                            .isEqualTo(uploader.getUsersId());
+                });
+    }
+
+    @Test
+    void hidesAllPhotosOfReportedUploaderOnlyFromReporter() {
+        User reporter = saveUser("uploader-hide-reporter", Role.PARENT);
+        User otherMember = saveUser("uploader-hide-other-member");
+        User hiddenUploader = saveUser("uploader-hide-hidden");
+        User visibleUploader = saveUser("uploader-hide-visible");
+        Senior mother = saveSenior("MOTHER-011", hiddenUploader);
+        saveFamilyMember(reporter, mother.getFamily());
+        saveFamilyMember(otherMember, mother.getFamily());
+
+        FamilyPhoto visible = savePhoto(visibleUploader, "uploader-hide-visible.jpg", mother);
+        FamilyPhoto reported = savePhoto(hiddenUploader, "uploader-hide-reported.jpg", mother);
+        saveUploaderReport(reported, reporter, true);
+        // 신고 이후에 올린 사진도 함께 숨긴다.
+        FamilyPhoto uploadedLater = savePhoto(hiddenUploader, "uploader-hide-later.jpg", mother);
+
+        assertThat(familyPhotoRepository.findAllAccessibleByFamily(
+                mother.getFamily(),
+                reporter,
+                PageRequest.of(0, 10)
+        )).containsExactly(visible);
+        assertThat(familyPhotoRepository.findNextAccessiblePageByFamily(
+                mother.getFamily(),
+                reporter,
+                LocalDateTime.now().plusMinutes(1),
+                Long.MAX_VALUE,
+                PageRequest.of(0, 10)
+        )).containsExactly(visible);
+        assertThat(familyPhotoRepository.findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
+                mother.getFamily(),
+                reporter,
+                PageRequest.of(0, 4)
+        )).containsExactly(visible);
+        assertThat(familyPhotoRepository.findAllAccessibleByFamilyAndUploader(
+                mother.getFamily(),
+                hiddenUploader,
+                reporter,
+                PageRequest.of(0, 10)
+        )).isEmpty();
+        assertThat(familyPhotoRepository.findNextAccessiblePageByFamilyAndUploader(
+                mother.getFamily(),
+                hiddenUploader,
+                reporter,
+                LocalDateTime.now().plusMinutes(1),
+                Long.MAX_VALUE,
+                PageRequest.of(0, 10)
+        )).isEmpty();
+        assertThat(familyPhotoRepository.countAccessibleByFamily(mother.getFamily(), reporter))
+                .isEqualTo(1L);
+        assertThat(familyPhotoRepository.countAccessibleByFamilyAndUploader(
+                mother.getFamily(),
+                hiddenUploader,
+                reporter
+        )).isZero();
+        assertThat(familyPhotoRepository.findAccessibleByFamilyPhotoIdAndUser(
+                uploadedLater.getFamilyPhotoId(),
+                reporter
+        )).isEmpty();
+
+        // 다른 가족 구성원에게는 그대로 보인다.
+        assertThat(familyPhotoRepository.findAllAccessibleByFamily(
+                mother.getFamily(),
+                otherMember,
+                PageRequest.of(0, 10)
+        )).containsExactly(uploadedLater, reported, visible);
+        assertThat(familyPhotoRepository.countAccessibleByFamily(mother.getFamily(), otherMember))
+                .isEqualTo(3L);
+
+        // 신고용 조회는 숨김과 상관없이 찾아서, 다시 신고하면 중복 신고로 응답할 수 있다.
+        assertThat(familyPhotoRepository.findAccessibleForReportByFamilyPhotoIdAndUser(
+                reported.getFamilyPhotoId(),
+                reporter
+        )).contains(reported);
+    }
+
+    @Test
+    void keepsShowingUploaderPhotosWhenReportIsNotHidden() {
+        User reporter = saveUser("uploader-no-hide-reporter");
+        User uploader = saveUser("uploader-no-hide-uploader");
+        Senior mother = saveSenior("MOTHER-012", uploader);
+        saveFamilyMember(reporter, mother.getFamily());
+
+        FamilyPhoto photo = savePhoto(uploader, "uploader-no-hide.jpg", mother);
+        saveUploaderReport(photo, reporter, false);
+
+        assertThat(familyPhotoRepository.findAllAccessibleByFamily(
+                mother.getFamily(),
+                reporter,
+                PageRequest.of(0, 10)
+        )).containsExactly(photo);
+        assertThat(familyPhotoRepository.findAccessibleByFamilyPhotoIdAndUser(
+                photo.getFamilyPhotoId(),
+                reporter
+        )).contains(photo);
+    }
+
+    @Test
+    void removesAlbumOfHiddenUploaderFromAlbumList() {
+        User parent = saveUser("album-hide-parent", Role.PARENT);
+        User hiddenUploader = saveUser("album-hide-hidden");
+        User visibleUploader = saveUser("album-hide-visible");
+        Senior mother = saveSenior("MOTHER-013", hiddenUploader);
+
+        FamilyPhoto hiddenPhoto = savePhoto(hiddenUploader, "album-hide-hidden.jpg", mother);
+        FamilyPhoto visiblePhoto = savePhoto(visibleUploader, "album-hide-visible.jpg", mother);
+        saveUploaderReport(hiddenPhoto, parent, true);
+
+        assertThat(familyPhotoRepository.findLatestPhotosByUploader(
+                mother.getFamily(),
+                Role.CHILD,
+                parent
+        )).containsExactly(visiblePhoto);
+        assertThat(familyPhotoRepository.countAlbumPhotosByUploader(
+                mother.getFamily(),
+                Role.CHILD,
+                LocalDateTime.now().minusDays(1),
+                parent
+        )).singleElement().satisfies(count ->
+                assertThat(count.getUploaderUserId()).isEqualTo(visibleUploader.getUsersId())
+        );
+    }
+
+    @Test
+    void allowsUploaderAndPrimaryManagerOfSharedSeniorToDelete() {
+        User uploader = saveUser("photo-uploader");
+        User motherPrimary = saveUser("mother-primary");
+        User motherSub = saveUser("mother-sub");
+        User auntPrimary = saveUser("aunt-primary");
+        Senior mother = saveSenior("MOTHER-006", uploader);
+        Senior aunt = saveSenior("AUNT-006", uploader);
+        saveFamilyMember(motherPrimary, mother.getFamily(), ManagerType.PRIMARY);
+        saveFamilyMember(motherSub, mother.getFamily(), ManagerType.SUB);
+        saveFamilyMember(auntPrimary, aunt.getFamily(), ManagerType.PRIMARY);
+
+        FamilyPhoto photo = savePhoto(uploader, "delete-shared-photo.jpg", mother);
+
+        FamilyPhotoPermissionService permissionService =
+                new FamilyPhotoPermissionService(
+                        familyPhotoSeniorRepository
+                );
+
+        assertThat(permissionService.canDelete(photo, uploader)).isTrue();
+        assertThat(permissionService.canDelete(photo, motherPrimary)).isTrue();
+        assertThat(permissionService.canDelete(photo, motherSub)).isFalse();
+        // 공유 대상이 아닌 시니어의 주 담당자는 삭제할 수 없다.
+        assertThat(permissionService.canDelete(photo, auntPrimary)).isFalse();
+    }
+
+    @Test
+    void findsMissingThumbnailsInBoundedIdOrderWithoutRepeatingEarlierPhotos() {
+        User uploader = saveUser("thumbnail-backfill-uploader");
+        FamilyPhoto first = savePhoto(uploader, "missing-first.jpg");
+        familyPhotoRepository.saveAndFlush(FamilyPhoto.builder()
+                .user(uploader)
+                .imageKey("already-generated.jpg")
+                .thumbnailKey("thumbnails/already-generated.jpg")
+                .build());
+        FamilyPhoto second = savePhoto(uploader, "missing-second.jpg");
+        FamilyPhoto third = savePhoto(uploader, "missing-third.jpg");
+
+        assertThat(familyPhotoRepository.findPhotosWithoutThumbnail(
+                0L, PageRequest.of(0, 2)
+        )).extracting(FamilyPhoto::getFamilyPhotoId)
+                .containsExactly(first.getFamilyPhotoId(), second.getFamilyPhotoId());
+
+        // 앞선 사진 생성이 실패해 NULL로 남아 있어도 커서 이후로 진행한다.
+        assertThat(familyPhotoRepository.findPhotosWithoutThumbnail(
+                first.getFamilyPhotoId(), PageRequest.of(0, 2)
+        )).extracting(FamilyPhoto::getFamilyPhotoId)
+                .containsExactly(second.getFamilyPhotoId(), third.getFamilyPhotoId());
+
+        assertThat(familyPhotoRepository.findPhotosWithoutThumbnail(
+                third.getFamilyPhotoId(), PageRequest.of(0, 2)
+        )).isEmpty();
+    }
+
+    @Test
+    void attachesThumbnailOnlyToExistingPhotoWithoutThumbnail() {
+        User uploader = saveUser("thumbnail-attachment-uploader");
+        FamilyPhoto photo = savePhoto(uploader, "original-for-backfill.jpg");
+        Long photoId = photo.getFamilyPhotoId();
+
+        assertThat(familyPhotoRepository.updateThumbnailIfAbsent(
+                photoId, "thumbnails/first.jpg"
+        )).isEqualTo(1);
+        assertThat(familyPhotoRepository.findById(photoId)).hasValueSatisfying(saved -> {
+            assertThat(saved.getThumbnailKey()).isEqualTo("thumbnails/first.jpg");
+            assertThat(saved.getImageKey()).isEqualTo("original-for-backfill.jpg");
+        });
+
+        assertThat(familyPhotoRepository.updateThumbnailIfAbsent(
+                photoId, "thumbnails/second.jpg"
+        )).isZero();
+        assertThat(familyPhotoRepository.findById(photoId)).hasValueSatisfying(saved ->
+                assertThat(saved.getThumbnailKey()).isEqualTo("thumbnails/first.jpg")
+        );
+
+        familyPhotoRepository.deleteById(photoId);
+        familyPhotoRepository.flush();
+        assertThat(familyPhotoRepository.updateThumbnailIfAbsent(
+                photoId, "thumbnails/deleted-photo.jpg"
+        )).isZero();
+        assertThat(familyPhotoRepository.findById(photoId)).isEmpty();
+    }
+
+    private Family saveFamily(String seniorCode) {
+        return familyRepository.saveAndFlush(
+                Family.builder()
+                        .seniorCode(seniorCode)
+                        .build()
+        );
+    }
+
+    private User saveUser(String key) {
+        return saveUser(key, Role.CHILD);
+    }
+
+    private User saveUser(String key, Role role) {
+        return userRepository.saveAndFlush(
+                User.builder()
+                        .loginId(key)
+                        .email(key + "@example.com")
+                        .name(key)
+                        .role(role)
+                        .build()
+        );
+    }
+
+    private void saveFamilyMember(User user, Family family) {
+        saveFamilyMember(user, family, ManagerType.SUB);
+    }
+
+    private void saveFamilyMember(
+            User user,
+            Family family,
+            ManagerType managerType
+    ) {
+        familyMemberRepository.saveAndFlush(
+                FamilyMember.builder()
+                        .user(user)
+                        .family(family)
+                        .managerType(managerType)
+                        .build()
+        );
+    }
+
+    private Senior saveSenior(String seniorCode, User registeredBy) {
+        Family family = saveFamily(seniorCode);
+        return seniorRepository.saveAndFlush(
+                Senior.builder()
+                        .name(seniorCode)
+                        .relation(SeniorRelation.OTHER)
+                        .family(family)
+                        .registeredBy(registeredBy)
+                        .birth(LocalDate.of(1950, 1, 1))
+                        .phoneNumber("01012345678")
+                        .build()
+        );
+    }
+
+    private FamilyPhoto savePhoto(User uploader, String imageKey, Senior... seniors) {
+        FamilyPhoto photo = familyPhotoRepository.saveAndFlush(
+                FamilyPhoto.builder()
+                        .user(uploader)
+                        .imageKey(imageKey)
+                        .build()
+        );
+        for (Senior senior : seniors) {
+            familyPhotoSeniorRepository.saveAndFlush(
+                    FamilyPhotoSenior.builder()
+                            .familyPhoto(photo)
+                            .senior(senior)
+                            .build()
+            );
+        }
+        return photo;
+    }
+
+    private FamilyPhotoReport saveReport(FamilyPhoto photo, User reporter, boolean hidden) {
+        return familyPhotoReportRepository.saveAndFlush(
+                FamilyPhotoReport.builder()
+                        .familyPhoto(photo)
+                        .reporter(reporter)
+                        .reportedUser(photo.getUser())
+                        .imageKey(photo.getImageKey())
+                        .reason(PhotoReportReason.ETC)
+                        .hidden(hidden)
+                        .status(PhotoReportStatus.PENDING)
+                        .build()
+        );
+    }
+
+    private FamilyUserReport saveUploaderReport(FamilyPhoto photo, User reporter, boolean hidden) {
+        return familyUserReportRepository.saveAndFlush(
+                FamilyUserReport.builder()
+                        .reporter(reporter)
+                        .reportedUser(photo.getUser())
+                        .familyPhoto(photo)
+                        .imageKey(photo.getImageKey())
+                        .reason(PhotoReportReason.ETC)
+                        .hidden(hidden)
+                        .status(PhotoReportStatus.PENDING)
+                        .build()
+        );
+    }
+
+}

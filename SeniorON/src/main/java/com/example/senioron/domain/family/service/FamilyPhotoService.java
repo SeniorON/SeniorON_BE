@@ -1,0 +1,1034 @@
+package com.example.senioron.domain.family.service;
+
+import com.example.senioron.domain.family.dto.request.FamilyPhotoCreateRequest;
+import com.example.senioron.domain.family.dto.request.FamilyPhotoUploadCompleteRequest;
+import com.example.senioron.domain.family.dto.request.FamilyPhotoUploadUrlRequest;
+import com.example.senioron.domain.family.dto.response.FamilyPhotoAlbumResponse;
+import com.example.senioron.domain.family.dto.response.FamilyPhotoCursorResponse;
+import com.example.senioron.domain.family.dto.response.FamilyPhotoItemResponse;
+import com.example.senioron.domain.family.dto.response.FamilyPhotoListResponse;
+import com.example.senioron.domain.family.dto.response.FamilyPhotoUploadUrlResponse;
+import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyPhoto;
+import com.example.senioron.domain.family.entity.FamilyPhotoSenior;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
+import com.example.senioron.domain.family.entity.PhotoReportStatus;
+import com.example.senioron.domain.family.repository.FamilyPhotoReportRepository;
+import com.example.senioron.domain.family.repository.FamilyUserReportRepository;
+import com.example.senioron.domain.family.repository.FamilyPhotoRepository;
+import com.example.senioron.domain.family.repository.FamilyPhotoSeniorRepository;
+import com.example.senioron.domain.family.repository.projection.FamilyPhotoAlbumCountProjection;
+import com.example.senioron.domain.family.support.FamilyPhotoResponseMapper;
+import com.example.senioron.domain.user.entity.Role;
+import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.global.apiPayload.code.ErrorCode;
+import com.example.senioron.global.apiPayload.exception.BusinessException;
+import com.example.senioron.global.storage.PresignedUploadInfo;
+import com.example.senioron.global.storage.S3Service;
+import com.example.senioron.global.storage.StoredObjectInfo;
+import com.example.senioron.global.storage.ThumbnailService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
+import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.family.repository.FamilyPhotoViewRepository;
+import com.example.senioron.domain.family.event.FamilyPhotoDeletedEvent;
+import org.springframework.context.ApplicationEventPublisher;
+import com.example.senioron.domain.user.entity.ManagerType;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class FamilyPhotoService {
+
+    private final FamilyPhotoRepository familyPhotoRepository;
+    private final FamilyPhotoViewRepository familyPhotoViewRepository;
+    private final UserRepository userRepository;
+    private final S3Service s3Service;
+    private final ThumbnailService thumbnailService;
+    private final FamilyPhotoPermissionService familyPhotoPermissionService;
+    private final FamilyPhotoPersistenceService photoPersistenceService;
+    private final FamilyMemberRepository familyMemberRepository;
+    private final SeniorRepository seniorRepository;
+    private final FamilyPhotoPushTargetService familyPhotoPushTargetService;
+    private final ApplicationEventPublisher eventPublisher;
+    private final FamilyPhotoResponseMapper familyPhotoResponseMapper;
+    private final FamilyPhotoSeniorRepository familyPhotoSeniorRepository;
+    private final FamilyPhotoReportRepository familyPhotoReportRepository;
+    private final FamilyUserReportRepository familyUserReportRepository;
+
+    private static final int NEW_PHOTO_WINDOW_HOURS = 24;
+    private static final long MAX_FAMILY_PHOTO_SIZE = 10L * 1024 * 1024;
+
+    private static final Map<String, String> IMAGE_EXTENSIONS =
+            Map.of(
+                    "image/jpeg", ".jpg",
+                    "image/png", ".png",
+                    "image/webp", ".webp"
+            );
+
+    private static final Pattern IMAGE_FILE_NAME_PATTERN =
+            Pattern.compile(
+                    "^[0-9a-f]{8}-"
+                            + "[0-9a-f]{4}-"
+                            + "[0-9a-f]{4}-"
+                            + "[0-9a-f]{4}-"
+                            + "[0-9a-f]{12}"
+                            + "\\.(jpg|png|webp)$"
+            );
+
+    @Transactional(readOnly = true)
+    public FamilyPhotoUploadUrlResponse createPhotoUploadUrl(
+            User principal,
+            FamilyPhotoUploadUrlRequest request
+    ) {
+        User user = findChildUser(principal);
+
+        Family family = resolveAccessibleFamily(
+                user,
+                request.getSeniorId()
+        );
+
+        String directory = "family-photos/"
+                + family.getFamilyId()
+                + "/"
+                + user.getUsersId();
+
+        PresignedUploadInfo uploadInfo =
+                s3Service.createPresignedUploadUrl(
+                        directory,
+                        request.getContentType()
+                );
+
+        return FamilyPhotoUploadUrlResponse.builder()
+                .imageKey(uploadInfo.imageKey())
+                .uploadUrl(uploadInfo.uploadUrl())
+                .expiresInSeconds(
+                        uploadInfo.expiresInSeconds()
+                )
+                .build();
+    }
+
+    public FamilyPhotoItemResponse completePhotoUpload(
+            User principal,
+            String idempotencyKey,
+            FamilyPhotoUploadCompleteRequest request
+    ) {
+        User user = findChildUser(principal);
+
+        Family family = resolveAccessibleFamily(
+                user,
+                request.getSeniorId()
+        );
+
+        List<Long> seniorIds =
+                resolveShareTargetSeniorIds(
+                        user,
+                        request.getSeniorIds()
+                );
+
+        LocalDateTime newPhotoCutoff =
+                LocalDateTime.now()
+                        .minusHours(
+                                NEW_PHOTO_WINDOW_HOURS
+                        );
+
+        /*
+         * 완료 응답을 받지 못한 클라이언트가
+         * 같은 멱등키로 재요청한 경우 기존 결과를 반환한다.
+         */
+        FamilyPhoto existingByIdempotencyKey =
+                photoPersistenceService
+                        .findExisting(
+                                user.getUsersId(),
+                                idempotencyKey
+                        )
+                        .orElse(null);
+
+        if (existingByIdempotencyKey != null) {
+            return toItemResponse(
+                    existingByIdempotencyKey,
+                    user,
+                    newPhotoCutoff,
+                    false
+            );
+        }
+
+        String imageKey = request.getImageKey();
+
+        /*
+         * 다른 가족 또는 다른 사용자의 key인지 먼저 검사한다.
+         * 이 검사를 먼저 해야 다른 사용자의 imageKey 등록 여부가
+         * 외부에 노출되지 않는다.
+         */
+        validateImageKeyOwnership(
+                user,
+                family,
+                imageKey
+        );
+
+        if (familyPhotoRepository.existsByImageKey(imageKey)) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_PHOTO_ALREADY_REGISTERED
+            );
+        }
+
+        /*
+         * 실제 S3 객체의 존재 여부, 크기,
+         * Content-Type과 확장자를 검사한다.
+         */
+        validateUploadedObject(
+                user,
+                family,
+                imageKey
+        );
+
+        String thumbnailKey = createThumbnailOrNull(imageKey);
+        FamilyPhoto savedPhoto;
+
+        try {
+            savedPhoto = photoPersistenceService.create(
+                    user.getUsersId(),
+                    imageKey,
+                    thumbnailKey,
+                    idempotencyKey,
+                    request.getDescription(),
+                    family.getFamilyId(),
+                    seniorIds
+            );
+        } catch (DataIntegrityViolationException exception) {
+            deleteUploadedObjectSafely(thumbnailKey);
+
+            FamilyPhoto existingPhoto = photoPersistenceService
+                    .findExisting(user.getUsersId(), idempotencyKey)
+                    .orElse(null);
+
+            // 동일 멱등키로 먼저 저장된 결과가 있으면 반환
+            if (existingPhoto != null) {
+                return toItemResponse(
+                        existingPhoto,
+                        user,
+                        newPhotoCutoff,
+                        false
+                );
+            }
+
+            // 다른 멱등키로 같은 원본이 먼저 등록됐다면 충돌 처리
+            if (familyPhotoRepository.existsByImageKey(imageKey)) {
+                throw new BusinessException(
+                        ErrorCode.FAMILY_PHOTO_ALREADY_REGISTERED
+                );
+            }
+
+            throw exception;
+        } catch (RuntimeException exception) {
+            deleteUploadedObjectSafely(thumbnailKey);
+            throw exception;
+        }
+
+        return toItemResponse(
+                savedPhoto,
+                user,
+                newPhotoCutoff,
+                false
+        );
+    }
+
+    private void validateUploadedObject(
+            User user,
+            Family family,
+            String imageKey
+    ) {
+        validateImageKeyOwnership(
+                user,
+                family,
+                imageKey
+        );
+
+        StoredObjectInfo objectInfo =
+                s3Service.findObjectInfo(imageKey)
+                        .orElseThrow(() ->
+                                new BusinessException(
+                                        ErrorCode.FAMILY_PHOTO_UPLOAD_NOT_FOUND
+                                )
+                        );
+
+        if (objectInfo.contentLength() <= 0
+                || objectInfo.contentLength()
+                > MAX_FAMILY_PHOTO_SIZE) {
+            deleteUploadedObjectSafely(imageKey);
+
+            throw new BusinessException(
+                    ErrorCode.FAMILY_PHOTO_SIZE_EXCEEDED
+            );
+        }
+
+        String expectedExtension =
+                IMAGE_EXTENSIONS.get(
+                        objectInfo.contentType()
+                );
+
+        if (expectedExtension == null
+                || !imageKey.endsWith(expectedExtension)) {
+            deleteUploadedObjectSafely(imageKey);
+
+            throw new BusinessException(
+                    ErrorCode.UNSUPPORTED_IMAGE_TYPE
+            );
+        }
+    }
+
+    private User findChildUser(User principal) {
+        User user = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.USER_NOT_FOUND)
+                );
+
+        if (user.getRole() != Role.CHILD) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+
+        return user;
+    }
+
+    private void validateImageKeyOwnership(
+            User user,
+            Family family,
+            String imageKey
+    ) {
+        String expectedPrefix =
+                "family-photos/"
+                        + family.getFamilyId()
+                        + "/"
+                        + user.getUsersId()
+                        + "/";
+
+        if (imageKey == null
+                || !imageKey.startsWith(expectedPrefix)) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN
+            );
+        }
+
+        String fileName =
+                imageKey.substring(
+                        expectedPrefix.length()
+                );
+
+        if (!IMAGE_FILE_NAME_PATTERN
+                .matcher(fileName)
+                .matches()) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN
+            );
+        }
+    }
+
+    public FamilyPhotoItemResponse createPhoto(
+            User principal,
+            String idempotencyKey,
+            FamilyPhotoCreateRequest request
+    ) {
+        User user = findChildUser(principal);
+
+        Family family = resolveAccessibleFamily(
+                user,
+                request.getSeniorId()
+        );
+
+        List<Long> seniorIds =
+                resolveShareTargetSeniorIds(
+                        user,
+                        request.getSeniorIds()
+                );
+
+        LocalDateTime newPhotoCutoff =
+                LocalDateTime.now().minusHours(NEW_PHOTO_WINDOW_HOURS);
+
+        return photoPersistenceService
+                .findExisting(user.getUsersId(), idempotencyKey)
+                .map(photo ->
+                        toItemResponse(
+                                photo,
+                                user,
+                                newPhotoCutoff,
+                                false
+                        )
+                )
+                .orElseGet(() ->
+                        uploadAndCreatePhoto(
+                                user,
+                                family,
+                                seniorIds,
+                                idempotencyKey,
+                                request,
+                                newPhotoCutoff
+                        )
+                );
+    }
+
+    private FamilyPhotoItemResponse uploadAndCreatePhoto(
+            User user,
+            Family family,
+            List<Long> seniorIds,
+            String idempotencyKey,
+            FamilyPhotoCreateRequest request,
+            LocalDateTime newPhotoCutoff
+    ) {
+        String directory =
+                "family-photos/" + family.getFamilyId();
+
+        String imageKey = s3Service.upload(
+                request.getImage(),
+                directory
+        );
+
+        String thumbnailKey = null;
+
+        FamilyPhoto savedPhoto;
+
+        try {
+            thumbnailKey = createThumbnailOrNull(imageKey);
+            savedPhoto = photoPersistenceService.create(
+                    user.getUsersId(),
+                    imageKey,
+                    thumbnailKey,
+                    idempotencyKey,
+                    request.getDescription(),
+                    family.getFamilyId(),
+                    seniorIds
+            );
+
+        } catch (DataIntegrityViolationException exception) {
+            deleteUploadedObjectSafely(imageKey);
+            deleteUploadedObjectSafely(thumbnailKey);
+
+            FamilyPhoto existingPhoto =
+                    photoPersistenceService
+                            .findExisting(
+                                    user.getUsersId(),
+                                    idempotencyKey
+                            )
+                            .orElseThrow(() -> exception);
+
+            return toItemResponse(
+                    existingPhoto,
+                    user,
+                    newPhotoCutoff,
+                    false
+            );
+
+        } catch (RuntimeException exception) {
+            deleteUploadedObjectSafely(imageKey);
+            deleteUploadedObjectSafely(thumbnailKey);
+            throw exception;
+        }
+
+        return toItemResponse(
+                savedPhoto,
+                user,
+                newPhotoCutoff,
+                false
+        );
+    }
+
+    private void deleteUploadedObjectSafely(String imageKey) {
+
+        if (imageKey == null || imageKey.isBlank()) {
+            return;
+        }
+
+        try {
+            s3Service.delete(imageKey);
+        } catch (RuntimeException exception) {
+            log.error(
+                    "가족사진 멱등 처리 중 S3 객체 삭제 실패, imageKey={}",
+                    imageKey,
+                    exception
+            );
+        }
+    }
+
+    private User findChildUploader(
+            Long uploaderUserId
+    ) {
+        User uploader = userRepository.findById(uploaderUserId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_MEMBER_NOT_FOUND));
+
+        if (uploader.getRole() != Role.CHILD) {
+            throw new BusinessException(ErrorCode.FAMILY_MEMBER_NOT_FOUND);
+        }
+
+        return uploader;
+    }
+
+    private FamilyPhotoItemResponse toItemResponse(
+            FamilyPhoto photo,
+            User currentUser,
+            LocalDateTime newPhotoCutoff,
+            boolean viewedByCurrentParent
+    ) {
+        return toItemResponse(
+                photo,
+                currentUser,
+                newPhotoCutoff,
+                viewedByCurrentParent,
+                familyPhotoPermissionService.canDelete(
+                        photo,
+                        currentUser
+                )
+        );
+    }
+
+    private FamilyPhotoItemResponse toItemResponse(
+            FamilyPhoto photo,
+            User currentUser,
+            LocalDateTime newPhotoCutoff,
+            boolean viewedByCurrentParent,
+            boolean canDelete
+    ) {
+        return familyPhotoResponseMapper.toItemResponse(
+                photo,
+                currentUser,
+                newPhotoCutoff,
+                viewedByCurrentParent,
+                canDelete
+        );
+    }
+
+    private Set<Long> findViewedPhotoIds(
+            User currentUser,
+            List<FamilyPhoto> photos
+    ) {
+        if (currentUser.getRole() != Role.PARENT
+                || photos.isEmpty()) {
+            return Set.of();
+        }
+
+        List<Long> familyPhotoIds = photos.stream()
+                .map(FamilyPhoto::getFamilyPhotoId)
+                .toList();
+
+        return Set.copyOf(
+                familyPhotoViewRepository
+                        .findViewedFamilyPhotoIds(
+                                currentUser.getUsersId(),
+                                familyPhotoIds
+                        )
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public FamilyPhotoListResponse getPhotos(
+            User principal,
+            Long seniorId,
+            Long uploaderUserId,
+            LocalDateTime cursorCreatedAt,
+            Long cursorId,
+            int size
+    ) {
+        if (size < 1 || size > 50) {
+            throw new IllegalArgumentException(
+                    "사진 조회 개수는 1~50이어야 합니다."
+            );
+        }
+
+        if ((cursorCreatedAt == null) != (cursorId == null)) {
+            throw new IllegalArgumentException(
+                    "cursorCreatedAt과 cursorId는 함께 전달해야 합니다."
+            );
+        }
+
+        User currentUser = userRepository.findById(
+                        principal.getUsersId()
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.USER_NOT_FOUND
+                        )
+                );
+
+        Family family = resolveAccessibleFamily(
+                currentUser,
+                seniorId
+        );
+
+        /*
+         * uploaderUserId를 사용한 자녀 앨범 조회는
+         * 부모 화면에서만 허용한다.
+         */
+        if (uploaderUserId != null
+                && currentUser.getRole() != Role.PARENT) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+
+        User uploader = uploaderUserId == null
+                ? null
+                : findChildUploader(
+                uploaderUserId
+        );
+
+        Pageable pageable = PageRequest.of(0, size + 1);
+
+        List<FamilyPhoto> fetchedPhotos;
+
+        if (uploader == null) {
+            if (cursorCreatedAt == null) {
+                fetchedPhotos = familyPhotoRepository
+                        .findAllAccessibleByFamily(
+                                family,
+                                currentUser,
+                                pageable
+                        );
+            } else {
+                fetchedPhotos = familyPhotoRepository
+                        .findNextAccessiblePageByFamily(
+                                family,
+                                currentUser,
+                                cursorCreatedAt,
+                                cursorId,
+                                pageable
+                        );
+            }
+        } else {
+            if (cursorCreatedAt == null) {
+                fetchedPhotos = familyPhotoRepository
+                        .findAllAccessibleByFamilyAndUploader(
+                                family,
+                                uploader,
+                                currentUser,
+                                pageable
+                        );
+            } else {
+                fetchedPhotos = familyPhotoRepository
+                        .findNextAccessiblePageByFamilyAndUploader(
+                                family,
+                                uploader,
+                                currentUser,
+                                cursorCreatedAt,
+                                cursorId,
+                                pageable
+                        );
+            }
+        }
+
+        boolean hasNext = fetchedPhotos.size() > size;
+
+        List<FamilyPhoto> pagePhotos = hasNext
+                ? fetchedPhotos.subList(0, size)
+                : fetchedPhotos;
+
+        FamilyPhotoCursorResponse nextCursor = null;
+
+        if (hasNext) {
+            FamilyPhoto lastPhoto =
+                    pagePhotos.get(pagePhotos.size() - 1);
+
+            nextCursor = FamilyPhotoCursorResponse.builder()
+                    .createdAt(lastPhoto.getCreatedAt())
+                    .familyPhotoId(lastPhoto.getFamilyPhotoId())
+                    .build();
+        }
+
+        LocalDateTime newPhotoCutoff =
+                LocalDateTime.now().minusHours(NEW_PHOTO_WINDOW_HOURS);
+
+        Set<Long> viewedPhotoIds =
+                findViewedPhotoIds(
+                        currentUser,
+                        pagePhotos
+                );
+
+        Set<Long> deletablePhotoIds =
+                familyPhotoPermissionService.findDeletablePhotoIds(
+                        pagePhotos,
+                        currentUser
+                );
+
+        List<FamilyPhotoItemResponse> photoResponses =
+                pagePhotos.stream()
+                        .map(photo ->
+                                toItemResponse(
+                                        photo,
+                                        currentUser,
+                                        newPhotoCutoff,
+                                        viewedPhotoIds.contains(
+                                                photo.getFamilyPhotoId()
+                                        ),
+                                        deletablePhotoIds.contains(
+                                                photo.getFamilyPhotoId()
+                                        )
+                                )
+                        )
+                        .toList();
+
+        long totalCount = uploader == null
+                ? familyPhotoRepository.countAccessibleByFamily(family, currentUser)
+                : familyPhotoRepository.countAccessibleByFamilyAndUploader(
+                family,
+                uploader,
+                currentUser
+        );
+
+        return FamilyPhotoListResponse.builder()
+                .photos(photoResponses)
+                .totalCount(totalCount)
+                .nextCursor(nextCursor)
+                .hasNext(hasNext)
+                .build();
+    }
+
+    @Transactional
+    public void deletePhoto(User principal, Long familyPhotoId) {
+        User currentUser = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        FamilyPhoto photo = familyPhotoRepository
+                .findAccessibleForDeletionByFamilyPhotoIdAndUser(
+                        familyPhotoId,
+                        currentUser
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.FAMILY_PHOTO_NOT_FOUND
+                        )
+                );
+
+        boolean isUploader = Objects.equals(
+                photo.getUser().getUsersId(),
+                currentUser.getUsersId()
+        );
+
+        List<FamilyPhotoSenior> shareTargets =
+                familyPhotoSeniorRepository.findAllByFamilyPhotoWithSenior(photo);
+
+        // 주 담당자는 본인이 주 담당자인 시니어에게서만 공유를 해제한다.
+        List<FamilyPhotoSenior> removedTargets = isUploader
+                ? shareTargets
+                : shareTargets.stream()
+                .filter(target -> isPrimaryManager(currentUser, target.getSenior()))
+                .toList();
+
+        if (!isUploader && removedTargets.isEmpty()) {
+            throw new BusinessException(ErrorCode.FAMILY_PHOTO_DELETE_FORBIDDEN);
+        }
+
+        List<String> tokens =
+                familyPhotoPushTargetService.loadDeletionTokens(
+                        familyPhotoId,
+                        removedTargets.stream()
+                                .map(target -> target.getSenior().getSeniorId())
+                                .toList()
+                );
+
+        if (isUploader || removedTargets.size() == shareTargets.size()) {
+            String imageKey = photo.getImageKey();
+            String thumbnailKey = photo.getThumbnailKey();
+            // 처리 대기 중인 신고가 있으면 관리자 검토를 위해 원본은 남겨 둔다.
+            // 같은 원본을 다시 등록한 사진이 지워져도 보존되도록 원본 키로 확인하고,
+            // 방금 접수된 신고도 놓치지 않도록 잠금 조회로 최신 상태를 읽는다.
+            boolean hasPendingReport = !familyPhotoReportRepository
+                    .findIdsByImageKeyAndStatus(
+                            imageKey,
+                            PhotoReportStatus.PENDING
+                    )
+                    .isEmpty()
+                    || !familyUserReportRepository
+                    .findIdsByImageKeyAndStatus(
+                            imageKey,
+                            PhotoReportStatus.PENDING
+                    )
+                    .isEmpty();
+
+            // 조회한 공유 대상이 영속성 컨텍스트에 남지 않도록 엔티티 단위로 삭제한다.
+            familyPhotoSeniorRepository.deleteAll(shareTargets);
+            familyPhotoRepository.delete(photo);
+            if (!hasPendingReport) {
+                registerS3DeleteAfterCommit(imageKey);
+            }
+            registerS3DeleteAfterCommit(thumbnailKey);
+        } else {
+            familyPhotoSeniorRepository.deleteAll(removedTargets);
+        }
+
+        if (!tokens.isEmpty()) {
+            eventPublisher.publishEvent(
+                    new FamilyPhotoDeletedEvent(familyPhotoId, tokens)
+            );
+        }
+    }
+
+    private boolean isPrimaryManager(User user, Senior senior) {
+        return familyMemberRepository
+                .findByUserAndFamily(user, senior.getFamily())
+                .map(member -> member.getManagerType() == ManagerType.PRIMARY)
+                .orElse(false);
+    }
+
+    private void registerS3DeleteAfterCommit(String imageKey){
+
+        if (imageKey == null || imageKey.isBlank()) {
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization(){
+                    @Override
+                    public void afterCommit(){
+                        try{
+                            s3Service.delete(imageKey);
+                        }catch(RuntimeException e){
+                            log.warn(
+                                    "가족 사진 S3 삭제 실패, imageKey={}",
+                                    imageKey,
+                                    e
+                            );
+                        }
+                    }
+                }
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public List<FamilyPhotoAlbumResponse> getPhotoAlbums(
+            User principal,
+            Long seniorId
+    ){
+        // 인증 객체의 id를 사용해 현재 사용자 정보를 db에서 다시 조회
+        User parent = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        // 부모님 전용 화면이므로 PARENT 계정만 허용
+        if (parent.getRole() != Role.PARENT) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+
+        Family family = resolveAccessibleFamily(
+                parent,
+                seniorId
+        );
+
+        // 현재 시각으로부터 24시간 전을 새로운 사진 판단 기준으로 사용
+        LocalDateTime newPhotoCutoff = LocalDateTime.now().minusHours(NEW_PHOTO_WINDOW_HOURS);
+
+        // 자녀마다 가장 최근에 올린 사진 한 장 조회
+        List<FamilyPhoto> latestPhotos = familyPhotoRepository.findLatestPhotosByUploader(
+                family,
+                Role.CHILD,
+                parent
+        );
+
+        if (latestPhotos.isEmpty()) {
+            return List.of();
+        }
+
+        // 자녀별 전체 사진 수와 새로운 사진 수를 조회
+        Map<Long, FamilyPhotoAlbumCountProjection> countMap =
+                familyPhotoRepository.countAlbumPhotosByUploader(
+                                family,
+                                Role.CHILD,
+                                newPhotoCutoff,
+                                parent
+                        )
+                        .stream()
+                        .collect(
+                                Collectors.toMap(
+                                        FamilyPhotoAlbumCountProjection
+                                                ::getUploaderUserId,
+                                        Function.identity()
+                                )
+                        );
+
+        // 최신 사진과 사진 개수 집계 결과를 자녀 ID 기준으로 조합
+        return latestPhotos.stream()
+                .map(latestPhoto -> {
+                    User uploader = latestPhoto.getUser();
+
+                    FamilyPhotoAlbumCountProjection count = countMap.get(uploader.getUsersId());
+
+                    long photoCount = count == null
+                            ? 0L
+                            : count.getPhotoCount();
+
+                    long newPhotoCount = count == null
+                            ? 0L
+                            : count.getNewPhotoCount();
+
+                    return FamilyPhotoAlbumResponse.builder()
+                            .uploaderUserId(uploader.getUsersId())
+                                    .uploaderName(uploader.getName())
+                                    .latestPhotoUrl(s3Service.getFileUrl(latestPhoto.getImageKey()))
+                                    .photoCount(photoCount)
+                                    .hasNewPhotos(newPhotoCount > 0)
+                                    .build();
+                })
+                .toList();
+
+    }
+
+    // 사진 한 장 확인 처리 Service 추가
+    @Transactional
+    public void markPhotoAsViewed(
+            User principal,
+            Long seniorId,
+            Long familyPhotoId
+    ) {
+        User parent = userRepository.findById(
+                        principal.getUsersId()
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.USER_NOT_FOUND
+                        )
+                );
+
+        if (parent.getRole() != Role.PARENT) {
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN
+            );
+        }
+
+        Family family = resolveAccessibleFamily(
+                parent,
+                seniorId
+        );
+
+        FamilyPhoto photo = familyPhotoRepository
+                .findAccessibleByFamilyPhotoIdAndFamily(
+                        familyPhotoId,
+                        family
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                ErrorCode.FAMILY_PHOTO_NOT_FOUND
+                        )
+                );
+
+        familyPhotoViewRepository.saveIfAbsent(
+                photo,
+                parent
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public FamilyPhotoItemResponse getPhoto(
+            User principal,
+            Long familyPhotoId
+    ) {
+        User currentUser = userRepository
+                .findById(principal.getUsersId())
+                .orElseThrow(()-> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        FamilyPhoto photo = familyPhotoRepository
+                .findAccessibleByFamilyPhotoIdAndUser(
+                        familyPhotoId,
+                        currentUser
+                )
+                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_PHOTO_NOT_FOUND));
+
+        LocalDateTime newPhotoCutoff = LocalDateTime.now().minusHours(NEW_PHOTO_WINDOW_HOURS);
+
+        boolean viewedByCurrentParent =
+                currentUser.getRole() == Role.PARENT
+                        && familyPhotoViewRepository
+                        .existsByFamilyPhoto_FamilyPhotoIdAndParent_UsersId(
+                                photo.getFamilyPhotoId(),
+                                currentUser.getUsersId()
+                        );
+
+        return toItemResponse(
+                photo,
+                currentUser,
+                newPhotoCutoff,
+                viewedByCurrentParent
+        );
+    }
+
+    private Family resolveAccessibleFamily(
+            User user,
+            Long seniorId
+    ) {
+        Senior senior = seniorRepository.findById(seniorId)
+                .orElseThrow(() ->
+                        new BusinessException(ErrorCode.SENIOR_NOT_FOUND)
+                );
+
+        Family family = senior.getFamily();
+
+        if (!familyMemberRepository.existsByUserAndFamily(user, family)) {
+            throw new BusinessException(
+                    ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED
+            );
+        }
+
+        return family;
+    }
+
+    private List<Long> resolveShareTargetSeniorIds(
+            User user,
+            List<Long> requestedSeniorIds
+    ) {
+        List<Long> distinctIds = requestedSeniorIds.stream()
+                .distinct()
+                .sorted()
+                .toList();
+
+        if (distinctIds.isEmpty()) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN
+            );
+        }
+
+        // 담당 중이며 시니어 기기가 연결된 시니어에게만 공유할 수 있다.
+        Set<Long> targetSeniorIds = familyMemberRepository
+                .findPhotoShareTargetMembers(
+                        user,
+                        List.of(ManagerType.PRIMARY, ManagerType.SUB)
+                )
+                .stream()
+                .map(member -> member.getFamily().getSenior().getSeniorId())
+                .collect(Collectors.toSet());
+
+        if (!targetSeniorIds.containsAll(distinctIds)) {
+            throw new BusinessException(
+                    ErrorCode.FAMILY_PHOTO_UPLOAD_FORBIDDEN
+            );
+        }
+
+        return distinctIds;
+    }
+
+    private String createThumbnailOrNull(String imageKey) {
+        byte[] originalBytes = s3Service.download(imageKey);
+        thumbnailService.validateOriginal(originalBytes);
+
+        try {
+            byte[] thumbnailBytes = thumbnailService.create(originalBytes);
+            return s3Service.uploadThumbnail(thumbnailBytes);
+        } catch (RuntimeException exception) {
+            log.warn(
+                    "가족사진 썸네일 생성·저장 실패, imageKey={}",
+                    imageKey,
+                    exception
+            );
+            return null;
+        }
+    }
+}

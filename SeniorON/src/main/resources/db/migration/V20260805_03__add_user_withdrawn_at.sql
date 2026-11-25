@@ -1,0 +1,2 @@
+ALTER TABLE users
+    ADD COLUMN withdrawn_at DATETIME(6) NULL;

@@ -1,0 +1,100 @@
+
+package com.example.senioron.domain.inquiry.repository;
+
+import com.example.senioron.domain.inquiry.entity.Inquiry;
+import com.example.senioron.domain.inquiry.entity.InquiryStatus;
+import jakarta.persistence.LockModeType;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+public interface InquiryRepository extends JpaRepository<Inquiry, Long> {
+
+    List<Inquiry> findByUserUsersIdOrderByCreatedAtDescInquiryIdDesc(
+            Long usersId
+    );
+
+    Optional<Inquiry> findByInquiryIdAndUserUsersId(
+            Long inquiryId,
+            Long usersId
+    );
+
+    @EntityGraph(attributePaths = {"user"})
+    @Query(
+            value = """
+                    SELECT i FROM Inquiry i JOIN i.user u
+                    WHERE (:status IS NULL OR i.status = :status)
+                    AND (
+                        :keyword IS NULL
+                        OR LOWER(i.title) LIKE :keyword
+                        OR LOWER(u.name) LIKE :keyword
+                    )
+                    ORDER BY i.createdAt DESC, i.inquiryId DESC
+                    """,
+            countQuery = """
+                    SELECT COUNT(i) FROM Inquiry i JOIN i.user u
+                    WHERE (:status IS NULL OR i.status = :status)
+                    AND (
+                        :keyword IS NULL
+                        OR LOWER(i.title) LIKE :keyword
+                        OR LOWER(u.name) LIKE :keyword
+                    )
+                    """
+    )
+    Page<Inquiry> findAdminInquiries(
+            @Param("status") InquiryStatus status,
+            @Param("keyword") String keyword,
+            Pageable pageable
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            SELECT i FROM Inquiry i
+            WHERE i.inquiryId = :inquiryId
+            """)
+    Optional<Inquiry> findByIdForUpdate(
+            @Param("inquiryId") Long inquiryId
+    );
+
+    long countByStatus(InquiryStatus status);
+
+    long countByCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+            LocalDateTime start,
+            LocalDateTime end
+    );
+
+    long countByStatusAndCompletedAtGreaterThanEqualAndCompletedAtLessThan(
+            InquiryStatus status,
+            LocalDateTime start,
+            LocalDateTime end
+    );
+
+    @Query("""
+            SELECT
+                i.createdAt AS inquiryCreatedAt,
+                MIN(a.createdAt) AS firstAnswerAt
+            FROM Inquiry i
+            JOIN i.answers a
+            WHERE i.createdAt >= :start
+              AND i.createdAt < :end
+            GROUP BY i.inquiryId, i.createdAt
+            """)
+    List<FirstAnswerTimeProjection> findFirstAnswerTimes(
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
+
+    interface FirstAnswerTimeProjection {
+
+        LocalDateTime getInquiryCreatedAt();
+
+        LocalDateTime getFirstAnswerAt();
+    }
+}

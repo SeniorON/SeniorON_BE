@@ -1,0 +1,100 @@
+package com.example.senioron.domain.family.controller;
+
+import com.example.senioron.domain.family.dto.request.FamilyJoinRequest;
+import com.example.senioron.domain.family.dto.request.FamilyPrimaryManagerUpdateRequest;
+import com.example.senioron.domain.family.dto.response.*;
+import com.example.senioron.domain.family.service.FamilyService;
+import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.global.apiPayload.response.Response;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import com.example.senioron.domain.family.dto.response.PhotoShareTargetResponse;
+
+
+@Tag(name = "가족", description = "시니어 코드 등 가족 관련 API")
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/family")
+public class FamilyController {
+
+    private final FamilyService familyService;
+
+    @Operation(summary = "시니어 코드 생성", description = "새로운 가족을 생성하고 시니어 코드를 발급합니다. 시니어 코드 생성은 자식(CHILD)만 가능합니다.")
+    @PostMapping("code-create")
+    public Response<SeniorCodeCreateResponse> createFamily(@AuthenticationPrincipal User user) {
+        return Response.ok(familyService.createFamily(user));
+    }
+
+    @Operation(summary = "시니어 코드로 참여", description = "시니어 코드를 입력해 기존 가족에 참여합니다.")
+    @PostMapping("/join")
+    public Response<FamilyJoinResponse> joinFamily(@AuthenticationPrincipal User user, @Valid @RequestBody FamilyJoinRequest request) {
+        return Response.ok(familyService.joinFamily(user, request));
+    }
+
+    @Operation(summary = "가족 구성원 조회", description = "선택한 시니어의 가족 구성원 목록을 조회합니다.")
+    @GetMapping("/members")
+    public Response<List<FamilyMemberResponse>> getFamilyMembers(
+            @AuthenticationPrincipal User user,
+            @RequestParam Long seniorId
+    ){
+        return Response.ok(familyService.getFamilyMembers(user, seniorId));
+    }
+
+    @Operation(summary = "주 담당자 변경", description = "선택한 시니어 가족의 주 담당자를 같은 가족의 다른 자녀 구성원으로 변경합니다.")
+    @PatchMapping("/primary-manager")
+    public Response<FamilyPrimaryManagerUpdateResponse> updatePrimaryManager(
+            @AuthenticationPrincipal User user,
+            @RequestParam Long seniorId,
+            @Valid @RequestBody FamilyPrimaryManagerUpdateRequest request
+    ) {
+        return Response.ok(familyService.updatePrimaryManager(user, seniorId, request));
+    }
+
+    @Operation(summary = "가족 구성원 삭제", description = "주 담당자가 선택한 시니어 가족의 구성원을 가족에서 제외합니다.")
+    @DeleteMapping("/members/{targetUserId}")
+    public Response<Void> removeFamilyMember(
+            @AuthenticationPrincipal User user,
+            @RequestParam Long seniorId,
+            @PathVariable Long targetUserId
+    ) {
+        familyService.removeFamilyMember(user, seniorId, targetUserId);
+        return Response.ok();
+    }
+
+    @Operation(summary = "가족 메인 화면 조회", description = "선택한 시니어의 가족 구성원과 해당 시니어에게 공유된 최근 사진을 조회합니다.")
+    @GetMapping("/home")
+    public Response<FamilyHomeResponse> getFamilyHome(
+            @AuthenticationPrincipal User user,
+            @RequestParam Long seniorId
+    ){
+        return Response.ok(familyService.getFamilyHome(user, seniorId));
+    }
+
+    @Operation(summary = "시니어 코드 조회", description = "선택한 가족의 가입 코드와 구성원 수를 조회합니다.")
+    @GetMapping("/code")
+    public Response<SeniorCodeResponse> getSeniorCode(
+            @AuthenticationPrincipal User user,
+            @RequestParam Long familyId
+    ) {
+        return Response.ok(
+                familyService.getSeniorCode(user, familyId)
+        );
+    }
+
+    @Operation(summary = "사진 공유 대상 목록 조회", description = "로그인한 자녀가 주·보조 담당자로 관리하며 시니어 기기가 연결된 시니어 목록을 조회합니다.")
+    @GetMapping("/photos/targets")
+    public Response<List<PhotoShareTargetResponse>> getPhotoShareTargets(
+            @AuthenticationPrincipal User user
+    ) {
+        return Response.ok(
+                familyService.getPhotoShareTargets(user)
+        );
+    }
+
+}

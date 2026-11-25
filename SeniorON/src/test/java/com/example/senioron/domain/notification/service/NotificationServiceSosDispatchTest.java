@@ -1,0 +1,296 @@
+package com.example.senioron.domain.notification.service;
+
+import com.example.senioron.domain.device.repository.DeviceRepository;
+import com.example.senioron.domain.event.util.FcmSender;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
+import com.example.senioron.domain.notification.dto.NotificationDispatchTarget;
+import com.example.senioron.domain.notification.repository.NotificationRepository;
+import com.example.senioron.domain.notification.repository.NotificationSettingRepository;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
+import com.example.senioron.domain.user.repository.UserRepository;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.IntStream;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+
+@Timeout(15)
+class NotificationServiceSosDispatchTest {
+
+    private final FcmSender fcmSender = mock(FcmSender.class);
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+    private final NotificationService service = new NotificationService(
+            mock(NotificationRepository.class), mock(NotificationSettingRepository.class),
+            mock(UserRepository.class), mock(SeniorRepository.class), mock(FamilyMemberRepository.class),
+            mock(DeviceRepository.class), fcmSender, meterRegistry,
+            mock(NotificationHomeWebSocketService.class));
+    private final ExecutorService requestExecutor = Executors.newSingleThreadExecutor();
+
+    @AfterEach
+    void tearDown() throws InterruptedException {
+        service.shutdownDispatchExecutors();
+        requestExecutor.shutdownNow();
+        assertThat(requestExecutor.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+        meterRegistry.close();
+    }
+
+    @Test
+    void returnsImmediatelyWithoutWaitingForFcm() throws Exception {
+        CountDownLatch sendStarted = new CountDownLatch(1);
+        CountDownLatch releaseSend = new CountDownLatch(1);
+        given(fcmSender.sendHighPriority("slow", "SOS", "도움이 필요해요", 100L)).willAnswer(invocation -> {
+            sendStarted.countDown();
+            await(releaseSend);
+            return true;
+        });
+
+        try {
+            var response = requestExecutor.submit(() -> service.dispatchSosAsync(List.of(target(1L, "slow"))));
+
+            response.get(500, TimeUnit.MILLISECONDS);
+            assertThat(sendStarted.await(2, TimeUnit.SECONDS)).isTrue();
+            assertThat(counterOrZero("delivered")).isZero();
+
+            releaseSend.countDown();
+            awaitDispatchCount("delivered", 1.0, 2);
+        } finally {
+            releaseSend.countDown();
+        }
+    }
+
+    @Test
+    void firstSuccessfulDeviceCompletesReceiverWhileSlowDeviceContinues() throws Exception {
+        CountDownLatch slowStarted = new CountDownLatch(1);
+        CountDownLatch releaseSlow = new CountDownLatch(1);
+        given(fcmSender.sendHighPriority("slow", "SOS", "도움이 필요해요", 100L)).willAnswer(invocation -> {
+            slowStarted.countDown();
+            await(releaseSlow);
+            return true;
+        });
+        given(fcmSender.sendHighPriority("fast", "SOS", "도움이 필요해요", 100L)).willAnswer(invocation -> {
+            await(slowStarted);
+            return true;
+        });
+
+        try {
+            service.dispatchSosAsync(List.of(target(1L, "slow", "fast")));
+
+            awaitDispatchCount("delivered", 1.0, 2);
+            releaseSlow.countDown();
+            verify(fcmSender).sendHighPriority("slow", "SOS", "도움이 필요해요", 100L);
+            verify(fcmSender).sendHighPriority("fast", "SOS", "도움이 필요해요", 100L);
+        } finally {
+            releaseSlow.countDown();
+        }
+    }
+
+    @Test
+    void recordsPartialResultByReceiverAfterAllReceiversComplete() throws Exception {
+        CountDownLatch releaseSecondReceiver = new CountDownLatch(1);
+        given(fcmSender.sendHighPriority(anyString(), anyString(), anyString(), anyLong())).willAnswer(invocation -> {
+            if ("second-receiver".equals(invocation.getArgument(0))) {
+                await(releaseSecondReceiver);
+            }
+            return true;
+        });
+
+        try {
+            service.dispatchSosAsync(List.of(
+                    target(1L, "first-phone", "first-tablet"),
+                    target(2L, "second-receiver"),
+                    target(3L)));
+
+            assertThat(counterOrZero("partial")).isZero();
+            releaseSecondReceiver.countDown();
+            awaitDispatchCount("partial", 1.0, 2);
+        } finally {
+            releaseSecondReceiver.countDown();
+        }
+    }
+
+    @Test
+    void recordsUndeliveredWhenAllDevicesFail() throws Exception {
+        given(fcmSender.sendHighPriority("exception", "SOS", "도움이 필요해요", 100L))
+                .willThrow(new IllegalStateException("FCM unavailable"));
+        given(fcmSender.sendHighPriority("failed", "SOS", "도움이 필요해요", 100L)).willReturn(false);
+
+        service.dispatchSosAsync(List.of(target(1L, "exception", "failed")));
+
+        awaitDispatchCount("undelivered", 1.0, 2);
+    }
+
+    @Test
+    void sendsToEveryTargetUsersDeviceToken() throws Exception {
+        given(fcmSender.sendHighPriority(anyString(), anyString(), anyString(), anyLong()))
+                .willReturn(true);
+
+        service.dispatchSosAsync(List.of(
+                target(1L, "primary-token"),
+                target(2L, "sub-token"),
+                target(3L, "none-token")
+        ));
+
+        awaitDispatchCount("delivered", 1.0, 2);
+        verify(fcmSender).sendHighPriority("primary-token", "SOS", "도움이 필요해요", 100L);
+        verify(fcmSender).sendHighPriority("sub-token", "SOS", "도움이 필요해요", 100L);
+        verify(fcmSender).sendHighPriority("none-token", "SOS", "도움이 필요해요", 100L);
+    }
+
+    @Test
+    void distinguishesNoReceiversFromReceiversWithoutDevices() throws Exception {
+        service.dispatchSosAsync(List.of());
+        service.dispatchSosAsync(List.of(target(1L)));
+
+        awaitDispatchCount("no_receiver", 1.0, 2);
+        awaitDispatchCount("undelivered", 1.0, 2);
+        verifyNoInteractions(fcmSender);
+    }
+
+    @Test
+    void doesNotExceedSosPoolConcurrency() throws Exception {
+        CountDownLatch poolOccupied = new CountDownLatch(8);
+        CountDownLatch releaseDevices = new CountDownLatch(1);
+        AtomicInteger active = new AtomicInteger();
+        AtomicInteger maximumActive = new AtomicInteger();
+        given(fcmSender.sendHighPriority(anyString(), anyString(), anyString(), anyLong())).willAnswer(invocation -> {
+            maximumActive.accumulateAndGet(active.incrementAndGet(), Math::max);
+            poolOccupied.countDown();
+            try {
+                await(releaseDevices);
+                return true;
+            } finally {
+                active.decrementAndGet();
+            }
+        });
+        String[] tokens = IntStream.range(0, 12).mapToObj(i -> "token-" + i).toArray(String[]::new);
+
+        try {
+            service.dispatchSosAsync(List.of(target(1L, tokens)));
+
+            assertThat(poolOccupied.await(2, TimeUnit.SECONDS)).isTrue();
+            verify(fcmSender, times(8)).sendHighPriority(anyString(), anyString(), anyString(), anyLong());
+            releaseDevices.countDown();
+            awaitDispatchCount("delivered", 1.0, 2);
+            service.shutdownDispatchExecutors();
+            verify(fcmSender, times(12)).sendHighPriority(anyString(), anyString(), anyString(), anyLong());
+            assertThat(maximumActive.get()).isEqualTo(8);
+        } finally {
+            releaseDevices.countDown();
+        }
+    }
+
+    private NotificationDispatchTarget target(Long receiverId, String... tokens) {
+        return new NotificationDispatchTarget(receiverId, "SOS", "도움이 필요해요", 100L, List.of(tokens));
+    }
+
+    @Test
+    void rejectsOverflowWithoutCallingFcmOnRequestThread() throws Exception {
+        CountDownLatch occupied = new CountDownLatch(8);
+        CountDownLatch release = new CountDownLatch(1);
+        given(fcmSender.sendHighPriority(anyString(), anyString(), anyString(), anyLong())).willAnswer(call -> {
+            occupied.countDown();
+            await(release);
+            return true;
+        });
+        try {
+            service.dispatchSosAsync(List.of(target(1L,
+                    IntStream.range(0, 8).mapToObj(i -> "active-" + i).toArray(String[]::new))));
+            assertThat(occupied.await(2, TimeUnit.SECONDS)).isTrue();
+            requestExecutor.submit(() -> service.dispatchSosAsync(List.of(target(2L,
+                    IntStream.range(0, 101).mapToObj(i -> "queued-" + i).toArray(String[]::new)))))
+                    .get(1, TimeUnit.SECONDS);
+            assertThat(sosPool().getQueue()).hasSize(100);
+            assertThat(meterRegistry.get("sos_device_dispatch_total").tag("result", "rejected").counter().count())
+                    .isEqualTo(1);
+            verify(fcmSender, times(8)).sendHighPriority(anyString(), anyString(), anyString(), anyLong());
+        } finally {
+            release.countDown();
+        }
+    }
+
+    @Test
+    void expiresQueuedTaskAndNeverSendsItAfterWorkersAreReleased() throws Exception {
+        CountDownLatch occupied = new CountDownLatch(8);
+        CountDownLatch release = new CountDownLatch(1);
+        // 발송 스레드 8개를 점유해 만료 대상이 반드시 큐에서 대기하도록 한다.
+        try {
+            for (int i = 0; i < 8; i++) sosPool().execute(() -> {
+                occupied.countDown();
+                try { await(release); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            });
+            assertThat(occupied.await(2, TimeUnit.SECONDS)).isTrue();
+            org.springframework.test.util.ReflectionTestUtils.setField(service, "sosMaxQueueWaitMillis", 100L);
+            service.dispatchSosAsync(List.of(target(1L, "expired-token")));
+            awaitDispatchCount("undelivered", 1, 2);
+            assertThat(sosPool().getQueue()).isEmpty();
+            assertThat(meterRegistry.get("sos_device_dispatch_total").tag("result", "expired").counter().count())
+                    .isEqualTo(1);
+            release.countDown();
+            service.shutdownDispatchExecutors();
+            verifyNoInteractions(fcmSender);
+        } finally {
+            release.countDown();
+        }
+    }
+
+    @Test
+    void runningSendIsNotClassifiedAsFailureAfterFiveSeconds() throws Exception {
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        given(fcmSender.sendHighPriority(anyString(), anyString(), anyString(), anyLong())).willAnswer(call -> {
+            started.countDown();
+            await(release);
+            return true;
+        });
+        try {
+            service.dispatchSosAsync(List.of(target(1L, "slow")));
+            assertThat(started.await(2, TimeUnit.SECONDS)).isTrue();
+            Thread.sleep(5200);
+            assertThat(counterOrZero("undelivered")).isZero();
+            release.countDown();
+            awaitDispatchCount("delivered", 1, 2);
+        } finally {
+            release.countDown();
+        }
+    }
+
+    private java.util.concurrent.ThreadPoolExecutor sosPool() {
+        return (java.util.concurrent.ThreadPoolExecutor)
+                org.springframework.test.util.ReflectionTestUtils.getField(service, "sosDispatchExecutor");
+    }
+
+    private void awaitDispatchCount(String result, double expected, long timeoutSeconds) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds);
+        while (System.nanoTime() < deadline && counterOrZero(result) < expected) {
+            Thread.sleep(10);
+        }
+        assertThat(counterOrZero(result)).isEqualTo(expected);
+    }
+
+    private double counterOrZero(String result) {
+        var counter = meterRegistry.find("sos_dispatch_total").tag("result", result).counter();
+        return counter != null ? counter.count() : 0.0;
+    }
+
+    private static void await(CountDownLatch latch) throws InterruptedException {
+        if (!latch.await(10, TimeUnit.SECONDS)) {
+            throw new IllegalStateException("Test did not release pending FCM call");
+        }
+    }
+}

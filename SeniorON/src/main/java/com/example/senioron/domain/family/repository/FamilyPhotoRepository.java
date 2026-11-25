@@ -1,0 +1,523 @@
+package com.example.senioron.domain.family.repository;
+
+import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyPhoto;
+import com.example.senioron.domain.family.repository.projection.FamilyPhotoAlbumCountProjection;
+import com.example.senioron.domain.user.entity.Role;
+import com.example.senioron.domain.user.entity.User;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.*;
+import org.springframework.data.repository.query.Param;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+
+public interface FamilyPhotoRepository extends JpaRepository<FamilyPhoto, Long> {
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+        SELECT fp
+        FROM FamilyPhoto fp
+        WHERE fp.user = :user
+        ORDER BY fp.familyPhotoId ASC
+        """)
+    List<FamilyPhoto> findAllByUploaderForUpdate(@Param("user") User user);
+
+    // 첫 페이지 조회 메서드
+    @EntityGraph(attributePaths = "user")
+    @Query("""
+    SELECT fp
+    FROM FamilyPhoto fp
+    WHERE EXISTS (
+        SELECT fps.id
+        FROM FamilyPhotoSenior fps
+        WHERE fps.familyPhoto = fp
+          AND fps.senior.family = :family
+    )
+      AND NOT EXISTS (
+          SELECT fpr.id
+          FROM FamilyPhotoReport fpr
+          WHERE fpr.familyPhoto = fp
+            AND fpr.reporter = :viewer
+            AND fpr.hidden = true
+      )
+      AND NOT EXISTS (
+          SELECT fur.id
+          FROM FamilyUserReport fur
+          WHERE fur.reportedUser = fp.user
+            AND fur.reporter = :viewer
+            AND fur.hidden = true
+      )
+    ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
+    """)
+    List<FamilyPhoto> findByFamilyOrderByCreatedAtDescFamilyPhotoIdDesc(
+            @Param("family") Family family,
+            @Param("viewer") User viewer,
+            Pageable pageable
+    );
+
+    @EntityGraph(attributePaths = "user")
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+        SELECT fp
+        FROM FamilyPhoto fp
+        WHERE fp.familyPhotoId = :familyPhotoId
+          AND EXISTS (
+              SELECT fps.id
+              FROM FamilyPhotoSenior fps
+              WHERE fps.familyPhoto = fp
+                AND fps.senior.family = :family
+          )
+        """)
+    Optional<FamilyPhoto> findAccessibleByFamilyPhotoIdAndFamily(
+            @Param("familyPhotoId") Long familyPhotoId,
+            @Param("family") Family family
+    );
+
+    @EntityGraph(attributePaths = "user")
+    @Query("""
+    SELECT fp
+    FROM FamilyPhoto fp
+    WHERE fp.user.role = :role
+      AND EXISTS (
+          SELECT fps.id
+          FROM FamilyPhotoSenior fps
+          WHERE fps.familyPhoto = fp
+            AND fps.senior.family = :family
+      )
+      AND NOT EXISTS (
+          SELECT fpr.id
+          FROM FamilyPhotoReport fpr
+          WHERE fpr.familyPhoto = fp
+            AND fpr.reporter = :viewer
+            AND fpr.hidden = true
+      )
+      AND NOT EXISTS (
+          SELECT fur.id
+          FROM FamilyUserReport fur
+          WHERE fur.reportedUser = fp.user
+            AND fur.reporter = :viewer
+            AND fur.hidden = true
+      )
+      AND NOT EXISTS (
+          SELECT newer.familyPhotoId
+          FROM FamilyPhoto newer
+          WHERE newer.user = fp.user
+            AND EXISTS (
+                SELECT newerFps.id
+                FROM FamilyPhotoSenior newerFps
+                WHERE newerFps.familyPhoto = newer
+                  AND newerFps.senior.family = :family
+            )
+            AND NOT EXISTS (
+                SELECT newerFpr.id
+                FROM FamilyPhotoReport newerFpr
+                WHERE newerFpr.familyPhoto = newer
+                  AND newerFpr.reporter = :viewer
+                  AND newerFpr.hidden = true
+            )
+            AND (
+                newer.createdAt > fp.createdAt
+                OR (
+                    newer.createdAt = fp.createdAt
+                    AND newer.familyPhotoId > fp.familyPhotoId
+                )
+            )
+      )
+    ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
+    """)
+    List<FamilyPhoto> findLatestPhotosByUploader(
+            @Param("family") Family family,
+            @Param("role") Role role,
+            @Param("viewer") User viewer
+    );
+
+    @Query("""
+        SELECT fp.user.usersId AS uploaderUserId,
+               COUNT(fp.familyPhotoId) AS photoCount,
+               SUM(
+                   CASE
+                       WHEN fp.createdAt >= :newPhotoCutoff
+                            AND NOT EXISTS (
+                                SELECT fpv.id
+                                FROM FamilyPhotoView fpv
+                                WHERE fpv.familyPhoto = fp
+                                  AND fpv.parent = :parent
+                            )
+                       THEN 1
+                       ELSE 0
+                   END
+               ) AS newPhotoCount
+        FROM FamilyPhoto fp
+        WHERE fp.user.role = :role
+          AND EXISTS (
+              SELECT fps.id
+              FROM FamilyPhotoSenior fps
+              WHERE fps.familyPhoto = fp
+                AND fps.senior.family = :family
+          )
+          AND NOT EXISTS (
+              SELECT fpr.id
+              FROM FamilyPhotoReport fpr
+              WHERE fpr.familyPhoto = fp
+                AND fpr.reporter = :parent
+                AND fpr.hidden = true
+          )
+          AND NOT EXISTS (
+              SELECT fur.id
+              FROM FamilyUserReport fur
+              WHERE fur.reportedUser = fp.user
+                AND fur.reporter = :parent
+                AND fur.hidden = true
+          )
+        GROUP BY fp.user.usersId
+        """)
+    List<FamilyPhotoAlbumCountProjection> countAlbumPhotosByUploader(
+            @Param("family")
+            Family family,
+
+            @Param("role")
+            Role role,
+
+            @Param("newPhotoCutoff")
+            LocalDateTime newPhotoCutoff,
+
+            @Param("parent")
+            User parent
+    );
+
+    @EntityGraph(attributePaths = "user")
+    Optional<FamilyPhoto> findByUserUsersIdAndIdempotencyKey(
+            Long usersId,
+            String idempotencyKey
+    );
+
+    boolean existsByImageKey(String imageKey);
+
+    // 관리자 게시자 신고 상세: 게시자가 올린 전체 사진 수와 최근 사진
+    long countByUser_UsersId(Long usersId);
+
+    List<FamilyPhoto> findTop5ByUser_UsersIdOrderByCreatedAtDescFamilyPhotoIdDesc(Long usersId);
+
+    // 관리자 게시자 사진 목록: 최근 사진과 같은 순서로 페이지 조회한다.
+    Page<FamilyPhoto> findByUser_UsersIdOrderByCreatedAtDescFamilyPhotoIdDesc(Long usersId, Pageable pageable);
+
+    @EntityGraph(attributePaths = "user")
+    @Query("""
+        SELECT fp
+        FROM FamilyPhoto fp
+        WHERE fp.familyPhotoId = :familyPhotoId
+          AND EXISTS (
+              SELECT fps.id
+              FROM FamilyPhotoSenior fps
+              WHERE fps.familyPhoto = fp
+                AND EXISTS (
+                    SELECT fm.id
+                    FROM FamilyMember fm
+                    WHERE fm.family = fps.senior.family
+                      AND fm.user = :user
+                )
+          )
+          AND NOT EXISTS (
+              SELECT fpr.id
+              FROM FamilyPhotoReport fpr
+              WHERE fpr.familyPhoto = fp
+                AND fpr.reporter = :user
+                AND fpr.hidden = true
+          )
+          AND NOT EXISTS (
+              SELECT fur.id
+              FROM FamilyUserReport fur
+              WHERE fur.reportedUser = fp.user
+                AND fur.reporter = :user
+                AND fur.hidden = true
+          )
+        """)
+    Optional<FamilyPhoto> findAccessibleByFamilyPhotoIdAndUser(
+            @Param("familyPhotoId") Long familyPhotoId,
+            @Param("user") User user
+    );
+
+    // 신고 접수용: 사진 삭제와 순서를 맞추기 위해 사진 행을 잠그고 조회한다.
+    @EntityGraph(attributePaths = "user")
+    @Lock(LockModeType.PESSIMISTIC_READ)
+    @Query("""
+        SELECT fp
+        FROM FamilyPhoto fp
+        WHERE fp.familyPhotoId = :familyPhotoId
+          AND EXISTS (
+              SELECT fps.id
+              FROM FamilyPhotoSenior fps
+              WHERE fps.familyPhoto = fp
+                AND EXISTS (
+                    SELECT fm.id
+                    FROM FamilyMember fm
+                    WHERE fm.family = fps.senior.family
+                      AND fm.user = :user
+                )
+          )
+        """)
+    Optional<FamilyPhoto> findAccessibleForReportByFamilyPhotoIdAndUser(
+            @Param("familyPhotoId") Long familyPhotoId,
+            @Param("user") User user
+    );
+
+    @EntityGraph(attributePaths = "user")
+    @Query("""
+        SELECT fp
+        FROM FamilyPhoto fp
+        WHERE EXISTS (
+            SELECT fps.id
+            FROM FamilyPhotoSenior fps
+            WHERE fps.familyPhoto = fp
+              AND fps.senior.family = :family
+        )
+          AND NOT EXISTS (
+              SELECT fpr.id
+              FROM FamilyPhotoReport fpr
+              WHERE fpr.familyPhoto = fp
+                AND fpr.reporter = :viewer
+                AND fpr.hidden = true
+          )
+          AND NOT EXISTS (
+              SELECT fur.id
+              FROM FamilyUserReport fur
+              WHERE fur.reportedUser = fp.user
+                AND fur.reporter = :viewer
+                AND fur.hidden = true
+          )
+        ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
+        """)
+    List<FamilyPhoto> findAllAccessibleByFamily(
+            @Param("family") Family family,
+            @Param("viewer") User viewer,
+            Pageable pageable
+    );
+
+    @EntityGraph(attributePaths = "user")
+    @Query("""
+        SELECT fp
+        FROM FamilyPhoto fp
+        WHERE EXISTS (
+            SELECT fps.id
+            FROM FamilyPhotoSenior fps
+            WHERE fps.familyPhoto = fp
+              AND fps.senior.family = :family
+        )
+          AND NOT EXISTS (
+              SELECT fpr.id
+              FROM FamilyPhotoReport fpr
+              WHERE fpr.familyPhoto = fp
+                AND fpr.reporter = :viewer
+                AND fpr.hidden = true
+          )
+          AND NOT EXISTS (
+              SELECT fur.id
+              FROM FamilyUserReport fur
+              WHERE fur.reportedUser = fp.user
+                AND fur.reporter = :viewer
+                AND fur.hidden = true
+          )
+          AND (
+              fp.createdAt < :cursorCreatedAt
+              OR (
+                  fp.createdAt = :cursorCreatedAt
+                  AND fp.familyPhotoId < :cursorId
+              )
+          )
+        ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
+        """)
+    List<FamilyPhoto> findNextAccessiblePageByFamily(
+            @Param("family") Family family,
+            @Param("viewer") User viewer,
+            @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
+            @Param("cursorId") Long cursorId,
+            Pageable pageable
+    );
+
+    @EntityGraph(attributePaths = "user")
+    @Query("""
+        SELECT fp
+        FROM FamilyPhoto fp
+        WHERE fp.user = :uploader
+          AND EXISTS (
+              SELECT fps.id
+              FROM FamilyPhotoSenior fps
+              WHERE fps.familyPhoto = fp
+                AND fps.senior.family = :family
+          )
+          AND NOT EXISTS (
+              SELECT fpr.id
+              FROM FamilyPhotoReport fpr
+              WHERE fpr.familyPhoto = fp
+                AND fpr.reporter = :viewer
+                AND fpr.hidden = true
+          )
+          AND NOT EXISTS (
+              SELECT fur.id
+              FROM FamilyUserReport fur
+              WHERE fur.reportedUser = fp.user
+                AND fur.reporter = :viewer
+                AND fur.hidden = true
+          )
+        ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
+        """)
+    List<FamilyPhoto> findAllAccessibleByFamilyAndUploader(
+            @Param("family") Family family,
+            @Param("uploader") User uploader,
+            @Param("viewer") User viewer,
+            Pageable pageable
+    );
+
+    @EntityGraph(attributePaths = "user")
+    @Query("""
+        SELECT fp
+        FROM FamilyPhoto fp
+        WHERE fp.user = :uploader
+          AND EXISTS (
+              SELECT fps.id
+              FROM FamilyPhotoSenior fps
+              WHERE fps.familyPhoto = fp
+                AND fps.senior.family = :family
+          )
+          AND NOT EXISTS (
+              SELECT fpr.id
+              FROM FamilyPhotoReport fpr
+              WHERE fpr.familyPhoto = fp
+                AND fpr.reporter = :viewer
+                AND fpr.hidden = true
+          )
+          AND NOT EXISTS (
+              SELECT fur.id
+              FROM FamilyUserReport fur
+              WHERE fur.reportedUser = fp.user
+                AND fur.reporter = :viewer
+                AND fur.hidden = true
+          )
+          AND (
+              fp.createdAt < :cursorCreatedAt
+              OR (
+                  fp.createdAt = :cursorCreatedAt
+                  AND fp.familyPhotoId < :cursorId
+              )
+          )
+        ORDER BY fp.createdAt DESC, fp.familyPhotoId DESC
+        """)
+    List<FamilyPhoto> findNextAccessiblePageByFamilyAndUploader(
+            @Param("family") Family family,
+            @Param("uploader") User uploader,
+            @Param("viewer") User viewer,
+            @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
+            @Param("cursorId") Long cursorId,
+            Pageable pageable
+    );
+
+    @Query("""
+        SELECT COUNT(fp)
+        FROM FamilyPhoto fp
+        WHERE EXISTS (
+            SELECT fps.id
+            FROM FamilyPhotoSenior fps
+            WHERE fps.familyPhoto = fp
+              AND fps.senior.family = :family
+        )
+          AND NOT EXISTS (
+              SELECT fpr.id
+              FROM FamilyPhotoReport fpr
+              WHERE fpr.familyPhoto = fp
+                AND fpr.reporter = :viewer
+                AND fpr.hidden = true
+          )
+          AND NOT EXISTS (
+              SELECT fur.id
+              FROM FamilyUserReport fur
+              WHERE fur.reportedUser = fp.user
+                AND fur.reporter = :viewer
+                AND fur.hidden = true
+          )
+        """)
+    long countAccessibleByFamily(
+            @Param("family") Family family,
+            @Param("viewer") User viewer
+    );
+
+    @Query("""
+        SELECT COUNT(fp)
+        FROM FamilyPhoto fp
+        WHERE fp.user = :uploader
+          AND EXISTS (
+              SELECT fps.id
+              FROM FamilyPhotoSenior fps
+              WHERE fps.familyPhoto = fp
+                AND fps.senior.family = :family
+          )
+          AND NOT EXISTS (
+              SELECT fpr.id
+              FROM FamilyPhotoReport fpr
+              WHERE fpr.familyPhoto = fp
+                AND fpr.reporter = :viewer
+                AND fpr.hidden = true
+          )
+          AND NOT EXISTS (
+              SELECT fur.id
+              FROM FamilyUserReport fur
+              WHERE fur.reportedUser = fp.user
+                AND fur.reporter = :viewer
+                AND fur.hidden = true
+          )
+        """)
+    long countAccessibleByFamilyAndUploader(
+            @Param("family") Family family,
+            @Param("uploader") User uploader,
+            @Param("viewer") User viewer
+    );
+
+    @Query("""
+    SELECT fp
+    FROM FamilyPhoto fp
+    WHERE fp.thumbnailKey IS NULL
+      AND fp.familyPhotoId > :afterId
+    ORDER BY fp.familyPhotoId ASC
+    """)
+    List<FamilyPhoto> findPhotosWithoutThumbnail(
+            @Param("afterId") Long afterId,
+            Pageable pageable
+    );
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+    UPDATE FamilyPhoto fp
+    SET fp.thumbnailKey = :thumbnailKey
+    WHERE fp.familyPhotoId = :photoId
+      AND fp.thumbnailKey IS NULL
+    """)
+    int updateThumbnailIfAbsent(
+            @Param("photoId") Long photoId,
+            @Param("thumbnailKey") String thumbnailKey
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+    SELECT fp
+    FROM FamilyPhoto fp
+    WHERE fp.familyPhotoId = :familyPhotoId
+      AND EXISTS (
+          SELECT fps.id
+          FROM FamilyPhotoSenior fps
+          WHERE fps.familyPhoto = fp
+            AND EXISTS (
+                SELECT fm.id
+                FROM FamilyMember fm
+                WHERE fm.family = fps.senior.family
+                  AND fm.user = :user
+            )
+      )
+    """)
+    Optional<FamilyPhoto> findAccessibleForDeletionByFamilyPhotoIdAndUser(
+            @Param("familyPhotoId") Long familyPhotoId,
+            @Param("user") User user
+    );
+}

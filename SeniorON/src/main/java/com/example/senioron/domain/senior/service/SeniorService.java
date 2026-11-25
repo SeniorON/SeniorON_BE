@@ -1,0 +1,324 @@
+package com.example.senioron.domain.senior.service;
+
+import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyMember;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
+import com.example.senioron.domain.family.repository.FamilyRepository;
+import com.example.senioron.domain.senior.dto.request.SeniorCreateRequest;
+import com.example.senioron.domain.senior.dto.response.ManagedSeniorResponse;
+import com.example.senioron.domain.senior.dto.response.MedicationConsentConnectionStatus;
+import com.example.senioron.domain.senior.dto.response.ParentSeniorProfileResponse;
+import com.example.senioron.domain.senior.dto.response.SeniorCreateResponse;
+import com.example.senioron.domain.senior.dto.response.SeniorFamilyResponse;
+import com.example.senioron.domain.senior.dto.response.SeniorMedicationConsentResponse;
+import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.senior.entity.SeniorRelation;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
+import com.example.senioron.domain.senior.repository.SeniorWithdrawalNoticeRecipientRepository;
+import com.example.senioron.domain.user.entity.Role;
+import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.global.apiPayload.code.ErrorCode;
+import com.example.senioron.global.apiPayload.exception.BusinessException;
+import java.sql.SQLException;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@RequiredArgsConstructor
+@Transactional(readOnly = true)
+public class SeniorService {
+
+    private final SeniorRepository seniorRepository;
+    private final UserRepository userRepository;
+    private final FamilyRepository familyRepository;
+    private final FamilyMemberRepository familyMemberRepository;
+    private final SeniorWithdrawalNoticeRecipientRepository withdrawalRecipientRepository;
+
+    public List<ManagedSeniorResponse> getManagedSeniors(User user) {
+        if (user == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
+        }
+
+        User foundUser = userRepository.findById(user.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        List<ManagedSeniorResponse> managedSeniors =
+                familyMemberRepository.findManagedSeniorResponsesByUserId(
+                        foundUser.getUsersId()
+                );
+        List<ManagedSeniorResponse> withdrawnSeniors = withdrawalRecipientRepository
+                .findUnacknowledgedAndUnexpiredByRecipientUserId(
+                        foundUser.getUsersId(),
+                        LocalDateTime.now()
+                )
+                .stream()
+                .map(ManagedSeniorResponse::withdrawn)
+                .toList();
+
+        Set<Long> withdrawnSeniorIds = withdrawnSeniors.stream()
+                .map(ManagedSeniorResponse::seniorId)
+                .collect(Collectors.toSet());
+        Set<Long> withdrawalFamilyIds = withdrawnSeniors.stream()
+                .map(ManagedSeniorResponse::familyId)
+                .collect(Collectors.toSet());
+
+        Stream<ManagedSeniorResponse> normalItems = managedSeniors.stream()
+                .filter(item -> !isDuplicateWithdrawalItem(
+                        item,
+                        withdrawnSeniorIds,
+                        withdrawalFamilyIds
+                ));
+        return Stream.concat(normalItems, withdrawnSeniors.stream()).toList();
+    }
+
+    private boolean isDuplicateWithdrawalItem(
+            ManagedSeniorResponse item,
+            Set<Long> withdrawnSeniorIds,
+            Set<Long> withdrawalFamilyIds
+    ) {
+        if (item.seniorId() == null) {
+            return withdrawalFamilyIds.contains(item.familyId());
+        }
+        return withdrawnSeniorIds.contains(item.seniorId());
+    }
+
+    public List<SeniorFamilyResponse> getFamilySeniors(User principal, Long familyId) {
+        if (principal == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
+        }
+
+        User user = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        Family family = getFamilyOrThrow(familyId);
+        validateFamilyMember(user, family);
+
+        return seniorRepository.findAllByFamilyOrderBySeniorIdAsc(family)
+                .stream()
+                .map(SeniorFamilyResponse::from)
+                .toList();
+    }
+
+    public ParentSeniorProfileResponse getParentSeniorProfile(User principal) {
+        if (principal == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
+        }
+
+        User user = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        if (user.getRole() != Role.PARENT) {
+            throw new BusinessException(ErrorCode.SENIOR_PARENT_LINK_PARENT_ONLY);
+        }
+
+        Senior senior = seniorRepository.findByParentUser(user)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SENIOR_NOT_FOUND));
+        return ParentSeniorProfileResponse.from(senior);
+    }
+
+    public SeniorMedicationConsentResponse getMedicationConsent(
+            User principal,
+            Long seniorId
+    ) {
+        if (principal == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
+        }
+
+        User currentUser = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        Senior senior = seniorRepository.findById(seniorId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SENIOR_NOT_FOUND));
+
+        if (senior.getFamily() == null
+                || !familyMemberRepository.existsByUserAndFamily(
+                currentUser,
+                senior.getFamily()
+        )) {
+            throw new BusinessException(ErrorCode.SENIOR_MANAGEMENT_ACCESS_DENIED);
+        }
+
+        User parentUser = senior.getParentUser();
+        if (parentUser == null) {
+            return SeniorMedicationConsentResponse.builder()
+                    .connectionStatus(MedicationConsentConnectionStatus.NOT_CONNECTED)
+                    .medicationConsent(null)
+                    .build();
+        }
+
+        return SeniorMedicationConsentResponse.builder()
+                .connectionStatus(MedicationConsentConnectionStatus.CONNECTED)
+                .medicationConsent(parentUser.getHealthInfoAgreed())
+                .build();
+    }
+
+    /**
+     * 로그인한 사용자가 관리할 시니어 정보를 등록합니다.
+     */
+    @Transactional
+    public SeniorCreateResponse createSenior(
+            User user,
+            SeniorCreateRequest request
+    ) {
+        if (user == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
+        }
+        if (user.getRole() == Role.PARENT) {
+            throw new BusinessException(ErrorCode.SENIOR_CREATE_CHILD_ONLY);
+        }
+
+        validateCustomRelation(request);
+
+        Family lockedFamily = familyRepository.findByIdForUpdate(request.familyId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND));
+        validateFamilyMember(user, lockedFamily);
+
+        FamilyMember registeringMember = familyMemberRepository
+                .findByUserAndFamily(user, lockedFamily)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FORBIDDEN));
+        String resolvedCustomRelation = resolveCustomRelation(request);
+
+        Senior senior = Senior.builder()
+                .name(request.name())
+                .birth(request.birth())
+                .phoneNumber(normalizePhoneNumber(request.phoneNumber()))
+                .address(request.address())
+                .detailAddress(request.detailAddress())
+                .latitude(request.latitude())
+                .longitude(request.longitude())
+                .family(lockedFamily)
+                .registeredBy(user)
+                .build();
+
+        linkExistingParentUser(senior, lockedFamily, user);
+
+        Senior savedSenior = saveSeniorOrThrowAlreadyExists(senior);
+
+        registeringMember.updateRelation(
+                request.relation(),
+                resolvedCustomRelation
+        );
+
+        return SeniorCreateResponse.from(savedSenior, registeringMember);
+    }
+
+    private Senior saveSeniorOrThrowAlreadyExists(Senior senior) {
+        try {
+            return seniorRepository.saveAndFlush(senior);
+        } catch (DataIntegrityViolationException e) {
+            if (isDuplicateKeyViolation(e)) {
+                throw new BusinessException(ErrorCode.SENIOR_ALREADY_EXISTS);
+            }
+            throw e;
+        }
+    }
+
+    private boolean isDuplicateKeyViolation(DataIntegrityViolationException exception) {
+        if (exception instanceof DuplicateKeyException) {
+            return true;
+        }
+
+        Throwable current = exception;
+        while (current != null) {
+            if (current instanceof SQLException sqlException
+                    && (sqlException.getErrorCode() == 1062
+                    || "23505".equals(sqlException.getSQLState()))) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    /**
+     * 직접 작성 관계를 선택한 경우 관계명이 입력되었는지 검증합니다.
+     */
+    private void validateCustomRelation(SeniorCreateRequest request) {
+        validateCustomRelation(request.relation(), request.customRelation());
+    }
+
+    private void validateCustomRelation(SeniorRelation relation, String customRelation) {
+        if (relation == SeniorRelation.OTHER
+                && (customRelation == null
+                || customRelation.isBlank())) {
+            throw new BusinessException(
+                    ErrorCode.CUSTOM_RELATION_REQUIRED
+            );
+        }
+    }
+
+    /**
+     * OTHER가 아닐 경우 불필요한 직접 작성 관계는 저장하지 않습니다.
+     */
+    private String resolveCustomRelation(SeniorCreateRequest request) {
+        return resolveCustomRelation(request.relation(), request.customRelation());
+    }
+
+    private String resolveCustomRelation(SeniorRelation relation, String customRelation) {
+        if (relation != SeniorRelation.OTHER) {
+            return null;
+        }
+
+        return customRelation.trim();
+    }
+
+    /**
+     * 전화번호에서 하이픈과 공백을 제거합니다.
+     */
+    private String normalizePhoneNumber(String phoneNumber) {
+        return phoneNumber
+                .replace("-", "")
+                .replace(" ", "");
+    }
+
+    private void validateSameFamily(User user, Senior senior) {
+        if (senior.getFamily() == null) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+
+        validateFamilyMember(user, senior.getFamily());
+    }
+
+    private Family getFamilyOrThrow(Long familyId) {
+        return familyRepository.findById(familyId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.FAMILY_NOT_FOUND));
+    }
+
+    private void validateFamilyMember(User user, Family family) {
+        if (!familyMemberRepository.existsByUserAndFamily(user, family)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+    }
+
+    private void linkExistingParentUser(
+            Senior senior,
+            Family family,
+            User registeringUser
+    ) {
+        familyMemberRepository
+                .findByFamilyAndUserIdNotAndUserRole(
+                        family,
+                        registeringUser.getUsersId(),
+                        Role.PARENT
+                )
+                .stream()
+                .map(FamilyMember::getUser)
+                .findFirst()
+                .ifPresent(parentUser -> {
+                    if (seniorRepository.existsByParentUser(parentUser)) {
+                        throw new BusinessException(
+                                ErrorCode.PARENT_USER_ALREADY_LINKED_TO_SENIOR
+                        );
+                    }
+
+                    senior.linkParentUser(parentUser);
+                });
+    }
+}

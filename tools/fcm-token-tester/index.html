@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>FCM 테스트 토큰 발급</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; }
+    button { font-size: 16px; padding: 10px 20px; cursor: pointer; }
+    textarea { width: 100%; height: 100px; margin-top: 16px; font-family: monospace; font-size: 13px; }
+    #status { margin-top: 12px; white-space: pre-wrap; }
+    .error { color: #c0392b; }
+    .ok { color: #27ae60; }
+  </style>
+</head>
+<body>
+  <h2>FCM 테스트 토큰 발급</h2>
+  <p>버튼을 누르면 알림 권한을 요청하고, 이 브라우저(이 기기)를 식별하는 실제 FCM 토큰을 발급받습니다.<br>
+  발급된 토큰을 백엔드 <code>POST /api/users/login</code>의 <code>fcmToken</code> 값으로 넣으면 실제 발송 테스트가 가능합니다.</p>
+
+  <button id="getTokenBtn">토큰 발급받기</button>
+  <div id="status"></div>
+  <textarea id="tokenBox" readonly placeholder="여기에 토큰이 표시됩니다"></textarea>
+
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-messaging-compat.js"></script>
+  <script src="./firebase-config.js"></script>
+  <script>
+    const statusEl = document.getElementById("status");
+    const tokenBox = document.getElementById("tokenBox");
+    const btn = document.getElementById("getTokenBtn");
+
+    function setStatus(message, cls) {
+      statusEl.textContent = message;
+      statusEl.className = cls || "";
+    }
+
+    // register()는 설치를 시작만 시킬 뿐 활성화까지 기다려주지 않는다.
+    // 활성화되기 전에 getToken()을 부르면 "no active Service Worker" 에러가 난다.
+    function waitForActivation(registration) {
+      if (registration.active) {
+        return Promise.resolve(registration);
+      }
+      const worker = registration.installing || registration.waiting;
+      if (!worker) {
+        return navigator.serviceWorker.ready;
+      }
+      return new Promise((resolve) => {
+        worker.addEventListener("statechange", () => {
+          if (worker.state === "activated") {
+            resolve(registration);
+          }
+        });
+      });
+    }
+
+    async function main() {
+      if (!("serviceWorker" in navigator)) {
+        setStatus("이 브라우저는 서비스워커를 지원하지 않습니다. 최신 Chrome을 사용하세요.", "error");
+        return;
+      }
+      if (firebaseConfig.apiKey.startsWith("여기에")) {
+        setStatus("firebase-config.js에 아직 실제 값을 안 채우셨습니다. 먼저 채워주세요.", "error");
+        return;
+      }
+
+      firebase.initializeApp(firebaseConfig);
+      const messaging = firebase.messaging();
+
+      // 포그라운드(탭이 열려있는 상태)에서 푸시가 오면 여기서 잡힌다. 실제 발송 테스트할 때 유용.
+      messaging.onMessage((payload) => {
+        console.log("포그라운드 메시지 수신:", payload);
+        alert("푸시 도착!\n제목: " + payload.notification?.title + "\n내용: " + payload.notification?.body);
+      });
+
+      btn.addEventListener("click", async () => {
+        try {
+          setStatus("서비스워커 등록 중...");
+          let registration = await navigator.serviceWorker.register("./firebase-messaging-sw.js");
+
+          setStatus("서비스워커 활성화 대기 중...");
+          registration = await waitForActivation(registration);
+
+          setStatus("알림 권한 요청 중... (브라우저 팝업에서 허용을 눌러주세요)");
+          const permission = await Notification.requestPermission();
+          if (permission !== "granted") {
+            setStatus("알림 권한이 거부되었습니다. 브라우저 설정에서 이 사이트의 알림을 허용해주세요.", "error");
+            return;
+          }
+
+          setStatus("토큰 요청 중...");
+          const token = await messaging.getToken({
+            vapidKey: VAPID_KEY,
+            serviceWorkerRegistration: registration,
+          });
+
+          if (!token) {
+            setStatus("토큰이 비어있습니다. VAPID 키가 올바른지 확인해주세요.", "error");
+            return;
+          }
+
+          tokenBox.value = token;
+          setStatus("토큰 발급 완료! 아래 값을 복사하세요.", "ok");
+          console.log("FCM 토큰:", token);
+        } catch (e) {
+          console.error(e);
+          setStatus("에러 발생: " + e.message + "\n(콘솔 로그도 확인해주세요)", "error");
+        }
+      });
+    }
+
+    main();
+  </script>
+</body>
+</html>

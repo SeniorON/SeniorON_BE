@@ -1,0 +1,118 @@
+package com.example.senioron.domain.socialaccount.service;
+
+import com.example.senioron.domain.device.service.DeviceService;
+import com.example.senioron.domain.device.service.DeviceCredentialIssueResult;
+import com.example.senioron.domain.socialaccount.dto.kakao.response.KakaoLoginResponse;
+import com.example.senioron.domain.socialaccount.dto.kakao.response.KakaoUserInfo;
+import com.example.senioron.domain.socialaccount.dto.kakao.request.KakaoLoginRequest;
+import com.example.senioron.domain.socialaccount.entity.LoginProvider;
+import com.example.senioron.domain.socialaccount.entity.SocialAccount;
+import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
+import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.entity.UserStatus;
+import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.domain.user.service.RefreshTokenService;
+import com.example.senioron.global.apiPayload.code.ErrorCode;
+import com.example.senioron.global.apiPayload.exception.BusinessException;
+import com.example.senioron.global.jwt.JwtUtil;
+import java.util.Optional;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@RequiredArgsConstructor
+public class KakaoLoginTransactionService {
+
+    private final SocialAccountRepository socialAccountRepository;
+    private final UserRepository userRepository;
+    private final JwtUtil jwtUtil;
+    private final RefreshTokenService refreshTokenService;
+    private final DeviceService deviceService;
+
+    @Transactional
+    public KakaoLoginResponse login(KakaoLoginRequest request, KakaoUserInfo kakaoUserInfo) {
+        String providerId = String.valueOf(kakaoUserInfo.getId());
+
+        Optional<SocialAccount> existingSocialAccount =
+                socialAccountRepository.findByProviderAndProviderId(
+                        LoginProvider.KAKAO,
+                        providerId
+                );
+
+        // 기존 카카오 회원인 경우 JWT 발급 후 로그인
+        if (existingSocialAccount.isPresent()) {
+            User user = existingSocialAccount.get().getUser();
+            if (user.getStatus() == UserStatus.WITHDRAWN) {
+                throw new BusinessException(ErrorCode.WITHDRAWN_USER);
+            }
+
+            String refreshToken = jwtUtil.createRefreshToken(user);
+            DeviceCredentialIssueResult deviceCredentialIssueResult =
+                    registerDevice(user, request.getDeviceIdentifier());
+            updateFcmTokenIfPresent(user, request.getFcmToken(), request.getDeviceIdentifier());
+            var loginSession = refreshTokenService.saveOrRotate(
+                    user,
+                    request.getDeviceIdentifier(),
+                    refreshToken
+            );
+            String accessToken = jwtUtil.createAccessToken(user, loginSession.getSessionId());
+
+            return KakaoLoginResponse.builder()
+                    .accessToken(accessToken)
+                    .refreshToken(refreshToken)
+                    .deviceAuthToken(deviceAuthToken(deviceCredentialIssueResult))
+                    .usersId(user.getUsersId())
+                    .name(user.getName())
+                    .role(user.getRole())
+                    .newUser(false)
+                    .build();
+        }
+
+        rejectIfGeneralAccountUsesVerifiedEmail(kakaoUserInfo);
+
+        // 신규 카카오 회원인 경우 추가 회원가입 진행
+        return KakaoLoginResponse.builder()
+                .accessToken(null)
+                .usersId(null)
+                .name(kakaoUserInfo.getNickname())
+                .role(null)
+                .providerId(providerId)
+                .newUser(true)
+                .build();
+    }
+
+    private void rejectIfGeneralAccountUsesVerifiedEmail(KakaoUserInfo kakaoUserInfo) {
+        if (!kakaoUserInfo.hasVerifiedEmail()) {
+            return;
+        }
+
+        userRepository.findByEmail(kakaoUserInfo.getEmail())
+                .filter(this::hasGeneralLoginCredentials)
+                .ifPresent(user -> {
+                    throw new BusinessException(ErrorCode.GENERAL_ACCOUNT_EMAIL_EXISTS);
+                });
+    }
+
+    private boolean hasGeneralLoginCredentials(User user) {
+        return hasText(user.getLoginId()) || hasText(user.getPassword());
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private DeviceCredentialIssueResult registerDevice(User user, String deviceIdentifier) {
+        return deviceService.registerDevice(user, deviceIdentifier);
+    }
+
+    private void updateFcmTokenIfPresent(User user, String fcmToken, String deviceIdentifier) {
+        if (fcmToken != null && !fcmToken.isBlank()) {
+            deviceService.updateFcmToken(user, fcmToken, deviceIdentifier);
+        }
+    }
+
+    private String deviceAuthToken(DeviceCredentialIssueResult deviceCredentialIssueResult) {
+        return deviceCredentialIssueResult == null ? null : deviceCredentialIssueResult.deviceAuthToken();
+    }
+}

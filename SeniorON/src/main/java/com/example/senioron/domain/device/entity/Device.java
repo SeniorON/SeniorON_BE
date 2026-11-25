@@ -1,0 +1,190 @@
+package com.example.senioron.domain.device.entity;
+
+import com.example.senioron.common.entity.BaseEntity;
+import com.example.senioron.domain.user.entity.User;
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.time.LocalDateTime;
+
+@Entity
+@Table(
+        uniqueConstraints = @UniqueConstraint(columnNames = {"device_identifier"}),
+        indexes = {
+                @Index(name = "idx_device_users_id", columnList = "users_id")
+        }
+)
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor
+@Builder
+public class Device extends BaseEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "device_id")
+    private Long deviceId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "users_id")
+    private User user;
+
+    private String deviceIdentifier;
+
+    private String deviceToken;
+
+    @Column(name = "device_auth_token_hash")
+    private String deviceAuthTokenHash;
+
+    private String deviceName;
+
+    @Enumerated(EnumType.STRING)
+    private DeviceStatus connectionStatus;
+
+    private Integer batteryLevel;
+
+    private Boolean charging;
+
+    private Boolean deviceStatusSharingEnabled;
+
+    private Boolean networkConnected;
+
+    private Boolean defaultHomeEnabled;
+
+    private Boolean locationPermissionGranted;
+
+    private Boolean gpsEnabled;
+
+    private Boolean notificationPermissionGranted;
+
+    private Boolean appExecutionMaintained;
+
+    private LocalDateTime lastConnectedAt;
+
+    private Double latitude;
+
+    private Double longitude;
+
+    private LocalDateTime lastLocationUpdatedAt;
+
+    public void updateDeviceStatus(
+            DeviceStatus connectionStatus,
+            Integer batteryLevel,
+            LocalDateTime lastConnectedAt
+    ) {
+        this.connectionStatus = connectionStatus;
+        this.batteryLevel = batteryLevel;
+        this.lastConnectedAt = lastConnectedAt;
+    }
+
+    public void updateDeviceToken(String deviceToken) {
+        this.deviceToken = deviceToken;
+    }
+
+    public boolean hasDeviceAuthToken() {
+        return deviceAuthTokenHash != null && !deviceAuthTokenHash.isBlank();
+    }
+
+    public void issueDeviceAuthTokenHash(String deviceAuthTokenHash) {
+        this.deviceAuthTokenHash = deviceAuthTokenHash;
+    }
+
+    public void reassignOwner(User user) {
+        this.user = user;
+    }
+
+    public void updateDeviceInfo(
+            String deviceName,
+            DeviceStatus connectionStatus,
+            Integer batteryLevel,
+            Boolean charging,
+            Boolean deviceStatusSharingEnabled,
+            Boolean networkConnected,
+            Boolean defaultHomeEnabled,
+            Boolean locationPermissionGranted,
+            Boolean gpsEnabled,
+            Boolean notificationPermissionGranted,
+            Boolean appExecutionMaintained,
+            LocalDateTime lastConnectedAt
+    ) {
+        this.deviceName = deviceName;
+        this.connectionStatus = connectionStatus;
+        this.batteryLevel = batteryLevel;
+        this.charging = charging;
+        this.deviceStatusSharingEnabled = deviceStatusSharingEnabled;
+        this.networkConnected = networkConnected;
+        this.defaultHomeEnabled = defaultHomeEnabled;
+        this.locationPermissionGranted = locationPermissionGranted;
+        this.gpsEnabled = gpsEnabled;
+        this.notificationPermissionGranted = notificationPermissionGranted;
+        this.appExecutionMaintained = appExecutionMaintained;
+        this.lastConnectedAt = lastConnectedAt;
+    }
+
+    public void patchDeviceInfo(
+            String deviceName,
+            Integer batteryLevel,
+            Boolean charging,
+            Boolean deviceStatusSharingEnabled,
+            Boolean networkConnected,
+            Boolean defaultHomeEnabled,
+            Boolean locationPermissionGranted,
+            Boolean gpsEnabled,
+            Boolean notificationPermissionGranted,
+            Boolean appExecutionMaintained,
+            LocalDateTime lastConnectedAt
+    ) {
+        if (deviceName != null) {
+            this.deviceName = deviceName;
+        }
+        if (batteryLevel != null) {
+            this.batteryLevel = batteryLevel;
+        }
+        if (charging != null) {
+            this.charging = charging;
+        }
+        if (deviceStatusSharingEnabled != null) {
+            this.deviceStatusSharingEnabled = deviceStatusSharingEnabled;
+        }
+        if (networkConnected != null) {
+            this.networkConnected = networkConnected;
+        }
+        if (defaultHomeEnabled != null) {
+            this.defaultHomeEnabled = defaultHomeEnabled;
+        }
+        if (locationPermissionGranted != null) {
+            this.locationPermissionGranted = locationPermissionGranted;
+        }
+        if (gpsEnabled != null) {
+            this.gpsEnabled = gpsEnabled;
+        }
+        if (notificationPermissionGranted != null) {
+            this.notificationPermissionGranted = notificationPermissionGranted;
+        }
+        if (appExecutionMaintained != null) {
+            this.appExecutionMaintained = appExecutionMaintained;
+        }
+
+        this.connectionStatus = DeviceStatus.ONLINE;
+        this.lastConnectedAt = lastConnectedAt;
+    }
+
+    public void disconnect() {
+        this.connectionStatus = DeviceStatus.DISCONNECTED;
+    }
+
+    public void reconnect() {
+        this.connectionStatus = DeviceStatus.ONLINE;
+        this.lastConnectedAt = LocalDateTime.now();
+    }
+
+    public void updateLocation(
+            Double latitude,
+            Double longitude,
+            LocalDateTime lastLocationUpdatedAt
+    ) {
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.lastLocationUpdatedAt = lastLocationUpdatedAt;
+    }
+}

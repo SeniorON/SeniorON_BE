@@ -1,0 +1,506 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+APP_DIR="$HOME/SeniorON_BE"
+STATE_FILE="$APP_DIR/.current-color"
+
+IMAGE_TAG="${IMAGE_TAG:?IMAGE_TAG is required}"
+
+# 배포 이미지 저장소 (docker-compose.yml의 app-blue/app-green과 동일)
+APP_IMAGE_REPO="${APP_IMAGE_REPO:-jsh424/senioron}"
+
+cd "$APP_DIR"
+
+echo "=========================================="
+echo " SeniorON Blue-Green Deployment"
+echo " IMAGE_TAG: $IMAGE_TAG"
+echo "=========================================="
+
+# --------------------------------------------------
+# Utility Functions
+# --------------------------------------------------
+
+get_container_id() {
+    docker compose ps -q "$1"
+}
+
+get_health_status() {
+    local service="$1"
+    local container_id
+
+    container_id=$(get_container_id "$service")
+
+    if [[ -z "$container_id" ]]; then
+        echo "not-found"
+        return
+    fi
+
+    docker inspect \
+        --format='{{.State.Health.Status}}' \
+        "$container_id" 2>/dev/null || echo "unknown"
+}
+
+wait_for_health() {
+    local service="$1"
+
+    echo ""
+    echo "Waiting for $service health..."
+
+    for i in $(seq 1 120); do
+        local status
+        status=$(get_health_status "$service")
+
+        echo "[$i/120] $service health=$status"
+
+        if [[ "$status" == "healthy" ]]; then
+            echo "$service is healthy."
+            return 0
+        fi
+
+        if [[ "$status" == "unhealthy" ]]; then
+            echo "ERROR: $service became unhealthy."
+            return 1
+        fi
+
+        sleep 2
+    done
+
+    echo "ERROR: $service health check timeout."
+    return 1
+}
+
+cleanup_service() {
+    local service="$1"
+
+    echo "Stopping and removing $service..."
+
+    if ! docker compose stop -t 10 "$service"; then
+        echo "WARNING: Graceful stop failed for $service, killing..."
+        docker compose kill "$service" || true
+    fi
+
+    docker compose rm -f "$service" || true
+
+    echo "$service cleaned up."
+    return 0
+}
+
+cleanup_old_images() {
+    local repo_tag tag keep skip removed
+    local -a keep_tags=("$IMAGE_TAG" "$CURRENT_TAG" "latest")
+
+    echo ""
+    echo "Cleaning up old Docker images..."
+
+    # before/after 비교용 디스크 사용량 로그
+    echo "--- Docker disk usage (before) ---"
+    docker system df 2>/dev/null || true
+
+    removed=0
+
+    while IFS= read -r repo_tag; do
+        [[ -z "$repo_tag" || "$repo_tag" == "<none>:<none>" ]] && continue
+
+        tag="${repo_tag##*:}"
+
+        # dangling(<none>) 이미지는 아래 docker image prune에서 정리
+        [[ "$tag" == "<none>" ]] && continue
+
+        skip=0
+
+        for keep in "${keep_tags[@]}"; do
+            # 현재 배포 이미지, 직전 이미지(롤백 대상), latest는 보존
+            if [[ -n "$keep" && "$keep" != "none" && "$tag" == "$keep" ]]; then
+                skip=1
+                break
+            fi
+        done
+
+        if [[ "$skip" -eq 1 ]]; then
+            echo "Keeping image: $repo_tag"
+            continue
+        fi
+
+        # 실행 중이거나 중지된 컨테이너가 참조하는 이미지는 docker rmi가 거부하므로 안전
+        if docker rmi "$repo_tag" >/dev/null 2>&1; then
+            echo "Removed image: $repo_tag"
+            removed=$((removed + 1))
+        else
+            echo "Skipped image (in use or remove failed): $repo_tag"
+        fi
+    done < <(docker images --format '{{.Repository}}:{{.Tag}}' "$APP_IMAGE_REPO" 2>/dev/null || true)
+
+    # 태그가 사라진 dangling 이미지 정리 (기존 동작 유지)
+    docker image prune -f >/dev/null 2>&1 || true
+
+    echo "Removed $removed unused image tag(s)."
+    echo "--- Docker disk usage (after) ---"
+    docker system df 2>/dev/null || true
+}
+
+switch_upstream() {
+    local color="$1"
+    local src="nginx/upstream.$color.conf"
+
+    if [[ ! -f "$src" ]]; then
+        echo "ERROR: upstream config not found: $src"
+        return 1
+    fi
+
+    if ! cp "$src" "nginx/conf.d/upstream.conf"; then
+        echo "ERROR: Failed to copy upstream config for $color."
+        return 1
+    fi
+
+    echo "Testing Nginx configuration..."
+
+    if ! docker compose exec -T nginx nginx -t; then
+        echo "ERROR: Nginx configuration test failed."
+        return 1
+    fi
+
+    echo "Reloading Nginx..."
+
+    if ! docker compose exec -T nginx nginx -s reload; then
+        echo "ERROR: Nginx reload failed."
+        return 1
+    fi
+
+    if ! grep -q "app-$color:8080" "nginx/conf.d/upstream.conf"; then
+        echo "ERROR: Active upstream does not point to app-$color."
+        return 1
+    fi
+
+    return 0
+}
+
+rollback_upstream() {
+    local color="$1"
+    local src="nginx/upstream.$color.conf"
+
+    echo ""
+    echo "=========================================="
+    echo " Rolling back traffic to $color"
+    echo "=========================================="
+
+    if [[ ! -f "$src" ]]; then
+        echo "CRITICAL: Rollback upstream config not found: $src"
+        return 1
+    fi
+
+    if ! cp "$src" "nginx/conf.d/upstream.conf"; then
+        echo "CRITICAL: Failed to copy rollback upstream config."
+        return 1
+    fi
+
+    if ! grep -q "app-$color:8080" "nginx/conf.d/upstream.conf"; then
+        echo "CRITICAL: Rollback upstream does not point to app-$color."
+        return 1
+    fi
+
+    if ! docker compose exec -T nginx nginx -t; then
+        echo "CRITICAL: Rollback Nginx configuration test FAILED."
+        return 1
+    fi
+
+    if ! docker compose exec -T nginx nginx -s reload; then
+        echo "CRITICAL: Rollback Nginx reload FAILED."
+        return 1
+    fi
+
+    echo "Traffic restored to $color."
+    return 0
+}
+
+smoke_test() {
+    echo ""
+    echo "Running external smoke test..."
+
+    for i in $(seq 1 10); do
+
+        RESPONSE=$(curl \
+            -fsS \
+            --max-time 10 \
+            https://senioron.site/actuator/health/readiness \
+            2>/dev/null || true)
+
+        if echo "$RESPONSE" | grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"'; then
+            echo "[$i/10] Smoke test passed."
+            return 0
+        fi
+
+        echo "[$i/10] Smoke test failed. Retrying..."
+        sleep 3
+    done
+
+    echo "ERROR: Smoke test failed."
+    return 1
+}
+
+# --------------------------------------------------
+# 1. 현재 운영 색상 확인
+# --------------------------------------------------
+
+if [[ -f "$STATE_FILE" ]]; then
+    CURRENT_STATE=$(cat "$STATE_FILE")
+
+    CURRENT_COLOR="${CURRENT_STATE%%:*}"
+    CURRENT_TAG="${CURRENT_STATE#*:}"
+else
+    CURRENT_COLOR="none"
+    CURRENT_TAG="none"
+fi
+
+case "$CURRENT_COLOR" in
+
+    blue)
+        CURRENT_SERVICE="app-blue"
+        NEXT_COLOR="green"
+        NEXT_SERVICE="app-green"
+        ;;
+
+    green)
+        CURRENT_SERVICE="app-green"
+        NEXT_COLOR="blue"
+        NEXT_SERVICE="app-blue"
+        ;;
+
+    none)
+        CURRENT_SERVICE=""
+        NEXT_COLOR="blue"
+        NEXT_SERVICE="app-blue"
+        ;;
+
+    *)
+        echo "ERROR: Invalid deployment state: $CURRENT_STATE"
+        exit 1
+        ;;
+
+esac
+
+echo "Current : $CURRENT_COLOR ($CURRENT_TAG)"
+echo "Next    : $NEXT_COLOR ($IMAGE_TAG)"
+
+# --------------------------------------------------
+# 2. 새 이미지 Pull
+# --------------------------------------------------
+
+echo ""
+echo "[1/7] Pulling $NEXT_SERVICE image..."
+
+IMAGE_TAG="$IMAGE_TAG" \
+docker compose pull "$NEXT_SERVICE"
+
+# --------------------------------------------------
+# 3. 새 애플리케이션 기동
+# --------------------------------------------------
+
+echo ""
+echo "[2/7] Starting $NEXT_SERVICE..."
+
+# 혹시 이전 배포 실패 등으로 남아있는 컨테이너 강제 정리
+docker compose rm -f -s "$NEXT_SERVICE" 2>/dev/null || true
+
+IMAGE_TAG="$IMAGE_TAG" \
+docker compose up -d --remove-orphans "$NEXT_SERVICE"
+
+# --------------------------------------------------
+# 4. Health Check
+# --------------------------------------------------
+
+echo ""
+echo "[3/7] Health Check..."
+
+if ! wait_for_health "$NEXT_SERVICE"; then
+
+    echo ""
+    echo "ERROR: New application failed health check."
+
+    echo "--- System Memory Status ---"
+    free -m 2>/dev/null || true
+    echo "--- Docker Stats ---"
+    docker stats --no-stream 2>/dev/null || true
+    echo "--- Application Logs ---"
+    docker compose logs --tail=150 "$NEXT_SERVICE" || true
+
+    if ! cleanup_service "$NEXT_SERVICE"; then
+        echo "WARNING: Failed to cleanup failed deployment."
+    fi
+
+    exit 1
+fi
+
+# --------------------------------------------------
+# 최초 Bootstrap
+# --------------------------------------------------
+
+if [[ "$CURRENT_COLOR" == "none" ]]; then
+
+    echo ""
+    echo "=========================================="
+    echo " Initial Blue Bootstrap"
+    echo "=========================================="
+
+    echo "Preparing Nginx upstream for $NEXT_COLOR..."
+
+    cp \
+        "nginx/upstream.$NEXT_COLOR.conf" \
+        "nginx/conf.d/upstream.conf"
+
+    echo "Starting Nginx..."
+
+    docker compose up -d nginx
+
+    sleep 3
+
+    echo "Testing Nginx configuration..."
+
+    if ! docker compose exec -T nginx nginx -t; then
+        echo "ERROR: Initial Nginx configuration test failed."
+
+        if ! cleanup_service "$NEXT_SERVICE"; then
+            echo "WARNING: Failed to cleanup failed deployment."
+        fi
+
+        exit 1
+    fi
+
+    echo "Reloading Nginx..."
+
+    if ! docker compose exec -T nginx nginx -s reload; then
+        echo "ERROR: Initial Nginx reload failed."
+
+        if ! cleanup_service "$NEXT_SERVICE"; then
+            echo "WARNING: Failed to cleanup failed deployment."
+        fi
+
+        exit 1
+    fi
+
+    echo ""
+    echo "Running initial smoke test..."
+
+    if ! smoke_test; then
+        echo ""
+        echo "ERROR: Initial bootstrap smoke test failed."
+
+        if ! cleanup_service "$NEXT_SERVICE"; then
+            echo "WARNING: Failed to cleanup failed deployment."
+        fi
+
+        exit 1
+    fi
+
+    echo "$NEXT_COLOR:$IMAGE_TAG" > "$STATE_FILE"
+
+    cleanup_old_images
+
+    echo ""
+    echo "=========================================="
+    echo " Initial Bootstrap Successful"
+    echo " Active : $NEXT_COLOR"
+    echo " Image  : $IMAGE_TAG"
+    echo "=========================================="
+
+    exit 0
+fi
+
+# --------------------------------------------------
+# 5. Nginx Upstream 전환
+# --------------------------------------------------
+
+echo ""
+echo "[4/7] Switching Nginx upstream..."
+
+if ! switch_upstream "$NEXT_COLOR"; then
+
+    echo ""
+    echo "ERROR: Nginx switch failed."
+    echo "Restoring previous environment..."
+
+    if ! rollback_upstream "$CURRENT_COLOR"; then
+        echo ""
+        echo "CRITICAL: Automatic rollback failed."
+        echo "Manual intervention is required."
+    fi
+
+    if ! cleanup_service "$NEXT_SERVICE"; then
+        echo "WARNING: Failed to cleanup new application."
+    fi
+
+    exit 1
+fi
+
+echo "Traffic switched to $NEXT_SERVICE."
+
+# --------------------------------------------------
+# 6. External Smoke Test
+# --------------------------------------------------
+
+echo ""
+echo "[5/7] External Smoke Test..."
+
+if ! smoke_test; then
+
+    echo ""
+    echo "ERROR: Smoke test failed."
+    echo "Rolling back..."
+
+    if ! rollback_upstream "$CURRENT_COLOR"; then
+        echo ""
+        echo "CRITICAL: Automatic rollback failed."
+        echo "Manual intervention is required."
+    fi
+
+    if ! cleanup_service "$NEXT_SERVICE"; then
+        echo "WARNING: Failed to cleanup new application."
+    fi
+
+    exit 1
+fi
+
+echo "Smoke test passed."
+
+# --------------------------------------------------
+# 7. 이전 환경 종료 및 운영 상태 기록
+# --------------------------------------------------
+
+echo ""
+echo "[6/7] Stopping old application (Grace period: 5s)..."
+sleep 5
+
+if ! cleanup_service "$CURRENT_SERVICE"; then
+    echo ""
+    echo "ERROR: Failed to cleanup old application."
+    echo "New application is currently serving traffic."
+    echo "Manual intervention is required."
+    exit 1
+fi
+
+echo ""
+echo "Verifying old application is stopped..."
+
+if [[ -n "$(get_container_id "$CURRENT_SERVICE")" ]]; then
+    echo "ERROR: $CURRENT_SERVICE is still running."
+    echo "Manual intervention is required."
+    exit 1
+fi
+
+echo "$NEXT_COLOR:$IMAGE_TAG" > "$STATE_FILE"
+
+# 디스크 부족 방지를 위한 미사용 이미지 정리
+# (현재 이미지 + 직전 롤백 이미지 + latest는 보존)
+cleanup_old_images
+
+echo ""
+echo "[7/7] Deployment state updated."
+
+echo ""
+echo "=========================================="
+echo " Deployment Successful"
+echo "=========================================="
+echo " Previous : $CURRENT_COLOR ($CURRENT_TAG)"
+echo " Active   : $NEXT_COLOR"
+echo " Image    : $IMAGE_TAG"
+echo "=========================================="

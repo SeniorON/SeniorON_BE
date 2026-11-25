@@ -23,9 +23,16 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'
+    implementation 'org.springframework.boot:spring-boot-starter-mail'
+    implementation 'org.springframework.boot:spring-boot-starter-flyway'
+    implementation 'org.flywaydb:flyway-mysql'
+    implementation 'com.google.firebase:firebase-admin:9.10.0'
+    implementation 'software.amazon.awssdk:s3:2.46.21'
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.9'
     compileOnly 'org.projectlombok:lombok'
     runtimeOnly 'org.mariadb.jdbc:mariadb-java-client'
+    runtimeOnly 'com.h2database:h2'
     annotationProcessor 'org.projectlombok:lombok'
     testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
@@ -33,6 +40,26 @@ dependencies {
     testCompileOnly 'org.projectlombok:lombok'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     testAnnotationProcessor 'org.projectlombok:lombok'
+
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.7'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.7'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.7'
+
+    runtimeOnly 'com.h2database:h2'
+    runtimeOnly 'org.springframework.boot:spring-boot-h2console'
+
+    //monitoring
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+    
+    // JSON Logging for Loki
+    implementation 'net.logstash.logback:logstash-logback-encoder:7.4'
+
+    // 이미지 축소 및 압축
+    implementation 'net.coobird:thumbnailator:0.4.21'
+
+    // 현재 허용하는 WebP 이미지도 읽을 수 있도록 지원
+    implementation 'com.twelvemonkeys.imageio:imageio-webp:3.15.0'
 }
 
 tasks.named('test') {

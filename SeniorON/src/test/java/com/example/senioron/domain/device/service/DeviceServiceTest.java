@@ -1,0 +1,873 @@
+package com.example.senioron.domain.device.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.example.senioron.domain.device.entity.Device;
+import com.example.senioron.domain.device.entity.DeviceStatus;
+import com.example.senioron.domain.device.repository.DeviceRepository;
+import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyMember;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
+import com.example.senioron.domain.family.repository.FamilyRepository;
+import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.user.entity.Role;
+import com.example.senioron.domain.user.entity.RefreshToken;
+import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
+import com.example.senioron.domain.user.repository.RefreshTokenRepository;
+import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.domain.device.dto.request.DeviceStatusPatchRequest;
+import com.example.senioron.domain.device.dto.request.DeviceStatusUpdateRequest;
+import com.example.senioron.domain.device.dto.response.DeviceReconnectionStatusResponse;
+import com.example.senioron.domain.user.entity.ManagerType;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import com.example.senioron.global.apiPayload.exception.BusinessException;
+import java.time.LocalDateTime;
+import java.util.UUID;
+import java.time.LocalDate;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+/**
+ * 같은 기기(device_identifier)에서 부모 로그아웃 후 자녀가 로그인해도
+ * 부모의 FCM 토큰이 남아있어 두 계정 모두에게 알림이 가던 버그를 검증한다.
+ */
+@DataJpaTest
+class DeviceServiceTest {
+
+    private static final String DEVICE_IDENTIFIER = "device-A";
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
+
+    @Autowired
+    private DeviceRepository deviceRepository;
+
+    @Autowired
+    private SeniorRepository seniorRepository;
+
+    @Autowired
+    private FamilyRepository familyRepository;
+
+    @Autowired
+    private FamilyMemberRepository familyMemberRepository;
+
+    private DeviceService deviceService;
+    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
+    private DeviceService deviceService() {
+        if (deviceService == null) {
+            deviceService = new DeviceService(
+                    deviceRepository,
+                    seniorRepository,
+                    familyMemberRepository,
+                    passwordEncoder
+            );
+        }
+        return deviceService;
+    }
+
+    @Test
+    void registerDeviceIssuesDeviceAuthTokenWhenCredentialIsMissing() {
+        User parent = saveUser("parent", Role.PARENT);
+
+        DeviceCredentialIssueResult result = deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+
+        assertThat(result.deviceAuthToken()).isNotBlank();
+        Device device = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow();
+        assertThat(device.getDeviceAuthTokenHash()).isNotBlank();
+    }
+
+    @Test
+    void deviceAuthTokenStoresOnlyHashInsteadOfRawToken() {
+        User parent = saveUser("parent", Role.PARENT);
+
+        DeviceCredentialIssueResult result = deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+
+        Device device = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow();
+        assertThat(device.getDeviceAuthTokenHash()).isNotEqualTo(result.deviceAuthToken());
+        assertThat(passwordEncoder.matches(result.deviceAuthToken(), device.getDeviceAuthTokenHash())).isTrue();
+    }
+
+    @Test
+    void verifyDeviceCredentialSucceedsWithCorrectDeviceIdentifierAndToken() {
+        User parent = saveUser("parent", Role.PARENT);
+        DeviceCredentialIssueResult result = deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+
+        boolean verified = deviceService().verifyDeviceCredential(DEVICE_IDENTIFIER, result.deviceAuthToken());
+
+        assertThat(verified).isTrue();
+    }
+
+    @Test
+    void verifyDeviceCredentialFailsWithWrongToken() {
+        User parent = saveUser("parent", Role.PARENT);
+        deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+
+        boolean verified = deviceService().verifyDeviceCredential(DEVICE_IDENTIFIER, "wrong-device-auth-token");
+
+        assertThat(verified).isFalse();
+    }
+
+    @Test
+    void verifyDeviceCredentialFailsWhenTokenBelongsToAnotherDevice() {
+        User parent = saveUser("parent", Role.PARENT);
+        DeviceCredentialIssueResult deviceA = deviceService().registerDevice(parent, "device-A");
+        deviceService().registerDevice(parent, "device-B");
+
+        boolean verified = deviceService().verifyDeviceCredential("device-B", deviceA.deviceAuthToken());
+
+        assertThat(verified).isFalse();
+    }
+
+    @Test
+    void registerDeviceDoesNotReissueDeviceAuthTokenWhenCredentialAlreadyExists() {
+        User parent = saveUser("parent", Role.PARENT);
+        DeviceCredentialIssueResult first = deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+        Device device = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow();
+        String firstHash = device.getDeviceAuthTokenHash();
+
+        DeviceCredentialIssueResult second = deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+
+        assertThat(first.deviceAuthToken()).isNotBlank();
+        assertThat(second.deviceAuthToken()).isNull();
+        assertThat(deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow().getDeviceAuthTokenHash())
+                .isEqualTo(firstHash);
+    }
+
+    @Test
+    void registerDeviceIssuesDeviceAuthTokenForExistingDeviceWithoutCredential() {
+        User parent = saveUser("parent", Role.PARENT);
+        deviceRepository.saveAndFlush(Device.builder()
+                .user(parent)
+                .deviceIdentifier(DEVICE_IDENTIFIER)
+                .build());
+
+        DeviceCredentialIssueResult result = deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+
+        Device device = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow();
+        assertThat(result.deviceAuthToken()).isNotBlank();
+        assertThat(device.getDeviceAuthTokenHash()).isNotBlank();
+        assertThat(deviceService().verifyDeviceCredential(DEVICE_IDENTIFIER, result.deviceAuthToken())).isTrue();
+    }
+
+    @Test
+    void updateFcmTokenRegistersDeviceAndStoresFcmToken() {
+        User parent = saveUser("parent", Role.PARENT);
+
+        deviceService().updateFcmToken(parent, "fcm-token-parent", DEVICE_IDENTIFIER);
+
+        Device device = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow();
+        assertThat(device.getUser().getUsersId()).isEqualTo(parent.getUsersId());
+        assertThat(device.getDeviceIdentifier()).isEqualTo(DEVICE_IDENTIFIER);
+        assertThat(device.getDeviceToken()).isEqualTo("fcm-token-parent");
+        assertThat(device.getConnectionStatus()).isEqualTo(DeviceStatus.ONLINE);
+    }
+
+    @Test
+    void registerDeviceRegistersDeviceWithoutFcmToken() {
+        User parent = saveUser("parent", Role.PARENT);
+
+        deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+
+        Device device = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow();
+        assertThat(device.getUser().getUsersId()).isEqualTo(parent.getUsersId());
+        assertThat(device.getDeviceIdentifier()).isEqualTo(DEVICE_IDENTIFIER);
+        assertThat(device.getDeviceToken()).isNull();
+    }
+
+    @Test
+    void registerDeviceDoesNotCreateDuplicateRowForSameDeviceIdentifier() {
+        User parent = saveUser("parent", Role.PARENT);
+
+        deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+        deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+
+        assertThat(deviceRepository.count()).isEqualTo(1L);
+        assertThat(deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER)).isPresent();
+    }
+
+    @Test
+    void sameUserCanRegisterMultipleDevices() {
+        User parent = saveUser("parent", Role.PARENT);
+
+        deviceService().registerDevice(parent, "device-A");
+        deviceService().registerDevice(parent, "device-B");
+
+        assertThat(deviceRepository.findAllByUser(parent))
+                .extracting(Device::getDeviceIdentifier)
+                .containsExactlyInAnyOrder("device-A", "device-B");
+    }
+
+    @Test
+    void logoutClearsDeviceTokenButKeepsConnectionStatus() {
+        User parent = saveUser("parent", Role.PARENT);
+
+        deviceService().registerToken(parent, "fcm-token-parent", DEVICE_IDENTIFIER);
+        deviceService().clearToken(parent, DEVICE_IDENTIFIER);
+
+        Device device = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow();
+
+        assertThat(device.getDeviceToken()).isNull();
+        assertThat(device.getConnectionStatus()).isEqualTo(DeviceStatus.ONLINE);
+    }
+
+    @Test
+    void logoutKeepsDeviceRowAndUserDeviceIdentifierRelation() {
+        User parent = saveUser("parent", Role.PARENT);
+        DeviceCredentialIssueResult result = deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+        deviceService().updateFcmToken(parent, "fcm-token-parent", DEVICE_IDENTIFIER);
+        String deviceAuthTokenHash = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER)
+                .orElseThrow()
+                .getDeviceAuthTokenHash();
+
+        deviceService().clearToken(parent, DEVICE_IDENTIFIER);
+
+        Device device = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow();
+        assertThat(device.getUser().getUsersId()).isEqualTo(parent.getUsersId());
+        assertThat(device.getDeviceIdentifier()).isEqualTo(DEVICE_IDENTIFIER);
+        assertThat(device.getDeviceToken()).isNull();
+        assertThat(device.getConnectionStatus()).isEqualTo(DeviceStatus.ONLINE);
+        assertThat(device.getDeviceAuthTokenHash()).isEqualTo(deviceAuthTokenHash);
+        assertThat(deviceService().verifyDeviceCredential(DEVICE_IDENTIFIER, result.deviceAuthToken())).isTrue();
+    }
+
+    @Test
+    void deletingRefreshTokenDoesNotDeleteRegisteredDevice() {
+        User parent = saveUser("parent", Role.PARENT);
+        DeviceCredentialIssueResult result = deviceService().registerDevice(parent, DEVICE_IDENTIFIER);
+        String deviceAuthTokenHash = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER)
+                .orElseThrow()
+                .getDeviceAuthTokenHash();
+        refreshTokenRepository.saveAndFlush(RefreshToken.builder()
+                .user(parent)
+                .deviceIdentifier(DEVICE_IDENTIFIER)
+                .tokenHash("refresh-token-hash-" + UUID.randomUUID())
+                .expiresAt(LocalDateTime.now().minusMinutes(1))
+                .build());
+
+        refreshTokenRepository.deleteByExpiresAtBefore(LocalDateTime.now());
+
+        assertThat(refreshTokenRepository.count()).isZero();
+        Device device = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow();
+        assertThat(device.getUser().getUsersId()).isEqualTo(parent.getUsersId());
+        assertThat(device.getDeviceIdentifier()).isEqualTo(DEVICE_IDENTIFIER);
+        assertThat(device.getDeviceAuthTokenHash()).isEqualTo(deviceAuthTokenHash);
+        assertThat(deviceService().verifyDeviceCredential(DEVICE_IDENTIFIER, result.deviceAuthToken())).isTrue();
+    }
+
+    @Test
+    void updateDeviceStatusSavesAllDeviceStatusFields() {
+        Family family = familyRepository.saveAndFlush(
+                Family.builder()
+                        .seniorCode("family-" + UUID.randomUUID())
+                        .build()
+        );
+
+        User parent = saveUser("parent", Role.PARENT, family);
+
+        DeviceStatusUpdateRequest request =
+                new DeviceStatusUpdateRequest(
+                        DEVICE_IDENTIFIER,
+                        "Galaxy S24",
+                        72,
+                        true,   // charging
+                        true,   // deviceStatusSharingEnabled
+                        true,   // networkConnected
+                        true,   // defaultHomeEnabled
+                        true,   // locationPermissionGranted
+                        false,  // gpsEnabled
+                        true,   // notificationPermissionGranted
+                        true    // appExecutionMaintained
+                );
+
+        deviceService().updateDeviceStatus(parent, request);
+
+        Device device = deviceRepository
+                .findByDeviceIdentifier(DEVICE_IDENTIFIER)
+                .orElseThrow();
+
+        assertThat(device.getDeviceName()).isEqualTo("Galaxy S24");
+        assertThat(device.getConnectionStatus()).isEqualTo(DeviceStatus.ONLINE);
+        assertThat(device.getBatteryLevel()).isEqualTo(72);
+        assertThat(device.getCharging()).isTrue();
+        assertThat(device.getDeviceStatusSharingEnabled()).isTrue();
+        assertThat(device.getNetworkConnected()).isTrue();
+        assertThat(device.getDefaultHomeEnabled()).isTrue();
+        assertThat(device.getLocationPermissionGranted()).isTrue();
+        assertThat(device.getGpsEnabled()).isFalse();
+        assertThat(device.getNotificationPermissionGranted()).isTrue();
+        assertThat(device.getAppExecutionMaintained()).isTrue();
+        assertThat(device.getLastConnectedAt()).isNotNull();
+    }
+
+
+    @Test
+    void patchDeviceStatusUpdatesOnlyProvidedFields() {
+        // given: 기존 기기 상태 저장
+        User parent = saveUser("parent", Role.PARENT);
+
+        Device device = deviceRepository.saveAndFlush(
+                Device.builder()
+                        .user(parent)
+                        .deviceIdentifier(DEVICE_IDENTIFIER)
+                        .deviceName("Galaxy S24")
+                        .connectionStatus(DeviceStatus.ONLINE)
+                        .batteryLevel(72)
+                        .charging(true)
+                        .networkConnected(true)
+                        .gpsEnabled(false)
+                        .lastConnectedAt(LocalDateTime.now().minusHours(1))
+                        .build()
+        );
+
+        LocalDateTime previousConnectedAt = device.getLastConnectedAt();
+
+        // when: 배터리 잔량만 변경
+        DeviceStatusPatchRequest request =
+                new DeviceStatusPatchRequest(
+                        DEVICE_IDENTIFIER,
+                        null,   // deviceName
+                        85,     // batteryLevel
+                        null,   // charging
+                        null,   // deviceStatusSharingEnabled
+                        null,   // networkConnected
+                        null,   // defaultHomeEnabled
+                        null,   // locationPermissionGranted
+                        null,   // gpsEnabled
+                        null,   // notificationPermissionGranted
+                        null    // appExecutionMaintained
+                );
+
+        deviceService().patchDeviceStatus(parent, request);
+
+        deviceRepository.flush();
+
+        // then: 변경된 필드만 갱신되고 나머지는 유지
+        Device updatedDevice = deviceRepository
+                .findByDeviceIdentifier(DEVICE_IDENTIFIER)
+                .orElseThrow();
+
+        assertThat(updatedDevice.getBatteryLevel()).isEqualTo(85);
+        assertThat(updatedDevice.getDeviceName()).isEqualTo("Galaxy S24");
+        assertThat(updatedDevice.getCharging()).isTrue();
+        assertThat(updatedDevice.getNetworkConnected()).isTrue();
+        assertThat(updatedDevice.getGpsEnabled()).isFalse();
+        assertThat(updatedDevice.getConnectionStatus())
+                .isEqualTo(DeviceStatus.ONLINE);
+        assertThat(updatedDevice.getLastConnectedAt())
+                .isAfter(previousConnectedAt);
+    }
+
+
+    @Test
+    void patchDeviceStatusUpdatesFalseAndZeroValues() {
+        // given
+        User parent = saveUser("parent", Role.PARENT);
+
+        deviceRepository.saveAndFlush(
+                Device.builder()
+                        .user(parent)
+                        .deviceIdentifier(DEVICE_IDENTIFIER)
+                        .connectionStatus(DeviceStatus.ONLINE)
+                        .batteryLevel(72)
+                        .charging(true)
+                        .networkConnected(true)
+                        .build()
+        );
+
+        DeviceStatusPatchRequest request =
+                new DeviceStatusPatchRequest(
+                        DEVICE_IDENTIFIER,
+                        null,
+                        0,       // batteryLevel
+                        false,   // charging
+                        null,
+                        false,   // networkConnected
+                        null,
+                        null,
+                        null,
+                        null,
+                        null
+                );
+
+        // when
+        deviceService().patchDeviceStatus(parent, request);
+
+        deviceRepository.flush();
+
+        // then
+        Device updatedDevice = deviceRepository
+                .findByDeviceIdentifier(DEVICE_IDENTIFIER)
+                .orElseThrow();
+
+        assertThat(updatedDevice.getBatteryLevel()).isZero();
+        assertThat(updatedDevice.getCharging()).isFalse();
+        assertThat(updatedDevice.getNetworkConnected()).isFalse();
+    }
+
+
+    @Test
+    void patchDeviceStatusRejectsOtherUsersDevice() {
+        // given: 서로 다른 시니어 계정
+        User owner = saveUser("owner", Role.PARENT);
+        User otherParent = saveUser("other-parent", Role.PARENT);
+
+        deviceRepository.saveAndFlush(
+                Device.builder()
+                        .user(owner)
+                        .deviceIdentifier(DEVICE_IDENTIFIER)
+                        .connectionStatus(DeviceStatus.ONLINE)
+                        .batteryLevel(72)
+                        .build()
+        );
+
+        DeviceStatusPatchRequest request =
+                new DeviceStatusPatchRequest(
+                        DEVICE_IDENTIFIER,
+                        null,
+                        85,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null
+                );
+
+        // when & then: 다른 사용자는 수정 불가
+        assertThatThrownBy(() ->
+                deviceService().patchDeviceStatus(otherParent, request)
+        ).isInstanceOf(BusinessException.class);
+
+        // 기존 값 유지
+        Device device = deviceRepository
+                .findByDeviceIdentifier(DEVICE_IDENTIFIER)
+                .orElseThrow();
+
+        assertThat(device.getBatteryLevel()).isEqualTo(72);
+    }
+
+
+    @Test
+    void patchDeviceStatusRejectsDisconnectedDevice() {
+        // given: 연결 해제된 기기
+        User parent = saveUser("parent", Role.PARENT);
+
+        deviceRepository.saveAndFlush(
+                Device.builder()
+                        .user(parent)
+                        .deviceIdentifier(DEVICE_IDENTIFIER)
+                        .connectionStatus(DeviceStatus.DISCONNECTED)
+                        .batteryLevel(72)
+                        .build()
+        );
+
+        DeviceStatusPatchRequest request =
+                new DeviceStatusPatchRequest(
+                        DEVICE_IDENTIFIER,
+                        null,
+                        85,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null
+                );
+
+        // when & then: 연결 해제된 기기는 수정 불가
+        assertThatThrownBy(() ->
+                deviceService().patchDeviceStatus(parent, request)
+        ).isInstanceOf(BusinessException.class);
+
+        Device device = deviceRepository
+                .findByDeviceIdentifier(DEVICE_IDENTIFIER)
+                .orElseThrow();
+
+        // 연결 해제 상태와 기존 배터리 값 유지
+        assertThat(device.getConnectionStatus())
+                .isEqualTo(DeviceStatus.DISCONNECTED);
+        assertThat(device.getBatteryLevel()).isEqualTo(72);
+    }
+
+
+    @Test
+    void patchDeviceStatusRejectsNonexistentDevice() {
+        // given: 등록되지 않은 기기
+        User parent = saveUser("parent", Role.PARENT);
+
+        DeviceStatusPatchRequest request =
+                new DeviceStatusPatchRequest(
+                        "unknown-device",
+                        null,
+                        85,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null
+                );
+
+        // when & then: 존재하지 않는 기기는 수정 불가
+        assertThatThrownBy(() ->
+                deviceService().patchDeviceStatus(parent, request)
+        ).isInstanceOf(BusinessException.class);
+
+        // PATCH 요청으로 새로운 기기가 생성되지 않았는지 확인
+        assertThat(deviceRepository.findByDeviceIdentifier("unknown-device"))
+                .isEmpty();
+    }
+
+
+
+    // 기기 A에서 부모 로그인 → 로그아웃 → 같은 기기 A에서 자녀 로그인.
+    // 로그아웃 시 FCM 토큰만 제거하고 연결 상태는 유지한다.
+    // 같은 기기에서 다른 계정이 로그인하면 기기 row의 소유자와 FCM 토큰이
+    // 새 계정으로 변경되고 연결 상태는 ONLINE을 유지한다.
+    @Test
+    void reloginWithDifferentAccountOnSameDeviceLeavesOnlyOneActiveTokenOwnedByNewAccount() {
+        User parent = saveUser("parent", Role.PARENT);
+        User child = saveUser("child", Role.CHILD);
+
+        deviceService().registerToken(parent, "fcm-token-parent", DEVICE_IDENTIFIER);
+        deviceService().clearToken(parent, DEVICE_IDENTIFIER);
+        deviceService().registerToken(child, "fcm-token-child", DEVICE_IDENTIFIER);
+
+        assertThat(deviceRepository.count()).isEqualTo(1L);
+
+        Device device = deviceRepository.findByDeviceIdentifier(DEVICE_IDENTIFIER).orElseThrow();
+
+        assertThat(device.getUser().getUsersId()).isEqualTo(child.getUsersId());
+        assertThat(device.getDeviceToken()).isEqualTo("fcm-token-child");
+        assertThat(device.getConnectionStatus())
+                .isEqualTo(DeviceStatus.ONLINE);
+    }
+
+    @Test
+    void disconnectOwnDeviceDisconnectsAllDevicesOfCurrentSenior() {
+        User parent = saveUser("parent", Role.PARENT);
+
+        deviceService().updateFcmToken(
+                parent,
+                "fcm-token-A",
+                "device-A"
+        );
+        deviceService().updateFcmToken(
+                parent,
+                "fcm-token-B",
+                "device-B"
+        );
+
+        deviceService().disconnectOwnDevice(parent);
+
+        assertThat(deviceRepository.findAllByUser(parent))
+                .extracting(Device::getConnectionStatus)
+                .containsOnly(DeviceStatus.DISCONNECTED);
+    }
+
+    @Test
+    void reconnectDeviceWithoutRegisteredDeviceDoesNothing() {
+        User parent = saveUser("parent", Role.PARENT);
+
+        deviceService().reconnectDevice(parent);
+
+        assertThat(deviceRepository.count()).isZero();
+    }
+
+    @Test
+    void reconnectionStatusReturnsTrueWhenFamilyConnectedAndDeviceDisconnected() {
+        Family family = familyRepository.saveAndFlush(
+                Family.builder()
+                        .seniorCode("family-" + UUID.randomUUID())
+                        .build()
+        );
+        User parent = saveUser("parent", Role.PARENT, family);
+
+        deviceService().updateFcmToken(
+                parent,
+                "fcm-token",
+                DEVICE_IDENTIFIER
+        );
+        deviceService().disconnectOwnDevice(parent);
+
+        DeviceReconnectionStatusResponse response =
+                deviceService().getReconnectionStatus(parent);
+
+        assertThat(response.familyConnected()).isTrue();
+        assertThat(response.deviceDisconnected()).isTrue();
+    }
+
+    @Test
+    void reconnectionStatusReturnsFalseWhenDeviceIsOnline() {
+        Family family = familyRepository.saveAndFlush(
+                Family.builder()
+                        .seniorCode("family-" + UUID.randomUUID())
+                        .build()
+        );
+        User parent = saveUser("parent", Role.PARENT, family);
+
+        deviceService().updateFcmToken(
+                parent,
+                "fcm-token",
+                DEVICE_IDENTIFIER
+        );
+
+        DeviceReconnectionStatusResponse response =
+                deviceService().getReconnectionStatus(parent);
+
+        assertThat(response.familyConnected()).isTrue();
+        assertThat(response.deviceDisconnected()).isFalse();
+    }
+
+    @Test
+    void reconnectionStatusReturnsFamilyDisconnectedWhenNoFamilyExists() {
+        User parent = saveUser("parent", Role.PARENT);
+
+        DeviceReconnectionStatusResponse response =
+                deviceService().getReconnectionStatus(parent);
+
+        assertThat(response.familyConnected()).isFalse();
+        assertThat(response.deviceDisconnected()).isFalse();
+    }
+
+    @Test
+    void subManagerCanDisconnectOnlyOwnRelationshipFromSenior() {
+        Family family = familyRepository.saveAndFlush(
+                Family.builder()
+                        .seniorCode("family-" + UUID.randomUUID())
+                        .build()
+        );
+
+        User primary = saveUser("primary", Role.CHILD, family);
+        User sub = saveUser("sub", Role.CHILD);
+
+        familyMemberRepository.saveAndFlush(
+                FamilyMember.builder()
+                        .user(sub)
+                        .family(family)
+                        .managerType(ManagerType.SUB)
+                        .build()
+        );
+
+        Senior senior = seniorRepository.saveAndFlush(
+                senior(
+                        "senior",
+                        family,
+                        primary,
+                        null,
+                        37.1,
+                        127.1
+                )
+        );
+
+        deviceService().disconnectDevice(
+                sub,
+                senior.getSeniorId()
+        );
+
+        assertThat(
+                familyMemberRepository.existsByUserAndFamily(
+                        sub,
+                        family
+                )
+        ).isFalse();
+
+        assertThat(
+                familyMemberRepository.existsByUserAndFamily(
+                        primary,
+                        family
+                )
+        ).isTrue();
+
+        assertThat(
+                seniorRepository.findById(senior.getSeniorId())
+        ).isPresent();
+    }
+
+    @Test
+    void primaryManagerCannotDisconnectFromSenior() {
+        Family family = familyRepository.saveAndFlush(
+                Family.builder()
+                        .seniorCode("family-" + UUID.randomUUID())
+                        .build()
+        );
+
+        User primary = saveUser(
+                "primary",
+                Role.CHILD,
+                family
+        );
+
+        Senior senior = seniorRepository.saveAndFlush(
+                senior(
+                        "senior",
+                        family,
+                        primary,
+                        null,
+                        37.1,
+                        127.1
+                )
+        );
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                deviceService().disconnectDevice(
+                        primary,
+                        senior.getSeniorId()
+                )
+        ).isInstanceOf(
+                com.example.senioron.global.apiPayload.exception.BusinessException.class
+        );
+
+        assertThat(
+                familyMemberRepository.existsByUserAndFamily(
+                        primary,
+                        family
+                )
+        ).isTrue();
+    }
+
+    @Test
+    void disconnectingSubManagerKeepsOtherSubManagerRelationship() {
+        Family family = familyRepository.saveAndFlush(
+                Family.builder()
+                        .seniorCode("family-" + UUID.randomUUID())
+                        .build()
+        );
+
+        User primary = saveUser("primary", Role.CHILD, family);
+        User subA = saveUser("sub-a", Role.CHILD);
+        User subB = saveUser("sub-b", Role.CHILD);
+
+        familyMemberRepository.saveAndFlush(
+                FamilyMember.builder()
+                        .user(subA)
+                        .family(family)
+                        .managerType(ManagerType.SUB)
+                        .build()
+        );
+
+        familyMemberRepository.saveAndFlush(
+                FamilyMember.builder()
+                        .user(subB)
+                        .family(family)
+                        .managerType(ManagerType.SUB)
+                        .build()
+        );
+
+        Senior senior = seniorRepository.saveAndFlush(
+                senior(
+                        "senior",
+                        family,
+                        primary,
+                        null,
+                        37.1,
+                        127.1
+                )
+        );
+
+        deviceService().disconnectDevice(
+                subA,
+                senior.getSeniorId()
+        );
+
+        assertThat(
+                familyMemberRepository.existsByUserAndFamily(
+                        subA,
+                        family
+                )
+        ).isFalse();
+
+        assertThat(
+                familyMemberRepository.existsByUserAndFamily(
+                        subB,
+                        family
+                )
+        ).isTrue();
+
+        assertThat(
+                familyMemberRepository.existsByUserAndFamily(
+                        primary,
+                        family
+                )
+        ).isTrue();
+    }
+
+    @Test
+    void homeLocationUsesSeniorLinkedToCurrentParentInsteadOfFirstSeniorInFamily() {
+        Family family = familyRepository.saveAndFlush(Family.builder()
+                .seniorCode("family-" + UUID.randomUUID()).build());
+        Family otherFamily = familyRepository.saveAndFlush(Family.builder()
+                .seniorCode("family-" + UUID.randomUUID()).build());
+        User child = saveUser("child-owner", Role.CHILD, family);
+        User currentParent = saveUser("current-parent", Role.PARENT, family);
+        User otherParent = saveUser("other-parent", Role.PARENT, otherFamily);
+
+        seniorRepository.saveAndFlush(senior("first-senior", otherFamily, child, otherParent, 37.1, 127.1));
+        seniorRepository.saveAndFlush(senior("linked-senior", family, child, currentParent, 37.2, 127.2));
+
+        var response = deviceService().getHomeLocation(currentParent);
+
+        assertThat(response.latitude()).isEqualTo(37.2);
+        assertThat(response.longitude()).isEqualTo(127.2);
+    }
+
+    private Senior senior(String name, Family family, User registeredBy, User parent,
+                          double latitude, double longitude) {
+        return Senior.builder()
+                .name(name)
+                .birth(LocalDate.of(1950, 1, 1))
+                .phoneNumber("01012345678")
+                .family(family)
+                .registeredBy(registeredBy)
+                .parentUser(parent)
+                .latitude(latitude)
+                .longitude(longitude)
+                .build();
+    }
+
+    private User saveUser(String prefix, Role role) {
+        return saveUser(prefix, role, null);
+    }
+
+    private User saveUser(String prefix, Role role, Family family) {
+        String unique = UUID.randomUUID().toString();
+
+        User user = userRepository.saveAndFlush(
+                User.builder()
+                        .loginId(prefix + "-" + unique)
+                        .email(prefix + "-" + unique + "@test.com")
+                        .password("encoded-password")
+                        .name(prefix)
+                        .role(role)
+                        .family(family)
+                        .build()
+        );
+
+        if (family != null) {
+            familyMemberRepository.saveAndFlush(
+                    FamilyMember.builder()
+                            .user(user)
+                            .family(family)
+                            .managerType(role == Role.CHILD ? ManagerType.PRIMARY : ManagerType.NONE)
+                            .build()
+            );
+            user.updateFamily(family);
+        }
+
+        return user;
+    }
+}

@@ -1,0 +1,319 @@
+package com.example.senioron.domain.event.service;
+
+import com.example.senioron.domain.event.dto.request.InactivityRequest;
+import com.example.senioron.domain.event.dto.request.OutingReturnRequest;
+import com.example.senioron.domain.event.dto.request.RiskLinkRequest;
+import com.example.senioron.domain.event.dto.SosEventCreation;
+import com.example.senioron.domain.event.dto.SosAddressLookupRequested;
+import com.example.senioron.domain.event.dto.request.SosEventRequest;
+import com.example.senioron.domain.event.dto.response.EventDetailResponse;
+import com.example.senioron.domain.event.dto.response.InactivityResponse;
+import com.example.senioron.domain.event.dto.response.OutingReturnResponse;
+import com.example.senioron.domain.event.dto.response.RiskLinkResponse;
+import com.example.senioron.domain.event.dto.response.SosEventResponse;
+import com.example.senioron.domain.event.entity.Event;
+import com.example.senioron.domain.event.entity.EventType;
+import com.example.senioron.domain.event.entity.RiskCheckResult;
+import com.example.senioron.domain.event.repository.EventRepository;
+import com.example.senioron.domain.event.util.GeocodingClient;
+import com.example.senioron.domain.event.util.SafeBrowsingClient;
+import com.example.senioron.domain.notification.dto.NotificationPreparationResult;
+import com.example.senioron.domain.user.entity.Role;
+import com.example.senioron.domain.notification.service.NotificationService;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
+import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
+import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.global.apiPayload.code.ErrorCode;
+import com.example.senioron.global.apiPayload.exception.BusinessException;
+import io.micrometer.core.instrument.MeterRegistry;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationContext;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.dao.DataIntegrityViolationException;
+import java.util.Optional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class EventService {
+
+    private static final String SOS_EVENT_METRIC = "sos_event_total";
+    private static final String TAG_RESULT = "result";
+
+    private final EventRepository eventRepository;
+    private final NotificationService notificationService;
+    private final GeocodingClient geocodingClient;
+    private final SafeBrowsingClient safeBrowsingClient;
+    private final ApplicationContext applicationContext;
+    private final UserRepository userRepository;
+    private final SeniorRepository seniorRepository;
+    private final FamilyMemberRepository familyMemberRepository;
+    private final MeterRegistry meterRegistry;
+
+    /**
+     * SOS 이벤트와 인앱 알림을 먼저 커밋하고, FCM은 전용 풀에서 비동기로 발송한다.
+     * 푸시 실패는 API 실패로 바꾸지 않고 로그와 메트릭으로 관찰한다.
+     */
+    public SosEventResponse createSosEvent(User user, SosEventRequest req){
+        validateParent(user);
+        EventService self = applicationContext.getBean(EventService.class);
+        if (req.getClientEventId() != null) {
+            Optional<SosEventResponse> replay = self.findSosReplay(user, req.getClientEventId());
+            if (replay.isPresent()) return replay.get();
+        }
+        try {
+            SosEventCreation creation = self.saveSosEvent(user, req);
+            return SosEventResponse.of(creation.event(), creation.notificationResult());
+        } catch (DataIntegrityViolationException failure) {
+            if (req.getClientEventId() != null) {
+                Optional<SosEventResponse> replay = self.findSosReplay(user, req.getClientEventId());
+                if (replay.isPresent()) return replay.get();
+            }
+            throw failure;
+        }
+    }
+
+    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
+    public Optional<SosEventResponse> findSosReplay(User user, String clientEventId) {
+        return eventRepository.findByTriggeredUser_UsersIdAndClientEventIdAndEventType(
+                user.getUsersId(), clientEventId, EventType.SOS)
+                .map(event -> SosEventResponse.replay(event, SosAddressLookupService.PENDING_ADDRESS));
+    }
+
+    @Transactional
+    public SosEventCreation saveSosEvent(User user, SosEventRequest req){
+        Event event = Event.builder()
+                .user(user)
+                .triggeredUser(user)
+                .senior(resolveSenior(user))
+                .deviceBattery(req.getDeviceBattery())
+                .eventType(EventType.SOS)
+                .latitude(req.getLatitude())
+                .longitude(req.getLongitude())
+                .address(SosAddressLookupService.PENDING_ADDRESS)
+                .clientEventId(req.getClientEventId())
+                .build();
+
+        Event savedEvent = eventRepository.save(event);
+        if (req.getClientEventId() != null) eventRepository.flush();
+        NotificationPreparationResult notificationResult =
+                notificationService.prepareSosNotificationResult(savedEvent);
+        savedEvent.recordPreparationResult(notificationResult);
+
+        // REQUIRED 전파로 외부 트랜잭션에 참여한 경우에도 실제 커밋 이후에만 발송한다.
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                countSosEvent("success");
+                notificationService.dispatchSosAsync(notificationResult.targets());
+            }
+        });
+
+        // 롤백 시 조회하지 않으며, 커밋 후 주소 조회 결과를 기다리지 않고 발송한다.
+        applicationContext.publishEvent(new SosAddressLookupRequested(
+                savedEvent.getEventId(), savedEvent.getLatitude(), savedEvent.getLongitude()));
+
+        return new SosEventCreation(savedEvent, notificationResult);
+    }
+
+    public InactivityResponse createInactivityEvent(User user, InactivityRequest req){
+        validateParent(user);
+        EventService self = applicationContext.getBean(EventService.class);
+        if (req.getClientEventId() != null) {
+            Optional<InactivityResponse> replay = self.findInactivityReplay(user, req.getClientEventId());
+            if (replay.isPresent()) return replay.get();
+        }
+        String address = req.getLatitude() != null && req.getLongitude() != null
+                ? geocodingClient.reverseGeocode(req.getLatitude(), req.getLongitude())
+                : null;
+        try {
+            return self.saveInactivityEvent(address, user, req);
+        } catch (DataIntegrityViolationException failure) {
+            if (req.getClientEventId() != null) {
+                Optional<InactivityResponse> replay = self.findInactivityReplay(user, req.getClientEventId());
+                if (replay.isPresent()) return replay.get();
+            }
+            throw failure;
+        }
+    }
+
+    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
+    public Optional<InactivityResponse> findInactivityReplay(User user, String clientEventId) {
+        return eventRepository.findByTriggeredUser_UsersIdAndClientEventIdAndEventType(
+                user.getUsersId(), clientEventId, EventType.INACTIVITY).map(InactivityResponse::replay);
+    }
+
+    @Transactional
+    public InactivityResponse saveInactivityEvent(String address, User user, InactivityRequest req){
+        Event event = Event.builder()
+                .user(user)
+                .triggeredUser(user)
+                .senior(resolveSenior(user))
+                .deviceBattery(req.getDeviceBattery())
+                .eventType(EventType.INACTIVITY)
+                .latitude(req.getLatitude())
+                .longitude(req.getLongitude())
+                .address(address)
+                .lastSeenAt(req.getLastSeenAt())
+                .clientEventId(req.getClientEventId())
+                .build();
+
+        Event savedEvent = eventRepository.save(event);
+        if (req.getClientEventId() != null) eventRepository.flush();
+        NotificationPreparationResult result = notificationService.createFormEvent(savedEvent);
+        savedEvent.recordPreparationResult(result);
+
+        return InactivityResponse.of(savedEvent, result);
+    }
+
+    public OutingReturnResponse createOutingReturnEvent(User user, OutingReturnRequest req) {
+        validateParent(user);
+        EventService self = applicationContext.getBean(EventService.class);
+        if (req.getClientEventId() != null) {
+            Optional<OutingReturnResponse> existing = self.findOutingReturnReplay(user, req.getClientEventId());
+            if (existing.isPresent()) {
+                return existing.get();
+            }
+        }
+        String address = geocodingClient.reverseGeocode(req.getLatitude(), req.getLongitude());
+        try {
+            return self.saveOutingReturnEvent(address, user, req);
+        } catch (DataIntegrityViolationException failure) {
+            // 유일 제약 경쟁의 패자는 롤백된 저장 트랜잭션 밖에서 승자의 결과를 다시 읽는다.
+            if (req.getClientEventId() != null) {
+                Optional<OutingReturnResponse> existing = self.findOutingReturnReplay(user, req.getClientEventId());
+                if (existing.isPresent()) {
+                    return existing.get();
+                }
+            }
+            throw failure;
+        }
+    }
+
+    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
+    public Optional<OutingReturnResponse> findOutingReturnReplay(User user, String clientEventId) {
+        return eventRepository.findByTriggeredUser_UsersIdAndClientEventIdAndEventType(
+                user.getUsersId(), clientEventId, EventType.OUTING_RETURN).map(OutingReturnResponse::of);
+    }
+
+    @Transactional
+    public OutingReturnResponse saveOutingReturnEvent(String address, User user, OutingReturnRequest req) {
+        Event event = Event.builder()
+                .user(user)
+                .triggeredUser(user)
+                .senior(resolveSenior(user))
+                .eventType(EventType.OUTING_RETURN)
+                .phase(req.getPhase())
+                .detectionType(req.getDetectionType())
+                .clientEventId(req.getClientEventId())
+                .detectedAt(req.getDetectedAt() == null ? null
+                        : req.getDetectedAt().atZoneSameInstant(java.time.ZoneId.of("Asia/Seoul")).toLocalDateTime())
+                .latitude(req.getLatitude())
+                .longitude(req.getLongitude())
+                .deviceBattery(req.getDeviceBattery())
+                .address(address)
+                .build();
+
+        Event savedEvent = eventRepository.save(event);
+        if (req.getClientEventId() != null) {
+            // 알림 생성 이전에 유일 제약을 확인하여 경쟁에서 진 요청의 부수 효과를 차단한다.
+            eventRepository.flush();
+        }
+        NotificationPreparationResult result = notificationService.createFormEvent(savedEvent);
+        savedEvent.recordPreparationResult(result);
+
+        return OutingReturnResponse.of(savedEvent, result);
+    }
+
+    /**
+     * 세이프 브라우징 검사가 실패(UNAVAILABLE)해도 이벤트는 항상 저장한다.
+     * SOS와 동일한 원칙: 외부 API 장애로 알람 기록 자체가 유실되면 안 되기 때문이다.
+     * 이 경우 isDangerous는 null("모름")로 남고, 위험이 확인된 경우에만 알림을 보낸다.
+     */
+    @Transactional
+    public RiskLinkResponse saveRiskLinkEvent(User user, RiskLinkRequest req) {
+
+        validateParent(user);
+        RiskCheckResult result = safeBrowsingClient.checkUrl(req.getLinkUrl());
+        Boolean isDangerous = switch (result) {
+            case DANGEROUS -> true;
+            case SAFE -> false;
+            case UNAVAILABLE -> null;
+        };
+
+        Event event = Event.builder()
+                .user(user)
+                .triggeredUser(user)
+                .senior(resolveSenior(user))
+                .eventType(EventType.RISK_LINK)
+                .linkUrl(req.getLinkUrl())
+                .isDangerous(isDangerous)
+                .deviceBattery(req.getDeviceBattery())
+                .build();
+
+        Event savedEvent = eventRepository.save(event);
+        NotificationPreparationResult notificationResult;
+        if (Boolean.TRUE.equals(isDangerous)) {
+            notificationResult = notificationService.createFormEvent(savedEvent);
+        } else {
+            notificationResult = NotificationPreparationResult.notDispatched(
+                    savedEvent.getSenior() == null ? "SENIOR_NOT_LINKED"
+                            : isDangerous == null ? "RISK_CHECK_UNAVAILABLE" : "RISK_NOT_DETECTED");
+            log.info("위험링크 알림 발송 건너뜀. reason={}, eventId={}, seniorId={}, senderId={}",
+                    notificationResult.reason(), savedEvent.getEventId(),
+                    savedEvent.getSenior() == null ? null : savedEvent.getSenior().getSeniorId(),
+                    user.getUsersId());
+        }
+
+        return RiskLinkResponse.of(savedEvent, notificationResult);
+    }
+
+    @Transactional(readOnly = true)
+    public EventDetailResponse getEventDetail(User user, Long eventId){
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.EVENT_NOT_FOUND));
+        validateAccess(user, event);
+        return EventDetailResponse.of(event);
+    }
+
+    private void validateAccess(User principal, Event event) {
+        User currentUser = userRepository.findById(principal.getUsersId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        Senior senior = event.getSenior();
+        if (senior == null || senior.getFamily() == null
+                || !familyMemberRepository.existsByUserAndFamily(currentUser, senior.getFamily())) {
+            throw new BusinessException(ErrorCode.EVENT_ACCESS_DENIED);
+        }
+    }
+
+    private Senior resolveSenior(User user) {
+        validateParent(user);
+        Senior senior = seniorRepository.findByParentUser(user).orElse(null);
+        if (senior != null && (senior.getFamily() == null
+                || !familyMemberRepository.existsByUserAndFamily(user, senior.getFamily()))) {
+            throw new BusinessException(ErrorCode.EVENT_SENIOR_ACCESS_DENIED);
+        }
+        return senior;
+    }
+
+    private void validateParent(User user) {
+        if (user == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_AUTHENTICATED);
+        }
+        if (user.getRole() != Role.PARENT) {
+            throw new BusinessException(ErrorCode.EVENT_PARENT_ONLY);
+        }
+    }
+
+    private void countSosEvent(String result) {
+        meterRegistry.counter(SOS_EVENT_METRIC, TAG_RESULT, result).increment();
+    }
+}

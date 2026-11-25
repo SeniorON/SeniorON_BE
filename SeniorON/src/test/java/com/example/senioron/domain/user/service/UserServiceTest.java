@@ -1,0 +1,1623 @@
+package com.example.senioron.domain.user.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.InstanceOfAssertFactories.type;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+
+import com.example.senioron.domain.device.repository.DeviceRepository;
+import com.example.senioron.domain.device.service.DeviceCredentialIssueResult;
+import com.example.senioron.domain.device.service.DeviceService;
+import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyMember;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
+import com.example.senioron.domain.family.repository.FamilyRepository;
+import com.example.senioron.domain.family.service.FamilyConnectionService;
+import com.example.senioron.domain.family.service.FamilyPhotoWithdrawalService;
+import com.example.senioron.domain.inactivity.service.InactivitySettingService;
+import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.senior.entity.SeniorRelation;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
+import com.example.senioron.domain.senior.service.SeniorWithdrawalService;
+import com.example.senioron.domain.socialaccount.repository.SocialAccountRepository;
+import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeSendRequest;
+import com.example.senioron.domain.user.dto.request.SignupEmailVerificationCodeVerifyRequest;
+import com.example.senioron.domain.user.dto.request.TokenRefreshRequest;
+import com.example.senioron.domain.user.dto.request.MedicationConsentUpdateRequest;
+import com.example.senioron.domain.user.dto.request.UserLoginRequest;
+import com.example.senioron.domain.user.dto.request.UserRoleUpdateRequest;
+import com.example.senioron.domain.user.dto.request.UserSignUpRequest;
+import com.example.senioron.domain.user.dto.request.UserWithdrawalRequest;
+import com.example.senioron.domain.user.dto.response.OnboardingStatusResponse;
+import com.example.senioron.domain.user.dto.response.MedicationConsentResponse;
+import com.example.senioron.domain.user.dto.response.SignupEmailVerificationCodeVerifyResponse;
+import com.example.senioron.domain.user.dto.response.TokenRefreshResponse;
+import com.example.senioron.domain.user.dto.response.UserLoginResponse;
+import com.example.senioron.domain.user.dto.response.UserRoleUpdateResponse;
+import com.example.senioron.domain.user.dto.response.UserSignUpResponse;
+import com.example.senioron.domain.user.entity.ManagerType;
+import com.example.senioron.domain.user.entity.RefreshToken;
+import com.example.senioron.domain.user.entity.Role;
+import com.example.senioron.domain.user.entity.SignupEmailVerificationCode;
+import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.entity.UserStatus;
+import com.example.senioron.domain.user.event.SignupEmailVerificationCodeSendEvent;
+import com.example.senioron.domain.user.repository.RefreshTokenRepository;
+import com.example.senioron.domain.user.repository.SignupEmailVerificationCodeRepository;
+import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.global.apiPayload.code.ErrorCode;
+import com.example.senioron.global.apiPayload.exception.BusinessException;
+import com.example.senioron.global.jwt.JwtUtil;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.util.ReflectionTestUtils;
+
+class UserServiceTest {
+
+    private static final String EMAIL = "test@example.com";
+    private static final String VERIFICATION_CODE = "123456";
+    private static final String FCM_TOKEN = "fcm-token";
+    private static final String DEVICE_IDENTIFIER = "device-1";
+    private static final String DEVICE_AUTH_TOKEN = "device-auth-token";
+
+    private final UserRepository userRepository = mock(UserRepository.class);
+    private final RefreshTokenRepository refreshTokenRepository = mock(RefreshTokenRepository.class);
+    private final SignupEmailVerificationCodeRepository signupEmailVerificationCodeRepository =
+            mock(SignupEmailVerificationCodeRepository.class);
+    private final SignupEmailVerificationCodeIssuer signupEmailVerificationCodeIssuer =
+            mock(SignupEmailVerificationCodeIssuer.class);
+    private final SocialAccountRepository socialAccountRepository = mock(SocialAccountRepository.class);
+    private final DeviceRepository deviceRepository = mock(DeviceRepository.class);
+    private final DeviceService deviceService = mock(DeviceService.class);
+    private final SeniorRepository seniorRepository = mock(SeniorRepository.class);
+    private final SeniorWithdrawalService seniorWithdrawalService = mock(SeniorWithdrawalService.class);
+    private final FamilyMemberRepository familyMemberRepository = mock(FamilyMemberRepository.class);
+    private final FamilyRepository familyRepository = mock(FamilyRepository.class);
+    private final FamilyConnectionService familyConnectionService = mock(FamilyConnectionService.class);
+    private final FamilyPhotoWithdrawalService familyPhotoWithdrawalService =
+            mock(FamilyPhotoWithdrawalService.class);
+    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
+    private final EmailVerificationRateLimitService emailVerificationRateLimitService =
+            mock(EmailVerificationRateLimitService.class);
+    private final JwtUtil jwtUtil = new JwtUtil(
+            "12345678901234567890123456789012", 3600000L, 1209600000L,
+            "admin-test-secret-key-123456789012", 1800000L, 86400000L
+    );
+    private MutableClock clock;
+    private RefreshTokenService refreshTokenService;
+
+    private UserService userService;
+
+    @BeforeEach
+    void setUp() {
+        clock = new MutableClock(Instant.now());
+        refreshTokenService = new RefreshTokenService(refreshTokenRepository, jwtUtil, clock);
+        userService = new UserService(
+                userRepository,
+                refreshTokenRepository,
+                signupEmailVerificationCodeRepository,
+                signupEmailVerificationCodeIssuer,
+                socialAccountRepository,
+                refreshTokenService,
+                deviceRepository,
+                seniorWithdrawalService,
+                familyMemberRepository,
+                familyRepository,
+                familyConnectionService,
+                passwordEncoder,
+                jwtUtil,
+                mock(InactivitySettingService.class),
+                deviceService,
+                eventPublisher,
+                emailVerificationRateLimitService,
+                familyPhotoWithdrawalService
+        );
+    }
+
+    @Test
+    void signUpSavesRequestedRole() {
+        UserSignUpRequest request = createSignUpRequest(Role.CHILD);
+        SignupEmailVerificationCode savedCode = createVerifiedSignupEmailVerificationCode();
+        given(userRepository.existsByLoginId("testId")).willReturn(false);
+        given(userRepository.existsByEmail(EMAIL)).willReturn(false);
+        given(signupEmailVerificationCodeRepository.findByEmail(EMAIL)).willReturn(Optional.of(savedCode));
+        given(userRepository.save(any(User.class))).willAnswer(invocation -> {
+            User user = invocation.getArgument(0);
+            ReflectionTestUtils.setField(user, "usersId", 1L);
+            return user;
+        });
+
+        UserSignUpResponse response = userService.signUp(request);
+
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(userCaptor.capture());
+        User savedUser = userCaptor.getValue();
+
+        assertThat(savedUser.getRole()).isEqualTo(Role.CHILD);
+        assertThat(savedUser.getServiceTermsAgreed()).isTrue();
+        assertThat(savedUser.getPrivacyPolicyAgreed()).isTrue();
+        assertThat(savedUser.getAgeOver14Agreed()).isTrue();
+        assertThat(savedUser.getMarketingAgreed()).isFalse();
+        assertThat(savedUser.getHealthInfoAgreed()).isFalse();
+        assertThat(savedUser.getLocationInfoAgreed()).isFalse();
+        assertThat(savedUser.getFamilyInfoProvisionAgreed()).isTrue();
+        assertThat(response.getRole()).isEqualTo(Role.CHILD);
+        verify(signupEmailVerificationCodeRepository).delete(savedCode);
+    }
+
+    @Test
+    void signUpAllowsOmittedMedicationConsentForBackwardCompatibility() {
+        UserSignUpRequest request = createSignUpRequest(Role.CHILD);
+        ReflectionTestUtils.setField(request, "agreeHealthInfo", null);
+        SignupEmailVerificationCode savedCode = createVerifiedSignupEmailVerificationCode();
+        given(userRepository.existsByLoginId("testId")).willReturn(false);
+        given(userRepository.existsByEmail(EMAIL)).willReturn(false);
+        given(signupEmailVerificationCodeRepository.findByEmail(EMAIL)).willReturn(Optional.of(savedCode));
+        given(userRepository.save(any(User.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        userService.signUp(request);
+
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(userCaptor.capture());
+        assertThat(userCaptor.getValue().getHealthInfoAgreed()).isNull();
+    }
+
+    @Test
+    void getsMedicationConsentForAuthenticatedUser() {
+        User principal = User.builder().usersId(1L).build();
+        User user = User.builder().usersId(1L).healthInfoAgreed(true).build();
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+        MedicationConsentResponse response = userService.getMedicationConsent(principal);
+
+        assertThat(response.isMedicationConsent()).isTrue();
+    }
+
+    @Test
+    void treatsMissingMedicationConsentAsFalseWhenRetrieving() {
+        User principal = User.builder().usersId(1L).build();
+        User user = User.builder().usersId(1L).healthInfoAgreed(null).build();
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+        MedicationConsentResponse response = userService.getMedicationConsent(principal);
+
+        assertThat(response.isMedicationConsent()).isFalse();
+    }
+
+    @Test
+    void updatesMedicationConsentFromTrueToFalse() {
+        assertMedicationConsentUpdated(true, false);
+    }
+
+    @Test
+    void updatesMedicationConsentFromFalseToTrue() {
+        assertMedicationConsentUpdated(false, true);
+    }
+
+    @Test
+    void allowsUpdatingMedicationConsentToTheSameValue() {
+        assertMedicationConsentUpdated(false, false);
+    }
+
+    @Test
+    void signUpThrowsExceptionWhenSignupEmailVerificationMissing() {
+        UserSignUpRequest request = createSignUpRequest(Role.CHILD);
+        given(userRepository.existsByLoginId("testId")).willReturn(false);
+        given(userRepository.existsByEmail(EMAIL)).willReturn(false);
+        given(signupEmailVerificationCodeRepository.findByEmail(EMAIL)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.signUp(request))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SIGNUP_EMAIL_VERIFICATION_CODE_NOT_FOUND);
+
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void signUpThrowsExceptionWhenSignupEmailIsNotVerified() {
+        UserSignUpRequest request = createSignUpRequest(Role.CHILD);
+        SignupEmailVerificationCode savedCode = createVerificationCode(
+                passwordEncoder.encode(VERIFICATION_CODE),
+                LocalDateTime.now().minusMinutes(1),
+                LocalDateTime.now().plusMinutes(4)
+        );
+        given(userRepository.existsByLoginId("testId")).willReturn(false);
+        given(userRepository.existsByEmail(EMAIL)).willReturn(false);
+        given(signupEmailVerificationCodeRepository.findByEmail(EMAIL)).willReturn(Optional.of(savedCode));
+
+        assertThatThrownBy(() -> userService.signUp(request))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SIGNUP_EMAIL_NOT_VERIFIED);
+
+        verify(userRepository, never()).save(any(User.class));
+        verify(signupEmailVerificationCodeRepository, never()).delete(any(SignupEmailVerificationCode.class));
+    }
+
+    @Test
+    void signUpThrowsExceptionWhenSignupEmailVerificationExpired() {
+        UserSignUpRequest request = createSignUpRequest(Role.CHILD);
+        SignupEmailVerificationCode savedCode = createVerificationCode(
+                passwordEncoder.encode(VERIFICATION_CODE),
+                LocalDateTime.now().minusMinutes(10),
+                LocalDateTime.now().minusMinutes(1)
+        );
+        savedCode.verify(LocalDateTime.now().minusMinutes(2));
+        given(userRepository.existsByLoginId("testId")).willReturn(false);
+        given(userRepository.existsByEmail(EMAIL)).willReturn(false);
+        given(signupEmailVerificationCodeRepository.findByEmail(EMAIL)).willReturn(Optional.of(savedCode));
+
+        assertThatThrownBy(() -> userService.signUp(request))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.EXPIRED_SIGNUP_EMAIL_VERIFICATION_CODE);
+
+        verify(userRepository, never()).save(any(User.class));
+        verify(signupEmailVerificationCodeRepository, never()).delete(any(SignupEmailVerificationCode.class));
+    }
+
+    @Test
+    void loginReturnsUserRole() {
+        User user = User.builder()
+                .usersId(1L)
+                .loginId("testId")
+                .email(EMAIL)
+                .password(passwordEncoder.encode("password123!"))
+                .name("test")
+                .role(Role.PARENT)
+                .build();
+        given(userRepository.findByLoginId("testId")).willReturn(Optional.of(user));
+        given(refreshTokenRepository.findByUserAndDeviceIdentifier(user, null)).willReturn(Optional.empty());
+
+        UserLoginResponse response = userService.login(createLoginRequest());
+
+        assertThat(response.getRole()).isEqualTo(Role.PARENT);
+        assertThat(response.getAccessToken()).isNotBlank();
+        assertThat(response.getRefreshToken()).isNotBlank();
+        verify(refreshTokenRepository).saveAndFlush(any(RefreshToken.class));
+    }
+
+    @Test
+    void loginRegistersDeviceAndUpdatesFcmTokenWhenFcmTokenIsProvided() {
+        User user = createUser(1L);
+        given(userRepository.findByLoginId("testId")).willReturn(Optional.of(user));
+        given(refreshTokenRepository.findByUserAndDeviceIdentifier(user, DEVICE_IDENTIFIER)).willReturn(Optional.empty());
+        given(deviceService.registerDevice(user, DEVICE_IDENTIFIER))
+                .willReturn(DeviceCredentialIssueResult.issued(DEVICE_AUTH_TOKEN));
+
+        UserLoginResponse response = userService.login(createLoginRequest(FCM_TOKEN, DEVICE_IDENTIFIER));
+
+        assertThat(response.getAccessToken()).isNotBlank();
+        assertThat(response.getRefreshToken()).isNotBlank();
+        assertThat(response.getDeviceAuthToken()).isEqualTo(DEVICE_AUTH_TOKEN);
+        verify(deviceService).registerDevice(user, DEVICE_IDENTIFIER);
+        verify(deviceService).updateFcmToken(user, FCM_TOKEN, DEVICE_IDENTIFIER);
+        verify(refreshTokenRepository).saveAndFlush(any(RefreshToken.class));
+    }
+
+    @Test
+    void loginRegistersDeviceEvenWhenFcmTokenIsMissing() {
+        User user = createUser(1L);
+        given(userRepository.findByLoginId("testId")).willReturn(Optional.of(user));
+        given(refreshTokenRepository.findByUserAndDeviceIdentifier(user, DEVICE_IDENTIFIER)).willReturn(Optional.empty());
+        given(deviceService.registerDevice(user, DEVICE_IDENTIFIER))
+                .willReturn(DeviceCredentialIssueResult.issued(DEVICE_AUTH_TOKEN));
+
+        UserLoginResponse response = userService.login(createLoginRequest(null, DEVICE_IDENTIFIER));
+
+        assertThat(response.getAccessToken()).isNotBlank();
+        assertThat(response.getRefreshToken()).isNotBlank();
+        assertThat(response.getDeviceAuthToken()).isEqualTo(DEVICE_AUTH_TOKEN);
+        verify(deviceService).registerDevice(user, DEVICE_IDENTIFIER);
+        verify(deviceService, never()).updateFcmToken(eq(user), anyString(), eq(DEVICE_IDENTIFIER));
+        verify(refreshTokenRepository).saveAndFlush(any(RefreshToken.class));
+    }
+
+    @Test
+    void changingRoleToParentIsRejectedWhenAnotherParentBelongsToTheSameFamily() {
+        Family family = createFamily(1L);
+        User child = createChild(1L, family, ManagerType.SUB);
+        User existingParent = createUser(2L);
+        FamilyMember childMember = createFamilyMember(10L, child, family, ManagerType.SUB);
+        FamilyMember parentMember = createFamilyMember(11L, existingParent, family, ManagerType.NONE);
+        UserRoleUpdateRequest request = new UserRoleUpdateRequest();
+        ReflectionTestUtils.setField(request, "role", Role.PARENT);
+        ReflectionTestUtils.setField(request, "agreeLocationInfo", true);
+
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(child));
+        given(userRepository.findById(1L)).willReturn(Optional.of(child));
+        given(familyMemberRepository.findAllByUserWithFamilyAndSeniorOrderByIdAsc(child))
+                .willReturn(List.of(childMember));
+        given(familyMemberRepository.findAllByUser(child)).willReturn(List.of(childMember));
+        given(familyRepository.findByIdForUpdate(1L)).willReturn(Optional.of(family));
+        given(familyMemberRepository.findAllByFamilyOrderByIdAsc(family))
+                .willReturn(List.of(childMember, parentMember));
+
+        assertThatThrownBy(() -> userService.updateRole(child, request))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.FAMILY_PARENT_ALREADY_EXISTS);
+
+        assertThat(child.getRole()).isEqualTo(Role.CHILD);
+    }
+
+    @Test
+    void changingRoleFromChildToParentRejectsFalseLocationAgreement() {
+        User child = createChild(1L, null, ManagerType.NONE);
+        UserRoleUpdateRequest request = createRoleUpdateRequest(Role.PARENT, false);
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(child));
+        given(userRepository.findById(1L)).willReturn(Optional.of(child));
+        given(familyMemberRepository.findAllByUserWithFamilyAndSeniorOrderByIdAsc(child)).willReturn(List.of());
+
+        assertThatThrownBy(() -> userService.updateRole(child, request))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.REQUIRED_TERMS_NOT_AGREED);
+
+        assertThat(child.getRole()).isEqualTo(Role.CHILD);
+        assertThat(child.getLocationInfoAgreed()).isNull();
+    }
+
+    @Test
+    void changingRoleFromChildToParentRejectsMissingLocationAgreement() {
+        User child = createChild(1L, null, ManagerType.NONE);
+        UserRoleUpdateRequest request = createRoleUpdateRequest(Role.PARENT, null);
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(child));
+        given(userRepository.findById(1L)).willReturn(Optional.of(child));
+        given(familyMemberRepository.findAllByUserWithFamilyAndSeniorOrderByIdAsc(child)).willReturn(List.of());
+
+        assertThatThrownBy(() -> userService.updateRole(child, request))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.REQUIRED_TERMS_NOT_AGREED);
+
+        assertThat(child.getRole()).isEqualTo(Role.CHILD);
+    }
+
+    @Test
+    void changingRoleFromChildToParentStoresConfirmedLocationAgreement() {
+        User child = createChild(1L, null, ManagerType.NONE);
+        UserRoleUpdateRequest request = createRoleUpdateRequest(Role.PARENT, true);
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(child));
+        given(userRepository.findById(1L)).willReturn(Optional.of(child));
+        given(familyMemberRepository.findAllByUserWithFamilyAndSeniorOrderByIdAsc(child)).willReturn(List.of());
+        given(familyMemberRepository.findAllByUser(child)).willReturn(List.of());
+
+        UserRoleUpdateResponse response = userService.updateRole(child, request);
+
+        assertThat(response.getRole()).isEqualTo(Role.PARENT);
+        assertThat(child.getRole()).isEqualTo(Role.PARENT);
+        assertThat(child.getLocationInfoAgreed()).isTrue();
+    }
+
+    @Test
+    void changingRoleFromParentToChildDoesNotRequireLocationAgreement() {
+        User parent = createUser(1L);
+        UserRoleUpdateRequest request = createRoleUpdateRequest(Role.CHILD, null);
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(parent));
+        given(userRepository.findById(1L)).willReturn(Optional.of(parent));
+        given(familyMemberRepository.findAllByUserWithFamilyAndSeniorOrderByIdAsc(parent)).willReturn(List.of());
+
+        UserRoleUpdateResponse response = userService.updateRole(parent, request);
+
+        assertThat(response.getRole()).isEqualTo(Role.CHILD);
+        assertThat(parent.getRole()).isEqualTo(Role.CHILD);
+    }
+
+    @Test
+    void refreshTokenRotatesRefreshTokenAndReturnsNewTokens() {
+        User user = User.builder()
+                .usersId(1L)
+                .loginId("testId")
+                .email(EMAIL)
+                .password(passwordEncoder.encode("password123!"))
+                .name("test")
+                .role(Role.PARENT)
+                .build();
+        given(userRepository.findByLoginId("testId")).willReturn(Optional.of(user));
+        given(refreshTokenRepository.findByUserAndDeviceIdentifier(user, null)).willReturn(Optional.empty());
+
+        UserLoginResponse loginResponse = userService.login(createLoginRequest());
+        RefreshToken savedRefreshToken = captureSavedRefreshToken();
+        String previousTokenHash = savedRefreshToken.getTokenHash();
+        given(refreshTokenRepository.findByTokenHash(previousTokenHash)).willReturn(Optional.of(savedRefreshToken));
+
+        TokenRefreshResponse response = userService.refreshToken(
+                createTokenRefreshRequest(loginResponse.getRefreshToken())
+        );
+
+        assertThat(response.getAccessToken()).isNotBlank();
+        assertThat(response.getRefreshToken()).isNotBlank();
+        assertThat(response.getRefreshToken()).isNotEqualTo(loginResponse.getRefreshToken());
+        assertThat(savedRefreshToken.isRevoked()).isFalse();
+        assertThat(savedRefreshToken.getTokenHash()).isNotEqualTo(previousTokenHash);
+    }
+
+    @Test
+    void refreshTokenSucceedsAfterMoreThanOneHourWithoutActivity() {
+        User user = createUser(1L);
+        given(userRepository.findByLoginId("testId")).willReturn(Optional.of(user));
+        given(refreshTokenRepository.findByUserAndDeviceIdentifier(user, DEVICE_IDENTIFIER))
+                .willReturn(Optional.empty());
+
+        UserLoginResponse loginResponse = userService.login(createLoginRequest(null, DEVICE_IDENTIFIER));
+        RefreshToken savedRefreshToken = captureSavedRefreshToken();
+        given(refreshTokenRepository.findByTokenHash(savedRefreshToken.getTokenHash()))
+                .willReturn(Optional.of(savedRefreshToken));
+        clock.advance(Duration.ofHours(2));
+
+        TokenRefreshResponse response = userService.refreshToken(
+                createTokenRefreshRequest(loginResponse.getRefreshToken(), DEVICE_IDENTIFIER));
+
+        assertThat(response.getAccessToken()).isNotBlank();
+        assertThat(response.getRefreshToken()).isNotBlank();
+        assertThat(savedRefreshToken.isRevoked()).isFalse();
+    }
+
+    @Test
+    void rotatedRefreshTokenCannotBeReused() {
+        User user = createUser(1L);
+        given(userRepository.findByLoginId("testId")).willReturn(Optional.of(user));
+        given(refreshTokenRepository.findByUserAndDeviceIdentifier(user, DEVICE_IDENTIFIER))
+                .willReturn(Optional.empty());
+
+        UserLoginResponse loginResponse = userService.login(createLoginRequest(null, DEVICE_IDENTIFIER));
+        RefreshToken savedRefreshToken = captureSavedRefreshToken();
+        String originalHash = savedRefreshToken.getTokenHash();
+        given(refreshTokenRepository.findByTokenHash(originalHash))
+                .willReturn(Optional.of(savedRefreshToken));
+
+        userService.refreshToken(createTokenRefreshRequest(loginResponse.getRefreshToken(), DEVICE_IDENTIFIER));
+
+        assertThatThrownBy(() -> userService.refreshToken(
+                createTokenRefreshRequest(loginResponse.getRefreshToken(), DEVICE_IDENTIFIER)))
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.INVALID_REFRESH_TOKEN);
+    }
+
+    @Test
+    void refreshTokenFailsWhenRefreshTokenIsRevoked() {
+        User user = createUser(1L);
+        String refreshToken = jwtUtil.createRefreshToken(user);
+        RefreshToken savedRefreshToken = createRefreshToken(user, "device-1", refreshToken);
+        savedRefreshToken.revoke();
+        given(refreshTokenRepository.findByTokenHash(savedRefreshToken.getTokenHash()))
+                .willReturn(Optional.of(savedRefreshToken));
+
+        assertThatThrownBy(() -> userService.refreshToken(createTokenRefreshRequest(refreshToken, "device-1")))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.INVALID_REFRESH_TOKEN);
+    }
+
+    @Test
+    void refreshTokenFailsWhenRefreshTokenIsExpired() {
+        User user = createUser(1L);
+        String refreshToken = jwtUtil.createRefreshToken(user);
+        RefreshToken savedRefreshToken = createRefreshToken(user, "device-1", refreshToken);
+        ReflectionTestUtils.setField(savedRefreshToken, "expiresAt", clock.now().minusSeconds(1));
+        given(refreshTokenRepository.findByTokenHash(savedRefreshToken.getTokenHash()))
+                .willReturn(Optional.of(savedRefreshToken));
+
+        assertThatThrownBy(() -> userService.refreshToken(createTokenRefreshRequest(refreshToken, "device-1")))
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.EXPIRED_REFRESH_TOKEN);
+    }
+
+    @Test
+    void logoutRevokesRefreshTokenForRequestedDeviceOnly() {
+        User user = createUser(1L);
+        RefreshToken deviceOneRefreshToken = createRefreshToken(user, "device-1", "refresh-token-1");
+        RefreshToken deviceTwoRefreshToken = createRefreshToken(user, "device-2", "refresh-token-2");
+        given(refreshTokenRepository.findByUserAndDeviceIdentifier(user, "device-1"))
+                .willReturn(Optional.of(deviceOneRefreshToken));
+
+        userService.logout(user, "device-1");
+
+        assertThat(deviceOneRefreshToken.isRevoked()).isTrue();
+        assertThat(deviceTwoRefreshToken.isRevoked()).isFalse();
+        verify(deviceService).clearToken(user, "device-1");
+        verify(refreshTokenRepository).saveAndFlush(deviceOneRefreshToken);
+    }
+
+    @Test
+    void logoutSucceedsWhenRefreshTokenIsAlreadyRevoked() {
+        User user = createUser(1L);
+        RefreshToken savedRefreshToken = createRefreshToken(user, "device-1", "refresh-token");
+        savedRefreshToken.revoke();
+        given(refreshTokenRepository.findByUserAndDeviceIdentifier(user, "device-1"))
+                .willReturn(Optional.of(savedRefreshToken));
+
+        userService.logout(user, "device-1");
+        userService.logout(user, "device-1");
+
+        assertThat(savedRefreshToken.isRevoked()).isTrue();
+        verify(deviceService, times(2)).clearToken(user, "device-1");
+        verify(refreshTokenRepository, times(2)).saveAndFlush(savedRefreshToken);
+    }
+
+    @Test
+    void withdrawSucceedsWhenEveryFamilyMemberIsSubOrNone() {
+        User user = createWithdrawalUser(null);
+        Family firstFamily = createFamily(1L);
+        Family secondFamily = createFamily(2L);
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(user));
+        given(familyMemberRepository.findAllByUser(user)).willReturn(List.of(
+                createFamilyMember(1L, user, firstFamily, ManagerType.SUB),
+                createFamilyMember(2L, user, secondFamily, ManagerType.NONE)
+        ));
+
+        userService.withdraw(user, createWithdrawalRequest(UserService.WITHDRAWAL_CONFIRMATION));
+
+        assertThat(user.getStatus()).isEqualTo(UserStatus.WITHDRAWN);
+        assertThat(user.getWithdrawnAt()).isNotNull();
+        assertThat(user.getLoginId()).startsWith("withdrawn_1_");
+        assertThat(user.getEmail()).startsWith("withdrawn_1_").endsWith("@deleted.local");
+        assertThat(user.getName()).isEqualTo("탈퇴회원");
+        assertThat(user.getPhoneNumber()).isNull();
+        assertThat(user.getBirth()).isNull();
+        assertThat(user.getProfileImageKey()).isNull();
+        assertThat(user.getFamily()).isNull();
+        assertThat(user.getManagerType()).isNull();
+        assertThat(passwordEncoder.matches("password123!", user.getPassword())).isFalse();
+        verify(refreshTokenRepository).deleteAllByUser(user);
+        verify(deviceRepository).deleteAllByUser(user);
+        verify(socialAccountRepository).deleteAllByUser(user);
+        verify(familyMemberRepository).deleteAllByUser(user);
+        verify(seniorWithdrawalService, never()).withdrawParent(any(User.class));
+        verify(familyPhotoWithdrawalService).deleteUploadedPhotos(user);
+    }
+
+    @Test
+    void parentWithdrawalCleansUpSeniorDataBeforeCommonWithdrawal() {
+        User user = createWithdrawalUser(null);
+        ReflectionTestUtils.setField(user, "role", Role.PARENT);
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(user));
+        given(familyMemberRepository.findAllByUser(user)).willReturn(List.of());
+
+        userService.withdraw(user, createWithdrawalRequest(UserService.WITHDRAWAL_CONFIRMATION));
+
+        verify(seniorWithdrawalService).withdrawParent(user);
+        verify(familyPhotoWithdrawalService).deleteUploadedPhotos(user);
+        verify(refreshTokenRepository).deleteAllByUser(user);
+        verify(deviceRepository).deleteAllByUser(user);
+        verify(socialAccountRepository).deleteAllByUser(user);
+        verify(familyMemberRepository).deleteAllByUser(user);
+        assertThat(user.getStatus()).isEqualTo(UserStatus.WITHDRAWN);
+    }
+
+    @Test
+    void repeatedParentWithdrawalDoesNotCreateAnotherWithdrawalNotice() {
+        User user = createWithdrawalUser(null);
+        ReflectionTestUtils.setField(user, "role", Role.PARENT);
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(user));
+        given(familyMemberRepository.findAllByUser(user)).willReturn(List.of());
+        UserWithdrawalRequest request = createWithdrawalRequest(UserService.WITHDRAWAL_CONFIRMATION);
+
+        userService.withdraw(user, request);
+
+        assertThatThrownBy(() -> userService.withdraw(user, request))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.WITHDRAWN_USER);
+        verify(seniorWithdrawalService, times(1)).withdrawParent(user);
+        verify(refreshTokenRepository, times(1)).deleteAllByUser(user);
+    }
+
+    @Test
+    void withdrawFailsWhenConfirmationMismatch() {
+        User user = createWithdrawalUser(ManagerType.SUB);
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> userService.withdraw(user, createWithdrawalRequest("탈퇴")))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.INVALID_WITHDRAWAL_CONFIRMATION);
+
+        assertThat(user.getStatus()).isEqualTo(UserStatus.ACTIVE);
+        assertThat(user.getLoginId()).isEqualTo("withdraw-user");
+        verify(refreshTokenRepository, never()).deleteAllByUser(any(User.class));
+        verify(deviceRepository, never()).deleteAllByUser(any(User.class));
+        verify(socialAccountRepository, never()).deleteAllByUser(any(User.class));
+        verify(familyMemberRepository, never()).deleteAllByUser(any(User.class));
+        verify(seniorWithdrawalService, never()).withdrawParent(any(User.class));
+        verify(familyPhotoWithdrawalService, never()).deleteUploadedPhotos(any(User.class));
+    }
+
+    @Test
+    void primaryWithdrawalBlockedByTransferRequirementDoesNotDeleteData() {
+        User user = createWithdrawalUser(null);
+        Family family = createFamily(1L);
+        FamilyMember primaryMember = createFamilyMember(
+                1L,
+                user,
+                family,
+                ManagerType.PRIMARY
+        );
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(user));
+        org.mockito.Mockito.doThrow(new BusinessException(
+                        ErrorCode.PRIMARY_WITHDRAWAL_REQUIRES_TRANSFER))
+                .when(familyConnectionService)
+                .withdrawPrimaryMemberships(user);
+
+        assertThatThrownBy(() -> userService.withdraw(user, createWithdrawalRequest(UserService.WITHDRAWAL_CONFIRMATION)))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.PRIMARY_WITHDRAWAL_REQUIRES_TRANSFER);
+
+        assertThat(user.getStatus()).isEqualTo(UserStatus.ACTIVE);
+        assertThat(user.getWithdrawnAt()).isNull();
+        assertThat(user.getLoginId()).isEqualTo("withdraw-user");
+        assertThat(user.getEmail()).isEqualTo("withdraw@example.com");
+        assertThat(user.getName()).isEqualTo("탈퇴 전 사용자");
+        assertThat(primaryMember.getManagerType()).isEqualTo(ManagerType.PRIMARY);
+        verify(refreshTokenRepository, never()).deleteAllByUser(any(User.class));
+        verify(deviceRepository, never()).deleteAllByUser(any(User.class));
+        verify(socialAccountRepository, never()).deleteAllByUser(any(User.class));
+        verify(familyMemberRepository, never()).deleteAllByUser(any(User.class));
+        verify(familyPhotoWithdrawalService, never()).deleteUploadedPhotos(any(User.class));
+        verify(familyConnectionService).withdrawPrimaryMemberships(user);
+    }
+
+    @Test
+    void refreshTokenFailsForWithdrawnUser() {
+        User user = createWithdrawalUser(ManagerType.SUB);
+        user.withdraw(
+                "withdrawn_1_test",
+                "withdrawn_1_test@deleted.local",
+                passwordEncoder.encode("withdrawn"),
+                LocalDateTime.now()
+        );
+        String refreshToken = jwtUtil.createRefreshToken(user);
+        RefreshToken savedRefreshToken = RefreshToken.builder()
+                .user(user)
+                .deviceIdentifier(null)
+                .tokenHash(refreshTokenService.hashToken(refreshToken))
+                .expiresAt(LocalDateTime.now().plusDays(14))
+                .build();
+        given(refreshTokenRepository.findByTokenHash(savedRefreshToken.getTokenHash()))
+                .willReturn(Optional.of(savedRefreshToken));
+
+        assertThatThrownBy(() -> userService.refreshToken(createTokenRefreshRequest(refreshToken)))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.WITHDRAWN_USER);
+    }
+
+    @Test
+    void getOnboardingStatusReturnsEmptyStateWhenFamilyIsMissing() {
+        User user = User.builder()
+                .usersId(1L)
+                .loginId("testId")
+                .email(EMAIL)
+                .password("encoded")
+                .name("test")
+                .role(Role.CHILD)
+                .managerType(ManagerType.NONE)
+                .build();
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(familyMemberRepository.findAllByUserWithFamilyAndSeniorOrderByIdAsc(user))
+                .willReturn(List.of());
+
+        OnboardingStatusResponse response = userService.getOnboardingStatus(user);
+
+        assertThat(response.getCurrentUserRole()).isEqualTo(Role.CHILD);
+        assertThat(response.isHasFamily()).isFalse();
+        assertThat(response.isOnboardingCompleted()).isFalse();
+        assertThat(response.getFamilies()).isEmpty();
+    }
+
+    @Test
+    void getOnboardingStatusReturnsFamilySeniorStatus() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .seniorCode("ABC123")
+                .build();
+        User user = createChild(1L, family, ManagerType.PRIMARY);
+        User parent = createParentWithFamilyMember(2L, family);
+        Senior senior = createSenior(123L, family, user);
+        senior.linkParentUser(parent);
+        senior.updateRelation(SeniorRelation.FATHER, null);
+        linkSenior(family, senior);
+        FamilyMember familyMember = createFamilyMember(
+                1L,
+                user,
+                family,
+                ManagerType.PRIMARY,
+                SeniorRelation.MOTHER
+        );
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(familyMemberRepository.findAllByUserWithFamilyAndSeniorOrderByIdAsc(user))
+                .willReturn(List.of(familyMember));
+
+        OnboardingStatusResponse response = userService.getOnboardingStatus(user);
+        OnboardingStatusResponse.FamilyStatus familyStatus = response.getFamilies().get(0);
+
+        assertThat(response.getCurrentUserRole()).isEqualTo(Role.CHILD);
+        assertThat(response.isHasFamily()).isTrue();
+        assertThat(response.isOnboardingCompleted()).isTrue();
+        assertThat(response.getFamilies()).hasSize(1);
+        assertThat(familyStatus.getFamilyId()).isEqualTo(1L);
+        assertThat(familyStatus.getManagerType()).isEqualTo(ManagerType.PRIMARY);
+        assertThat(familyStatus.getSeniorId()).isEqualTo(123L);
+        assertThat(familyStatus.getSeniorName()).isEqualTo("시니어");
+        assertThat(familyStatus.getParentUserId()).isEqualTo(2L);
+        assertThat(familyStatus.getRelation()).isEqualTo(SeniorRelation.MOTHER);
+        assertThat(familyStatus.isSeniorProfileCompleted()).isTrue();
+        verify(seniorRepository, never()).findByParentUser(user);
+        verify(seniorRepository, never()).findFirstByFamilyOrderBySeniorIdAsc(family);
+    }
+
+    @Test
+    void getOnboardingStatusReturnsIncompleteWhenChildFamilyMemberRelationIsMissing() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .seniorCode("ABC123")
+                .build();
+        User user = createChild(1L, family, ManagerType.PRIMARY);
+        Senior senior = createSenior(123L, family, user);
+        senior.updateRelation(SeniorRelation.MOTHER, null);
+        linkSenior(family, senior);
+        FamilyMember familyMember = createFamilyMember(
+                1L,
+                user,
+                family,
+                ManagerType.PRIMARY
+        );
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(familyMemberRepository.findAllByUserWithFamilyAndSeniorOrderByIdAsc(user))
+                .willReturn(List.of(familyMember));
+
+        OnboardingStatusResponse response = userService.getOnboardingStatus(user);
+        OnboardingStatusResponse.FamilyStatus familyStatus = response.getFamilies().get(0);
+
+        assertThat(response.isHasFamily()).isTrue();
+        assertThat(response.isOnboardingCompleted()).isFalse();
+        assertThat(familyStatus.getSeniorId()).isEqualTo(123L);
+        assertThat(familyStatus.isSeniorProfileCompleted()).isTrue();
+        assertThat(familyStatus.getRelation()).isNull();
+    }
+
+    @Test
+    void getOnboardingStatusReturnsFamilyStatusWhenSeniorIsMissing() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .seniorCode("ABC123")
+                .build();
+        User user = createChild(1L, family, ManagerType.SUB);
+        FamilyMember familyMember = createFamilyMember(1L, user, family, ManagerType.SUB);
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(familyMemberRepository.findAllByUserWithFamilyAndSeniorOrderByIdAsc(user))
+                .willReturn(List.of(familyMember));
+
+        OnboardingStatusResponse response = userService.getOnboardingStatus(user);
+        OnboardingStatusResponse.FamilyStatus familyStatus = response.getFamilies().get(0);
+
+        assertThat(response.isHasFamily()).isTrue();
+        assertThat(response.getCurrentUserRole()).isEqualTo(Role.CHILD);
+        assertThat(response.isOnboardingCompleted()).isFalse();
+        assertThat(response.getFamilies()).hasSize(1);
+        assertThat(familyStatus.getFamilyId()).isEqualTo(1L);
+        assertThat(familyStatus.getManagerType()).isEqualTo(ManagerType.SUB);
+        assertThat(familyStatus.getSeniorId()).isNull();
+        assertThat(familyStatus.getSeniorName()).isNull();
+        assertThat(familyStatus.getParentUserId()).isNull();
+        assertThat(familyStatus.getRelation()).isNull();
+        assertThat(familyStatus.isSeniorProfileCompleted()).isFalse();
+    }
+
+    @Test
+    void getOnboardingStatusReturnsEveryFamilyIncludingFamilyWithoutSenior() {
+        Family firstFamily = Family.builder()
+                .familyId(1L)
+                .seniorCode("ABC123")
+                .build();
+        Family secondFamily = Family.builder()
+                .familyId(2L)
+                .seniorCode("DEF456")
+                .build();
+        User user = createChild(1L, firstFamily, ManagerType.PRIMARY);
+        User parent = createParentWithFamilyMember(2L, firstFamily);
+        Senior senior = createSenior(123L, firstFamily, user);
+        senior.linkParentUser(parent);
+        senior.updateRelation(SeniorRelation.MOTHER, null);
+        linkSenior(firstFamily, senior);
+        FamilyMember primaryMember = createFamilyMember(
+                1L,
+                user,
+                firstFamily,
+                ManagerType.PRIMARY,
+                SeniorRelation.MOTHER
+        );
+        FamilyMember subMember = createFamilyMember(2L, user, secondFamily, ManagerType.SUB);
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(familyMemberRepository.findAllByUserWithFamilyAndSeniorOrderByIdAsc(user))
+                .willReturn(List.of(primaryMember, subMember));
+
+        OnboardingStatusResponse response = userService.getOnboardingStatus(user);
+
+        assertThat(response.isHasFamily()).isTrue();
+        assertThat(response.getCurrentUserRole()).isEqualTo(Role.CHILD);
+        assertThat(response.isOnboardingCompleted()).isTrue();
+        assertThat(response.getFamilies()).hasSize(2);
+        assertThat(response.getFamilies())
+                .extracting(
+                        "familyId",
+                        "managerType",
+                        "seniorId",
+                        "seniorName",
+                        "seniorProfileCompleted"
+                )
+                .containsExactly(
+                        org.assertj.core.api.Assertions.tuple(
+                                1L,
+                                ManagerType.PRIMARY,
+                                123L,
+                                "시니어",
+                                true
+                        ),
+                        org.assertj.core.api.Assertions.tuple(
+                                2L,
+                                ManagerType.SUB,
+                                null,
+                                null,
+                                false
+                        )
+                );
+    }
+
+    @Test
+    void getOnboardingStatusKeepsFamilyMemberRelationsSeparateAcrossFamilies() {
+        Family firstFamily = Family.builder()
+                .familyId(1L)
+                .seniorCode("ABC123")
+                .build();
+        Family secondFamily = Family.builder()
+                .familyId(2L)
+                .seniorCode("DEF456")
+                .build();
+        User user = createChild(1L, firstFamily, ManagerType.NONE);
+        Senior firstSenior = createSenior(111L, firstFamily, user);
+        firstSenior.updateRelation(SeniorRelation.FATHER, null);
+        Senior secondSenior = createSenior(222L, secondFamily, user);
+        secondSenior.updateRelation(SeniorRelation.MOTHER, null);
+        linkSenior(firstFamily, firstSenior);
+        linkSenior(secondFamily, secondSenior);
+        FamilyMember firstMember = createFamilyMember(
+                1L,
+                user,
+                firstFamily,
+                ManagerType.NONE,
+                SeniorRelation.MOTHER
+        );
+        FamilyMember secondMember = createFamilyMember(
+                2L,
+                user,
+                secondFamily,
+                ManagerType.SUB,
+                SeniorRelation.GRANDPARENT
+        );
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(familyMemberRepository.findAllByUserWithFamilyAndSeniorOrderByIdAsc(user))
+                .willReturn(List.of(firstMember, secondMember));
+
+        OnboardingStatusResponse response = userService.getOnboardingStatus(user);
+
+        assertThat(response.isOnboardingCompleted()).isTrue();
+        assertThat(response.getFamilies())
+                .extracting("familyId", "managerType", "relation")
+                .containsExactly(
+                        org.assertj.core.api.Assertions.tuple(
+                                1L,
+                                ManagerType.NONE,
+                                SeniorRelation.MOTHER
+                        ),
+                        org.assertj.core.api.Assertions.tuple(
+                                2L,
+                                ManagerType.SUB,
+                                SeniorRelation.GRANDPARENT
+                        )
+                );
+    }
+
+    @Test
+    void getOnboardingStatusReturnsNullParentUserIdWhenSeniorIsNotLinked() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .seniorCode("ABC123")
+                .build();
+        User user = createChild(1L, family, ManagerType.PRIMARY);
+        Senior senior = createSenior(123L, family, user);
+        senior.updateRelation(SeniorRelation.MOTHER, null);
+        linkSenior(family, senior);
+        FamilyMember familyMember = createFamilyMember(
+                1L,
+                user,
+                family,
+                ManagerType.PRIMARY,
+                SeniorRelation.FATHER
+        );
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(familyMemberRepository.findAllByUserWithFamilyAndSeniorOrderByIdAsc(user))
+                .willReturn(List.of(familyMember));
+
+        OnboardingStatusResponse response = userService.getOnboardingStatus(user);
+        OnboardingStatusResponse.FamilyStatus familyStatus = response.getFamilies().get(0);
+
+        assertThat(response.isHasFamily()).isTrue();
+        assertThat(response.getCurrentUserRole()).isEqualTo(Role.CHILD);
+        assertThat(response.isOnboardingCompleted()).isTrue();
+        assertThat(familyStatus.getSeniorId()).isEqualTo(123L);
+        assertThat(familyStatus.getSeniorName()).isEqualTo("시니어");
+        assertThat(familyStatus.getParentUserId()).isNull();
+        assertThat(familyStatus.getRelation()).isEqualTo(SeniorRelation.FATHER);
+        assertThat(familyStatus.isSeniorProfileCompleted()).isTrue();
+    }
+
+    @Test
+    void getOnboardingStatusReturnsParentCompletionOnlyForOwnLinkedSeniorFamily() {
+        Family otherFamily = Family.builder()
+                .familyId(1L)
+                .seniorCode("ABC123")
+                .build();
+        Family linkedFamily = Family.builder()
+                .familyId(2L)
+                .seniorCode("DEF456")
+                .build();
+        User parent = createParentWithFamilyMember(2L, otherFamily);
+        User child = createChild(1L, linkedFamily, ManagerType.PRIMARY);
+        User otherParent = createParentWithFamilyMember(3L, otherFamily);
+        Senior otherSenior = createSenior(111L, otherFamily, child);
+        otherSenior.linkParentUser(otherParent);
+        otherSenior.updateRelation(SeniorRelation.MOTHER, null);
+        Senior linkedSenior = createSenior(222L, linkedFamily, child);
+        linkedSenior.linkParentUser(parent);
+        linkedSenior.updateRelation(SeniorRelation.FATHER, null);
+        linkSenior(otherFamily, otherSenior);
+        linkSenior(linkedFamily, linkedSenior);
+        FamilyMember otherMember = createFamilyMember(1L, parent, otherFamily, ManagerType.NONE);
+        FamilyMember linkedMember = createFamilyMember(2L, parent, linkedFamily, ManagerType.NONE);
+
+        given(userRepository.findById(2L)).willReturn(Optional.of(parent));
+        given(familyMemberRepository.findAllByUserWithFamilyAndSeniorOrderByIdAsc(parent))
+                .willReturn(List.of(otherMember, linkedMember));
+
+        OnboardingStatusResponse response = userService.getOnboardingStatus(parent);
+
+        assertThat(response.getCurrentUserRole()).isEqualTo(Role.PARENT);
+        assertThat(response.isHasFamily()).isTrue();
+        assertThat(response.isOnboardingCompleted()).isTrue();
+        assertThat(response.getFamilies()).hasSize(2);
+        assertThat(response.getFamilies())
+                .extracting("familyId", "parentUserId", "seniorId", "relation")
+                .containsExactly(
+                        org.assertj.core.api.Assertions.tuple(1L, 3L, 111L, null),
+                        org.assertj.core.api.Assertions.tuple(2L, 2L, 222L, null)
+                );
+        verify(seniorRepository, never()).findByParentUser(parent);
+    }
+
+    @Test
+    void getOnboardingStatusReturnsIncompleteWhenSeniorIsLinkedToDifferentParent() {
+        Family family = Family.builder()
+                .familyId(1L)
+                .seniorCode("ABC123")
+                .build();
+        User parent = createParentWithFamilyMember(2L, family);
+        User otherParent = createParentWithFamilyMember(3L, family);
+        User child = createChild(1L, family, ManagerType.PRIMARY);
+        Senior senior = createSenior(123L, family, child);
+        senior.linkParentUser(otherParent);
+        senior.updateRelation(SeniorRelation.MOTHER, null);
+        linkSenior(family, senior);
+        FamilyMember familyMember = createFamilyMember(1L, parent, family, ManagerType.NONE);
+
+        given(userRepository.findById(2L)).willReturn(Optional.of(parent));
+        given(familyMemberRepository.findAllByUserWithFamilyAndSeniorOrderByIdAsc(parent))
+                .willReturn(List.of(familyMember));
+
+        OnboardingStatusResponse response = userService.getOnboardingStatus(parent);
+        OnboardingStatusResponse.FamilyStatus familyStatus = response.getFamilies().get(0);
+
+        assertThat(response.isHasFamily()).isTrue();
+        assertThat(response.getCurrentUserRole()).isEqualTo(Role.PARENT);
+        assertThat(response.isOnboardingCompleted()).isFalse();
+        assertThat(familyStatus.getSeniorId()).isEqualTo(123L);
+        assertThat(familyStatus.getParentUserId()).isEqualTo(3L);
+        assertThat(familyStatus.getRelation()).isNull();
+        assertThat(familyStatus.isSeniorProfileCompleted()).isTrue();
+    }
+
+    @Test
+    void verifySignupEmailVerificationCodeSucceeds() {
+        SignupEmailVerificationCode savedCode = createVerificationCode(
+                passwordEncoder.encode(VERIFICATION_CODE),
+                LocalDateTime.now().minusMinutes(1),
+                LocalDateTime.now().plusMinutes(4)
+        );
+        given(userRepository.existsByEmail(EMAIL)).willReturn(false);
+        given(signupEmailVerificationCodeRepository.findByEmail(EMAIL)).willReturn(Optional.of(savedCode));
+
+        SignupEmailVerificationCodeVerifyResponse response = userService.verifySignupEmailVerificationCode(
+                createVerifyRequest(EMAIL, VERIFICATION_CODE)
+        );
+
+        assertThat(response.getVerified()).isTrue();
+        assertThat(savedCode.isVerified()).isTrue();
+        assertThat(savedCode.getVerifiedAt()).isNotNull();
+    }
+
+    @Test
+    void verifySignupEmailVerificationCodeThrowsExceptionWhenCodeMismatch() {
+        SignupEmailVerificationCode savedCode = createVerificationCode(
+                passwordEncoder.encode(VERIFICATION_CODE),
+                LocalDateTime.now().minusMinutes(1),
+                LocalDateTime.now().plusMinutes(4)
+        );
+        given(userRepository.existsByEmail(EMAIL)).willReturn(false);
+        given(signupEmailVerificationCodeRepository.findByEmail(EMAIL)).willReturn(Optional.of(savedCode));
+
+        assertThatThrownBy(() -> userService.verifySignupEmailVerificationCode(
+                createVerifyRequest(EMAIL, "000000")
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.INVALID_SIGNUP_EMAIL_VERIFICATION_CODE);
+        assertThat(savedCode.isVerified()).isFalse();
+    }
+
+    @Test
+    void verifySignupEmailVerificationCodeThrowsExceptionWhenExpired() {
+        SignupEmailVerificationCode savedCode = createVerificationCode(
+                passwordEncoder.encode(VERIFICATION_CODE),
+                LocalDateTime.now().minusMinutes(10),
+                LocalDateTime.now().minusMinutes(1)
+        );
+        given(userRepository.existsByEmail(EMAIL)).willReturn(false);
+        given(signupEmailVerificationCodeRepository.findByEmail(EMAIL)).willReturn(Optional.of(savedCode));
+
+        assertThatThrownBy(() -> userService.verifySignupEmailVerificationCode(
+                createVerifyRequest(EMAIL, VERIFICATION_CODE)
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.EXPIRED_SIGNUP_EMAIL_VERIFICATION_CODE);
+        assertThat(savedCode.isVerified()).isFalse();
+    }
+
+    @Test
+    void verifySignupEmailVerificationCodeThrowsExceptionWhenRequestHistoryMissing() {
+        given(userRepository.existsByEmail(EMAIL)).willReturn(false);
+        given(signupEmailVerificationCodeRepository.findByEmail(EMAIL)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.verifySignupEmailVerificationCode(
+                createVerifyRequest(EMAIL, VERIFICATION_CODE)
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SIGNUP_EMAIL_VERIFICATION_CODE_NOT_FOUND);
+    }
+
+    @Test
+    void verifySignupEmailVerificationCodeThrowsExceptionWhenEmailAlreadyExists() {
+        given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(createUser(1L)));
+
+        assertThatThrownBy(() -> userService.verifySignupEmailVerificationCode(
+                createVerifyRequest(EMAIL, VERIFICATION_CODE)
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.DUPLICATE_EMAIL);
+    }
+
+    @Test
+    void sendSignupEmailVerificationCodeRejectsSocialOnlyAccountWithoutSendingCode() {
+        User socialOnlyUser = User.builder()
+                .usersId(1L)
+                .email(EMAIL)
+                .name("소셜 회원")
+                .role(Role.CHILD)
+                .build();
+        given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(socialOnlyUser));
+        given(socialAccountRepository.existsByUser(socialOnlyUser)).willReturn(true);
+
+        assertThatThrownBy(() -> userService.sendSignupEmailVerificationCode(
+                createSendRequest(EMAIL), "127.0.0.1"
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SOCIAL_EMAIL_ALREADY_EXISTS);
+
+        assertThat(ErrorCode.SOCIAL_EMAIL_ALREADY_EXISTS.getMessage())
+                .isEqualTo("이미 해당 이메일로 가입된 소셜 계정이 있습니다. 기존 소셜 계정으로 로그인해 주세요.");
+        verify(emailVerificationRateLimitService, never()).checkAndRecord(anyString(), anyString());
+        verify(signupEmailVerificationCodeIssuer, never()).createOrReissue(
+                anyString(), anyString(), any(LocalDateTime.class), any(LocalDateTime.class)
+        );
+        verify(eventPublisher, never()).publishEvent(any(SignupEmailVerificationCodeSendEvent.class));
+    }
+
+    @Test
+    void verifySignupEmailVerificationCodeRejectsSocialOnlyAccount() {
+        User socialOnlyUser = User.builder()
+                .usersId(1L)
+                .email(EMAIL)
+                .name("소셜 회원")
+                .role(Role.CHILD)
+                .build();
+        given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(socialOnlyUser));
+        given(socialAccountRepository.existsByUser(socialOnlyUser)).willReturn(true);
+
+        assertThatThrownBy(() -> userService.verifySignupEmailVerificationCode(
+                createVerifyRequest(EMAIL, VERIFICATION_CODE)
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SOCIAL_EMAIL_ALREADY_EXISTS);
+    }
+
+    @Test
+    void signUpRejectsSocialOnlyAccount() {
+        User socialOnlyUser = User.builder()
+                .usersId(1L)
+                .email(EMAIL)
+                .name("소셜 회원")
+                .role(Role.CHILD)
+                .build();
+        given(userRepository.existsByLoginId("testId")).willReturn(false);
+        given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(socialOnlyUser));
+        given(socialAccountRepository.existsByUser(socialOnlyUser)).willReturn(true);
+
+        assertThatThrownBy(() -> userService.signUp(createSignUpRequest(Role.CHILD)))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SOCIAL_EMAIL_ALREADY_EXISTS);
+
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void signUpTreatsAccountWithGeneralLoginCredentialsAsGeneralAccountEvenWhenSocialLinked() {
+        User mixedAccountUser = createUser(1L);
+        given(userRepository.existsByLoginId("testId")).willReturn(false);
+        given(userRepository.findByEmail(EMAIL)).willReturn(Optional.of(mixedAccountUser));
+
+        assertThatThrownBy(() -> userService.signUp(createSignUpRequest(Role.CHILD)))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.DUPLICATE_EMAIL);
+
+        verify(socialAccountRepository, never()).existsByUser(mixedAccountUser);
+    }
+
+    @Test
+    void verifySignupEmailVerificationCodeThrowsExceptionWhenAlreadyVerified() {
+        SignupEmailVerificationCode savedCode = createVerificationCode(
+                passwordEncoder.encode(VERIFICATION_CODE),
+                LocalDateTime.now().minusMinutes(1),
+                LocalDateTime.now().plusMinutes(4)
+        );
+        savedCode.verify(LocalDateTime.now());
+        given(userRepository.existsByEmail(EMAIL)).willReturn(false);
+        given(signupEmailVerificationCodeRepository.findByEmail(EMAIL)).willReturn(Optional.of(savedCode));
+
+        assertThatThrownBy(() -> userService.verifySignupEmailVerificationCode(
+                createVerifyRequest(EMAIL, VERIFICATION_CODE)
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.SIGNUP_EMAIL_ALREADY_VERIFIED);
+    }
+
+    @Test
+    void verifySignupEmailVerificationCodeRejectsPreviousCodeAfterReissueAndAcceptsLatestCode() {
+        SignupEmailVerificationCode savedCode = createVerificationCode(
+                passwordEncoder.encode("111111"),
+                LocalDateTime.now().minusMinutes(1),
+                LocalDateTime.now().plusMinutes(4)
+        );
+        savedCode.reissue(
+                passwordEncoder.encode("222222"),
+                LocalDateTime.now(),
+                LocalDateTime.now().plusMinutes(5)
+        );
+        given(userRepository.existsByEmail(EMAIL)).willReturn(false);
+        given(signupEmailVerificationCodeRepository.findByEmail(EMAIL)).willReturn(Optional.of(savedCode));
+
+        assertThatThrownBy(() -> userService.verifySignupEmailVerificationCode(
+                createVerifyRequest(EMAIL, "111111")
+        ))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.INVALID_SIGNUP_EMAIL_VERIFICATION_CODE);
+
+        SignupEmailVerificationCodeVerifyResponse response = userService.verifySignupEmailVerificationCode(
+                createVerifyRequest(EMAIL, "222222")
+        );
+
+        assertThat(response.getVerified()).isTrue();
+        assertThat(savedCode.isVerified()).isTrue();
+    }
+
+    @Test
+    void sendSignupEmailVerificationCodeResetsVerifiedStateWhenReissued() {
+        SignupEmailVerificationCode savedCode = createVerificationCode(
+                passwordEncoder.encode(VERIFICATION_CODE),
+                LocalDateTime.now().minusMinutes(1),
+                LocalDateTime.now().plusMinutes(4)
+        );
+        savedCode.verify(LocalDateTime.now());
+        given(userRepository.existsByEmail(EMAIL)).willReturn(false);
+        given(signupEmailVerificationCodeIssuer.createOrReissue(
+                anyString(),
+                anyString(),
+                any(LocalDateTime.class),
+                any(LocalDateTime.class)
+        )).willAnswer(invocation -> {
+            savedCode.reissue(
+                    invocation.getArgument(1),
+                    invocation.getArgument(2),
+                    invocation.getArgument(3)
+            );
+            return savedCode;
+        });
+
+        userService.sendSignupEmailVerificationCode(createSendRequest(EMAIL), "127.0.0.1");
+
+        assertThat(savedCode.isVerified()).isFalse();
+        assertThat(savedCode.getVerifiedAt()).isNull();
+        verify(eventPublisher).publishEvent(any(SignupEmailVerificationCodeSendEvent.class));
+        verify(emailVerificationRateLimitService).checkAndRecord(EMAIL, "127.0.0.1");
+    }
+
+    @Test
+    void sendSignupEmailVerificationCodeRetriesWhenInitialInsertRaceOccurs() {
+        SignupEmailVerificationCode savedCode = createVerificationCode(
+                passwordEncoder.encode(VERIFICATION_CODE),
+                LocalDateTime.now().minusMinutes(1),
+                LocalDateTime.now().plusMinutes(4)
+        );
+        given(userRepository.existsByEmail(EMAIL)).willReturn(false);
+        given(signupEmailVerificationCodeIssuer.createOrReissue(
+                anyString(),
+                anyString(),
+                any(LocalDateTime.class),
+                any(LocalDateTime.class)
+        )).willThrow(new DataIntegrityViolationException("duplicate email"));
+        given(signupEmailVerificationCodeIssuer.reissueExisting(
+                anyString(),
+                anyString(),
+                any(LocalDateTime.class),
+                any(LocalDateTime.class)
+        )).willReturn(savedCode);
+
+        userService.sendSignupEmailVerificationCode(createSendRequest(EMAIL), "127.0.0.1");
+
+        verify(signupEmailVerificationCodeIssuer).reissueExisting(
+                anyString(),
+                anyString(),
+                any(LocalDateTime.class),
+                any(LocalDateTime.class)
+        );
+        verify(eventPublisher).publishEvent(any(SignupEmailVerificationCodeSendEvent.class));
+    }
+
+    private SignupEmailVerificationCode createVerificationCode(
+            String codeHash,
+            LocalDateTime issuedAt,
+            LocalDateTime expiresAt
+    ) {
+        return SignupEmailVerificationCode.builder()
+                .email(EMAIL)
+                .codeHash(codeHash)
+                .issuedAt(issuedAt)
+                .expiresAt(expiresAt)
+                .build();
+    }
+
+    private SignupEmailVerificationCode createVerifiedSignupEmailVerificationCode() {
+        SignupEmailVerificationCode savedCode = createVerificationCode(
+                passwordEncoder.encode(VERIFICATION_CODE),
+                LocalDateTime.now().minusMinutes(1),
+                LocalDateTime.now().plusMinutes(4)
+        );
+        savedCode.verify(LocalDateTime.now().minusSeconds(30));
+        return savedCode;
+    }
+
+    private SignupEmailVerificationCodeVerifyRequest createVerifyRequest(String email, String verificationCode) {
+        SignupEmailVerificationCodeVerifyRequest request = new SignupEmailVerificationCodeVerifyRequest();
+        ReflectionTestUtils.setField(request, "email", email);
+        ReflectionTestUtils.setField(request, "verificationCode", verificationCode);
+        return request;
+    }
+
+    private SignupEmailVerificationCodeSendRequest createSendRequest(String email) {
+        SignupEmailVerificationCodeSendRequest request = new SignupEmailVerificationCodeSendRequest();
+        ReflectionTestUtils.setField(request, "email", email);
+        return request;
+    }
+
+    private UserSignUpRequest createSignUpRequest(Role role) {
+        UserSignUpRequest request = new UserSignUpRequest();
+        ReflectionTestUtils.setField(request, "loginId", "testId");
+        ReflectionTestUtils.setField(request, "email", EMAIL);
+        ReflectionTestUtils.setField(request, "password", "password123!");
+        ReflectionTestUtils.setField(request, "passwordCheck", "password123!");
+        ReflectionTestUtils.setField(request, "name", "test");
+        ReflectionTestUtils.setField(request, "birth", LocalDate.of(1990, 1, 1));
+        ReflectionTestUtils.setField(request, "role", role);
+        ReflectionTestUtils.setField(request, "agreeServiceTerms", true);
+        ReflectionTestUtils.setField(request, "agreePrivacyPolicy", true);
+        ReflectionTestUtils.setField(request, "agreeAgeOver14", true);
+        ReflectionTestUtils.setField(request, "agreeMarketing", false);
+        ReflectionTestUtils.setField(request, "agreeHealthInfo", false);
+        ReflectionTestUtils.setField(request, "agreeLocationInfo", false);
+        ReflectionTestUtils.setField(request, "agreeFamilyInfoProvision", true);
+        return request;
+    }
+
+    private UserLoginRequest createLoginRequest() {
+        return createLoginRequest(null, null);
+    }
+
+    private void assertMedicationConsentUpdated(Boolean currentValue, Boolean requestedValue) {
+        User principal = User.builder().usersId(1L).build();
+        User user = User.builder().usersId(1L).healthInfoAgreed(currentValue).build();
+        given(userRepository.findByIdForUpdate(1L)).willReturn(Optional.of(user));
+
+        MedicationConsentResponse response = userService.updateMedicationConsent(
+                principal,
+                createMedicationConsentUpdateRequest(requestedValue)
+        );
+
+        assertThat(response.isMedicationConsent()).isEqualTo(requestedValue);
+        assertThat(user.getHealthInfoAgreed()).isEqualTo(requestedValue);
+    }
+
+    private MedicationConsentUpdateRequest createMedicationConsentUpdateRequest(Boolean medicationConsent) {
+        MedicationConsentUpdateRequest request = new MedicationConsentUpdateRequest();
+        ReflectionTestUtils.setField(request, "medicationConsent", medicationConsent);
+        return request;
+    }
+
+    private UserRoleUpdateRequest createRoleUpdateRequest(Role role, Boolean agreeLocationInfo) {
+        UserRoleUpdateRequest request = new UserRoleUpdateRequest();
+        ReflectionTestUtils.setField(request, "role", role);
+        ReflectionTestUtils.setField(request, "agreeLocationInfo", agreeLocationInfo);
+        return request;
+    }
+
+    private UserLoginRequest createLoginRequest(String fcmToken, String deviceIdentifier) {
+        UserLoginRequest request = new UserLoginRequest();
+        ReflectionTestUtils.setField(request, "loginId", "testId");
+        ReflectionTestUtils.setField(request, "password", "password123!");
+        ReflectionTestUtils.setField(request, "fcmToken", fcmToken);
+        ReflectionTestUtils.setField(request, "deviceIdentifier", deviceIdentifier);
+        return request;
+    }
+
+    private static final class MutableClock extends Clock {
+        private Instant instant;
+
+        private MutableClock(Instant instant) {
+            this.instant = instant;
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneId.systemDefault();
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return instant;
+        }
+
+        private void advance(Duration duration) {
+            instant = instant.plus(duration);
+        }
+
+        private LocalDateTime now() {
+            return LocalDateTime.now(this);
+        }
+    }
+
+    private TokenRefreshRequest createTokenRefreshRequest(String refreshToken) {
+        return createTokenRefreshRequest(refreshToken, null);
+    }
+
+    private TokenRefreshRequest createTokenRefreshRequest(String refreshToken, String deviceIdentifier) {
+        TokenRefreshRequest request = new TokenRefreshRequest();
+        ReflectionTestUtils.setField(request, "refreshToken", refreshToken);
+        ReflectionTestUtils.setField(request, "deviceIdentifier", deviceIdentifier);
+        return request;
+    }
+
+    private UserWithdrawalRequest createWithdrawalRequest(String confirmation) {
+        UserWithdrawalRequest request = new UserWithdrawalRequest();
+        ReflectionTestUtils.setField(request, "confirmation", confirmation);
+        return request;
+    }
+
+    private User createWithdrawalUser(ManagerType managerType) {
+        return User.builder()
+                .usersId(1L)
+                .loginId("withdraw-user")
+                .email("withdraw@example.com")
+                .password(passwordEncoder.encode("password123!"))
+                .name("탈퇴 전 사용자")
+                .birth(LocalDate.of(1990, 1, 1))
+                .phoneNumber("010-1234-5678")
+                .role(Role.CHILD)
+                .managerType(managerType)
+                .status(UserStatus.ACTIVE)
+                .profileImageKey("profile-images/1/original.webp")
+                .build();
+    }
+
+    private Family createFamily(Long familyId) {
+        return Family.builder()
+                .familyId(familyId)
+                .seniorCode("FAMILY-" + familyId)
+                .build();
+    }
+
+    private User createUser(Long usersId) {
+        return User.builder()
+                .usersId(usersId)
+                .loginId("testId")
+                .email(EMAIL)
+                .password(passwordEncoder.encode("password123!"))
+                .name("test")
+                .role(Role.PARENT)
+                .status(UserStatus.ACTIVE)
+                .build();
+    }
+
+    private User createChild(Long usersId, Family family, ManagerType managerType) {
+        return User.builder()
+                .usersId(usersId)
+                .family(family)
+                .loginId("child" + usersId)
+                .email("child" + usersId + "@example.com")
+                .password("encoded")
+                .name("자녀")
+                .role(Role.CHILD)
+                .managerType(managerType)
+                .status(UserStatus.ACTIVE)
+                .build();
+    }
+
+    private User createParentWithFamilyMember(Long usersId, Family family) {
+        User parent = User.builder()
+                .usersId(usersId)
+                .loginId("parent" + usersId)
+                .email("parent" + usersId + "@example.com")
+                .password("encoded")
+                .name("부모")
+                .role(Role.PARENT)
+                .status(UserStatus.ACTIVE)
+                .build();
+        parent.getFamilyMembers().add(
+                FamilyMember.builder()
+                        .id(1L)
+                        .user(parent)
+                        .family(family)
+                        .managerType(ManagerType.NONE)
+                        .build()
+        );
+        return parent;
+    }
+
+    private FamilyMember createFamilyMember(
+            Long id,
+            User user,
+            Family family,
+            ManagerType managerType
+    ) {
+        return createFamilyMember(id, user, family, managerType, null);
+    }
+
+    private FamilyMember createFamilyMember(
+            Long id,
+            User user,
+            Family family,
+            ManagerType managerType,
+            SeniorRelation relation
+    ) {
+        return FamilyMember.builder()
+                .id(id)
+                .user(user)
+                .family(family)
+                .managerType(managerType)
+                .relation(relation)
+                .build();
+    }
+
+    private void linkSenior(Family family, Senior senior) {
+        ReflectionTestUtils.setField(family, "senior", senior);
+    }
+
+    private Senior createSenior(Long seniorId, Family family, User registeredBy) {
+        return Senior.builder()
+                .seniorId(seniorId)
+                .name("시니어")
+                .birth(LocalDate.of(1950, 1, 1))
+                .phoneNumber("01012345678")
+                .family(family)
+                .registeredBy(registeredBy)
+                .build();
+    }
+
+    private RefreshToken createRefreshToken(User user, String deviceIdentifier, String refreshToken) {
+        return RefreshToken.builder()
+                .user(user)
+                .deviceIdentifier(deviceIdentifier)
+                .tokenHash(refreshTokenService.hashToken(refreshToken))
+                .expiresAt(LocalDateTime.now().plusDays(14))
+                .build();
+    }
+
+    private RefreshToken captureSavedRefreshToken() {
+        ArgumentCaptor<RefreshToken> refreshTokenCaptor = ArgumentCaptor.forClass(RefreshToken.class);
+        verify(refreshTokenRepository).saveAndFlush(refreshTokenCaptor.capture());
+        return refreshTokenCaptor.getValue();
+    }
+}

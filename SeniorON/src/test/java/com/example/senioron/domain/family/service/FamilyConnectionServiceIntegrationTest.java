@@ -1,0 +1,310 @@
+package com.example.senioron.domain.family.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.InstanceOfAssertFactories.type;
+
+import com.example.senioron.domain.event.entity.Event;
+import com.example.senioron.domain.event.repository.EventRepository;
+import com.example.senioron.domain.family.dto.response.FamilyConnectionDisconnectResponse;
+import com.example.senioron.domain.family.entity.Family;
+import com.example.senioron.domain.family.entity.FamilyMember;
+import com.example.senioron.domain.family.repository.FamilyMemberRepository;
+import com.example.senioron.domain.family.repository.FamilyRepository;
+import com.example.senioron.domain.permission.entity.SeniorPermissionSetting;
+import com.example.senioron.domain.permission.repository.SeniorPermissionSettingRepository;
+import com.example.senioron.domain.senior.entity.Senior;
+import com.example.senioron.domain.senior.repository.SeniorRepository;
+import com.example.senioron.domain.user.entity.ManagerType;
+import com.example.senioron.domain.user.entity.Role;
+import com.example.senioron.domain.user.entity.User;
+import com.example.senioron.domain.user.repository.UserRepository;
+import com.example.senioron.global.apiPayload.code.ErrorCode;
+import com.example.senioron.global.apiPayload.exception.BusinessException;
+import jakarta.persistence.EntityManager;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+
+@DataJpaTest(showSql = false)
+@Import({FamilyConnectionService.class, UnusedFamilyCleanupService.class})
+class FamilyConnectionServiceIntegrationTest {
+
+    @Autowired private FamilyConnectionService service;
+    @Autowired private FamilyRepository familyRepository;
+    @Autowired private FamilyMemberRepository familyMemberRepository;
+    @Autowired private SeniorRepository seniorRepository;
+    @Autowired private SeniorPermissionSettingRepository permissionSettingRepository;
+    @Autowired private EventRepository eventRepository;
+    @Autowired private UserRepository userRepository;
+    @Autowired private EntityManager entityManager;
+
+    @Test
+    void subDisconnectDeletesOnlyOwnMembership() {
+        Family family = saveFamily("SUB-LEAVE");
+        User primary = saveUser("sub-leave-primary");
+        User sub = saveUser("sub-leave-sub");
+        saveMember(primary, family, ManagerType.PRIMARY);
+        saveMember(sub, family, ManagerType.SUB);
+
+        FamilyConnectionDisconnectResponse response =
+                service.disconnect(sub, family.getFamilyId());
+        entityManager.flush();
+        entityManager.clear();
+
+        Family persistedFamily = familyRepository.findById(family.getFamilyId())
+                .orElseThrow();
+        User persistedPrimary = userRepository.findById(primary.getUsersId())
+                .orElseThrow();
+        User persistedSub = userRepository.findById(sub.getUsersId())
+                .orElseThrow();
+        assertThat(familyMemberRepository.findByUserAndFamily(
+                persistedSub,
+                persistedFamily
+        )).isEmpty();
+        assertThat(familyMemberRepository.findByUserAndFamily(
+                persistedPrimary,
+                persistedFamily
+        )).isPresent();
+        assertThat(response.familyId()).isEqualTo(family.getFamilyId());
+        assertThat(response.familyDeleted()).isFalse();
+    }
+
+    @Test
+    void primaryDisconnectDeletesUnusedFamilySeniorAndPermissionSetting() {
+        Family family = saveFamily("PRIMARY-LEAVE");
+        User primary = saveUser("primary-leave");
+        FamilyMember member = saveMember(primary, family, ManagerType.PRIMARY);
+        Senior senior = seniorRepository.saveAndFlush(Senior.builder()
+                .name("시니어")
+                .birth(LocalDate.of(1950, 1, 1))
+                .phoneNumber("01012345678")
+                .family(family)
+                .registeredBy(primary)
+                .build());
+        permissionSettingRepository.saveAndFlush(
+                SeniorPermissionSetting.builder()
+                        .senior(senior)
+                        .build()
+        );
+
+        // Family.senior 역방향 참조가 영속성 컨텍스트에 로드된 상태에서도
+        // Senior 삭제와 이후 flush가 안전해야 한다.
+        entityManager.clear();
+        Family managedFamily = familyRepository.findById(family.getFamilyId())
+                .orElseThrow();
+        assertThat(managedFamily.getSenior()).isNotNull();
+
+        FamilyConnectionDisconnectResponse response =
+                service.disconnect(primary, family.getFamilyId());
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(familyMemberRepository.findById(member.getId())).isEmpty();
+        assertThat(permissionSettingRepository.findById(senior.getSeniorId()))
+                .isEmpty();
+        assertThat(seniorRepository.findById(senior.getSeniorId())).isEmpty();
+        assertThat(familyRepository.findById(family.getFamilyId())).isEmpty();
+        assertThat(userRepository.findById(primary.getUsersId())).isPresent();
+        assertThat(response.familyId()).isEqualTo(family.getFamilyId());
+        assertThat(response.familyDeleted()).isTrue();
+    }
+
+    @Test
+    void primaryDisconnectDeletesFamilyBeforeSeniorProfileCreation() {
+        Family family = saveFamily("NO-SENIOR");
+        User primary = saveUser("no-senior-primary");
+        saveMember(primary, family, ManagerType.PRIMARY);
+
+        FamilyConnectionDisconnectResponse response =
+                service.disconnect(primary, family.getFamilyId());
+        entityManager.clear();
+
+        assertThat(familyRepository.findById(family.getFamilyId())).isEmpty();
+        assertThat(userRepository.findById(primary.getUsersId())).isPresent();
+        assertThat(response.familyId()).isEqualTo(family.getFamilyId());
+        assertThat(response.familyDeleted()).isTrue();
+    }
+
+    @Test
+    void seniorConnectionHistoryKeepsEntireFamily() {
+        Family family = familyRepository.saveAndFlush(Family.builder()
+                .seniorCode("HAS-HISTORY")
+                .firstSeniorConnectedAt(LocalDateTime.of(2026, 11, 1, 10, 0))
+                .build());
+        User primary = saveUser("history-primary");
+        FamilyMember member = saveMember(primary, family, ManagerType.PRIMARY);
+
+        assertThatThrownBy(() -> service.disconnect(primary, family.getFamilyId()))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.PRIMARY_CONNECTION_DISCONNECT_HISTORY_EXISTS);
+
+        assertThat(familyMemberRepository.findById(member.getId())).isPresent();
+        assertThat(familyRepository.findById(family.getFamilyId())).isPresent();
+    }
+
+    @Test
+    void primaryWithdrawalDeletesFamilyWhenOnlyPrimaryCurrentlyRemainsDespiteSeniorHistory() {
+        Family family = familyRepository.saveAndFlush(Family.builder()
+                .seniorCode("WITHDRAW-HISTORY")
+                .firstSeniorConnectedAt(LocalDateTime.of(2026, 11, 1, 10, 0))
+                .build());
+        User primary = saveUser("withdraw-history-primary");
+        FamilyMember primaryMember = saveMember(primary, family, ManagerType.PRIMARY);
+
+        service.withdrawPrimaryMemberships(primary);
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(familyMemberRepository.findById(primaryMember.getId())).isEmpty();
+        assertThat(familyRepository.findById(family.getFamilyId())).isEmpty();
+        assertThat(userRepository.findById(primary.getUsersId())).isPresent();
+    }
+
+    @Test
+    void primaryWithdrawalDeletesFamilyAfterDisconnectedSubIsNoLongerCurrentMember() {
+        Family family = saveFamily("WITHDRAW-DISCONNECTED-SUB");
+        User primary = saveUser("withdraw-disconnected-primary");
+        User sub = saveUser("withdraw-disconnected-sub");
+        saveMember(primary, family, ManagerType.PRIMARY);
+        FamilyMember disconnectedSub = saveMember(sub, family, ManagerType.SUB);
+        familyMemberRepository.delete(disconnectedSub);
+        familyMemberRepository.flush();
+
+        service.withdrawPrimaryMemberships(primary);
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(familyRepository.findById(family.getFamilyId())).isEmpty();
+        assertThat(userRepository.findById(primary.getUsersId())).isPresent();
+        assertThat(userRepository.findById(sub.getUsersId())).isPresent();
+    }
+
+    @Test
+    void primaryWithdrawalRequiresTransferWhenActiveSubCurrentlyRemains() {
+        Family family = saveFamily("WITHDRAW-TRANSFER");
+        User primary = saveUser("withdraw-transfer-primary");
+        User sub = saveUser("withdraw-transfer-sub");
+        FamilyMember primaryMember = saveMember(primary, family, ManagerType.PRIMARY);
+        FamilyMember subMember = saveMember(sub, family, ManagerType.SUB);
+
+        assertThatThrownBy(() -> service.withdrawPrimaryMemberships(primary))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.PRIMARY_WITHDRAWAL_REQUIRES_TRANSFER);
+
+        assertThat(familyRepository.findById(family.getFamilyId())).isPresent();
+        assertThat(familyMemberRepository.findById(primaryMember.getId())).isPresent();
+        assertThat(familyMemberRepository.findById(subMember.getId())).isPresent();
+    }
+
+    @Test
+    void primaryWithdrawalRejectsProfilelessParentAndKeepsFamilyData() {
+        Family family = saveFamily("WITHDRAW-PROFILELESS-PARENT");
+        User primary = saveUser("withdraw-profileless-primary");
+        User parent = userRepository.saveAndFlush(User.builder()
+                .loginId("withdraw-profileless-parent")
+                .name("withdraw-profileless-parent")
+                .role(Role.PARENT)
+                .build());
+        FamilyMember primaryMember = saveMember(primary, family, ManagerType.PRIMARY);
+        FamilyMember parentMember = saveMember(parent, family, ManagerType.NONE);
+
+        assertThatThrownBy(() -> service.withdrawPrimaryMemberships(primary))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.PRIMARY_WITHDRAWAL_SENIOR_REMAINS);
+
+        assertThat(familyRepository.findById(family.getFamilyId())).isPresent();
+        assertThat(familyMemberRepository.findById(primaryMember.getId())).isPresent();
+        assertThat(familyMemberRepository.findById(parentMember.getId())).isPresent();
+    }
+
+    @Test
+    void primaryWithdrawalRejectsWhenOnlySeniorProfileRemains() {
+        Family family = saveFamily("WITHDRAW-SENIOR");
+        User primary = saveUser("withdraw-senior-primary");
+        FamilyMember primaryMember = saveMember(primary, family, ManagerType.PRIMARY);
+        Senior senior = seniorRepository.saveAndFlush(Senior.builder()
+                .name("연결된 시니어")
+                .birth(LocalDate.of(1950, 1, 1))
+                .phoneNumber("01012345678")
+                .family(family)
+                .registeredBy(primary)
+                .build());
+
+        assertThatThrownBy(() -> service.withdrawPrimaryMemberships(primary))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.PRIMARY_WITHDRAWAL_SENIOR_REMAINS);
+
+        assertThat(familyRepository.findById(family.getFamilyId())).isPresent();
+        assertThat(familyMemberRepository.findById(primaryMember.getId())).isPresent();
+        assertThat(seniorRepository.findById(senior.getSeniorId())).isPresent();
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void usageDataCleanupFailureRollsBackMembershipDeletion() {
+        Family family = saveFamily("ROLLBACK");
+        User primary = saveUser("rollback-primary");
+        FamilyMember member = saveMember(primary, family, ManagerType.PRIMARY);
+        Senior senior = seniorRepository.saveAndFlush(Senior.builder()
+                .name("시니어")
+                .birth(LocalDate.of(1950, 1, 1))
+                .phoneNumber("01012345678")
+                .family(family)
+                .registeredBy(primary)
+                .build());
+        Event event = eventRepository.saveAndFlush(Event.builder()
+                .senior(senior)
+                .build());
+
+        assertThatThrownBy(() -> service.disconnect(primary, family.getFamilyId()))
+                .isInstanceOf(BusinessException.class)
+                .asInstanceOf(type(BusinessException.class))
+                .extracting(BusinessException::getCode)
+                .isEqualTo(ErrorCode.UNUSED_FAMILY_CLEANUP_BLOCKED);
+
+        assertThat(familyMemberRepository.findById(member.getId())).isPresent();
+        assertThat(eventRepository.findById(event.getEventId())).isPresent();
+        assertThat(seniorRepository.findById(senior.getSeniorId())).isPresent();
+        assertThat(familyRepository.findById(family.getFamilyId())).isPresent();
+    }
+
+    private Family saveFamily(String seniorCode) {
+        return familyRepository.saveAndFlush(Family.builder()
+                .seniorCode(seniorCode)
+                .build());
+    }
+
+    private User saveUser(String loginId) {
+        return userRepository.saveAndFlush(User.builder()
+                .loginId(loginId)
+                .name(loginId)
+                .role(Role.CHILD)
+                .build());
+    }
+
+    private FamilyMember saveMember(
+            User user,
+            Family family,
+            ManagerType managerType
+    ) {
+        return familyMemberRepository.saveAndFlush(FamilyMember.builder()
+                .user(user)
+                .family(family)
+                .managerType(managerType)
+                .build());
+    }
+}

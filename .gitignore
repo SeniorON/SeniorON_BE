@@ -23,3 +23,24 @@
 hs_err_pid*
 replay_pid*
 .DS_Store
+
+# Environments & Secrets
+.env
+
+# Firebase Admin SDK Private Key
+*firebase-adminsdk*.json
+
+# FCM 테스트 토큰 발급 도구의 실제 설정값 (tools/fcm-token-tester/README.md 참고)
+tools/fcm-token-tester/firebase-config.js
+
+# IntelliJ IDEA settings
+.idea/
+
+# Existing application secrets
+application-secret.yml
+
+# Blue-Green active Nginx upstream
+nginx/conf.d/upstream.conf
+
+# Blue-Green deployment runtime state
+.current-color
