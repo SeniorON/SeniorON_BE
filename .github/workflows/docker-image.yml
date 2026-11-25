@@ -4,9 +4,13 @@ on:
   push:
     branches:
       - develop
+  workflow_dispatch:
 
 jobs:
   docker:
+    # 수동 실행(workflow_dispatch)은 develop/main에서만 허용
+    # 임의 브랜치 빌드가 :latest 태그를 덮어쓰지 않도록 제한
+    if: github.event_name == 'push' || github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
     permissions:
