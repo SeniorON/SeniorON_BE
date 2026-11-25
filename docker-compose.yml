@@ -1,7 +1,14 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 services:
 
   nginx:
     image: nginx:latest
+    logging: *default-logging
     restart: unless-stopped
 
     ports:
@@ -19,6 +26,7 @@ services:
 
   nginx-exporter:
     image: nginx/nginx-prometheus-exporter:latest
+    logging: *default-logging
     restart: unless-stopped
 
     expose:
@@ -32,6 +40,7 @@ services:
 
   app-blue:
     image: jsh424/senioron:${IMAGE_TAG:-latest}
+    logging: *default-logging
     expose:
       - "8080"
 
@@ -69,6 +78,7 @@ services:
 
   app-green:
     image: jsh424/senioron:${IMAGE_TAG:-latest}
+    logging: *default-logging
     expose:
       - "8080"
 
@@ -107,6 +117,7 @@ services:
 
   prometheus:
     image: prom/prometheus:latest
+    logging: *default-logging
     restart: unless-stopped
     mem_limit: 256m
 
@@ -138,6 +149,7 @@ services:
 
   grafana:
     image: grafana/grafana:latest
+    logging: *default-logging
     restart: unless-stopped
 
     networks:
@@ -162,6 +174,9 @@ services:
       GF_SERVER_SERVE_FROM_SUB_PATH: "true"
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      # 공개 회원가입/익명 접근 차단
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
 
     volumes:
       - grafana-data:/var/lib/grafana
@@ -201,6 +216,7 @@ services:
 
   node-exporter:
     image: prom/node-exporter:latest
+    logging: *default-logging
     restart: unless-stopped
     mem_limit: 64m
 
@@ -241,6 +257,7 @@ services:
 
   mysqld-exporter:
     image: prom/mysqld-exporter:latest
+    logging: *default-logging
     restart: unless-stopped
     mem_limit: 64m
 
