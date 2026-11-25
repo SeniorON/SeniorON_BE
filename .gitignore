@@ -44,3 +44,7 @@ nginx/conf.d/upstream.conf
 
 # Blue-Green deployment runtime state
 .current-color
+
+# certbot webroot (ACME challenge files)
+certbot/www/*
+!certbot/www/.gitkeep
