@@ -5,7 +5,7 @@ on:
     workflows:
       - Docker Image
     branches:
-      - develop
+      - main
     types:
       - completed
 
@@ -47,7 +47,7 @@ jobs:
 
           cd ~/SeniorON_BE
 
-          git fetch origin develop
+          git fetch origin main
 
           git checkout --detach "$IMAGE_TAG"
 
